@@ -189,10 +189,10 @@ Vývoj běží proti **nahraným datům z analýzy** (`../analysis/recordings/`)
    - Filtrace kategorií (raceFilter)
    - Custom visibility
 
-3. **Dashboard UI** (minimalistické)
+3. ✅ **Dashboard UI** (minimalistické)
    - Přehled připojených scoreboardů
    - Status zdrojů (C123, XML)
-   - Inline editace nastavení
+   - Auto-refresh každé 2 sekundy
 
 ---
 

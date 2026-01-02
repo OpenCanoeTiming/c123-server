@@ -260,4 +260,33 @@ describe('AdminServer', () => {
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
     });
   });
+
+  describe('Dashboard UI', () => {
+    beforeEach(async () => {
+      await adminServer.start();
+    });
+
+    it('should serve dashboard HTML at root', async () => {
+      const response = await fetch(`http://localhost:${TEST_PORT}/`);
+      expect(response.ok).toBe(true);
+      expect(response.headers.get('content-type')).toContain('text/html');
+
+      const html = await response.text();
+      expect(html).toContain('<!DOCTYPE html>');
+      expect(html).toContain('C123 Server Dashboard');
+      expect(html).toContain('/api/status');
+    });
+
+    it('should include key dashboard elements', async () => {
+      const response = await fetch(`http://localhost:${TEST_PORT}/`);
+      const html = await response.text();
+
+      // Check for key sections
+      expect(html).toContain('Uptime');
+      expect(html).toContain('Scoreboards');
+      expect(html).toContain('Sources');
+      expect(html).toContain('On Course');
+      expect(html).toContain('Results');
+    });
+  });
 });

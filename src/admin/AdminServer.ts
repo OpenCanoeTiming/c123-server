@@ -149,6 +149,181 @@ export class AdminServer {
     this.app.get('/health', (_req: Request, res: Response) => {
       res.json({ status: 'ok' });
     });
+
+    // Dashboard UI
+    this.app.get('/', (_req: Request, res: Response) => {
+      res.send(this.getDashboardHtml());
+    });
+  }
+
+  /**
+   * Generate inline dashboard HTML
+   */
+  private getDashboardHtml(): string {
+    return `<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>C123 Server - Admin Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
+    h1 { color: #00d4ff; margin-bottom: 20px; }
+    h2 { color: #ccc; font-size: 1.1em; margin: 20px 0 10px; border-bottom: 1px solid #333; padding-bottom: 5px; }
+    .card { background: #16213e; border-radius: 8px; padding: 15px; margin-bottom: 15px; }
+    .status { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
+    .status.connected { background: #00ff88; }
+    .status.disconnected { background: #ff4444; }
+    .status.connecting { background: #ffaa00; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+    .stat { text-align: center; }
+    .stat-value { font-size: 2em; color: #00d4ff; font-weight: bold; }
+    .stat-label { color: #888; font-size: 0.9em; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #333; }
+    th { color: #888; font-weight: normal; }
+    .config-form { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .config-form label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+    .config-form input[type="checkbox"] { width: 16px; height: 16px; }
+    .btn { background: #00d4ff; color: #1a1a2e; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+    .btn:hover { background: #00b8e6; }
+    .error { color: #ff6b6b; }
+    #lastUpdate { color: #666; font-size: 0.85em; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>C123 Server Dashboard</h1>
+
+  <div class="grid">
+    <div class="card stat">
+      <div class="stat-value" id="uptime">-</div>
+      <div class="stat-label">Uptime</div>
+    </div>
+    <div class="card stat">
+      <div class="stat-value" id="scoreboardCount">0</div>
+      <div class="stat-label">Scoreboards</div>
+    </div>
+    <div class="card stat">
+      <div class="stat-value" id="onCourseCount">0</div>
+      <div class="stat-label">On Course</div>
+    </div>
+    <div class="card stat">
+      <div class="stat-value" id="resultsCount">0</div>
+      <div class="stat-label">Results</div>
+    </div>
+  </div>
+
+  <h2>Event</h2>
+  <div class="card">
+    <div id="eventInfo">Loading...</div>
+  </div>
+
+  <h2>Sources</h2>
+  <div class="card">
+    <table id="sourcesTable">
+      <thead><tr><th>Name</th><th>Type</th><th>Status</th><th>Details</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h2>Connected Scoreboards</h2>
+  <div class="card">
+    <table id="scoreboardsTable">
+      <thead><tr><th>ID</th><th>Connected</th><th>Last Activity</th><th>Config</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div id="noScoreboards" style="color: #666; padding: 10px;">No scoreboards connected</div>
+  </div>
+
+  <div id="lastUpdate"></div>
+
+  <script>
+    function formatUptime(seconds) {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = seconds % 60;
+      if (h > 0) return h + 'h ' + m + 'm';
+      if (m > 0) return m + 'm ' + s + 's';
+      return s + 's';
+    }
+
+    function formatTime(iso) {
+      if (!iso) return '-';
+      const d = new Date(iso);
+      return d.toLocaleTimeString();
+    }
+
+    function statusClass(status) {
+      if (status === 'connected') return 'connected';
+      if (status === 'connecting') return 'connecting';
+      return 'disconnected';
+    }
+
+    async function refresh() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+
+        document.getElementById('uptime').textContent = formatUptime(data.uptime);
+        document.getElementById('scoreboardCount').textContent = data.scoreboards.connected;
+        document.getElementById('onCourseCount').textContent = data.event.onCourseCount;
+        document.getElementById('resultsCount').textContent = data.event.resultsCount;
+
+        const eventInfo = data.event.raceName
+          ? '<strong>' + data.event.raceName + '</strong> (ID: ' + (data.event.currentRaceId || '-') + ')'
+          : 'No active race';
+        document.getElementById('eventInfo').innerHTML = eventInfo;
+
+        // Sources
+        const sourcesBody = document.querySelector('#sourcesTable tbody');
+        sourcesBody.innerHTML = data.sources.map(s =>
+          '<tr>' +
+          '<td>' + s.name + '</td>' +
+          '<td>' + s.type.toUpperCase() + '</td>' +
+          '<td><span class="status ' + statusClass(s.status) + '"></span>' + s.status + '</td>' +
+          '<td>' + (s.host ? s.host + ':' + s.port : (s.path || '-')) + '</td>' +
+          '</tr>'
+        ).join('');
+
+        // Scoreboards
+        const scoreboardsBody = document.querySelector('#scoreboardsTable tbody');
+        const noScoreboards = document.getElementById('noScoreboards');
+        if (data.scoreboards.list.length === 0) {
+          scoreboardsBody.innerHTML = '';
+          noScoreboards.style.display = 'block';
+        } else {
+          noScoreboards.style.display = 'none';
+          scoreboardsBody.innerHTML = data.scoreboards.list.map(s =>
+            '<tr>' +
+            '<td>' + s.id.substring(0, 8) + '</td>' +
+            '<td>' + formatTime(s.connectedAt) + '</td>' +
+            '<td>' + formatTime(s.lastActivity) + '</td>' +
+            '<td>' + formatConfig(s.config) + '</td>' +
+            '</tr>'
+          ).join('');
+        }
+
+        document.getElementById('lastUpdate').textContent = 'Last update: ' + new Date().toLocaleTimeString();
+      } catch (e) {
+        document.getElementById('lastUpdate').innerHTML = '<span class="error">Error: ' + e.message + '</span>';
+      }
+    }
+
+    function formatConfig(cfg) {
+      if (!cfg) return '-';
+      const parts = [];
+      if (cfg.showOnCourse === false) parts.push('oncourse: off');
+      if (cfg.showResults === false) parts.push('results: off');
+      if (cfg.raceFilter && cfg.raceFilter.length) parts.push('filter: ' + cfg.raceFilter.join(', '));
+      return parts.length ? parts.join('; ') : 'default';
+    }
+
+    refresh();
+    setInterval(refresh, 2000);
+  </script>
+</body>
+</html>`;
   }
 
   /**
