@@ -160,7 +160,7 @@ Vývoj běží proti **nahraným datům z analýzy** (`../analysis/recordings/`)
 
 ---
 
-### Fáze 3: XML soubory + BR1/BR2
+### Fáze 3: XML soubory + BR1/BR2 [DONE]
 
 1. ✅ **XmlFileSource**
    - Načítání XML z lokální cesty nebo URL (OneDrive)
@@ -172,7 +172,7 @@ Vývoj běží proti **nahraným datům z analýzy** (`../analysis/recordings/`)
    - Spojení s BR2 daty (PrevTime, PrevPen)
    - Výpočet TotalTotal (nejlepší z obou jízd)
 
-3. **Rozšířené zprávy**
+3. ✅ **Rozšířené zprávy**
    - Nový formát pro obě jízdy v UI
    - Zachování zpětné kompatibility
 
