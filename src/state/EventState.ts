@@ -1,0 +1,198 @@
+import { EventEmitter } from 'node:events';
+import type { ParsedMessage, OnCourseCompetitor } from '../parsers/types.js';
+import type { EventStateData, EventStateEvents } from './types.js';
+
+const HIGHLIGHT_DURATION_MS = 10000;
+
+/**
+ * Aggregated state of the current event.
+ *
+ * Receives parsed messages and maintains current state of:
+ * - Time of day
+ * - Race configuration
+ * - Schedule
+ * - On-course competitors
+ * - Results
+ * - Highlight (recent finish)
+ */
+export class EventState extends EventEmitter<EventStateEvents> {
+  private _state: EventStateData = {
+    timeOfDay: null,
+    raceConfig: null,
+    schedule: [],
+    currentRaceId: null,
+    onCourse: [],
+    results: null,
+    highlightBib: null,
+  };
+
+  private highlightTimer: NodeJS.Timeout | null = null;
+  private previousOnCourse: Map<string, OnCourseCompetitor> = new Map();
+
+  /**
+   * Get the current state (readonly snapshot)
+   */
+  get state(): Readonly<EventStateData> {
+    return this._state;
+  }
+
+  /**
+   * Process a parsed message and update state
+   */
+  processMessage(message: ParsedMessage): void {
+    switch (message.type) {
+      case 'timeofday':
+        this._state.timeOfDay = message.data.time;
+        break;
+
+      case 'raceconfig':
+        this._state.raceConfig = message.data;
+        break;
+
+      case 'schedule':
+        this._state.schedule = message.data.races;
+        break;
+
+      case 'oncourse':
+        this.updateOnCourse(message.data.competitors);
+        break;
+
+      case 'results':
+        this.updateResults(message.data);
+        break;
+
+      case 'unknown':
+        // Ignore unknown messages
+        return;
+    }
+
+    this.emit('change', this._state);
+  }
+
+  /**
+   * Update on-course competitors and detect finishes
+   */
+  private updateOnCourse(competitors: OnCourseCompetitor[]): void {
+    // Build map of current competitors
+    const currentMap = new Map<string, OnCourseCompetitor>();
+    for (const comp of competitors) {
+      currentMap.set(comp.bib, comp);
+    }
+
+    // Detect finishes: competitor had no dtFinish before, now has one
+    for (const comp of competitors) {
+      const prev = this.previousOnCourse.get(comp.bib);
+      if (prev && !prev.dtFinish && comp.dtFinish) {
+        this.onFinish(comp);
+      }
+    }
+
+    // Update previous state for next comparison
+    this.previousOnCourse = currentMap;
+
+    // Update current race from first competitor
+    if (competitors.length > 0 && competitors[0].raceId) {
+      const newRaceId = competitors[0].raceId;
+      if (this._state.currentRaceId !== newRaceId) {
+        this._state.currentRaceId = newRaceId;
+        this.emit('raceChange', newRaceId);
+      }
+    }
+
+    this._state.onCourse = competitors;
+  }
+
+  /**
+   * Update results
+   */
+  private updateResults(results: typeof this._state.results): void {
+    this._state.results = results;
+
+    // Update current race if this is the current race results
+    if (results?.isCurrent && results.raceId) {
+      if (this._state.currentRaceId !== results.raceId) {
+        this._state.currentRaceId = results.raceId;
+        this.emit('raceChange', results.raceId);
+      }
+    }
+  }
+
+  /**
+   * Handle finish detection
+   */
+  private onFinish(competitor: OnCourseCompetitor): void {
+    this.setHighlight(competitor.bib);
+    this.emit('finish', competitor);
+  }
+
+  /**
+   * Set highlight bib with auto-clear timer
+   */
+  private setHighlight(bib: string): void {
+    // Clear existing timer
+    if (this.highlightTimer) {
+      clearTimeout(this.highlightTimer);
+      this.highlightTimer = null;
+    }
+
+    this._state.highlightBib = bib;
+
+    // Auto-clear after duration
+    this.highlightTimer = setTimeout(() => {
+      this._state.highlightBib = null;
+      this.highlightTimer = null;
+      this.emit('change', this._state);
+    }, HIGHLIGHT_DURATION_MS);
+  }
+
+  /**
+   * Manually set highlight (e.g., from external source)
+   */
+  setHighlightBib(bib: string | null): void {
+    if (bib) {
+      this.setHighlight(bib);
+    } else {
+      if (this.highlightTimer) {
+        clearTimeout(this.highlightTimer);
+        this.highlightTimer = null;
+      }
+      this._state.highlightBib = null;
+    }
+    this.emit('change', this._state);
+  }
+
+  /**
+   * Reset state
+   */
+  reset(): void {
+    if (this.highlightTimer) {
+      clearTimeout(this.highlightTimer);
+      this.highlightTimer = null;
+    }
+
+    this.previousOnCourse.clear();
+
+    this._state = {
+      timeOfDay: null,
+      raceConfig: null,
+      schedule: [],
+      currentRaceId: null,
+      onCourse: [],
+      results: null,
+      highlightBib: null,
+    };
+
+    this.emit('change', this._state);
+  }
+
+  /**
+   * Clean up timers
+   */
+  destroy(): void {
+    if (this.highlightTimer) {
+      clearTimeout(this.highlightTimer);
+      this.highlightTimer = null;
+    }
+    this.removeAllListeners();
+  }
+}
