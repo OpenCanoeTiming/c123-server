@@ -28,15 +28,45 @@ export function formatTopMessage(state: EventStateData): TopMessage | null {
   const currentRace = schedule.find((r) => r.raceId === currentRaceId);
   const raceStatus = currentRace?.raceStatus?.toString() ?? '0';
 
-  const list: TopResultItem[] = results.rows.map((row) => ({
-    Rank: row.rank,
-    Bib: row.bib,
-    Name: row.name,
-    Club: row.club,
-    Total: row.total,
-    Pen: row.pen,
-    Behind: row.behind,
-  }));
+  const list: TopResultItem[] = results.rows.map((row) => {
+    const item: TopResultItem = {
+      Rank: row.rank,
+      Bib: row.bib,
+      Name: row.name,
+      Club: row.club,
+      Total: row.total,
+      Pen: row.pen,
+      Behind: row.behind,
+    };
+
+    // Add extended BR1/BR2 fields if present
+    if (row.time) {
+      item.Time = row.time;
+    }
+    if (row.prevTime !== undefined) {
+      item.PrevTime = row.prevTime;
+    }
+    if (row.prevPen !== undefined) {
+      item.PrevPen = row.prevPen;
+    }
+    if (row.prevTotal !== undefined) {
+      item.PrevTotal = row.prevTotal;
+    }
+    if (row.prevRank !== undefined) {
+      item.PrevRank = row.prevRank;
+    }
+    if (row.totalTotal !== undefined) {
+      item.TotalTotal = row.totalTotal;
+    }
+    if (row.totalRank !== undefined) {
+      item.TotalRank = row.totalRank;
+    }
+    if (row.betterRun !== undefined) {
+      item.BetterRun = row.betterRun;
+    }
+
+    return item;
+  });
 
   return {
     msg: 'top',

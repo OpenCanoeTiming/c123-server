@@ -23,6 +23,24 @@ export interface TopResultItem {
   Pen: number;
   /** Behind leader (e.g., "+1.23") */
   Behind: string;
+
+  // Extended fields for BR1/BR2 (two-run races)
+  /** Current run time as formatted string (e.g., "79.99") */
+  Time?: string;
+  /** Previous run time in centiseconds */
+  PrevTime?: number;
+  /** Previous run penalty seconds */
+  PrevPen?: number;
+  /** Previous run total in centiseconds */
+  PrevTotal?: number;
+  /** Previous run rank */
+  PrevRank?: number;
+  /** Best of both runs (TotalTotal) in centiseconds */
+  TotalTotal?: number;
+  /** Best run rank */
+  TotalRank?: number;
+  /** Which run was better: 1 or 2 */
+  BetterRun?: number;
 }
 
 /**
