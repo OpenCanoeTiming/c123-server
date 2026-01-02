@@ -115,24 +115,24 @@ Vývoj běží proti **nahraným datům z analýzy** (`../analysis/recordings/`)
 
 ---
 
-### Fáze 1: Základ (MVP)
+### Fáze 1: Základ (MVP) [DONE]
 
 **Cíl:** Funkční server, který nahradí c123-proxy.js
 
-1. **TcpSource** (rozšíření c123-proxy.js)
+1. ✅ **TcpSource** (rozšíření c123-proxy.js)
    - TCP připojení k C123:27333
    - Pipe-delimited XML parsing
    - Reconnect s exponential backoff
 
-2. **Základní XML parsery** (převzít z C123Provider.ts)
+2. ✅ **Základní XML parsery** (převzít z C123Provider.ts)
    - `parseOnCourse()` - závodníci na trati
    - `parseResults()` - výsledky
    - `parseTimeOfDay()` - systémový čas
 
-3. **EventState** - jednoduchý stav
+3. ✅ **EventState** - jednoduchý stav
    - Aktuální závod, závodníci, výsledky
 
-4. **WebSocketServer** - CLI-kompatibilní výstup
+4. ✅ **WebSocketServer** - CLI-kompatibilní výstup
    - Port 27084 (vedle C123)
    - Emituje `top`, `oncourse`, `comp` zprávy
 
@@ -144,17 +144,17 @@ Vývoj běží proti **nahraným datům z analýzy** (`../analysis/recordings/`)
 
 ### Fáze 2: Auto-discovery + Detekce dojetí
 
-1. **UdpDiscovery**
+1. ✅ **UdpDiscovery**
    - Poslouchá UDP broadcast 27333
    - Automaticky najde C123 IP
    - Spustí TcpSource bez manuální konfigurace
 
-2. **FinishDetector**
+2. ✅ **FinishDetector** (implementováno v EventState)
    - Sleduje změnu `dtFinish` (z "" na timestamp)
    - Emituje `HighlightBib` pro scoreboard
    - Zajistí highlight i bez CLI
 
-3. **MessageFormatter**
+3. ✅ **MessageFormatter**
    - Transformace EventState → CLI JSON zprávy
    - Kompletní formát: top, oncourse, comp, control
 
