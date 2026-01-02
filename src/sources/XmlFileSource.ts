@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import { EventEmitter } from 'node:events';
 import type { Source, SourceEvents, SourceStatus } from './types.js';
@@ -28,7 +27,6 @@ export class XmlFileSource extends EventEmitter<SourceEvents> implements Source 
   private pollTimer: NodeJS.Timeout | null = null;
   private lastModified: number | null = null;
   private _status: SourceStatus = 'disconnected';
-  private isPolling = false;
 
   constructor(config: XmlFileSourceConfig) {
     super();
@@ -66,7 +64,6 @@ export class XmlFileSource extends EventEmitter<SourceEvents> implements Source 
       return; // Already running
     }
 
-    this.isPolling = true;
     this.setStatus('connecting');
 
     // Initial read
@@ -82,8 +79,6 @@ export class XmlFileSource extends EventEmitter<SourceEvents> implements Source 
    * Stop polling.
    */
   stop(): void {
-    this.isPolling = false;
-
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
       this.pollTimer = null;

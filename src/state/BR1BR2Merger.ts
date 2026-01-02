@@ -105,8 +105,6 @@ export class BR1BR2Merger {
     const br1 = br1Cache.get(bib);
 
     // Current run (BR2) values
-    const currentTimeCs = this.parseTimeToCs(row.time);
-    const currentPen = row.pen;
     const currentTotalCs = this.parseTimeToCs(row.total);
 
     // If we have cached BR1 data, use it to fill in missing fields
@@ -117,50 +115,52 @@ export class BR1BR2Merger {
       const prevRank = row.prevRank ?? br1.rank;
 
       // Calculate totalTotal if not already provided
-      let totalTotal = row.totalTotal;
-      let betterRun = row.betterRun;
-
-      if (totalTotal === undefined && prevTotal > 0 && currentTotalCs > 0) {
-        if (prevTotal <= currentTotalCs) {
-          totalTotal = prevTotal;
-          betterRun = 1;
-        } else {
-          totalTotal = currentTotalCs;
-          betterRun = 2;
-        }
-      }
-
-      return {
+      const result: ResultRow = {
         ...row,
         prevTime,
         prevPen,
         prevTotal,
         prevRank,
-        totalTotal,
-        betterRun,
       };
+
+      if (row.totalTotal !== undefined) {
+        result.totalTotal = row.totalTotal;
+        if (row.betterRun !== undefined) {
+          result.betterRun = row.betterRun;
+        }
+      } else if (prevTotal > 0 && currentTotalCs > 0) {
+        if (prevTotal <= currentTotalCs) {
+          result.totalTotal = prevTotal;
+          result.betterRun = 1;
+        } else {
+          result.totalTotal = currentTotalCs;
+          result.betterRun = 2;
+        }
+      }
+
+      return result;
     }
 
     // No BR1 cache - try to use data from row itself (from C123's PrevTime fields)
     if (row.prevTotal !== undefined) {
-      let totalTotal = row.totalTotal;
-      let betterRun = row.betterRun;
+      const result: ResultRow = { ...row };
 
-      if (totalTotal === undefined && row.prevTotal > 0 && currentTotalCs > 0) {
+      if (row.totalTotal !== undefined) {
+        result.totalTotal = row.totalTotal;
+        if (row.betterRun !== undefined) {
+          result.betterRun = row.betterRun;
+        }
+      } else if (row.prevTotal > 0 && currentTotalCs > 0) {
         if (row.prevTotal <= currentTotalCs) {
-          totalTotal = row.prevTotal;
-          betterRun = 1;
+          result.totalTotal = row.prevTotal;
+          result.betterRun = 1;
         } else {
-          totalTotal = currentTotalCs;
-          betterRun = 2;
+          result.totalTotal = currentTotalCs;
+          result.betterRun = 2;
         }
       }
 
-      return {
-        ...row,
-        totalTotal,
-        betterRun,
-      };
+      return result;
     }
 
     return row;
