@@ -247,6 +247,14 @@ Vývoj běží proti **nahraným datům z analýzy** (`../analysis/recordings/`)
 **Celkem: 148 testů, všechny procházejí**
 
 ---
+## dalsi instrukce
+
+ - [x] poradne README.md k pouziti a konfiguraci, strucnejsi verze do readme ke scoreboardu v2
+ - [ ] dokladne overeni toho, ze mame spravne highlight zavodnika po dojeti ... to jsme ve scoreboardu ladili dlouho a doporucuji prozkoumat, jak to ve scoreboardu je. je tam nekolik klicovych momentu a fakt ze ma cilovy cas je malo ... finalni vysledek je az kdyz vypadne z trate.
+ - [ ] korektni management logu, mozna i nahled na dulezite logyaktualni v te konzoli pro okamzity problemsolving
+
+---
+
 
 ## Porty
 
