@@ -1,0 +1,46 @@
+{
+  "name": "@canoe-scoreboard/c123-server",
+  "version": "0.1.0",
+  "description": "C123 to Scoreboard bridge - smart middleware for canoe slalom timing",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "c123-server": "./dist/cli.js"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest",
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "express": "^4.21.0",
+    "fast-xml-parser": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "@types/express": "^5.0.0",
+    "typescript": "^5.7.0",
+    "tsx": "^4.19.0",
+    "vitest": "^2.1.0",
+    "eslint": "^9.16.0",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "canoe",
+    "slalom",
+    "timing",
+    "scoreboard",
+    "canoe123"
+  ],
+  "author": "",
+  "license": "MIT"
+}
