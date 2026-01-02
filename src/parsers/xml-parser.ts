@@ -249,7 +249,16 @@ export function parseResults(element: unknown): ResultsMessage | null {
       const rowNumber = parseInt(String(rowData['@_Number'] ?? '0'), 10) || 0;
       const rank = parseInt(String(resultT?.['@_Rank'] ?? rowNumber), 10) || rowNumber;
 
-      rows.push({
+      // Parse BR1/BR2 fields if present
+      const prevTimeRaw = resultT?.['@_PrevTime'];
+      const prevPenRaw = resultT?.['@_PrevPen'];
+      const prevTotalRaw = resultT?.['@_PrevTotal'];
+      const prevRankRaw = resultT?.['@_PrevRank'];
+      const totalTotalRaw = resultT?.['@_TotalTotal'];
+      const totalRankRaw = resultT?.['@_TotalRank'];
+      const betterRunRaw = resultT?.['@_BetterRunNr'];
+
+      const resultRow: ResultRow = {
         rank,
         bib,
         name: String(participant['@_Name'] ?? ''),
@@ -264,7 +273,32 @@ export function parseResults(element: unknown): ResultsMessage | null {
         time: String(resultT?.['@_Time'] ?? ''),
         total: String(resultT?.['@_Total'] ?? ''),
         behind: String(resultT?.['@_Behind'] ?? ''),
-      });
+      };
+
+      // Add optional BR1/BR2 fields
+      if (prevTimeRaw !== undefined) {
+        resultRow.prevTime = parseInt(String(prevTimeRaw), 10) || 0;
+      }
+      if (prevPenRaw !== undefined) {
+        resultRow.prevPen = parseInt(String(prevPenRaw), 10) || 0;
+      }
+      if (prevTotalRaw !== undefined) {
+        resultRow.prevTotal = parseInt(String(prevTotalRaw), 10) || 0;
+      }
+      if (prevRankRaw !== undefined) {
+        resultRow.prevRank = parseInt(String(prevRankRaw), 10) || 0;
+      }
+      if (totalTotalRaw !== undefined) {
+        resultRow.totalTotal = parseInt(String(totalTotalRaw), 10) || 0;
+      }
+      if (totalRankRaw !== undefined) {
+        resultRow.totalRank = parseInt(String(totalRankRaw), 10) || 0;
+      }
+      if (betterRunRaw !== undefined) {
+        resultRow.betterRun = parseInt(String(betterRunRaw), 10) || 0;
+      }
+
+      rows.push(resultRow);
     }
   }
 

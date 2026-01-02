@@ -84,6 +84,22 @@ export interface ResultRow {
   total: string;
   /** Behind leader (e.g., "+1.23") */
   behind: string;
+
+  // BR1/BR2 fields (only present in second run results)
+  /** Previous run time in centiseconds */
+  prevTime?: number;
+  /** Previous run penalty seconds */
+  prevPen?: number;
+  /** Previous run total in centiseconds */
+  prevTotal?: number;
+  /** Previous run rank */
+  prevRank?: number;
+  /** Best of both runs (TotalTotal) in centiseconds */
+  totalTotal?: number;
+  /** Best run rank */
+  totalRank?: number;
+  /** Which run was better: 1 or 2 */
+  betterRun?: number;
 }
 
 /**
