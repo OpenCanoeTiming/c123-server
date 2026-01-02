@@ -250,7 +250,23 @@ Vývoj běží proti **nahraným datům z analýzy** (`../analysis/recordings/`)
 ## dalsi instrukce
 
  - [x] poradne README.md k pouziti a konfiguraci, strucnejsi verze do readme ke scoreboardu v2
- - [ ] dokladne overeni toho, ze mame spravne highlight zavodnika po dojeti ... to jsme ve scoreboardu ladili dlouho a doporucuji prozkoumat, jak to ve scoreboardu je. je tam nekolik klicovych momentu a fakt ze ma cilovy cas je malo ... finalni vysledek je az kdyz vypadne z trate.
+ - [x] dokladne overeni toho, ze mame spravne highlight zavodnika po dojeti
+
+   **Vysledek analyzy:** Implementace je spravna a CLI-kompatibilni.
+
+   Jak to funguje:
+   1. **Server (c123-server)** posila `HighlightBib` v `top` zprave ihned po detekci `dtFinish` (prechod z null na timestamp) - viz `src/state/EventState.ts:118-123`
+   2. **Scoreboard** ma interni dvoustupnovy system:
+      - Faze 1: Pri dtFinish zmene nastavi `pendingHighlightBib` + `pendingHighlightTotal`
+      - Faze 2: Highlight se aktivuje az kdyz Results obsahuji odpovidajici `total`
+
+   Timing (z analyzy nahravek `../analysis/07-sitova-komunikace.md`):
+   - C123 `dtFinish` prijde prvni
+   - CLI `HighlightBib` nasleduje o 28-43ms
+   - Zavodnik zustava v oncourse ~4 sekundy po dojeti
+
+   Reference: `../canoe-scoreboard-v2/src/context/ScoreboardContext.tsx:247-266`
+
  - [ ] korektni management logu, mozna i nahled na dulezite logyaktualni v te konzoli pro okamzity problemsolving
 
 ---
