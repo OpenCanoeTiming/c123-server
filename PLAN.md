@@ -196,14 +196,28 @@ Vývoj běží proti **nahraným datům z analýzy** (`../analysis/recordings/`)
 
 ---
 
-### Fáze 5: Windows služba + Produkční hardening
+### Fáze 5: Windows služba + Produkční hardening [IN PROGRESS]
 
-1. **Windows service wrapper** (node-windows)
+1. ✅ **Server orchestration** (`src/server.ts`)
+   - Hlavní `Server` třída koordinuje všechny komponenty
+   - UDP auto-discovery → TCP připojení
+   - XML source polling
+   - BR1/BR2 merging
+   - WebSocket broadcast do scoreboardů
+
+2. ✅ **CLI interface** (`src/cli.ts`)
+   - `c123-server` - spustí server
+   - `c123-server --host <ip>` - připojí na konkrétní C123
+   - `c123-server --xml <path>` - použije XML zdroj
+   - `c123-server install/uninstall/start/stop` - Windows service
+
+3. ✅ **Windows service wrapper** (`src/service/windows-service.ts`)
    - Instalace: `c123-server install`
    - Auto-start při boot
    - Auto-recovery při pádu
+   - Volitelná závislost `node-windows`
 
-2. **Robustnost**
+4. **Robustnost** (TODO)
    - Detekce výměny závodu
    - Zotavení z restartu C123 a z vymeny zavodu v c123
    - Logging, monitoring

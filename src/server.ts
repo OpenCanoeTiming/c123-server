@@ -1,0 +1,304 @@
+import { EventEmitter } from 'node:events';
+import type { ParsedMessage } from './parsers/types.js';
+import { parseXmlMessage } from './parsers/xml-parser.js';
+import type { Source, SourceStatus } from './sources/types.js';
+import { TcpSource } from './sources/TcpSource.js';
+import { UdpDiscovery } from './sources/UdpDiscovery.js';
+import { XmlFileSource } from './sources/XmlFileSource.js';
+import { EventState } from './state/EventState.js';
+import { BR1BR2Merger } from './state/BR1BR2Merger.js';
+import { WebSocketServer } from './output/WebSocketServer.js';
+import { AdminServer } from './admin/AdminServer.js';
+
+/**
+ * Wrapper to make UdpDiscovery compatible with Source interface for admin display
+ */
+class UdpDiscoverySourceAdapter implements Pick<Source, 'status'> {
+  constructor(private discovery: UdpDiscovery) {}
+
+  get status(): SourceStatus {
+    if (this.discovery.getDiscoveredHost()) {
+      return 'connected';
+    }
+    return this.discovery.isListening() ? 'connecting' : 'disconnected';
+  }
+}
+
+/**
+ * Server configuration
+ */
+export interface ServerConfig {
+  /** TCP source host (if not using auto-discovery) */
+  tcpHost?: string;
+  /** TCP source port (default: 27333) */
+  tcpPort?: number;
+  /** Enable UDP auto-discovery (default: true) */
+  autoDiscovery?: boolean;
+  /** UDP discovery port (default: 27333) */
+  udpPort?: number;
+  /** XML file source path (local or URL) */
+  xmlPath?: string;
+  /** XML polling interval in ms (default: 2000) */
+  xmlPollInterval?: number;
+  /** WebSocket server port (default: 27084) */
+  wsPort?: number;
+  /** Admin server port (default: 8084) */
+  adminPort?: number;
+}
+
+/**
+ * Server events
+ */
+export interface ServerEvents {
+  started: [];
+  stopped: [];
+  error: [Error];
+  tcpConnected: [string];
+  tcpDisconnected: [];
+}
+
+const DEFAULT_CONFIG: Required<ServerConfig> = {
+  tcpHost: '',
+  tcpPort: 27333,
+  autoDiscovery: true,
+  udpPort: 27333,
+  xmlPath: '',
+  xmlPollInterval: 2000,
+  wsPort: 27084,
+  adminPort: 8084,
+};
+
+/**
+ * Main C123 Server orchestration.
+ *
+ * Coordinates all components:
+ * - UDP discovery (auto-find C123)
+ * - TCP source (C123 connection)
+ * - XML file source (optional)
+ * - Event state (aggregation)
+ * - BR1/BR2 merger
+ * - WebSocket server (scoreboard output)
+ * - Admin server (dashboard)
+ */
+export class Server extends EventEmitter<ServerEvents> {
+  private readonly config: Required<ServerConfig>;
+
+  private udpDiscovery: UdpDiscovery | null = null;
+  private tcpSource: TcpSource | null = null;
+  private xmlSource: XmlFileSource | null = null;
+  private eventState: EventState;
+  private merger: BR1BR2Merger;
+  private wsServer: WebSocketServer;
+  private adminServer: AdminServer;
+
+  private isRunning = false;
+  private discoveredHost: string | null = null;
+
+  constructor(config?: ServerConfig) {
+    super();
+    this.config = { ...DEFAULT_CONFIG, ...config };
+
+    this.eventState = new EventState();
+    this.merger = new BR1BR2Merger();
+    this.wsServer = new WebSocketServer({ port: this.config.wsPort });
+    this.adminServer = new AdminServer({ port: this.config.adminPort });
+
+    this.setupEventHandlers();
+  }
+
+  /**
+   * Start the server and all components
+   */
+  async start(): Promise<void> {
+    if (this.isRunning) {
+      return;
+    }
+
+    // Start output servers first
+    await this.wsServer.start();
+    await this.adminServer.start();
+
+    // Register state with admin
+    this.adminServer.setEventState(this.eventState);
+    this.adminServer.setWebSocketServer(this.wsServer);
+
+    // Start data sources
+    if (this.config.autoDiscovery && !this.config.tcpHost) {
+      this.startUdpDiscovery();
+    } else if (this.config.tcpHost) {
+      this.startTcpSource(this.config.tcpHost, this.config.tcpPort);
+    }
+
+    if (this.config.xmlPath) {
+      this.startXmlSource();
+    }
+
+    this.isRunning = true;
+    this.emit('started');
+  }
+
+  /**
+   * Stop the server and all components
+   */
+  async stop(): Promise<void> {
+    if (!this.isRunning) {
+      return;
+    }
+
+    // Stop data sources
+    this.udpDiscovery?.stop();
+    this.tcpSource?.stop();
+    this.xmlSource?.stop();
+
+    // Stop output servers
+    await this.wsServer.stop();
+    await this.adminServer.stop();
+
+    // Cleanup
+    this.eventState.destroy();
+
+    this.isRunning = false;
+    this.emit('stopped');
+  }
+
+  /**
+   * Check if server is running
+   */
+  get running(): boolean {
+    return this.isRunning;
+  }
+
+  /**
+   * Get the discovered C123 host (if any)
+   */
+  getDiscoveredHost(): string | null {
+    return this.discoveredHost;
+  }
+
+  /**
+   * Manually set TCP source host (useful for switching)
+   */
+  setTcpHost(host: string, port?: number): void {
+    this.tcpSource?.stop();
+    this.startTcpSource(host, port ?? this.config.tcpPort);
+  }
+
+  /**
+   * Set XML source path
+   */
+  setXmlPath(path: string): void {
+    this.xmlSource?.stop();
+    this.config.xmlPath = path;
+    if (path) {
+      this.startXmlSource();
+    }
+  }
+
+  private setupEventHandlers(): void {
+    // Forward state changes to WebSocket clients
+    this.eventState.on('change', (state) => {
+      this.wsServer.broadcast(state);
+    });
+
+    // Log errors
+    this.wsServer.on('error', (err) => {
+      this.emit('error', err);
+    });
+  }
+
+  private startUdpDiscovery(): void {
+    this.udpDiscovery = new UdpDiscovery({ port: this.config.udpPort });
+
+    // Use adapter to provide status for admin display
+    const adapter = new UdpDiscoverySourceAdapter(this.udpDiscovery);
+    this.adminServer.registerSource('UDP Discovery', 'udp', adapter as unknown as Source, {
+      port: this.config.udpPort,
+    });
+
+    this.udpDiscovery.on('discovered', (host) => {
+      if (!this.discoveredHost) {
+        this.discoveredHost = host;
+        this.startTcpSource(host, this.config.tcpPort);
+      }
+    });
+
+    this.udpDiscovery.on('error', (err) => {
+      this.emit('error', err);
+    });
+
+    this.udpDiscovery.start();
+  }
+
+  private startTcpSource(host: string, port: number): void {
+    this.tcpSource = new TcpSource({ host, port });
+
+    this.adminServer.registerSource('C123 TCP', 'tcp', this.tcpSource, {
+      host,
+      port,
+    });
+
+    this.tcpSource.on('message', (xml) => {
+      this.handleXmlMessage(xml);
+    });
+
+    this.tcpSource.on('status', (status) => {
+      if (status === 'connected') {
+        this.emit('tcpConnected', host);
+      } else if (status === 'disconnected') {
+        this.emit('tcpDisconnected');
+      }
+    });
+
+    this.tcpSource.on('error', (err) => {
+      this.emit('error', err);
+    });
+
+    this.tcpSource.start();
+  }
+
+  private startXmlSource(): void {
+    this.xmlSource = new XmlFileSource({
+      path: this.config.xmlPath,
+      pollInterval: this.config.xmlPollInterval,
+    });
+
+    this.adminServer.registerSource('XML File', 'xml', this.xmlSource, {
+      path: this.config.xmlPath,
+    });
+
+    this.xmlSource.on('message', (xml) => {
+      this.handleXmlMessage(xml);
+    });
+
+    this.xmlSource.on('error', (err) => {
+      this.emit('error', err);
+    });
+
+    this.xmlSource.start();
+  }
+
+  private handleXmlMessage(xml: string): void {
+    try {
+      const parsedMessages = parseXmlMessage(xml);
+
+      for (const parsed of parsedMessages) {
+        if (parsed.type === 'unknown') {
+          continue;
+        }
+
+        // Apply BR1/BR2 merging for results
+        let message: ParsedMessage = parsed;
+        if (parsed.type === 'results') {
+          message = {
+            type: 'results',
+            data: this.merger.processResults(parsed.data),
+          };
+        }
+
+        this.eventState.processMessage(message);
+      }
+    } catch (err) {
+      this.emit('error', err instanceof Error ? err : new Error(String(err)));
+    }
+  }
+}
