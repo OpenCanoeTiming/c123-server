@@ -59,6 +59,7 @@ Options:
   --admin-port <p>  Admin dashboard port (default: 8084)
   --xml <path>      XML file path for results data
   --no-discovery    Disable UDP auto-discovery
+  -d, --debug       Enable verbose debug logging
   -h, --help        Show help message
   -v, --version     Show version
 ```
