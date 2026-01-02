@@ -91,7 +91,7 @@ export class AdminServer {
       this.startTime = Date.now();
 
       this.server = this.app.listen(this.port, () => {
-        Logger.info('Admin', `Server listening on port ${this.port}`);
+        Logger.info('Admin', `Server listening on port ${this.getPort()}`);
         resolve();
       });
 
@@ -124,6 +124,12 @@ export class AdminServer {
    * Get the port the server is listening on
    */
   getPort(): number {
+    if (this.server) {
+      const addr = this.server.address();
+      if (addr && typeof addr === 'object') {
+        return addr.port;
+      }
+    }
     return this.port;
   }
 

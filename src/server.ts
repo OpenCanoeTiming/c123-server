@@ -177,6 +177,20 @@ export class Server extends EventEmitter<ServerEvents> {
   }
 
   /**
+   * Get the WebSocket server port
+   */
+  getWsPort(): number {
+    return this.wsServer.getPort();
+  }
+
+  /**
+   * Get the Admin server port
+   */
+  getAdminPort(): number {
+    return this.adminServer.getPort();
+  }
+
+  /**
    * Manually set TCP source host (useful for switching)
    */
   setTcpHost(host: string, port?: number): void {

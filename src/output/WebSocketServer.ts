@@ -40,7 +40,7 @@ export class WebSocketServer extends EventEmitter<WebSocketServerEvents> {
       this.server = new WsServer({ port: this.port });
 
       this.server.on('listening', () => {
-        Logger.info('WebSocket', `Server listening on port ${this.port}`);
+        Logger.info('WebSocket', `Server listening on port ${this.getPort()}`);
         resolve();
       });
 
@@ -90,6 +90,12 @@ export class WebSocketServer extends EventEmitter<WebSocketServerEvents> {
    * Get the port the server is listening on
    */
   getPort(): number {
+    if (this.server) {
+      const addr = this.server.address();
+      if (addr && typeof addr === 'object') {
+        return addr.port;
+      }
+    }
     return this.port;
   }
 

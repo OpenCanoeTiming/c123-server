@@ -22,31 +22,23 @@ class MockSource extends EventEmitter<SourceEvents> implements Source {
 }
 
 describe('AdminServer', () => {
-  let adminServer: AdminServer;
-  const TEST_PORT = 18084;
-
-  beforeEach(() => {
-    adminServer = new AdminServer({ port: TEST_PORT });
-  });
-
-  afterEach(async () => {
-    await adminServer.stop();
-  });
-
   describe('start/stop', () => {
     it('should start and stop cleanly', async () => {
+      const adminServer = new AdminServer({ port: 0 });
       await adminServer.start();
-      expect(adminServer.getPort()).toBe(TEST_PORT);
+      expect(adminServer.getPort()).toBeGreaterThan(0);
       await adminServer.stop();
     });
 
     it('should handle multiple start calls', async () => {
+      const adminServer = new AdminServer({ port: 0 });
       await adminServer.start();
       await adminServer.start();
       await adminServer.stop();
     });
 
     it('should handle multiple stop calls', async () => {
+      const adminServer = new AdminServer({ port: 0 });
       await adminServer.start();
       await adminServer.stop();
       await adminServer.stop();
@@ -54,13 +46,22 @@ describe('AdminServer', () => {
   });
 
   describe('API endpoints', () => {
+    let adminServer: AdminServer;
+    let port: number;
+
     beforeEach(async () => {
+      adminServer = new AdminServer({ port: 0 });
       await adminServer.start();
+      port = adminServer.getPort();
+    });
+
+    afterEach(async () => {
+      await adminServer.stop();
     });
 
     describe('GET /health', () => {
       it('should return ok status', async () => {
-        const response = await fetch(`http://localhost:${TEST_PORT}/health`);
+        const response = await fetch(`http://localhost:${port}/health`);
         expect(response.ok).toBe(true);
 
         const data = await response.json();
@@ -70,7 +71,7 @@ describe('AdminServer', () => {
 
     describe('GET /api/status', () => {
       it('should return server status', async () => {
-        const response = await fetch(`http://localhost:${TEST_PORT}/api/status`);
+        const response = await fetch(`http://localhost:${port}/api/status`);
         expect(response.ok).toBe(true);
 
         const data = await response.json();
@@ -126,7 +127,7 @@ describe('AdminServer', () => {
 
         adminServer.setEventState(eventState);
 
-        const response = await fetch(`http://localhost:${TEST_PORT}/api/status`);
+        const response = await fetch(`http://localhost:${port}/api/status`);
         const data = (await response.json()) as { event: { currentRaceId: string; raceName: string; onCourseCount: number; resultsCount: number } };
 
         expect(data.event).toMatchObject({
@@ -142,7 +143,7 @@ describe('AdminServer', () => {
 
     describe('GET /api/sources', () => {
       it('should return empty sources by default', async () => {
-        const response = await fetch(`http://localhost:${TEST_PORT}/api/sources`);
+        const response = await fetch(`http://localhost:${port}/api/sources`);
         expect(response.ok).toBe(true);
 
         const data = (await response.json()) as { sources: unknown[] };
@@ -158,7 +159,7 @@ describe('AdminServer', () => {
           port: 27333,
         });
 
-        const response = await fetch(`http://localhost:${TEST_PORT}/api/sources`);
+        const response = await fetch(`http://localhost:${port}/api/sources`);
         const data = (await response.json()) as { sources: unknown[] };
 
         expect(data.sources).toHaveLength(1);
@@ -176,7 +177,7 @@ describe('AdminServer', () => {
 
     describe('GET /api/scoreboards', () => {
       it('should return empty scoreboards by default', async () => {
-        const response = await fetch(`http://localhost:${TEST_PORT}/api/scoreboards`);
+        const response = await fetch(`http://localhost:${port}/api/scoreboards`);
         expect(response.ok).toBe(true);
 
         const data = (await response.json()) as { connected: number; scoreboards: unknown[] };
@@ -187,10 +188,10 @@ describe('AdminServer', () => {
       });
 
       it('should track scoreboard connections', async () => {
-        // Create a real WebSocketServer
-        const wsPort = 18085;
-        const wsServer = new WebSocketServer({ port: wsPort });
+        // Create a real WebSocketServer on dynamic port
+        const wsServer = new WebSocketServer({ port: 0 });
         await wsServer.start();
+        const wsPort = wsServer.getPort();
         adminServer.setWebSocketServer(wsServer);
 
         // Connect a client
@@ -202,7 +203,7 @@ describe('AdminServer', () => {
         // Wait for connection to be registered
         await new Promise((resolve) => setTimeout(resolve, 50));
 
-        const response = await fetch(`http://localhost:${TEST_PORT}/api/scoreboards`);
+        const response = await fetch(`http://localhost:${port}/api/scoreboards`);
         const data = (await response.json()) as { connected: number; scoreboards: Array<{ id: string; connectedAt: string }> };
 
         expect(data.connected).toBe(1);
@@ -217,10 +218,10 @@ describe('AdminServer', () => {
       });
 
       it('should track scoreboard disconnections', async () => {
-        // Create a real WebSocketServer
-        const wsPort = 18086;
-        const wsServer = new WebSocketServer({ port: wsPort });
+        // Create a real WebSocketServer on dynamic port
+        const wsServer = new WebSocketServer({ port: 0 });
         await wsServer.start();
+        const wsPort = wsServer.getPort();
         adminServer.setWebSocketServer(wsServer);
 
         // Connect a client
@@ -238,7 +239,7 @@ describe('AdminServer', () => {
         // Wait for disconnection to be registered
         await new Promise((resolve) => setTimeout(resolve, 50));
 
-        const response = await fetch(`http://localhost:${TEST_PORT}/api/scoreboards`);
+        const response = await fetch(`http://localhost:${port}/api/scoreboards`);
         const data = (await response.json()) as { connected: number; scoreboards: unknown[] };
 
         expect(data.connected).toBe(0);
@@ -250,24 +251,34 @@ describe('AdminServer', () => {
   });
 
   describe('CORS', () => {
-    beforeEach(async () => {
-      await adminServer.start();
-    });
-
     it('should include CORS headers', async () => {
-      const response = await fetch(`http://localhost:${TEST_PORT}/api/status`);
+      const adminServer = new AdminServer({ port: 0 });
+      await adminServer.start();
+      const port = adminServer.getPort();
 
+      const response = await fetch(`http://localhost:${port}/api/status`);
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
+
+      await adminServer.stop();
     });
   });
 
   describe('Dashboard UI', () => {
+    let adminServer: AdminServer;
+    let port: number;
+
     beforeEach(async () => {
+      adminServer = new AdminServer({ port: 0 });
       await adminServer.start();
+      port = adminServer.getPort();
+    });
+
+    afterEach(async () => {
+      await adminServer.stop();
     });
 
     it('should serve dashboard HTML at root', async () => {
-      const response = await fetch(`http://localhost:${TEST_PORT}/`);
+      const response = await fetch(`http://localhost:${port}/`);
       expect(response.ok).toBe(true);
       expect(response.headers.get('content-type')).toContain('text/html');
 
@@ -278,7 +289,7 @@ describe('AdminServer', () => {
     });
 
     it('should include key dashboard elements', async () => {
-      const response = await fetch(`http://localhost:${TEST_PORT}/`);
+      const response = await fetch(`http://localhost:${port}/`);
       const html = await response.text();
 
       // Check for key sections

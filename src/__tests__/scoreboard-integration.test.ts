@@ -98,8 +98,8 @@ function extractTcpMessages(entries: RecordingEntry[]): string[] {
     .map((e) => e.data as string);
 }
 
-/** Helper to create isolated test environment */
-async function createTestEnv(wsPort: number, adminPort: number) {
+/** Helper to create isolated test environment with dynamic ports */
+async function createTestEnv() {
   const entries = await loadRecording();
   const tcpMessages = extractTcpMessages(entries);
 
@@ -137,10 +137,10 @@ async function createTestEnv(wsPort: number, adminPort: number) {
 
   mockTcpServer.on('connection', connectionHandler);
 
-  // Create server
+  // Create server with dynamic ports (0 = auto-assign)
   const server = new Server({
-    wsPort,
-    adminPort,
+    wsPort: 0,
+    adminPort: 0,
     autoDiscovery: false,
     tcpHost: '127.0.0.1',
     tcpPort: mockTcpPort,
@@ -161,7 +161,7 @@ async function createTestEnv(wsPort: number, adminPort: number) {
 
 describe('Scoreboard Integration', () => {
   it('should emit valid CLI-compatible messages that scoreboard can parse', async () => {
-    const { server, cleanup } = await createTestEnv(27185, 8185);
+    const { server, cleanup } = await createTestEnv();
 
     try {
       // Track received messages by type
@@ -175,10 +175,11 @@ describe('Scoreboard Integration', () => {
       const validationErrors: string[] = [];
 
       await server.start();
+      const wsPort = server.getWsPort();
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Connect WebSocket client (simulating scoreboard CLIProvider)
-      const ws = new WebSocket(`ws://127.0.0.1:27185`);
+      const ws = new WebSocket(`ws://127.0.0.1:${wsPort}`);
 
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -281,16 +282,17 @@ describe('Scoreboard Integration', () => {
   }, 15000);
 
   it('should include required fields in top message results', async () => {
-    const { server, cleanup } = await createTestEnv(27186, 8186);
+    const { server, cleanup } = await createTestEnv();
 
     try {
       let topMessage: { data: { list: Record<string, unknown>[] } } | null =
         null;
 
       await server.start();
+      const wsPort = server.getWsPort();
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const ws = new WebSocket(`ws://127.0.0.1:27186`);
+      const ws = new WebSocket(`ws://127.0.0.1:${wsPort}`);
 
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('Timeout')), 5000);
@@ -331,15 +333,16 @@ describe('Scoreboard Integration', () => {
   }, 15000);
 
   it('should include required fields in oncourse message', async () => {
-    const { server, cleanup } = await createTestEnv(27187, 8187);
+    const { server, cleanup } = await createTestEnv();
 
     try {
       let onCourseMessage: { data: Record<string, unknown>[] } | null = null;
 
       await server.start();
+      const wsPort = server.getWsPort();
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const ws = new WebSocket(`ws://127.0.0.1:27187`);
+      const ws = new WebSocket(`ws://127.0.0.1:${wsPort}`);
 
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('Timeout')), 5000);
