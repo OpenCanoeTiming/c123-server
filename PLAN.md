@@ -167,7 +167,7 @@ Vývoj běží proti **nahraným datům z analýzy** (`../analysis/recordings/`)
    - Polling pro změny
    - Poskytuje Participants, kompletní Results
 
-2. **BR1BR2Merger**
+2. ✅ **BR1BR2Merger**
    - Cache BR1 výsledků při jejich příjmu
    - Spojení s BR2 daty (PrevTime, PrevPen)
    - Výpočet TotalTotal (nejlepší z obou jízd)
