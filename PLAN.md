@@ -162,7 +162,7 @@ Vývoj běží proti **nahraným datům z analýzy** (`../analysis/recordings/`)
 
 ### Fáze 3: XML soubory + BR1/BR2
 
-1. **XmlFileSource**
+1. ✅ **XmlFileSource**
    - Načítání XML z lokální cesty nebo URL (OneDrive)
    - Polling pro změny
    - Poskytuje Participants, kompletní Results
