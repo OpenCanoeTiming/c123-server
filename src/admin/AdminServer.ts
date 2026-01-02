@@ -7,7 +7,7 @@ import type {
   AdminServerConfig,
   ServerStatusResponse,
   SourceStatusInfo,
-  ScoreboardInfo,
+  ScoreboardConfig,
 } from './types.js';
 
 const DEFAULT_PORT = 8084;
@@ -38,7 +38,7 @@ export class AdminServer {
 
   private eventState: EventState | null = null;
   private sources: RegisteredSource[] = [];
-  private scoreboards: Map<string, ScoreboardInfo> = new Map();
+  private wsServer: WebSocketServer | null = null;
 
   constructor(config?: Partial<AdminServerConfig>) {
     this.port = config?.port ?? DEFAULT_PORT;
@@ -57,16 +57,7 @@ export class AdminServer {
    * Register WebSocketServer for scoreboard tracking
    */
   setWebSocketServer(ws: WebSocketServer): void {
-    ws.on('connection', (clientId) => {
-      this.scoreboards.set(clientId, {
-        id: clientId,
-        connectedAt: new Date().toISOString(),
-      });
-    });
-
-    ws.on('disconnection', (clientId) => {
-      this.scoreboards.delete(clientId);
-    });
+    this.wsServer = ws;
   }
 
   /**
@@ -152,6 +143,7 @@ export class AdminServer {
     this.app.get('/api/status', this.handleStatus.bind(this));
     this.app.get('/api/sources', this.handleSources.bind(this));
     this.app.get('/api/scoreboards', this.handleScoreboards.bind(this));
+    this.app.post('/api/scoreboards/:id/config', this.handleScoreboardConfig.bind(this));
 
     // Health check
     this.app.get('/health', (_req: Request, res: Response) => {
@@ -164,14 +156,15 @@ export class AdminServer {
    */
   private handleStatus(_req: Request, res: Response): void {
     const state = this.eventState?.state;
+    const sessions = this.wsServer?.getSessions() ?? [];
 
     const response: ServerStatusResponse = {
       version: VERSION,
       uptime: Math.floor((Date.now() - this.startTime) / 1000),
       sources: this.getSourcesStatus(),
       scoreboards: {
-        connected: this.scoreboards.size,
-        list: Array.from(this.scoreboards.values()),
+        connected: sessions.length,
+        list: sessions.map((s) => s.getInfo()),
       },
       event: {
         currentRaceId: state?.currentRaceId ?? null,
@@ -195,10 +188,47 @@ export class AdminServer {
    * GET /api/scoreboards - Connected scoreboards
    */
   private handleScoreboards(_req: Request, res: Response): void {
+    const sessions = this.wsServer?.getSessions() ?? [];
     res.json({
-      connected: this.scoreboards.size,
-      scoreboards: Array.from(this.scoreboards.values()),
+      connected: sessions.length,
+      scoreboards: sessions.map((s) => s.getInfo()),
     });
+  }
+
+  /**
+   * POST /api/scoreboards/:id/config - Update scoreboard configuration
+   */
+  private handleScoreboardConfig(req: Request, res: Response): void {
+    const { id } = req.params;
+    const config = req.body as Partial<ScoreboardConfig>;
+
+    if (!this.wsServer) {
+      res.status(503).json({ error: 'WebSocket server not available' });
+      return;
+    }
+
+    const session = this.wsServer.getSession(id);
+    if (!session) {
+      res.status(404).json({ error: 'Scoreboard not found' });
+      return;
+    }
+
+    // Validate config
+    if (config.raceFilter !== undefined && !Array.isArray(config.raceFilter)) {
+      res.status(400).json({ error: 'raceFilter must be an array' });
+      return;
+    }
+    if (config.showOnCourse !== undefined && typeof config.showOnCourse !== 'boolean') {
+      res.status(400).json({ error: 'showOnCourse must be a boolean' });
+      return;
+    }
+    if (config.showResults !== undefined && typeof config.showResults !== 'boolean') {
+      res.status(400).json({ error: 'showResults must be a boolean' });
+      return;
+    }
+
+    this.wsServer.setSessionConfig(id, config);
+    res.json({ success: true, config: session.getConfig() });
   }
 
   /**

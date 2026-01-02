@@ -180,11 +180,11 @@ Vývoj běží proti **nahraným datům z analýzy** (`../analysis/recordings/`)
 
 ### Fáze 4: Admin dashboard + Per-scoreboard config
 
-1. **AdminServer** (Express, port 8084)
+1. ✅ **AdminServer** (Express, port 8084)
    - REST API: `/api/status`, `/api/scoreboards`, `/api/sources`
    - POST `/api/scoreboards/:id/config` - nastavení
 
-2. **ScoreboardSession**
+2. ✅ **ScoreboardSession**
    - Individuální konfigurace per scoreboard
    - Filtrace kategorií (raceFilter)
    - Custom visibility
@@ -205,8 +205,20 @@ Vývoj běží proti **nahraným datům z analýzy** (`../analysis/recordings/`)
 
 2. **Robustnost**
    - Detekce výměny závodu
-   - Zotavení z restartu C123
+   - Zotavení z restartu C123 a z vymeny zavodu v c123
    - Logging, monitoring
+
+---
+
+### Testovani a zpetna vazba
+
+Vytvor testy ktere otestuji vsechny funkcnosti
+
+otestuj e2e proti nahravce
+
+otestuj se scoreboardem, spust testy na scoreboardu proti C123 serveru
+
+vystupy z testu zapis jako dalsi fazi sem do planu
 
 ---
 

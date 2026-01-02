@@ -1,4 +1,5 @@
 import type { EventStateData } from '../state/types.js';
+import type { ScoreboardConfig } from '../admin/types.js';
 import type {
   TopMessage,
   CliOnCourseMessage,
@@ -149,6 +150,44 @@ export function formatAllMessages(state: EventStateData): string[] {
   const comp = formatCompMessage(state);
   if (comp) {
     messages.push(JSON.stringify(comp));
+  }
+
+  return messages;
+}
+
+/**
+ * Format messages with per-scoreboard filtering applied
+ */
+export function formatFilteredMessages(
+  state: EventStateData,
+  config: ScoreboardConfig
+): string[] {
+  const messages: string[] = [];
+
+  // Check if current race matches filter
+  const raceId = state.currentRaceId;
+  const passesRaceFilter =
+    !config.raceFilter ||
+    config.raceFilter.length === 0 ||
+    (raceId && config.raceFilter.includes(raceId));
+
+  // Results (top message)
+  if (config.showResults !== false && passesRaceFilter) {
+    const top = formatTopMessage(state);
+    if (top) {
+      messages.push(JSON.stringify(top));
+    }
+  }
+
+  // On-course data
+  if (config.showOnCourse !== false && passesRaceFilter) {
+    const oncourse = formatOnCourseMessage(state);
+    messages.push(JSON.stringify(oncourse));
+
+    const comp = formatCompMessage(state);
+    if (comp) {
+      messages.push(JSON.stringify(comp));
+    }
   }
 
   return messages;

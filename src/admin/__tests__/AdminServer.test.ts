@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { WebSocket } from 'ws';
 import { AdminServer } from '../AdminServer.js';
 import { EventState } from '../../state/EventState.js';
 import { WebSocketServer } from '../../output/WebSocketServer.js';
@@ -186,12 +187,20 @@ describe('AdminServer', () => {
       });
 
       it('should track scoreboard connections', async () => {
-        // Create a mock WebSocketServer that emits events
-        const mockWsServer = new EventEmitter() as unknown as WebSocketServer;
-        adminServer.setWebSocketServer(mockWsServer);
+        // Create a real WebSocketServer
+        const wsPort = 18085;
+        const wsServer = new WebSocketServer({ port: wsPort });
+        await wsServer.start();
+        adminServer.setWebSocketServer(wsServer);
 
-        // Simulate connection
-        (mockWsServer as EventEmitter).emit('connection', 'client-1');
+        // Connect a client
+        const client = new WebSocket(`ws://localhost:${wsPort}`);
+        await new Promise<void>((resolve) => {
+          client.on('open', () => resolve());
+        });
+
+        // Wait for connection to be registered
+        await new Promise((resolve) => setTimeout(resolve, 50));
 
         const response = await fetch(`http://localhost:${TEST_PORT}/api/scoreboards`);
         const data = (await response.json()) as { connected: number; scoreboards: Array<{ id: string; connectedAt: string }> };
@@ -199,24 +208,43 @@ describe('AdminServer', () => {
         expect(data.connected).toBe(1);
         expect(data.scoreboards).toHaveLength(1);
         expect(data.scoreboards[0]).toMatchObject({
-          id: 'client-1',
+          id: expect.stringMatching(/^client-\d+$/),
           connectedAt: expect.any(String),
         });
+
+        client.close();
+        await wsServer.stop();
       });
 
       it('should track scoreboard disconnections', async () => {
-        const mockWsServer = new EventEmitter() as unknown as WebSocketServer;
-        adminServer.setWebSocketServer(mockWsServer);
+        // Create a real WebSocketServer
+        const wsPort = 18086;
+        const wsServer = new WebSocketServer({ port: wsPort });
+        await wsServer.start();
+        adminServer.setWebSocketServer(wsServer);
 
-        // Simulate connection then disconnection
-        (mockWsServer as EventEmitter).emit('connection', 'client-1');
-        (mockWsServer as EventEmitter).emit('disconnection', 'client-1');
+        // Connect a client
+        const client = new WebSocket(`ws://localhost:${wsPort}`);
+        await new Promise<void>((resolve) => {
+          client.on('open', () => resolve());
+        });
+
+        // Wait for connection
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // Disconnect
+        client.close();
+
+        // Wait for disconnection to be registered
+        await new Promise((resolve) => setTimeout(resolve, 50));
 
         const response = await fetch(`http://localhost:${TEST_PORT}/api/scoreboards`);
         const data = (await response.json()) as { connected: number; scoreboards: unknown[] };
 
         expect(data.connected).toBe(0);
         expect(data.scoreboards).toHaveLength(0);
+
+        await wsServer.stop();
       });
     });
   });

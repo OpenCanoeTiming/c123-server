@@ -1,8 +1,9 @@
 import { WebSocketServer as WsServer, WebSocket } from 'ws';
 import { EventEmitter } from 'node:events';
 import type { EventStateData } from '../state/types.js';
+import type { ScoreboardConfig } from '../admin/types.js';
 import type { WebSocketServerConfig, WebSocketServerEvents } from './types.js';
-import { formatAllMessages } from './MessageFormatter.js';
+import { ScoreboardSession } from './ScoreboardSession.js';
 
 const DEFAULT_PORT = 27084;
 
@@ -11,11 +12,12 @@ const DEFAULT_PORT = 27084;
  *
  * Provides CLI-compatible JSON messages to connected scoreboards.
  * Broadcasts state changes to all connected clients.
+ * Supports per-scoreboard configuration via ScoreboardSession.
  */
 export class WebSocketServer extends EventEmitter<WebSocketServerEvents> {
   private readonly port: number;
   private server: WsServer | null = null;
-  private clients: Map<string, WebSocket> = new Map();
+  private sessions: Map<string, ScoreboardSession> = new Map();
   private clientIdCounter = 0;
   private lastState: EventStateData | null = null;
 
@@ -64,12 +66,16 @@ export class WebSocketServer extends EventEmitter<WebSocketServerEvents> {
         return;
       }
 
-      // Close all client connections
-      for (const [clientId, ws] of this.clients) {
-        ws.close();
+      // Close all WebSocket connections first
+      for (const client of this.server.clients) {
+        client.terminate();
+      }
+
+      // Emit disconnection events and clear sessions
+      for (const [clientId] of this.sessions) {
         this.emit('disconnection', clientId);
       }
-      this.clients.clear();
+      this.sessions.clear();
 
       this.server.close(() => {
         this.server = null;
@@ -89,7 +95,38 @@ export class WebSocketServer extends EventEmitter<WebSocketServerEvents> {
    * Get number of connected clients
    */
   getClientCount(): number {
-    return this.clients.size;
+    return this.sessions.size;
+  }
+
+  /**
+   * Get session by client ID
+   */
+  getSession(clientId: string): ScoreboardSession | undefined {
+    return this.sessions.get(clientId);
+  }
+
+  /**
+   * Get all sessions
+   */
+  getSessions(): ScoreboardSession[] {
+    return Array.from(this.sessions.values());
+  }
+
+  /**
+   * Update configuration for a specific scoreboard
+   */
+  setSessionConfig(clientId: string, config: Partial<ScoreboardConfig>): boolean {
+    const session = this.sessions.get(clientId);
+    if (!session) {
+      return false;
+    }
+    session.setConfig(config);
+
+    // Send updated state with new config applied
+    if (this.lastState) {
+      session.send(this.lastState);
+    }
+    return true;
   }
 
   /**
@@ -98,22 +135,12 @@ export class WebSocketServer extends EventEmitter<WebSocketServerEvents> {
   broadcast(state: EventStateData): void {
     this.lastState = state;
 
-    const messages = formatAllMessages(state);
-    for (const message of messages) {
-      this.broadcastRaw(message);
-    }
-  }
-
-  /**
-   * Send raw message to all connected clients
-   */
-  private broadcastRaw(message: string): void {
-    for (const [clientId, ws] of this.clients) {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(message);
+    for (const [clientId, session] of this.sessions) {
+      if (session.isConnected()) {
+        session.send(state);
       } else {
         // Clean up dead connections
-        this.clients.delete(clientId);
+        this.sessions.delete(clientId);
         this.emit('disconnection', clientId);
       }
     }
@@ -124,25 +151,23 @@ export class WebSocketServer extends EventEmitter<WebSocketServerEvents> {
    */
   private handleConnection(ws: WebSocket): void {
     const clientId = `client-${++this.clientIdCounter}`;
-    this.clients.set(clientId, ws);
+    const session = new ScoreboardSession(clientId, ws);
+    this.sessions.set(clientId, session);
     this.emit('connection', clientId);
 
     // Send current state to new client
     if (this.lastState) {
-      const messages = formatAllMessages(this.lastState);
-      for (const message of messages) {
-        ws.send(message);
-      }
+      session.send(this.lastState);
     }
 
     ws.on('close', () => {
-      this.clients.delete(clientId);
+      this.sessions.delete(clientId);
       this.emit('disconnection', clientId);
     });
 
     ws.on('error', (err) => {
       this.emit('error', err);
-      this.clients.delete(clientId);
+      this.sessions.delete(clientId);
       this.emit('disconnection', clientId);
     });
   }
