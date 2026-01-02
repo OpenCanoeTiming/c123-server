@@ -224,15 +224,27 @@ Vývoj běží proti **nahraným datům z analýzy** (`../analysis/recordings/`)
 
 ---
 
-### Testovani a zpetna vazba
+### Fáze 6: Testování a integrace [DONE]
 
-Vytvor testy ktere otestuji vsechny funkcnosti
+1. ✅ **Unit testy pro všechny komponenty**
+   - TcpSource, UdpDiscovery, XmlFileSource (29 testů)
+   - XML parser (19 testů)
+   - EventState, BR1BR2Merger (31 testů)
+   - MessageFormatter, WebSocketServer (24 testů)
+   - AdminServer (14 testů)
+   - Server orchestration (9 testů)
 
-otestuj e2e proti nahravce
+2. ✅ **E2E test proti nahrávce**
+   - Replay nahrané C123 session (`rec-2025-12-28T09-34-10.jsonl`)
+   - Ověření správného parsování TimeOfDay, OnCourse, Schedule
+   - Ověření emitování zpráv přes WebSocket (5 testů)
 
-otestuj se scoreboardem, spust testy na scoreboardu proti C123 serveru
+3. ✅ **Scoreboard integration test**
+   - Validace CLI-kompatibilního formátu zpráv
+   - Ověření struktury `top`, `oncourse`, `comp` zpráv
+   - Ověření požadovaných polí pro scoreboard (3 testy)
 
-vystupy z testu zapis jako dalsi fazi sem do planu
+**Celkem: 134 testů, všechny procházejí**
 
 ---
 
