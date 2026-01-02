@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
-import type { ParsedMessage, OnCourseCompetitor } from '../parsers/types.js';
+import type { ParsedMessage, OnCourseCompetitor, ScheduleRace } from '../parsers/types.js';
 import type { EventStateData, EventStateEvents } from './types.js';
+import { Logger } from '../utils/logger.js';
 
 const HIGHLIGHT_DURATION_MS = 10000;
 
@@ -24,6 +25,7 @@ export class EventState extends EventEmitter<EventStateEvents> {
     onCourse: [],
     results: null,
     highlightBib: null,
+    scheduleFingerprint: null,
   };
 
   private highlightTimer: NodeJS.Timeout | null = null;
@@ -50,7 +52,7 @@ export class EventState extends EventEmitter<EventStateEvents> {
         break;
 
       case 'schedule':
-        this._state.schedule = message.data.races;
+        this.updateSchedule(message.data.races);
         break;
 
       case 'oncourse':
@@ -67,6 +69,40 @@ export class EventState extends EventEmitter<EventStateEvents> {
     }
 
     this.emit('change', this._state);
+  }
+
+  /**
+   * Create a fingerprint from schedule to detect event changes.
+   * Uses all raceIds sorted to create a stable identifier.
+   */
+  private createScheduleFingerprint(races: ScheduleRace[]): string {
+    if (races.length === 0) {
+      return '';
+    }
+    // Sort by order and create fingerprint from raceIds
+    const sortedRaceIds = races
+      .slice()
+      .sort((a, b) => a.order - b.order)
+      .map((r) => r.raceId)
+      .join('|');
+    return sortedRaceIds;
+  }
+
+  /**
+   * Update schedule and detect event changes
+   */
+  private updateSchedule(races: ScheduleRace[]): void {
+    const newFingerprint = this.createScheduleFingerprint(races);
+    const oldFingerprint = this._state.scheduleFingerprint;
+
+    this._state.schedule = races;
+    this._state.scheduleFingerprint = newFingerprint;
+
+    // Detect schedule change (different event loaded)
+    if (oldFingerprint !== null && newFingerprint !== oldFingerprint) {
+      Logger.info('EventState', `Schedule changed: event reset detected`);
+      this.emit('scheduleChange', newFingerprint);
+    }
   }
 
   /**
@@ -165,6 +201,8 @@ export class EventState extends EventEmitter<EventStateEvents> {
    * Reset state
    */
   reset(): void {
+    Logger.info('EventState', 'State reset');
+
     if (this.highlightTimer) {
       clearTimeout(this.highlightTimer);
       this.highlightTimer = null;
@@ -180,6 +218,7 @@ export class EventState extends EventEmitter<EventStateEvents> {
       onCourse: [],
       results: null,
       highlightBib: null,
+      scheduleFingerprint: null,
     };
 
     this.emit('change', this._state);

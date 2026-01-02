@@ -12,6 +12,7 @@ function createMockState(overrides: Partial<EventStateData> = {}): EventStateDat
     onCourse: [],
     results: null,
     highlightBib: null,
+    scheduleFingerprint: null,
     ...overrides,
   };
 }

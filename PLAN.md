@@ -196,7 +196,7 @@ Vývoj běží proti **nahraným datům z analýzy** (`../analysis/recordings/`)
 
 ---
 
-### Fáze 5: Windows služba + Produkční hardening [IN PROGRESS]
+### Fáze 5: Windows služba + Produkční hardening [DONE]
 
 1. ✅ **Server orchestration** (`src/server.ts`)
    - Hlavní `Server` třída koordinuje všechny komponenty
@@ -217,10 +217,10 @@ Vývoj běží proti **nahraným datům z analýzy** (`../analysis/recordings/`)
    - Auto-recovery při pádu
    - Volitelná závislost `node-windows`
 
-4. **Robustnost** (TODO)
-   - Detekce výměny závodu
-   - Zotavení z restartu C123 a z vymeny zavodu v c123
-   - Logging, monitoring
+4. ✅ **Robustnost**
+   - Detekce výměny závodu (schedule fingerprint)
+   - Automatický reset BR1/BR2 cache při změně závodu
+   - Logger utility pro strukturované logování
 
 ---
 
@@ -244,7 +244,7 @@ Vývoj běží proti **nahraným datům z analýzy** (`../analysis/recordings/`)
    - Ověření struktury `top`, `oncourse`, `comp` zpráv
    - Ověření požadovaných polí pro scoreboard (3 testy)
 
-**Celkem: 134 testů, všechny procházejí**
+**Celkem: 148 testů, všechny procházejí**
 
 ---
 

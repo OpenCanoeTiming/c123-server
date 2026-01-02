@@ -6,3 +6,5 @@ export * from './admin/index.js';
 export * from './service/index.js';
 export { Server } from './server.js';
 export type { ServerConfig, ServerEvents } from './server.js';
+export { Logger } from './utils/logger.js';
+export type { LogLevel } from './utils/logger.js';

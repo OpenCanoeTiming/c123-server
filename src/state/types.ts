@@ -29,6 +29,9 @@ export interface EventStateData {
 
   /** Bib to highlight (recent finish) */
   highlightBib: string | null;
+
+  /** Schedule fingerprint for detecting event changes */
+  scheduleFingerprint: string | null;
 }
 
 /**
@@ -43,4 +46,7 @@ export interface EventStateEvents {
 
   /** Race changed */
   raceChange: [raceId: string];
+
+  /** Event/schedule changed (different event loaded in C123) */
+  scheduleChange: [fingerprint: string];
 }

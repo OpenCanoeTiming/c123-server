@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { Server } from '../server.js';
 import net from 'node:net';
 import fs from 'node:fs';

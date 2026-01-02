@@ -9,6 +9,7 @@ import { EventState } from './state/EventState.js';
 import { BR1BR2Merger } from './state/BR1BR2Merger.js';
 import { WebSocketServer } from './output/WebSocketServer.js';
 import { AdminServer } from './admin/AdminServer.js';
+import { Logger } from './utils/logger.js';
 
 /**
  * Wrapper to make UdpDiscovery compatible with Source interface for admin display
@@ -198,6 +199,22 @@ export class Server extends EventEmitter<ServerEvents> {
     // Forward state changes to WebSocket clients
     this.eventState.on('change', (state) => {
       this.wsServer.broadcast(state);
+    });
+
+    // Handle schedule change (different event loaded in C123)
+    this.eventState.on('scheduleChange', () => {
+      Logger.warn('Server', 'Event change detected, clearing BR1/BR2 cache');
+      this.merger.clearAll();
+    });
+
+    // Log race changes
+    this.eventState.on('raceChange', (raceId) => {
+      Logger.info('Server', `Race changed to: ${raceId}`);
+    });
+
+    // Log finish detection
+    this.eventState.on('finish', (competitor) => {
+      Logger.info('Server', `Finish detected: bib ${competitor.bib}`);
     });
 
     // Log errors

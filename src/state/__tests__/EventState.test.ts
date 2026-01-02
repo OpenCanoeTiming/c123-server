@@ -25,6 +25,7 @@ describe('EventState', () => {
         onCourse: [],
         results: null,
         highlightBib: null,
+        scheduleFingerprint: null,
       });
     });
   });
@@ -287,6 +288,7 @@ describe('EventState', () => {
         onCourse: [],
         results: null,
         highlightBib: null,
+        scheduleFingerprint: null,
       });
     });
 
@@ -299,7 +301,113 @@ describe('EventState', () => {
       expect(changeSpy).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('schedule change detection', () => {
+    it('should create schedule fingerprint from races', () => {
+      state.processMessage({
+        type: 'schedule',
+        data: {
+          races: [
+            createScheduleRace('K1M_ST_BR1_6', 1),
+            createScheduleRace('K1M_ST_BR2_6', 2),
+          ],
+        },
+      });
+
+      expect(state.state.scheduleFingerprint).toBe('K1M_ST_BR1_6|K1M_ST_BR2_6');
+    });
+
+    it('should not emit scheduleChange on first schedule', () => {
+      const changeSpy = vi.fn();
+      state.on('scheduleChange', changeSpy);
+
+      state.processMessage({
+        type: 'schedule',
+        data: {
+          races: [createScheduleRace('K1M_ST_BR1_6', 1)],
+        },
+      });
+
+      expect(changeSpy).not.toHaveBeenCalled();
+    });
+
+    it('should emit scheduleChange when schedule changes', () => {
+      const changeSpy = vi.fn();
+
+      // Set initial schedule
+      state.processMessage({
+        type: 'schedule',
+        data: {
+          races: [createScheduleRace('K1M_ST_BR1_6', 1)],
+        },
+      });
+
+      state.on('scheduleChange', changeSpy);
+
+      // Change schedule (different event)
+      state.processMessage({
+        type: 'schedule',
+        data: {
+          races: [createScheduleRace('C1W_HO_BR1_7', 1)],
+        },
+      });
+
+      expect(changeSpy).toHaveBeenCalledWith('C1W_HO_BR1_7');
+    });
+
+    it('should not emit scheduleChange if schedule is the same', () => {
+      const changeSpy = vi.fn();
+
+      // Set initial schedule
+      state.processMessage({
+        type: 'schedule',
+        data: {
+          races: [
+            createScheduleRace('K1M_ST_BR1_6', 1),
+            createScheduleRace('K1M_ST_BR2_6', 2),
+          ],
+        },
+      });
+
+      state.on('scheduleChange', changeSpy);
+
+      // Same schedule again
+      state.processMessage({
+        type: 'schedule',
+        data: {
+          races: [
+            createScheduleRace('K1M_ST_BR1_6', 1),
+            createScheduleRace('K1M_ST_BR2_6', 2),
+          ],
+        },
+      });
+
+      expect(changeSpy).not.toHaveBeenCalled();
+    });
+
+    it('should handle empty schedule', () => {
+      state.processMessage({
+        type: 'schedule',
+        data: { races: [] },
+      });
+
+      expect(state.state.scheduleFingerprint).toBe('');
+    });
+  });
 });
+
+function createScheduleRace(raceId: string, order: number) {
+  return {
+    order,
+    raceId,
+    race: `Test Race ${order}`,
+    mainTitle: 'Test',
+    subTitle: '',
+    shortTitle: 'T',
+    raceStatus: 3,
+    startTime: '10:00:00',
+  };
+}
 
 function createCompetitor(
   bib: string,

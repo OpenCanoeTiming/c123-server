@@ -1,6 +1,7 @@
 import net from 'node:net';
 import { EventEmitter } from 'node:events';
 import type { Source, SourceEvents, SourceStatus, TcpSourceConfig } from './types.js';
+import { Logger } from '../utils/logger.js';
 
 const DEFAULT_PORT = 27333;
 const DEFAULT_INITIAL_RECONNECT_DELAY = 1000;
@@ -77,6 +78,7 @@ export class TcpSource extends EventEmitter<SourceEvents> implements Source {
       this.socket = null;
     }
 
+    Logger.info('TcpSource', `Connecting to ${this.host}:${this.port}`);
     this.setStatus('connecting');
     this.buffer = '';
 
@@ -84,6 +86,7 @@ export class TcpSource extends EventEmitter<SourceEvents> implements Source {
     this.socket = socket;
 
     socket.connect(this.port, this.host, () => {
+      Logger.info('TcpSource', `Connected to ${this.host}:${this.port}`);
       this.currentReconnectDelay = this.initialReconnectDelay;
       this.setStatus('connected');
     });
@@ -93,12 +96,14 @@ export class TcpSource extends EventEmitter<SourceEvents> implements Source {
     });
 
     socket.on('close', () => {
+      Logger.info('TcpSource', 'Connection closed');
       this.socket = null;
       this.setStatus('disconnected');
       this.scheduleReconnect();
     });
 
     socket.on('error', (err) => {
+      Logger.error('TcpSource', 'Connection error', err);
       this.emit('error', err);
       // close event will trigger reconnect
     });
@@ -124,6 +129,8 @@ export class TcpSource extends EventEmitter<SourceEvents> implements Source {
     if (!this.shouldReconnect || this.reconnectTimer) {
       return;
     }
+
+    Logger.debug('TcpSource', `Reconnecting in ${this.currentReconnectDelay}ms`);
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
