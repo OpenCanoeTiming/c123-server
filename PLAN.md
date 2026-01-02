@@ -267,7 +267,13 @@ Vývoj běží proti **nahraným datům z analýzy** (`../analysis/recordings/`)
 
    Reference: `../canoe-scoreboard-v2/src/context/ScoreboardContext.tsx:247-266`
 
- - [ ] korektni management logu, mozna i nahled na dulezite logyaktualni v te konzoli pro okamzity problemsolving
+ - [x] korektni management logu, mozna i nahled na dulezite logyaktualni v te konzoli pro okamzity problemsolving
+
+   **Implementováno:**
+   - Barevný logger s úrovněmi (debug/info/warn/error)
+   - Logování ve všech komponentách (TcpSource, UdpDiscovery, WebSocketServer, AdminServer)
+   - CLI flag `--debug` pro verbose výstup
+   - Automatická detekce TTY pro barevný výstup
 
 ---
 

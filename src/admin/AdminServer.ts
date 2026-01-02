@@ -9,6 +9,7 @@ import type {
   SourceStatusInfo,
   ScoreboardConfig,
 } from './types.js';
+import { Logger } from '../utils/logger.js';
 
 const DEFAULT_PORT = 8084;
 const VERSION = '0.1.0';
@@ -90,6 +91,7 @@ export class AdminServer {
       this.startTime = Date.now();
 
       this.server = this.app.listen(this.port, () => {
+        Logger.info('Admin', `Server listening on port ${this.port}`);
         resolve();
       });
 

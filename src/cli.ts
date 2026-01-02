@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 import { Server, ServerConfig } from './server.js';
+import { Logger } from './utils/logger.js';
 
 /**
  * Parse command line arguments
  */
-function parseArgs(): { command: string; config: ServerConfig } {
+function parseArgs(): { command: string; config: ServerConfig; debug: boolean } {
   const args = process.argv.slice(2);
   let command = 'run';
+  let debug = false;
   const config: ServerConfig = {};
 
   for (let i = 0; i < args.length; i++) {
@@ -51,9 +53,13 @@ function parseArgs(): { command: string; config: ServerConfig } {
     if (arg === '--no-discovery') {
       config.autoDiscovery = false;
     }
+
+    if (arg === '--debug' || arg === '-d') {
+      debug = true;
+    }
   }
 
-  return { command, config };
+  return { command, config, debug };
 }
 
 /**
@@ -79,6 +85,7 @@ Options:
   --admin-port <p>  Admin dashboard port (default: 8084)
   --xml <path>      XML file path for results data
   --no-discovery    Disable UDP auto-discovery
+  -d, --debug       Enable verbose debug logging
   -h, --help        Show this help message
   -v, --version     Show version
 
@@ -92,12 +99,17 @@ Examples:
 /**
  * Run the server
  */
-async function runServer(config: ServerConfig): Promise<void> {
+async function runServer(config: ServerConfig, debug: boolean): Promise<void> {
+  // Configure log level based on debug flag
+  if (debug) {
+    Logger.setLevel('debug');
+  }
+
   const server = new Server(config);
 
   // Handle shutdown signals
   const shutdown = async () => {
-    console.log('\nShutting down...');
+    Logger.info('CLI', 'Shutting down...');
     await server.stop();
     process.exit(0);
   };
@@ -107,29 +119,29 @@ async function runServer(config: ServerConfig): Promise<void> {
 
   // Error handling
   server.on('error', (err) => {
-    console.error('Server error:', err.message);
+    Logger.error('Server', err.message, err);
   });
 
   server.on('tcpConnected', (host) => {
-    console.log(`Connected to C123 at ${host}`);
+    Logger.info('Server', `Connected to C123 at ${host}`);
   });
 
   server.on('tcpDisconnected', () => {
-    console.log('Disconnected from C123, reconnecting...');
+    Logger.warn('Server', 'Disconnected from C123, reconnecting...');
   });
 
   // Start
   try {
     await server.start();
-    console.log('C123 Server started');
-    console.log(`  WebSocket: ws://localhost:${config.wsPort ?? 27084}`);
-    console.log(`  Admin:     http://localhost:${config.adminPort ?? 8084}`);
+    Logger.info('CLI', 'C123 Server started');
+    Logger.info('CLI', `WebSocket: ws://localhost:${config.wsPort ?? 27084}`);
+    Logger.info('CLI', `Admin: http://localhost:${config.adminPort ?? 8084}`);
 
     if (config.autoDiscovery !== false && !config.tcpHost) {
-      console.log('  Waiting for C123 discovery...');
+      Logger.info('CLI', 'Waiting for C123 discovery...');
     }
   } catch (err) {
-    console.error('Failed to start server:', err);
+    Logger.error('CLI', 'Failed to start server', err);
     process.exit(1);
   }
 }
@@ -177,10 +189,10 @@ async function handleServiceCommand(command: string): Promise<void> {
  * Main entry point
  */
 async function main(): Promise<void> {
-  const { command, config } = parseArgs();
+  const { command, config, debug } = parseArgs();
 
   if (command === 'run') {
-    await runServer(config);
+    await runServer(config, debug);
   } else {
     await handleServiceCommand(command);
   }

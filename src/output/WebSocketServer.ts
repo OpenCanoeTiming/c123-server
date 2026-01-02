@@ -4,6 +4,7 @@ import type { EventStateData } from '../state/types.js';
 import type { ScoreboardConfig } from '../admin/types.js';
 import type { WebSocketServerConfig, WebSocketServerEvents } from './types.js';
 import { ScoreboardSession } from './ScoreboardSession.js';
+import { Logger } from '../utils/logger.js';
 
 const DEFAULT_PORT = 27084;
 
@@ -39,6 +40,7 @@ export class WebSocketServer extends EventEmitter<WebSocketServerEvents> {
       this.server = new WsServer({ port: this.port });
 
       this.server.on('listening', () => {
+        Logger.info('WebSocket', `Server listening on port ${this.port}`);
         resolve();
       });
 
@@ -153,6 +155,7 @@ export class WebSocketServer extends EventEmitter<WebSocketServerEvents> {
     const clientId = `client-${++this.clientIdCounter}`;
     const session = new ScoreboardSession(clientId, ws);
     this.sessions.set(clientId, session);
+    Logger.info('WebSocket', `Client connected: ${clientId}`);
     this.emit('connection', clientId);
 
     // Send current state to new client
@@ -162,6 +165,7 @@ export class WebSocketServer extends EventEmitter<WebSocketServerEvents> {
 
     ws.on('close', () => {
       this.sessions.delete(clientId);
+      Logger.info('WebSocket', `Client disconnected: ${clientId}`);
       this.emit('disconnection', clientId);
     });
 

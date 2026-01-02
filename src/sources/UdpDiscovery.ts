@@ -1,5 +1,6 @@
 import dgram from 'node:dgram';
 import { EventEmitter } from 'node:events';
+import { Logger } from '../utils/logger.js';
 
 const DEFAULT_PORT = 27333;
 const DEFAULT_DISCOVERY_TIMEOUT = 30000;
@@ -92,6 +93,7 @@ export class UdpDiscovery extends EventEmitter<UdpDiscoveryEvents> {
       socket.bind(this.port, () => {
         this.isRunning = true;
         this.startTimeoutTimer();
+        Logger.info('UdpDiscovery', `Listening on port ${this.port}`);
         resolve();
       });
     });
@@ -109,6 +111,7 @@ export class UdpDiscovery extends EventEmitter<UdpDiscoveryEvents> {
     }
 
     this.isRunning = false;
+    Logger.debug('UdpDiscovery', 'Stopped');
   }
 
   /**
@@ -130,6 +133,7 @@ export class UdpDiscovery extends EventEmitter<UdpDiscoveryEvents> {
     if (!this.discoveredHost) {
       this.discoveredHost = host;
       this.clearTimeoutTimer();
+      Logger.info('UdpDiscovery', `Discovered C123 at ${host}`);
       this.emit('discovered', host);
     }
   }
