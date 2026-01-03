@@ -256,14 +256,14 @@ Pro migrace z CLI na C123 Server:
 - [x] Doporučená architektura klienta
 - [x] Příklady v JS/TS
 
-#### 10.2 Scoreboard requirements
+#### 10.2 Scoreboard requirements ✅
 **Výstup:** `docs/SCOREBOARD-REQUIREMENTS.md`
 
 Co musí scoreboard implementovat:
-- [ ] Finish detection (sledování dtFinish)
-- [ ] BR1/BR2 merge logika
-- [ ] Results filtering (Current vs historické)
-- [ ] OnCourse → aktuální závodník
+- [x] Finish detection (sledování dtFinish)
+- [x] BR1/BR2 merge logika
+- [x] Results filtering (Current vs historické)
+- [x] OnCourse → aktuální závodník
 
 ---
 ## Dodatecna zjisteni a ukoly
