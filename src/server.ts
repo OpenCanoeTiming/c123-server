@@ -1,13 +1,13 @@
 import { EventEmitter } from 'node:events';
-import type { ParsedMessage } from './parsers/types.js';
-import { parseXmlMessage } from './parsers/xml-parser.js';
+import type { ParsedMessage } from './protocol/index.js';
+import { parseXmlMessage } from './protocol/index.js';
 import type { Source, SourceStatus } from './sources/types.js';
 import { TcpSource } from './sources/TcpSource.js';
 import { UdpDiscovery } from './sources/UdpDiscovery.js';
 import { XmlFileSource } from './sources/XmlFileSource.js';
 import { EventState } from './state/EventState.js';
 import { BR1BR2Merger } from './state/BR1BR2Merger.js';
-import { WebSocketServer } from './output/WebSocketServer.js';
+import { WebSocketServer } from './ws/WebSocketServer.js';
 import { AdminServer } from './admin/AdminServer.js';
 import { Logger } from './utils/logger.js';
 import {
@@ -16,7 +16,7 @@ import {
   createResults,
   createRaceConfig,
   createSchedule,
-} from './protocol/factory.js';
+} from './protocol/index.js';
 
 /**
  * Wrapper to make UdpDiscovery compatible with Source interface for admin display

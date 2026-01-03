@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { ParsedMessage, OnCourseCompetitor, ScheduleRace } from '../parsers/types.js';
+import type { ParsedMessage, OnCourseCompetitor, ScheduleRace } from '../protocol/index.js';
 import type { EventStateData, EventStateEvents } from './types.js';
 import { Logger } from '../utils/logger.js';
 

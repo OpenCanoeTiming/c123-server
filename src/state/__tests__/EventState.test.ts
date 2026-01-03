@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventState } from '../EventState.js';
-import type { ParsedMessage, OnCourseCompetitor } from '../../parsers/types.js';
+import type { ParsedMessage, OnCourseCompetitor } from '../../protocol/index.js';
 
 describe('EventState', () => {
   let state: EventState;

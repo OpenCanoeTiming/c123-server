@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { WebSocket } from 'ws';
 import { AdminServer } from '../AdminServer.js';
 import { EventState } from '../../state/EventState.js';
-import { WebSocketServer } from '../../output/WebSocketServer.js';
+import { WebSocketServer } from '../../ws/WebSocketServer.js';
 import { EventEmitter } from 'node:events';
 import type { Source, SourceEvents, SourceStatus } from '../../sources/types.js';
 

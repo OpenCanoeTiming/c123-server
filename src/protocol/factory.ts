@@ -8,7 +8,7 @@ import type {
   TimeOfDayMessage,
   RaceConfigMessage,
   ScheduleMessage,
-} from '../parsers/types.js';
+} from './parser-types.js';
 
 import type {
   C123TimeOfDay,

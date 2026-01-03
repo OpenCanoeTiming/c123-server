@@ -11,7 +11,7 @@ import type {
   TimeOfDayMessage,
   RaceConfigMessage,
   ScheduleMessage,
-} from '../parsers/types.js';
+} from './parser-types.js';
 
 // Re-export parser types for convenience
 export type {
@@ -23,7 +23,8 @@ export type {
   RaceConfigMessage,
   ScheduleRace,
   ScheduleMessage,
-} from '../parsers/types.js';
+  ParsedMessage,
+} from './parser-types.js';
 
 /**
  * Base envelope for all C123 protocol messages

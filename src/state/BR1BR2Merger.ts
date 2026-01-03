@@ -1,4 +1,4 @@
-import type { ResultsMessage, ResultRow } from '../parsers/types.js';
+import type { ResultsMessage, ResultRow } from '../protocol/index.js';
 
 /**
  * Cached run result for a competitor

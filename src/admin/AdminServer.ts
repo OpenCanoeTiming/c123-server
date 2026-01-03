@@ -2,7 +2,7 @@ import express, { Express, Request, Response } from 'express';
 import { Server } from 'node:http';
 import type { EventState } from '../state/EventState.js';
 import type { Source } from '../sources/types.js';
-import type { WebSocketServer } from '../output/WebSocketServer.js';
+import type { WebSocketServer } from '../ws/WebSocketServer.js';
 import type {
   AdminServerConfig,
   ServerStatusResponse,

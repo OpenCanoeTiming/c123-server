@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { BR1BR2Merger } from '../BR1BR2Merger.js';
-import type { ResultsMessage, ResultRow } from '../../parsers/types.js';
+import type { ResultsMessage, ResultRow } from '../../protocol/index.js';
 
 describe('BR1BR2Merger', () => {
   let merger: BR1BR2Merger;

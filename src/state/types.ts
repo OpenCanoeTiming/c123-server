@@ -3,7 +3,7 @@ import type {
   ResultsMessage,
   RaceConfigMessage,
   ScheduleRace,
-} from '../parsers/types.js';
+} from '../protocol/index.js';
 
 /**
  * Current state of the event

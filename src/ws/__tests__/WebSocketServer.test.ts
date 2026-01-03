@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { WebSocket } from 'ws';
 import { WebSocketServer } from '../WebSocketServer.js';
 import { createOnCourse, createTimeOfDay, createResults } from '../../protocol/factory.js';
-import type { C123Message } from '../../protocol/types.js';
+import type { C123Message, C123OnCourse, C123TimeOfDay, C123Results } from '../../protocol/types.js';
 
 describe('WebSocketServer', () => {
   let server: WebSocketServer;
@@ -154,8 +154,9 @@ describe('WebSocketServer', () => {
 
       expect(receivedMessages.length).toBe(1);
       expect(receivedMessages[0].type).toBe('OnCourse');
-      expect(receivedMessages[0].data.competitors).toHaveLength(1);
-      expect(receivedMessages[0].data.competitors[0].bib).toBe('5');
+      const onCourseMsg = receivedMessages[0] as C123OnCourse;
+      expect(onCourseMsg.data.competitors).toHaveLength(1);
+      expect(onCourseMsg.data.competitors[0].bib).toBe('5');
 
       client.close();
     });
@@ -214,8 +215,9 @@ describe('WebSocketServer', () => {
 
       expect(receivedMessages.length).toBe(1);
       expect(receivedMessages[0].type).toBe('TimeOfDay');
-      expect(receivedMessages[0].data.time).toBe('15:45:30');
-      expect(receivedMessages[0].timestamp).toBeDefined();
+      const timeMsg = receivedMessages[0] as C123TimeOfDay;
+      expect(timeMsg.data.time).toBe('15:45:30');
+      expect(timeMsg.timestamp).toBeDefined();
 
       client.close();
     });
@@ -266,8 +268,9 @@ describe('WebSocketServer', () => {
 
       expect(receivedMessages.length).toBe(1);
       expect(receivedMessages[0].type).toBe('Results');
-      expect(receivedMessages[0].data.raceId).toBe('K1M_ST_BR1_1');
-      expect(receivedMessages[0].data.rows).toHaveLength(1);
+      const resultsMsg = receivedMessages[0] as C123Results;
+      expect(resultsMsg.data.raceId).toBe('K1M_ST_BR1_1');
+      expect(resultsMsg.data.rows).toHaveLength(1);
 
       client.close();
     });

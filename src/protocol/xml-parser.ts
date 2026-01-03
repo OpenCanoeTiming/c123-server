@@ -9,7 +9,7 @@ import type {
   RaceConfigMessage,
   ScheduleMessage,
   ScheduleRace,
-} from './types.js';
+} from './parser-types.js';
 
 const parser = new XMLParser({
   ignoreAttributes: false,
