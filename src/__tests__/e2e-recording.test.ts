@@ -95,13 +95,9 @@ describe('E2E Recording Replay', () => {
   });
 
   it('should process recording and emit C123 messages to WebSocket clients', async () => {
-    const wsPort = 27184;
-    const adminPort = 8184;
-
     // Setup: server will connect to our mock TCP
     server = new Server({
-      wsPort,
-      adminPort,
+      port: 0, // Use dynamic port
       autoDiscovery: false,
       tcpHost: '127.0.0.1',
       tcpPort: mockTcpPort,
@@ -128,12 +124,13 @@ describe('E2E Recording Replay', () => {
 
     // Start server
     await server.start();
+    const port = server.getPort();
 
     // Wait for TCP to connect
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Connect WebSocket client
-    const ws = new WebSocket(`ws://127.0.0.1:${wsPort}`);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
 
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {

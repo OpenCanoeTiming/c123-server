@@ -1,15 +1,28 @@
 # C123 Server Integration Guide
 
-This guide explains how to integrate a scoreboard client with the C123 Server. It covers WebSocket connections, REST API usage, and recommended client architecture.
+This guide explains how to integrate a scoreboard client with the C123 Server. It covers server discovery, WebSocket connections, REST API usage, and recommended client architecture.
 
 ---
 
 ## Quick Start
 
-### 1. Connect to WebSocket (real-time data)
+### 1. Discover or Configure Server
 
 ```javascript
-const ws = new WebSocket('ws://192.168.1.50:27084');
+// Option A: URL parameter (explicit)
+const serverUrl = new URLSearchParams(location.search).get('server');
+
+// Option B: Auto-discovery (recommended)
+const serverUrl = await discoverC123Server();
+
+// Option C: Cached from previous session
+const serverUrl = localStorage.getItem('c123-server-url');
+```
+
+### 2. Connect to WebSocket (real-time data)
+
+```javascript
+const ws = new WebSocket(`ws://${serverUrl}/ws`);
 
 ws.onopen = () => {
   console.log('Connected to C123 Server');
@@ -21,15 +34,15 @@ ws.onmessage = (event) => {
 };
 ```
 
-### 2. Use REST API (static data)
+### 3. Use REST API (static data)
 
 ```javascript
 // Get race schedule
-const schedule = await fetch('http://192.168.1.50:8084/api/xml/schedule')
+const schedule = await fetch(`http://${serverUrl}/api/xml/schedule`)
   .then(r => r.json());
 
 // Get merged results for a race
-const results = await fetch('http://192.168.1.50:8084/api/xml/races/K1M_ST_BR1_6/results?merged=true')
+const results = await fetch(`http://${serverUrl}/api/xml/races/K1M_ST_BR1_6/results?merged=true`)
   .then(r => r.json());
 ```
 
@@ -37,11 +50,260 @@ const results = await fetch('http://192.168.1.50:8084/api/xml/races/K1M_ST_BR1_6
 
 ## Server Endpoints
 
-| Service | Port | Protocol | Purpose |
-|---------|------|----------|---------|
-| **Real-time data** | 27084 | WebSocket | OnCourse, Results, TimeOfDay |
-| **REST API** | 8084 | HTTP | Schedule, participants, results |
-| **XML changes** | 27085 | WebSocket | Notifications when XML file changes |
+All services run on a single port (default **27123**):
+
+| Path | Protocol | Purpose |
+|------|----------|---------|
+| `/` | HTTP | Admin dashboard |
+| `/ws` | WebSocket | Real-time C123 data (OnCourse, Results, TimeOfDay) |
+| `/api/*` | HTTP | REST API (status, config, XML data) |
+| `/api/discover` | HTTP | Server discovery endpoint |
+
+**Base URL:** `http://<server>:27123`
+
+---
+
+## Server Discovery
+
+The scoreboard can automatically find a C123 Server on the local network without manual configuration.
+
+### Discovery Algorithm
+
+```
+1. Check URL parameter ?server=host:port → use directly
+2. Check localStorage cache → verify if still alive
+3. Get hosting server IP (where scoreboard is served from)
+4. Scan subnet starting from that IP
+5. Cache discovered server for future use
+```
+
+### Discovery Endpoint
+
+**Request:**
+```
+GET /api/discover
+```
+
+**Response:**
+```json
+{
+  "service": "c123-server",
+  "version": "2.0.0",
+  "port": 27123,
+  "eventName": "Czech Cup 2025"
+}
+```
+
+The endpoint has CORS enabled (`Access-Control-Allow-Origin: *`) to allow cross-origin discovery requests from browsers.
+
+### Reference Implementation
+
+```typescript
+const C123_PORT = 27123;
+const DISCOVERY_TIMEOUT = 200; // ms
+const STORAGE_KEY = 'c123-server-url';
+
+interface DiscoverResult {
+  service: string;
+  version: string;
+  port: number;
+  eventName?: string;
+}
+
+/**
+ * Discover C123 Server on the local network.
+ * Priority: URL param > cached > subnet scan
+ */
+async function discoverC123Server(): Promise<string | null> {
+  // 1. Check URL parameter
+  const urlParam = new URLSearchParams(location.search).get('server');
+  if (urlParam) {
+    const url = normalizeServerUrl(urlParam);
+    if (await isServerAlive(url)) {
+      saveToCache(url);
+      return url;
+    }
+  }
+
+  // 2. Check cached server
+  const cached = localStorage.getItem(STORAGE_KEY);
+  if (cached && await isServerAlive(cached)) {
+    return cached;
+  }
+
+  // 3. Scan subnet starting from hosting server IP
+  const hostIP = getHostingServerIP();
+  const discovered = await scanSubnet(hostIP);
+
+  if (discovered) {
+    saveToCache(discovered);
+    return discovered;
+  }
+
+  return null;
+}
+
+/**
+ * Get IP address of the server hosting the scoreboard.
+ * Falls back to common gateway IPs if hostname is not an IP.
+ */
+function getHostingServerIP(): string {
+  const hostname = location.hostname;
+
+  // If already an IP address, use it
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
+    return hostname;
+  }
+
+  // Fallback: common local network gateways
+  return '192.168.1.1';
+}
+
+/**
+ * Scan subnet for C123 Server.
+ * Starts from the given IP and expands outward.
+ */
+async function scanSubnet(startIP: string): Promise<string | null> {
+  const parts = startIP.split('.');
+  const subnet = parts.slice(0, 3).join('.');
+  const startHost = parseInt(parts[3], 10);
+
+  // Generate IPs in order: startHost, startHost±1, startHost±2, ...
+  const ipsToScan: string[] = [];
+  for (let offset = 0; offset <= 254; offset++) {
+    if (startHost + offset <= 254) {
+      ipsToScan.push(`${subnet}.${startHost + offset}`);
+    }
+    if (offset > 0 && startHost - offset >= 1) {
+      ipsToScan.push(`${subnet}.${startHost - offset}`);
+    }
+  }
+
+  // Scan in batches of 20 for performance
+  const BATCH_SIZE = 20;
+  for (let i = 0; i < ipsToScan.length; i += BATCH_SIZE) {
+    const batch = ipsToScan.slice(i, i + BATCH_SIZE);
+    const results = await Promise.all(
+      batch.map(ip => probeServer(ip).catch(() => null))
+    );
+
+    const found = results.find(r => r !== null);
+    if (found) return found;
+  }
+
+  return null;
+}
+
+/**
+ * Probe a single IP for C123 Server.
+ */
+async function probeServer(ip: string): Promise<string | null> {
+  const url = `http://${ip}:${C123_PORT}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DISCOVERY_TIMEOUT);
+
+  try {
+    const response = await fetch(`${url}/api/discover`, {
+      signal: controller.signal
+    });
+
+    if (response.ok) {
+      const data: DiscoverResult = await response.json();
+      if (data.service === 'c123-server') {
+        return url;
+      }
+    }
+  } catch {
+    // Timeout or network error - server not found at this IP
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  return null;
+}
+
+/**
+ * Check if a server URL is responding.
+ */
+async function isServerAlive(url: string): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), DISCOVERY_TIMEOUT);
+
+    const response = await fetch(`${url}/api/discover`, {
+      signal: controller.signal
+    });
+
+    clearTimeout(timeout);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Normalize server URL (add protocol and port if missing).
+ */
+function normalizeServerUrl(input: string): string {
+  let url = input.trim();
+
+  // Add protocol if missing
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = `http://${url}`;
+  }
+
+  // Add port if missing
+  if (!url.includes(':', url.indexOf('//') + 2)) {
+    url = `${url}:${C123_PORT}`;
+  }
+
+  return url;
+}
+
+function saveToCache(url: string): void {
+  localStorage.setItem(STORAGE_KEY, url);
+}
+```
+
+### Usage in Scoreboard
+
+```typescript
+class ScoreboardApp {
+  private serverUrl: string | null = null;
+
+  async initialize() {
+    // Show "Searching for server..." UI
+    this.showSearching();
+
+    this.serverUrl = await discoverC123Server();
+
+    if (this.serverUrl) {
+      this.connect();
+    } else {
+      this.showManualConfig();
+    }
+  }
+
+  private connect() {
+    const ws = new WebSocket(`${this.serverUrl.replace('http', 'ws')}/ws`);
+    // ... handle connection
+  }
+
+  private showManualConfig() {
+    // Show UI for manual server URL input
+    // When user enters URL, save to localStorage and retry
+  }
+}
+```
+
+### Discovery Timing
+
+| Scenario | Expected Time |
+|----------|---------------|
+| URL parameter provided | < 50ms |
+| Cached server still alive | < 250ms |
+| Server on same IP as scoreboard host | < 300ms |
+| Full subnet scan (worst case) | 2-5 seconds |
 
 ---
 
@@ -50,7 +312,7 @@ const results = await fetch('http://192.168.1.50:8084/api/xml/races/K1M_ST_BR1_6
 ### Connection URL
 
 ```
-ws://<server-ip>:27084
+ws://<server-ip>:27123/ws
 ```
 
 ### Initial Message
@@ -104,7 +366,7 @@ interface C123Message {
   data: unknown;
 }
 
-const ws = new WebSocket('ws://192.168.1.50:27084');
+const ws = new WebSocket('ws://192.168.1.50:27123/ws');
 
 ws.onmessage = (event) => {
   const message: C123Message = JSON.parse(event.data);
@@ -272,7 +534,7 @@ t+4000ms   Competitor disappears from OnCourse
 
 ```typescript
 async function getSchedule() {
-  const response = await fetch('http://192.168.1.50:8084/api/xml/schedule');
+  const response = await fetch('http://192.168.1.50:27123/api/xml/schedule');
   const { schedule } = await response.json();
   return schedule;
 }
@@ -282,7 +544,7 @@ async function getSchedule() {
 
 ```typescript
 async function getParticipants() {
-  const response = await fetch('http://192.168.1.50:8084/api/xml/participants');
+  const response = await fetch('http://192.168.1.50:27123/api/xml/participants');
   const { participants } = await response.json();
   return participants;
 }
@@ -293,14 +555,14 @@ async function getParticipants() {
 ```typescript
 // Single run results
 async function getResults(raceId: string) {
-  const response = await fetch(`http://192.168.1.50:8084/api/xml/races/${raceId}/results`);
+  const response = await fetch(`http://192.168.1.50:27123/api/xml/races/${raceId}/results`);
   const { results } = await response.json();
   return results;
 }
 
 // Merged BR1+BR2 results (recommended for two-run races)
 async function getMergedResults(raceId: string) {
-  const response = await fetch(`http://192.168.1.50:8084/api/xml/races/${raceId}/results?merged=true`);
+  const response = await fetch(`http://192.168.1.50:27123/api/xml/races/${raceId}/results?merged=true`);
   const { results } = await response.json();
   return results;
 }
@@ -310,7 +572,7 @@ async function getMergedResults(raceId: string) {
 
 ```typescript
 async function getRunResults(raceId: string, run: 'BR1' | 'BR2') {
-  const response = await fetch(`http://192.168.1.50:8084/api/xml/races/${raceId}/results/${run}`);
+  const response = await fetch(`http://192.168.1.50:27123/api/xml/races/${raceId}/results/${run}`);
   const { results } = await response.json();
   return results;
 }
@@ -320,24 +582,32 @@ async function getRunResults(raceId: string, run: 'BR1' | 'BR2') {
 
 ## XML Change Notifications
 
-Connect to the XML WebSocket to receive notifications when the XML file changes:
+The main WebSocket connection (`/ws`) also receives XML change notifications. Listen for `XmlChange` messages:
 
 ```typescript
-const xmlWs = new WebSocket('ws://192.168.1.50:27085');
-
-xmlWs.onmessage = (event) => {
+// Same WebSocket connection used for real-time data
+ws.onmessage = (event) => {
   const message = JSON.parse(event.data);
 
-  if (message.type === 'XmlChange') {
-    const { sections, checksum } = message.data;
+  switch (message.type) {
+    case 'OnCourse':
+    case 'Results':
+    case 'TimeOfDay':
+      // Handle real-time C123 data
+      handleC123Message(message);
+      break;
 
-    // Refresh changed data via REST API
-    if (sections.includes('Results')) {
-      refreshResults();
-    }
-    if (sections.includes('Participants')) {
-      refreshParticipants();
-    }
+    case 'XmlChange':
+      // XML file was updated - refresh relevant data via REST API
+      const { sections, checksum } = message.data;
+
+      if (sections.includes('Results')) {
+        refreshResults();
+      }
+      if (sections.includes('Participants')) {
+        refreshParticipants();
+      }
+      break;
   }
 };
 ```
@@ -375,7 +645,7 @@ interface ScoreboardState {
 ```
                     ┌─────────────────┐
                     │  C123 Server    │
-                    │    :27084       │
+                    │    :27123       │
                     └────────┬────────┘
                              │ WebSocket
                              ▼
@@ -425,7 +695,7 @@ class ScoreboardClient {
   }
 
   connect() {
-    this.ws = new WebSocket(`ws://${this.serverUrl}:27084`);
+    this.ws = new WebSocket(`ws://${this.serverUrl}/ws`);
 
     this.ws.onopen = () => {
       this.state.connected = true;
@@ -614,8 +884,8 @@ The WebSocket provides real-time updates but may miss data if connection drops. 
 ```typescript
 async function syncState() {
   const [schedule, participants] = await Promise.all([
-    fetch(`http://${server}:8084/api/xml/schedule`).then(r => r.json()),
-    fetch(`http://${server}:8084/api/xml/participants`).then(r => r.json()),
+    fetch(`http://${server}:27123/api/xml/schedule`).then(r => r.json()),
+    fetch(`http://${server}:27123/api/xml/participants`).then(r => r.json()),
   ]);
 
   state.schedule = schedule.schedule;

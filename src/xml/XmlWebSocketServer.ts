@@ -25,6 +25,11 @@ const DEFAULT_PORT = 0; // Use dynamic port by default for test safety
 /**
  * WebSocket server for XML change notifications.
  *
+ * @deprecated This class is deprecated and will be removed in a future version.
+ * Use UnifiedServer instead, which combines Admin, WebSocket, and XML WebSocket
+ * functionality on a single port (27123). XML change notifications are now
+ * sent via the unified WebSocket at /ws path as XmlChange messages.
+ *
  * Clients connect to receive push notifications when the XML file changes.
  * Notifications include which sections changed and the new checksum.
  * Clients can then fetch the changed data via REST API.

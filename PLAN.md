@@ -283,15 +283,15 @@ Sloučení všech služeb (Admin, WS, REST) na jeden port 27123 pro jednodušš�
 - [x] XML WebSocket notifikace přesunout na `/ws` (type: XmlChange)
 - [x] Unit testy (23 testů)
 
-#### 11.2 Odstranění starých serverů
+#### 11.2 Odstranění starých serverů ✅
 **Vstup:** Fungující UnifiedServer z 11.1
 **Výstup:** Čistá architektura bez duplicit
 
-- [ ] Smazat nebo deprecovat `AdminServer` (sloučeno do UnifiedServer)
-- [ ] Smazat nebo deprecovat `WebSocketServer` (sloučeno)
-- [ ] Smazat nebo deprecovat `XmlWebSocketServer` (sloučeno)
-- [ ] Aktualizovat `Server.ts` orchestraci
-- [ ] Aktualizovat testy
+- [x] Deprecovat `AdminServer` (sloučeno do UnifiedServer)
+- [x] Deprecovat `WebSocketServer` (sloučeno)
+- [x] Deprecovat `XmlWebSocketServer` (sloučeno)
+- [x] Aktualizovat `Server.ts` orchestraci - nyní používá pouze UnifiedServer
+- [x] Aktualizovat testy - všechny testy aktualizovány na nový port model (236 testů)
 
 #### 11.3 Konfigurace a environment
 **Vstup:** UnifiedServer

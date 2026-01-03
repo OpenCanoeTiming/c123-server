@@ -327,7 +327,7 @@ describe('UnifiedServer', () => {
       });
 
       // Broadcast XML change
-      server.broadcastXmlChange(['Results', 'StartList'], 'abc123');
+      server.broadcastXmlChange(['Results', 'Schedule'], 'abc123');
 
       // Wait for message to be received
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -336,7 +336,7 @@ describe('UnifiedServer', () => {
       expect(receivedMessages[0]).toMatchObject({
         type: 'XmlChange',
         data: {
-          sections: ['Results', 'StartList'],
+          sections: ['Results', 'Schedule'],
           checksum: 'abc123',
         },
       });

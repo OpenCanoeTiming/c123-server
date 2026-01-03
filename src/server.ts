@@ -7,11 +7,9 @@ import { UdpDiscovery } from './sources/UdpDiscovery.js';
 import { XmlFileSource } from './sources/XmlFileSource.js';
 import { EventState } from './state/EventState.js';
 import { BR1BR2Merger } from './state/BR1BR2Merger.js';
-import { WebSocketServer } from './ws/WebSocketServer.js';
-import { AdminServer } from './admin/AdminServer.js';
+import { UnifiedServer } from './unified/UnifiedServer.js';
 import { XmlDataService } from './service/XmlDataService.js';
 import { XmlChangeNotifier } from './xml/XmlChangeNotifier.js';
-import { XmlWebSocketServer } from './xml/XmlWebSocketServer.js';
 import { Logger } from './utils/logger.js';
 import {
   createTimeOfDay,
@@ -53,12 +51,8 @@ export interface ServerConfig {
   xmlPath?: string;
   /** XML polling interval in ms (default: 2000) */
   xmlPollInterval?: number;
-  /** WebSocket server port (default: 27084) */
-  wsPort?: number;
-  /** Admin server port (default: 8084) */
-  adminPort?: number;
-  /** XML WebSocket server port (default: 27085) */
-  xmlWsPort?: number;
+  /** Unified server port (default: 27123) - HTTP + WebSocket on single port */
+  port?: number;
   /** Enable Canoe123 XML autodetection on Windows (default: true) */
   xmlAutoDetect?: boolean;
   /** Canoe123 autodetection check interval in ms (default: 30000) */
@@ -83,9 +77,7 @@ const DEFAULT_CONFIG: Required<ServerConfig> = {
   udpPort: 27333,
   xmlPath: '',
   xmlPollInterval: 2000,
-  wsPort: 27084,
-  adminPort: 8084,
-  xmlWsPort: 0, // Use dynamic port by default for test safety
+  port: 27123, // Unified server port (HTTP + WebSocket)
   xmlAutoDetect: true,
   xmlAutoDetectInterval: 30000,
 };
@@ -99,8 +91,7 @@ const DEFAULT_CONFIG: Required<ServerConfig> = {
  * - XML file source (optional)
  * - Event state (finish detection, race tracking)
  * - BR1/BR2 merger
- * - WebSocket server (C123 protocol output)
- * - Admin server (dashboard)
+ * - UnifiedServer (HTTP + WebSocket on single port 27123)
  */
 export class Server extends EventEmitter<ServerEvents> {
   private readonly config: Required<ServerConfig>;
@@ -111,10 +102,8 @@ export class Server extends EventEmitter<ServerEvents> {
   private xmlChangeNotifier: XmlChangeNotifier | null = null;
   private eventState: EventState;
   private merger: BR1BR2Merger;
-  private wsServer: WebSocketServer;
-  private adminServer: AdminServer;
+  private unifiedServer: UnifiedServer;
   private xmlDataService: XmlDataService;
-  private xmlWsServer: XmlWebSocketServer;
   private windowsConfigDetector: WindowsConfigDetector | null = null;
 
   private isRunning = false;
@@ -127,10 +116,8 @@ export class Server extends EventEmitter<ServerEvents> {
 
     this.eventState = new EventState();
     this.merger = new BR1BR2Merger();
-    this.wsServer = new WebSocketServer({ port: this.config.wsPort });
-    this.adminServer = new AdminServer({ port: this.config.adminPort });
+    this.unifiedServer = new UnifiedServer({ port: this.config.port });
     this.xmlDataService = new XmlDataService();
-    this.xmlWsServer = new XmlWebSocketServer({ port: this.config.xmlWsPort });
 
     this.setupEventHandlers();
   }
@@ -143,16 +130,13 @@ export class Server extends EventEmitter<ServerEvents> {
       return;
     }
 
-    // Start output servers first
-    await this.wsServer.start();
-    await this.adminServer.start();
-    await this.xmlWsServer.start();
+    // Start unified server (HTTP + WebSocket on single port)
+    await this.unifiedServer.start();
 
-    // Register state with admin
-    this.adminServer.setEventState(this.eventState);
-    this.adminServer.setWebSocketServer(this.wsServer);
-    this.adminServer.setXmlDataService(this.xmlDataService);
-    this.adminServer.setServer(this);
+    // Register components with unified server
+    this.unifiedServer.setEventState(this.eventState);
+    this.unifiedServer.setXmlDataService(this.xmlDataService);
+    this.unifiedServer.setServer(this);
 
     // Start data sources
     if (this.config.autoDiscovery && !this.config.tcpHost) {
@@ -193,10 +177,8 @@ export class Server extends EventEmitter<ServerEvents> {
     await this.xmlChangeNotifier?.stop();
     this.stopAutoDetection();
 
-    // Stop output servers
-    await this.wsServer.stop();
-    await this.adminServer.stop();
-    await this.xmlWsServer.stop();
+    // Stop unified server
+    await this.unifiedServer.stop();
 
     // Cleanup
     this.eventState.destroy();
@@ -220,24 +202,10 @@ export class Server extends EventEmitter<ServerEvents> {
   }
 
   /**
-   * Get the WebSocket server port
+   * Get the unified server port (HTTP + WebSocket)
    */
-  getWsPort(): number {
-    return this.wsServer.getPort();
-  }
-
-  /**
-   * Get the Admin server port
-   */
-  getAdminPort(): number {
-    return this.adminServer.getPort();
-  }
-
-  /**
-   * Get the XML WebSocket server port
-   */
-  getXmlWsPort(): number {
-    return this.xmlWsServer.getPort();
+  getPort(): number {
+    return this.unifiedServer.getPort();
   }
 
   /**
@@ -388,7 +356,7 @@ export class Server extends EventEmitter<ServerEvents> {
     });
 
     // Log errors
-    this.wsServer.on('error', (err) => {
+    this.unifiedServer.on('error', (err) => {
       this.emit('error', err);
     });
   }
@@ -398,7 +366,7 @@ export class Server extends EventEmitter<ServerEvents> {
 
     // Use adapter to provide status for admin display
     const adapter = new UdpDiscoverySourceAdapter(this.udpDiscovery);
-    this.adminServer.registerSource('UDP Discovery', 'udp', adapter as unknown as Source, {
+    this.unifiedServer.registerSource('UDP Discovery', 'udp', adapter as unknown as Source, {
       port: this.config.udpPort,
     });
 
@@ -419,7 +387,7 @@ export class Server extends EventEmitter<ServerEvents> {
   private startTcpSource(host: string, port: number): void {
     this.tcpSource = new TcpSource({ host, port });
 
-    this.adminServer.registerSource('C123 TCP', 'tcp', this.tcpSource, {
+    this.unifiedServer.registerSource('C123 TCP', 'tcp', this.tcpSource, {
       host,
       port,
     });
@@ -449,7 +417,7 @@ export class Server extends EventEmitter<ServerEvents> {
       pollInterval: this.config.xmlPollInterval,
     });
 
-    this.adminServer.registerSource('XML File', 'xml', this.xmlSource, {
+    this.unifiedServer.registerSource('XML File', 'xml', this.xmlSource, {
       path: this.config.xmlPath,
     });
 
@@ -473,7 +441,7 @@ export class Server extends EventEmitter<ServerEvents> {
 
     this.xmlChangeNotifier.on('change', (sections, checksum) => {
       Logger.info('Server', `XML changed: ${sections.join(', ')}`);
-      this.xmlWsServer.broadcastChange(sections, checksum);
+      this.unifiedServer.broadcastXmlChange(sections, checksum);
       // Clear XmlDataService cache so next REST request gets fresh data
       this.xmlDataService.clearCache();
     });
@@ -520,22 +488,22 @@ export class Server extends EventEmitter<ServerEvents> {
   private broadcastParsedMessage(message: ParsedMessage): void {
     switch (message.type) {
       case 'timeofday':
-        this.wsServer.broadcast(createTimeOfDay(message.data));
+        this.unifiedServer.broadcast(createTimeOfDay(message.data));
         break;
       case 'oncourse':
-        this.wsServer.broadcast(createOnCourse(message.data));
+        this.unifiedServer.broadcast(createOnCourse(message.data));
         break;
       case 'results':
         // Only broadcast results marked as current (active race)
         if (message.data.isCurrent) {
-          this.wsServer.broadcast(createResults(message.data));
+          this.unifiedServer.broadcast(createResults(message.data));
         }
         break;
       case 'raceconfig':
-        this.wsServer.broadcast(createRaceConfig(message.data));
+        this.unifiedServer.broadcast(createRaceConfig(message.data));
         break;
       case 'schedule':
-        this.wsServer.broadcast(createSchedule(message.data));
+        this.unifiedServer.broadcast(createSchedule(message.data));
         break;
     }
   }

@@ -38,12 +38,8 @@ function parseArgs(): { command: string; config: ServerConfig; debug: boolean } 
       config.tcpPort = parseInt(args[++i], 10);
     }
 
-    if (arg === '--ws-port' && args[i + 1]) {
-      config.wsPort = parseInt(args[++i], 10);
-    }
-
-    if (arg === '--admin-port' && args[i + 1]) {
-      config.adminPort = parseInt(args[++i], 10);
+    if (arg === '--server-port' && args[i + 1]) {
+      config.port = parseInt(args[++i], 10);
     }
 
     if (arg === '--xml' && args[i + 1]) {
@@ -83,16 +79,15 @@ Commands:
   stop        Stop the Windows service
 
 Options:
-  --host <ip>       C123 host IP (disables auto-discovery)
-  --port <port>     C123 port (default: 27333)
-  --ws-port <port>  WebSocket port for scoreboards (default: 27084)
-  --admin-port <p>  Admin dashboard port (default: 8084)
-  --xml <path>      XML file path for results data
-  --no-discovery    Disable UDP auto-discovery
-  --no-autodetect   Disable Canoe123 XML autodetection (Windows)
-  -d, --debug       Enable verbose debug logging
-  -h, --help        Show this help message
-  -v, --version     Show version
+  --host <ip>         C123 host IP (disables auto-discovery)
+  --port <port>       C123 source port (default: 27333)
+  --server-port <p>   Server port for HTTP + WebSocket (default: 27123)
+  --xml <path>        XML file path for results data
+  --no-discovery      Disable UDP auto-discovery
+  --no-autodetect     Disable Canoe123 XML autodetection (Windows)
+  -d, --debug         Enable verbose debug logging
+  -h, --help          Show this help message
+  -v, --version       Show version
 
 Examples:
   c123-server                     # Run with auto-discovery
@@ -141,9 +136,11 @@ async function runServer(config: ServerConfig, debug: boolean): Promise<void> {
   // Start
   try {
     await server.start();
+    const port = server.getPort();
     Logger.info('CLI', 'C123 Server started');
-    Logger.info('CLI', `WebSocket: ws://localhost:${config.wsPort ?? 27084}`);
-    Logger.info('CLI', `Admin: http://localhost:${config.adminPort ?? 8084}`);
+    Logger.info('CLI', `Dashboard: http://localhost:${port}`);
+    Logger.info('CLI', `WebSocket: ws://localhost:${port}/ws`);
+    Logger.info('CLI', `REST API:  http://localhost:${port}/api/*`);
 
     if (config.autoDiscovery !== false && !config.tcpHost) {
       Logger.info('CLI', 'Waiting for C123 discovery...');

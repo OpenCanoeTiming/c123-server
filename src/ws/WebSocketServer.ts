@@ -11,6 +11,10 @@ const DEFAULT_PORT = 27084;
 /**
  * WebSocket server for scoreboard connections.
  *
+ * @deprecated This class is deprecated and will be removed in a future version.
+ * Use UnifiedServer instead, which combines Admin, WebSocket, and XML WebSocket
+ * functionality on a single port (27123) with WebSocket at /ws path.
+ *
  * Broadcasts C123 protocol messages to connected scoreboards.
  * Supports per-scoreboard configuration via ScoreboardSession.
  */

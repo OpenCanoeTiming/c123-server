@@ -29,6 +29,10 @@ interface RegisteredSource {
 /**
  * Admin HTTP server for monitoring and configuration.
  *
+ * @deprecated This class is deprecated and will be removed in a future version.
+ * Use UnifiedServer instead, which combines Admin, WebSocket, and XML WebSocket
+ * functionality on a single port (27123).
+ *
  * Provides REST API endpoints:
  * - GET /api/status - Overall server status
  * - GET /api/sources - Data source status

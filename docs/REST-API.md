@@ -6,14 +6,49 @@ This document describes the REST API provided by the C123 Server for accessing r
 
 ## Overview
 
-The C123 Server provides two sets of APIs:
+The C123 Server provides the following APIs:
 
 | Category | Base URL | Description |
 |----------|----------|-------------|
+| **Discovery API** | `/api/discover` | Server identification for auto-discovery |
 | **Server API** | `/api` | Server status, sources, scoreboards |
 | **XML Data API** | `/api/xml` | Race data from XML file (schedule, results, participants) |
 
-**Base URL:** `http://<server>:8084`
+**Base URL:** `http://<server>:27123`
+
+---
+
+## Discovery API
+
+### GET /api/discover
+
+Simple endpoint for automatic server discovery. Returns minimal server identification with CORS enabled for cross-origin requests.
+
+**Response:**
+
+```json
+{
+  "service": "c123-server",
+  "version": "2.0.0",
+  "port": 27123,
+  "eventName": "Czech Cup 2025"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `service` | string | Always `"c123-server"` - used to identify the service |
+| `version` | string | Server version |
+| `port` | number | Port the server is running on |
+| `eventName` | string | Current event name from XML (if available) |
+
+**CORS Headers:**
+```
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: GET, OPTIONS
+```
+
+**Usage:** Scoreboards can probe IP addresses in the local subnet with a short timeout (200ms) to find available C123 servers. See [INTEGRATION.md](INTEGRATION.md#server-discovery) for full discovery implementation.
 
 ---
 
@@ -503,9 +538,11 @@ Get results for a specific run (BR1 or BR2) of a race.
 
 ## WebSocket Change Notifications
 
-For real-time updates when the XML file changes, connect to the XML WebSocket server.
+For real-time updates when the XML file changes, connect to the main WebSocket endpoint.
 
-**Endpoint:** `ws://<server>:27085`
+**Endpoint:** `ws://<server>:27123/ws`
+
+The same WebSocket connection used for real-time C123 data also delivers XML change notifications.
 
 **Message format:**
 
@@ -527,9 +564,9 @@ For real-time updates when the XML file changes, connect to the XML WebSocket se
 
 **Client workflow:**
 
-1. Connect to WebSocket
-2. Receive `XmlChange` notification
-3. Fetch changed data via REST API (e.g., `/api/xml/races/:id/results`)
+1. Connect to WebSocket (`/ws`)
+2. Handle both real-time C123 messages and `XmlChange` notifications
+3. When `XmlChange` received, fetch updated data via REST API (e.g., `/api/xml/races/:id/results`)
 
 ---
 

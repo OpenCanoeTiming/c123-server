@@ -125,10 +125,9 @@ async function createTestEnv() {
 
   mockTcpServer.on('connection', connectionHandler);
 
-  // Create server with dynamic ports (0 = auto-assign)
+  // Create server with dynamic port (0 = auto-assign)
   const server = new Server({
-    wsPort: 0,
-    adminPort: 0,
+    port: 0,
     autoDiscovery: false,
     tcpHost: '127.0.0.1',
     tcpPort: mockTcpPort,
@@ -165,11 +164,11 @@ describe('Scoreboard Integration', () => {
       const validationErrors: string[] = [];
 
       await server.start();
-      const wsPort = server.getWsPort();
+      const port = server.getPort();
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Connect WebSocket client
-      const ws = new WebSocket(`ws://127.0.0.1:${wsPort}`);
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
 
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -238,10 +237,10 @@ describe('Scoreboard Integration', () => {
       let resultsMessage: C123Results | null = null;
 
       await server.start();
-      const wsPort = server.getWsPort();
+      const port = server.getPort();
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const ws = new WebSocket(`ws://127.0.0.1:${wsPort}`);
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
 
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('Timeout')), 5000);
@@ -293,10 +292,10 @@ describe('Scoreboard Integration', () => {
       let onCourseMessage: C123OnCourse | null = null;
 
       await server.start();
-      const wsPort = server.getWsPort();
+      const port = server.getPort();
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const ws = new WebSocket(`ws://127.0.0.1:${wsPort}`);
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
 
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('Timeout')), 5000);

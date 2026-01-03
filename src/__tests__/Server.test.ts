@@ -19,8 +19,7 @@ describe('Server', () => {
 
     it('should create server with custom config', () => {
       const config: ServerConfig = {
-        wsPort: 27085,
-        adminPort: 8085,
+        port: 27200,
         autoDiscovery: false,
       };
       server = new Server(config);
@@ -31,8 +30,7 @@ describe('Server', () => {
   describe('start/stop', () => {
     it('should start and stop server', async () => {
       server = new Server({
-        wsPort: 27086,
-        adminPort: 8086,
+        port: 0, // Use dynamic port
         autoDiscovery: false,
       });
 
@@ -45,8 +43,7 @@ describe('Server', () => {
 
     it('should emit started event on start', async () => {
       server = new Server({
-        wsPort: 27087,
-        adminPort: 8087,
+        port: 0,
         autoDiscovery: false,
       });
 
@@ -59,8 +56,7 @@ describe('Server', () => {
 
     it('should emit stopped event on stop', async () => {
       server = new Server({
-        wsPort: 27088,
-        adminPort: 8088,
+        port: 0,
         autoDiscovery: false,
       });
 
@@ -74,8 +70,7 @@ describe('Server', () => {
 
     it('should not start twice', async () => {
       server = new Server({
-        wsPort: 27089,
-        adminPort: 8089,
+        port: 0,
         autoDiscovery: false,
       });
 
@@ -86,8 +81,7 @@ describe('Server', () => {
 
     it('should not stop when not running', async () => {
       server = new Server({
-        wsPort: 27090,
-        adminPort: 8090,
+        port: 0,
         autoDiscovery: false,
       });
 
@@ -99,8 +93,7 @@ describe('Server', () => {
   describe('discovered host', () => {
     it('should return null when not discovered', () => {
       server = new Server({
-        wsPort: 27091,
-        adminPort: 8091,
+        port: 0,
         autoDiscovery: false,
       });
 
@@ -111,8 +104,7 @@ describe('Server', () => {
   describe('configuration', () => {
     it('should handle errors gracefully when setting invalid XML path', async () => {
       server = new Server({
-        wsPort: 27092,
-        adminPort: 8092,
+        port: 0,
         autoDiscovery: false,
       });
 

@@ -52,9 +52,18 @@ c123-server/
 
 | Služba | Port | Poznámka |
 |--------|------|----------|
-| C123 (existující) | 27333 | TCP + UDP |
-| **C123 Server WS** | 27084 | Pro scoreboardy |
-| **C123 Server Admin** | 8084 | Web dashboard |
+| C123 (upstream) | 27333 | Canoe123 protokol (TCP + UDP), nelze měnit |
+| **C123 Server** | 27123 | Jeden port pro vše (HTTP + WS) |
+
+### Endpointy na portu 27123
+
+| Path | Protokol | Účel |
+|------|----------|------|
+| `/` | HTTP | Admin dashboard (SPA) |
+| `/ws` | WebSocket | Real-time data pro scoreboardy |
+| `/api/*` | HTTP | REST API (status, config, XML data) |
+
+Port 27123 je mnemotechnický (C-1-2-3) a IANA unassigned.
 
 ---
 
@@ -78,7 +87,7 @@ Proces: vzdy, zejmena u dodateckych pozadavku a zmen, nejprve aktualizovat dokum
 2. **XML validace** - identifikovat správný XML soubor, detekovat nekompatibilitu
 3. **XML je živá databáze** - soubor se průběžně mění, polling pro aktualizace
 4. **Cross-platform** - Windows primární, ale běží i na Linux/macOS
-5. **CLI-kompatibilní výstup** - scoreboard nepotřebuje změny
+5. **Jeden port** - všechny služby (Admin, WS, API) na jednom portu 27123
 
 ---
 
