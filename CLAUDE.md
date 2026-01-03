@@ -67,6 +67,9 @@ Vývoj běží proti **nahraným datům z analýzy**:
 ../analysis/recordings/rec-2025-12-28T09-34-10.jsonl
 ```
 
+
+Proces: vzdy, zejmena u dodateckych pozadavku a zmen, nejprve aktualizovat dokumentaci jako plan a zamer, doplnit pripadne kroky do planu a ty pak postupne realizovat
+
 ---
 
 ## Klíčové kvality

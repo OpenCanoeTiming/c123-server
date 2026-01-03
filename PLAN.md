@@ -272,7 +272,13 @@ Co musí scoreboard implementovat:
    - **Ano, kešují se.** `XmlDataService` drží parsed XML v `cachedData`.
    - Metoda `loadIfNeeded()` kontroluje `mtime` souboru - pokud se nezměnil, vrací keš.
    - Při změně `mtime` se soubor znovu načte a naparsuje.
- - [ ] přikládám komplexní XML  závod LODM včetně cross a dalších disciplin sem do slozky - pro zobecnění rozhraní
+ - [x] přikládám komplexní XML  závod LODM včetně cross a dalších disciplin sem do slozky - pro zobecnění rozhraní
+   - **Analyzováno.** Soubor `2024-LODM-fin.xml` (2.5 MB) obsahuje komplexní závod.
+   - Nové disciplíny Cross: X4 (čtvrtfinále), XS (semi), XF (finále), XT (time trial), XER (extended results)
+   - Nové atributy Results: `HeatNr`, `RoundNr`, `NrFLT`, `FLT` (pro Cross)
+   - Týmové soutěže: `Member1`, `Member2`, `Member3`, `NOC`
+   - **Rozhraní není třeba měnit** - REST API předává raw data, scoreboard si vytáhne co potřebuje.
+   - XML přidán do `.gitignore` (velký soubor, testovací data)
  - [ ] `EventState` zůstává pro detekci dojetí a sledování závodů -- není to nějaký relikt principu CLI nebo to je v C123 rozhraní ok?
 
 ---
