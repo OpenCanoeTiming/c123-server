@@ -303,16 +303,16 @@ Sloučení všech služeb (Admin, WS, REST) na jeden port 27123 pro jednodušš�
 - [x] Aktualizovat `AppSettings` pro persistenci
 - [x] Aktualizovat admin dashboard UI pro zobrazení správného portu
 
-#### 11.4 Aktualizace dokumentace
+#### 11.4 Aktualizace dokumentace ✅
 **Vstup:** Fungující konsolidovaný server
 **Výstup:** Aktualizovaná dokumentace všude
 
-- [ ] `CLAUDE.md` - sekce Porty
-- [ ] `PLAN.md` - sekce Porty (již aktualizováno)
-- [ ] `docs/REST-API.md` - Base URL, všechny příklady
-- [ ] `docs/INTEGRATION.md` - všechny porty a příklady kódu
-- [ ] `docs/C123-PROTOCOL.md` - pokud zmiňuje porty
-- [ ] `README.md` - quick start sekce
+- [x] `CLAUDE.md` - sekce Porty (již správně)
+- [x] `PLAN.md` - sekce Porty (již aktualizováno)
+- [x] `docs/REST-API.md` - Base URL, všechny příklady (již správně)
+- [x] `docs/INTEGRATION.md` - všechny porty a příklady kódu (již správně)
+- [x] `docs/C123-PROTOCOL.md` - opravena zmínka o /ws/xml na /ws
+- [x] `README.md` - kompletně přepsáno pro v2 architekturu
 
 ---
 

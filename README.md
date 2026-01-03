@@ -4,12 +4,14 @@ Smart middleware for canoe slalom timing - bridge between Canoe123 timing softwa
 
 ## Features
 
+- **Single port architecture** - All services (Admin, WebSocket, REST API) on port 27123
 - **Auto-discovery** - Automatically finds C123 on the local network via UDP broadcast
-- **CLI-compatible output** - Scoreboards work without changes
-- **BR1/BR2 merging** - Combines both runs with best time calculation
-- **Finish detection** - Highlights athletes when they cross the finish line
-- **Admin dashboard** - Web interface for monitoring and per-scoreboard configuration
-- **Windows service** - Run as a system service with auto-start
+- **Native C123 protocol** - Passes authentic C123 data (XML → JSON) without CLI emulation
+- **XML REST API** - Full access to race data (schedule, participants, results)
+- **Finish detection** - Detects when athletes cross the finish line via dtFinish tracking
+- **Admin dashboard** - Web interface for monitoring and configuration
+- **Windows auto-config** - Automatically detects XML path from Canoe123 settings
+- **Persistent settings** - Configuration survives restarts
 
 ## Installation
 
@@ -18,29 +20,25 @@ npm install
 npm run build
 ```
 
-## Usage
-
-### Basic (auto-discovery)
+## Quick Start
 
 ```bash
+# Auto-discovery mode
 c123-server
-```
 
-The server will automatically discover C123 on the network and start serving data to scoreboards.
-
-### Connect to specific C123
-
-```bash
+# Connect to specific C123
 c123-server --host 192.168.1.5
-```
 
-### With XML file for complete results
-
-```bash
+# With XML file for complete results
 c123-server --xml /path/to/results.xml
 ```
 
-### All options
+The server starts on port **27123** with:
+- Admin dashboard: http://localhost:27123/
+- WebSocket: ws://localhost:27123/ws
+- REST API: http://localhost:27123/api/
+
+## Command Line Options
 
 ```
 Usage: c123-server [command] [options]
@@ -53,24 +51,77 @@ Commands:
   stop        Stop the Windows service
 
 Options:
-  --host <ip>       C123 host IP (disables auto-discovery)
-  --port <port>     C123 port (default: 27333)
-  --ws-port <port>  WebSocket port for scoreboards (default: 27084)
-  --admin-port <p>  Admin dashboard port (default: 8084)
-  --xml <path>      XML file path for results data
-  --no-discovery    Disable UDP auto-discovery
-  -d, --debug       Enable verbose debug logging
-  -h, --help        Show help message
-  -v, --version     Show version
+  --host <ip>          C123 host IP (disables auto-discovery)
+  --port <port>        C123 port (default: 27333)
+  --server-port <p>    Server port for all services (default: 27123)
+  --xml <path>         XML file path for results data
+  --no-discovery       Disable UDP auto-discovery
+  -d, --debug          Enable verbose debug logging
+  -h, --help           Show help message
+  -v, --version        Show version
 ```
 
 ## Ports
 
 | Service | Port | Description |
 |---------|------|-------------|
-| C123 (existing) | 27333 | TCP + UDP (Canoe123 software) |
-| WebSocket | 27084 | Scoreboard connections |
-| Admin | 8084 | Web dashboard |
+| C123 (upstream) | 27333 | TCP + UDP (Canoe123 software) |
+| **C123 Server** | 27123 | All services (HTTP + WS) |
+
+### Endpoints on port 27123
+
+| Path | Protocol | Purpose |
+|------|----------|---------|
+| `/` | HTTP | Admin dashboard (SPA) |
+| `/ws` | WebSocket | Real-time C123 data + XML change notifications |
+| `/api/*` | HTTP | REST API (status, config, XML data) |
+| `/api/discover` | HTTP | Server discovery endpoint |
+
+## WebSocket Messages
+
+Real-time C123 data in JSON format:
+
+```json
+{
+  "type": "OnCourse",
+  "timestamp": "2025-01-02T10:30:45.123Z",
+  "data": {
+    "total": 2,
+    "competitors": [
+      {
+        "bib": "9",
+        "name": "KOPEČEK Michal",
+        "time": "81.15",
+        "dtFinish": null,
+        "rank": 8
+      }
+    ]
+  }
+}
+```
+
+Message types: `TimeOfDay`, `OnCourse`, `Results`, `RaceConfig`, `Schedule`, `XmlChange`
+
+## REST API
+
+```bash
+# Server status
+GET /api/status
+
+# Race schedule
+GET /api/xml/schedule
+
+# Participants
+GET /api/xml/participants
+
+# Race results
+GET /api/xml/races/:id/results
+
+# Merged BR1+BR2 results
+GET /api/xml/races/:id/results?merged=true
+```
+
+See [docs/REST-API.md](docs/REST-API.md) for full API documentation.
 
 ## Windows Service
 
@@ -88,50 +139,36 @@ c123-server stop
 c123-server uninstall
 ```
 
-**Note:** Requires `node-windows` optional dependency.
-
 ## Admin Dashboard
 
-Open http://localhost:8084 to access the admin dashboard:
+Open http://localhost:27123 to access the admin dashboard:
 
 - View connected scoreboards
 - Monitor data sources (C123, XML)
-- Configure per-scoreboard settings (race filter, visibility)
+- Configure XML path (manual or auto-detect from Canoe123)
+- View server status and connections
 
-### REST API
+## Architecture
 
-- `GET /api/status` - Server status overview
-- `GET /api/scoreboards` - List connected scoreboards
-- `GET /api/sources` - Data source status
-- `POST /api/scoreboards/:id/config` - Update scoreboard config
-
-## Message Format
-
-The server emits CLI-compatible JSON messages:
-
-```json
-// top (results)
-{
-  "msg": "top",
-  "data": {
-    "RaceName": "K1m - middle course",
-    "RaceStatus": "3",
-    "HighlightBib": "9",
-    "list": [{ "Rank": 1, "Bib": "1", "Name": "...", "Total": "78.99", "Pen": 2 }]
-  }
-}
-
-// oncourse (on course)
-{
-  "msg": "oncourse",
-  "data": [{ "Bib": "9", "Name": "...", "Time": "8115", "dtFinish": "" }]
-}
-
-// comp (current competitor)
-{
-  "msg": "comp",
-  "data": { "Bib": "9", "Name": "...", "Time": "8115" }
-}
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         C123 Server v2                              │
+│                                                                     │
+│   Sources                    Core                     Output        │
+│  ┌──────────────┐       ┌──────────────┐       ┌──────────────┐    │
+│  │ TcpSource    │──────▶│              │       │              │    │
+│  │   :27333     │       │  C123Proxy   │──────▶│  Unified     │    │
+│  ├──────────────┤       │ (XML → JSON) │       │  Server      │    │
+│  │ UdpDiscovery │──────▶│              │       │   :27123     │───▶│ Clients
+│  │   :27333     │       └──────────────┘       │              │    │
+│  └──────────────┘                              │  /      admin│    │
+│                         ┌──────────────┐       │  /ws   WS    │    │
+│  ┌──────────────┐       │  XmlService  │──────▶│  /api  REST  │    │
+│  │ XmlSource    │──────▶│ (data + push)│       └──────────────┘    │
+│  │ (file/URL)   │       └──────────────┘                           │
+│  └──────────────┘                                                   │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Development
@@ -153,25 +190,13 @@ npm run lint
 npm run build
 ```
 
-## Architecture
+## Documentation
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         C123 Server                                 │
-│                                                                     │
-│   Sources                    State                    Output        │
-│  ┌──────────────┐       ┌──────────────┐       ┌──────────────┐    │
-│  │ UdpDiscovery │──────>│              │       │  WebSocket   │    │
-│  │   :27333     │       │  EventState  │──────>│   :27084     │───>│ Scoreboards
-│  ├──────────────┤       │              │       └──────────────┘    │
-│  │ TcpSource    │──────>│ - RaceState  │                           │
-│  │   :27333     │       │ - BR1BR2Merge│       ┌──────────────┐    │
-│  ├──────────────┤       │ - FinishDet. │──────>│ AdminServer  │    │
-│  │ XmlFileSource│──────>│              │       │   :8084      │    │
-│  └──────────────┘       └──────────────┘       └──────────────┘    │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
+- [C123-PROTOCOL.md](docs/C123-PROTOCOL.md) - C123 protocol reference
+- [REST-API.md](docs/REST-API.md) - REST API documentation
+- [INTEGRATION.md](docs/INTEGRATION.md) - Scoreboard integration guide
+- [CLI-DIFFERENCES.md](docs/CLI-DIFFERENCES.md) - Migration from CLI format
+- [SCOREBOARD-REQUIREMENTS.md](docs/SCOREBOARD-REQUIREMENTS.md) - What scoreboards must implement
 
 ## License
 

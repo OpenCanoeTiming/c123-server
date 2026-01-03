@@ -511,7 +511,7 @@ Sent when errors occur:
 
 ### XmlChange
 
-Sent when the XML file changes (on `/ws/xml` endpoint):
+Sent when the XML file changes (on the main `/ws` endpoint):
 
 ```json
 {
