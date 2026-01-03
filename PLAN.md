@@ -293,15 +293,15 @@ Sloučení všech služeb (Admin, WS, REST) na jeden port 27123 pro jednodušš�
 - [x] Aktualizovat `Server.ts` orchestraci - nyní používá pouze UnifiedServer
 - [x] Aktualizovat testy - všechny testy aktualizovány na nový port model (236 testů)
 
-#### 11.3 Konfigurace a environment
+#### 11.3 Konfigurace a environment ✅
 **Vstup:** UnifiedServer
 **Výstup:** Konfigurabilní port s rozumným default
 
-- [ ] Default port: 27123
-- [ ] Env variable: `C123_SERVER_PORT` nebo `PORT`
-- [ ] CLI argument: `--port`
-- [ ] Aktualizovat `AppSettings` pro persistenci
-- [ ] Aktualizovat admin dashboard UI pro zobrazení správného portu
+- [x] Default port: 27123
+- [x] Env variable: `C123_SERVER_PORT` nebo `PORT`
+- [x] CLI argument: `--server-port` (již existoval)
+- [x] Aktualizovat `AppSettings` pro persistenci
+- [x] Aktualizovat admin dashboard UI pro zobrazení správného portu
 
 #### 11.4 Aktualizace dokumentace
 **Vstup:** Fungující konsolidovaný server
