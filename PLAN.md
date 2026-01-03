@@ -16,17 +16,17 @@ Předchozí verze (v1.0.0-cli) emulovala CLI rozhraní. Nový přístup se zbavu
 │                                                                     │
 │   Sources                    Core                     Output        │
 │  ┌──────────────┐       ┌──────────────┐       ┌──────────────┐    │
-│  │ TcpSource    │──────▶│              │       │  WebSocket   │    │
-│  │   :27333     │       │  C123Proxy   │──────▶│   :27084     │───▶│ Scoreboardy
-│  ├──────────────┤       │ (XML → JSON) │       └──────────────┘    │
-│  │ UdpDiscovery │──────▶│              │                           │
-│  │   :27333     │       └──────────────┘       ┌──────────────┐    │
-│  └──────────────┘                              │  REST API    │    │
-│                                                │   :8084      │───▶│ Web clients
-│  ┌──────────────┐       ┌──────────────┐       └──────────────┘    │
-│  │ XmlSource    │──────▶│  XmlService  │──────────────┘            │
-│  │ (file/URL)   │       │ (API + push) │                           │
-│  └──────────────┘       └──────────────┘                           │
+│  │ TcpSource    │──────▶│              │       │              │    │
+│  │   :27333     │       │  C123Proxy   │──────▶│  Unified     │    │
+│  ├──────────────┤       │ (XML → JSON) │       │  Server      │    │
+│  │ UdpDiscovery │──────▶│              │       │   :27123     │───▶│ Clients
+│  │   :27333     │       └──────────────┘       │              │    │
+│  └──────────────┘                              │  /      admin│    │
+│                         ┌──────────────┐       │  /ws   WS    │    │
+│  ┌──────────────┐       │  XmlService  │──────▶│  /api  REST  │    │
+│  │ XmlSource    │──────▶│ (data + push)│       └──────────────┘    │
+│  │ (file/URL)   │       └──────────────┘                           │
+│  └──────────────┘                                                   │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -81,7 +81,7 @@ Závodník zůstává v OnCourse ~4 sekundy po dojetí, pak zmizí.
 
 ### 1. Real-time C123 stream (TCP)
 ```
-C123 (Canoe123) ──TCP:27333──▶ C123 Server ──WS:27084──▶ Scoreboard
+C123 (Canoe123) ──TCP:27333──▶ C123 Server ──WS:27123/ws──▶ Scoreboard
 
 Formát: pipe-delimited XML fragmenty
 Transformace: XML parsing → JSON objekty (zachování struktury)
@@ -89,7 +89,8 @@ Transformace: XML parsing → JSON objekty (zachování struktury)
 
 ### 2. XML databáze (file)
 ```
-C123 XML soubor ──watch/poll──▶ C123 Server ──REST/WS──▶ Web clients
+C123 XML soubor ──watch/poll──▶ C123 Server ──REST:27123/api──▶ Web clients
+                                            ──WS:27123/ws────▶ (XmlChange notifikace)
 
 Přístupy (Windows priorita):
 - Lokální cesta: fs.watch() nebo chokidar (Windows NTFS events)
@@ -198,7 +199,7 @@ Každý krok (7.1, 7.2, ...) je navržen tak, aby se dal zvládnout v rámci **j
 **Vstup:** File watcher z 8.3
 **Výstup:** Push notifikace pro změny
 
-- [x] WebSocket kanál `/ws/xml` pro změny (XmlWebSocketServer na portu 27085)
+- [x] WebSocket notifikace pro změny (původně XmlWebSocketServer :27085, nyní součást UnifiedServer /ws)
 - [x] Message: `{ type: "XmlChange", data: { sections, checksum }, timestamp }`
 - [x] Klient si stáhne změněná data přes REST
 - [x] Diff detection (XmlChangeNotifier s per-section MD5 hash)
@@ -264,6 +265,111 @@ Co musí scoreboard implementovat:
 - [x] BR1/BR2 merge logika
 - [x] Results filtering (Current vs historické)
 - [x] OnCourse → aktuální závodník
+
+---
+
+### Fáze 11: Konsolidace portů
+
+Sloučení všech služeb (Admin, WS, REST) na jeden port 27123 pro jednodušší deployment a konfiguraci.
+
+#### 11.1 Refaktoring serverové architektury ✅
+**Vstup:** Oddělené servery (AdminServer :8084, WebSocketServer :27084, XmlWebSocketServer :27085)
+**Výstup:** Jeden UnifiedServer na portu 27123
+
+- [x] Vytvořit `src/unified/UnifiedServer.ts` - jeden HTTP server s Express
+- [x] Integrace WebSocket upgrade na path `/ws` (real-time C123 data)
+- [x] Integrace REST API na path `/api/*`
+- [x] Admin dashboard (statické soubory) na root `/`
+- [x] XML WebSocket notifikace přesunout na `/ws` (type: XmlChange)
+- [x] Unit testy (23 testů)
+
+#### 11.2 Odstranění starých serverů
+**Vstup:** Fungující UnifiedServer z 11.1
+**Výstup:** Čistá architektura bez duplicit
+
+- [ ] Smazat nebo deprecovat `AdminServer` (sloučeno do UnifiedServer)
+- [ ] Smazat nebo deprecovat `WebSocketServer` (sloučeno)
+- [ ] Smazat nebo deprecovat `XmlWebSocketServer` (sloučeno)
+- [ ] Aktualizovat `Server.ts` orchestraci
+- [ ] Aktualizovat testy
+
+#### 11.3 Konfigurace a environment
+**Vstup:** UnifiedServer
+**Výstup:** Konfigurabilní port s rozumným default
+
+- [ ] Default port: 27123
+- [ ] Env variable: `C123_SERVER_PORT` nebo `PORT`
+- [ ] CLI argument: `--port`
+- [ ] Aktualizovat `AppSettings` pro persistenci
+- [ ] Aktualizovat admin dashboard UI pro zobrazení správného portu
+
+#### 11.4 Aktualizace dokumentace
+**Vstup:** Fungující konsolidovaný server
+**Výstup:** Aktualizovaná dokumentace všude
+
+- [ ] `CLAUDE.md` - sekce Porty
+- [ ] `PLAN.md` - sekce Porty (již aktualizováno)
+- [ ] `docs/REST-API.md` - Base URL, všechny příklady
+- [ ] `docs/INTEGRATION.md` - všechny porty a příklady kódu
+- [ ] `docs/C123-PROTOCOL.md` - pokud zmiňuje porty
+- [ ] `README.md` - quick start sekce
+
+---
+
+### Fáze 12: Autodiscovery
+
+Automatické nalezení c123-server ve stejné síti pro scoreboard aplikace.
+
+#### Principy
+
+1. **Server se identifikuje** - discovery endpoint s CORS
+2. **Scoreboard hledá** - HTTP scan začínající od vlastní IP
+3. **Cache** - pamatovat si poslední nalezený server
+4. **Fallback** - URL parametr jako dosud (`?server=192.168.1.50:27123`)
+
+#### 12.1 Discovery endpoint na serveru
+**Vstup:** UnifiedServer z fáze 11
+**Výstup:** Identifikační endpoint
+
+- [ ] `GET /api/discover` endpoint
+  ```json
+  {
+    "service": "c123-server",
+    "version": "2.0.0",
+    "port": 27123,
+    "eventName": "Český pohár 2025"  // z XML pokud dostupné
+  }
+  ```
+- [ ] CORS hlavičky pro `/api/discover`:
+  ```
+  Access-Control-Allow-Origin: *
+  Access-Control-Allow-Methods: GET, OPTIONS
+  ```
+- [ ] Rychlá odpověď (< 50ms) - žádné I/O blokování
+- [ ] Unit testy
+
+#### 12.2 Discovery utilita pro scoreboard
+**Výstup:** `docs/discovery-client.ts` - referenční implementace
+
+Algoritmus:
+1. Zkontrolovat URL parametr `?server=` → použít přímo
+2. Zkontrolovat `localStorage['c123-server-url']` → ověřit dostupnost
+3. Zjistit IP odkud je scoreboard hostován (nebo WebRTC pro lokální IP)
+4. Scanovat subnet začínající od této IP (nejprve .1, pak okolní)
+5. Při nalezení uložit do localStorage
+
+- [ ] Referenční TypeScript implementace v docs/
+- [ ] `getLocalIP()` - zjištění IP (z `location.hostname` nebo WebRTC)
+- [ ] `scanSubnet()` - paralelní fetch s 200ms timeout
+- [ ] `discoverC123Server()` - orchestrace celého flow
+- [ ] Optimalizace: začít od IP serveru kde běží scoreboard
+
+#### 12.3 Aktualizace dokumentace
+**Výstup:** Aktualizovaná dokumentace
+
+- [ ] `docs/INTEGRATION.md` - sekce Discovery
+- [ ] Příklady kódu pro scoreboard implementaci
+- [ ] Popis fallback mechanismů
 
 ---
 ## Dodatecna zjisteni a ukoly
@@ -391,9 +497,22 @@ Co musí scoreboard implementovat:
 
 | Služba | Port | Poznámka |
 |--------|------|----------|
-| **C123** | 27333 | Existující (TCP + UDP) |
-| **C123 Server WS** | 27084 | Real-time data |
-| **C123 Server API** | 8084 | REST + Admin |
+| **C123** | 27333 | Upstream Canoe123 (TCP + UDP), nelze měnit |
+| **C123 Server** | 27123 | Jeden port pro vše (HTTP + WS) |
+
+### Struktura endpointů na portu 27123
+
+```
+http://server:27123/       → Admin dashboard (SPA)
+ws://server:27123/ws       → WebSocket pro scoreboardy (real-time C123 data)
+http://server:27123/api/*  → REST API (status, config, XML data)
+```
+
+**Zdůvodnění:**
+- Jeden port = jednodušší firewall, CORS, deployment
+- Port 27123 je mnemotechnický (C-1-2-3)
+- Sousední s C123 protokolem (27333)
+- IANA unassigned - žádné konflikty
 
 ---
 
