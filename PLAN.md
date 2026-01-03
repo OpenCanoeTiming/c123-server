@@ -268,7 +268,10 @@ Co musí scoreboard implementovat:
 ---
 ## Dodatecna zjisteni a ukoly
 
- - [ ] Kešují se XML data, nebo každý dotaz na API vede na čtení XML?
+ - [x] Kešují se XML data, nebo každý dotaz na API vede na čtení XML?
+   - **Ano, kešují se.** `XmlDataService` drží parsed XML v `cachedData`.
+   - Metoda `loadIfNeeded()` kontroluje `mtime` souboru - pokud se nezměnil, vrací keš.
+   - Při změně `mtime` se soubor znovu načte a naparsuje.
  - [ ] přikládám komplexní XML  závod LODM včetně cross a dalších disciplin sem do slozky - pro zobecnění rozhraní
  - [ ] `EventState` zůstává pro detekci dojetí a sledování závodů -- není to nějaký relikt principu CLI nebo to je v C123 rozhraní ok?
 
