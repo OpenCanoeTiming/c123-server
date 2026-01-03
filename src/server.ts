@@ -9,6 +9,7 @@ import { EventState } from './state/EventState.js';
 import { BR1BR2Merger } from './state/BR1BR2Merger.js';
 import { WebSocketServer } from './ws/WebSocketServer.js';
 import { AdminServer } from './admin/AdminServer.js';
+import { XmlDataService } from './service/XmlDataService.js';
 import { Logger } from './utils/logger.js';
 import {
   createTimeOfDay,
@@ -98,6 +99,7 @@ export class Server extends EventEmitter<ServerEvents> {
   private merger: BR1BR2Merger;
   private wsServer: WebSocketServer;
   private adminServer: AdminServer;
+  private xmlDataService: XmlDataService;
 
   private isRunning = false;
   private discoveredHost: string | null = null;
@@ -110,6 +112,7 @@ export class Server extends EventEmitter<ServerEvents> {
     this.merger = new BR1BR2Merger();
     this.wsServer = new WebSocketServer({ port: this.config.wsPort });
     this.adminServer = new AdminServer({ port: this.config.adminPort });
+    this.xmlDataService = new XmlDataService();
 
     this.setupEventHandlers();
   }
@@ -129,6 +132,7 @@ export class Server extends EventEmitter<ServerEvents> {
     // Register state with admin
     this.adminServer.setEventState(this.eventState);
     this.adminServer.setWebSocketServer(this.wsServer);
+    this.adminServer.setXmlDataService(this.xmlDataService);
 
     // Start data sources
     if (this.config.autoDiscovery && !this.config.tcpHost) {
@@ -139,6 +143,8 @@ export class Server extends EventEmitter<ServerEvents> {
 
     if (this.config.xmlPath) {
       this.startXmlSource();
+      // Also configure XmlDataService for REST API
+      this.xmlDataService.setPath(this.config.xmlPath);
     }
 
     this.isRunning = true;
@@ -211,6 +217,7 @@ export class Server extends EventEmitter<ServerEvents> {
   setXmlPath(path: string): void {
     this.xmlSource?.stop();
     this.config.xmlPath = path;
+    this.xmlDataService.setPath(path);
     if (path) {
       this.startXmlSource();
     }

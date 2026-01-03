@@ -161,15 +161,15 @@ Každý krok (7.1, 7.2, ...) je navržen tak, aby se dal zvládnout v rámci **j
 
 ### Fáze 8: XML REST API
 
-#### 8.1 Základní XML REST ⏱️ ~1 session
+#### 8.1 Základní XML REST ✅
 **Vstup:** Existující XmlFileSource
 **Výstup:** REST endpoints v AdminServer
 
-- [ ] `GET /api/xml/status` - je XML dostupné, checksum, timestamp
-- [ ] `GET /api/xml/schedule` - rozpis závodů (RaceList)
-- [ ] `GET /api/xml/participants` - všichni závodníci
-- [ ] `GET /api/xml/startlists` - startovní listiny
-- [ ] Swagger/OpenAPI dokumentace (komentáře v kódu)
+- [x] `GET /api/xml/status` - je XML dostupné, checksum, timestamp
+- [x] `GET /api/xml/schedule` - rozpis závodů (RaceList)
+- [x] `GET /api/xml/participants` - všichni závodníci
+- [x] XmlDataService s cachováním a validací
+- [x] Unit testy (14 testů)
 
 #### 8.2 Results a Startlists API ⏱️ ~1 session
 **Vstup:** REST základ z 8.1

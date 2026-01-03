@@ -3,6 +3,7 @@ import { Server } from 'node:http';
 import type { EventState } from '../state/EventState.js';
 import type { Source } from '../sources/types.js';
 import type { WebSocketServer } from '../ws/WebSocketServer.js';
+import type { XmlDataService } from '../service/XmlDataService.js';
 import type {
   AdminServerConfig,
   ServerStatusResponse,
@@ -40,6 +41,7 @@ export class AdminServer {
   private eventState: EventState | null = null;
   private sources: RegisteredSource[] = [];
   private wsServer: WebSocketServer | null = null;
+  private xmlDataService: XmlDataService | null = null;
 
   constructor(config?: Partial<AdminServerConfig>) {
     this.port = config?.port ?? DEFAULT_PORT;
@@ -59,6 +61,13 @@ export class AdminServer {
    */
   setWebSocketServer(ws: WebSocketServer): void {
     this.wsServer = ws;
+  }
+
+  /**
+   * Register XmlDataService for XML REST API
+   */
+  setXmlDataService(service: XmlDataService): void {
+    this.xmlDataService = service;
   }
 
   /**
@@ -152,6 +161,11 @@ export class AdminServer {
     this.app.get('/api/sources', this.handleSources.bind(this));
     this.app.get('/api/scoreboards', this.handleScoreboards.bind(this));
     this.app.post('/api/scoreboards/:id/config', this.handleScoreboardConfig.bind(this));
+
+    // XML REST API routes
+    this.app.get('/api/xml/status', this.handleXmlStatus.bind(this));
+    this.app.get('/api/xml/schedule', this.handleXmlSchedule.bind(this));
+    this.app.get('/api/xml/participants', this.handleXmlParticipants.bind(this));
 
     // Health check
     this.app.get('/health', (_req: Request, res: Response) => {
@@ -429,5 +443,62 @@ export class AdminServer {
       if (s.path !== undefined) info.path = s.path;
       return info;
     });
+  }
+
+  /**
+   * GET /api/xml/status - XML data availability and stats
+   */
+  private async handleXmlStatus(_req: Request, res: Response): Promise<void> {
+    if (!this.xmlDataService) {
+      res.status(503).json({ error: 'XML data service not available' });
+      return;
+    }
+
+    try {
+      const status = await this.xmlDataService.getStatus();
+      res.json(status);
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * GET /api/xml/schedule - Race schedule
+   */
+  private async handleXmlSchedule(_req: Request, res: Response): Promise<void> {
+    if (!this.xmlDataService) {
+      res.status(503).json({ error: 'XML data service not available' });
+      return;
+    }
+
+    try {
+      const schedule = await this.xmlDataService.getSchedule();
+      res.json({ schedule });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * GET /api/xml/participants - All participants
+   */
+  private async handleXmlParticipants(_req: Request, res: Response): Promise<void> {
+    if (!this.xmlDataService) {
+      res.status(503).json({ error: 'XML data service not available' });
+      return;
+    }
+
+    try {
+      const participants = await this.xmlDataService.getParticipants();
+      res.json({ participants });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
   }
 }
