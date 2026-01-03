@@ -217,13 +217,13 @@ Každý krok (7.1, 7.2, ...) je navržen tak, aby se dal zvládnout v rámci **j
 - [x] Detekce dojetí (dtFinish logika)
 - [x] RaceId formát a význam Current atributu
 
-#### 9.2 REST API dokumentace ⏱️ ~1 session
+#### 9.2 REST API dokumentace ✅
 **Výstup:** `docs/REST-API.md`
 
-- [ ] Všechny endpoints s příklady
-- [ ] Request/response formáty
-- [ ] Error handling
-- [ ] WebSocket change notifications
+- [x] Všechny endpoints s příklady
+- [x] Request/response formáty
+- [x] Error handling
+- [x] WebSocket change notifications
 
 #### 9.3 Odlišnosti od CLI ⏱️ ~1 session
 **Výstup:** `docs/CLI-DIFFERENCES.md`
