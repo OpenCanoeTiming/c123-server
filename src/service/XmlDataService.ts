@@ -70,6 +70,74 @@ export interface XmlDataStatus {
 }
 
 /**
+ * Race info combining schedule data with status
+ */
+export interface XmlRace {
+  raceId: string;
+  classId: string;
+  disId: string; // BR1, BR2, etc.
+  name: string;
+  startTime?: string | undefined;
+  raceOrder?: number | undefined;
+  raceStatus?: number | undefined;
+  participantCount: number;
+  hasResults: boolean;
+}
+
+/**
+ * Race detail with related data
+ */
+export interface XmlRaceDetail extends XmlRace {
+  startlistCount: number;
+  resultsCount: number;
+  relatedRaces: string[]; // Other runs of same class (BR1 <-> BR2)
+}
+
+/**
+ * Startlist entry for a race
+ */
+export interface XmlStartlistEntry {
+  startOrder: number;
+  bib: string;
+  participantId: string;
+  startTime?: string | undefined;
+  familyName: string;
+  givenName: string;
+  familyName2?: string | undefined;
+  givenName2?: string | undefined;
+  club: string;
+}
+
+/**
+ * Merged result combining BR1 and BR2
+ */
+export interface XmlMergedResult {
+  bib: string;
+  participantId: string;
+  familyName: string;
+  givenName: string;
+  familyName2?: string | undefined;
+  givenName2?: string | undefined;
+  club: string;
+  run1?: {
+    time?: number | undefined;
+    pen?: number | undefined;
+    total?: number | undefined;
+    rank?: number | undefined;
+    status?: string | undefined;
+  } | undefined;
+  run2?: {
+    time?: number | undefined;
+    pen?: number | undefined;
+    total?: number | undefined;
+    rank?: number | undefined;
+    status?: string | undefined;
+  } | undefined;
+  bestTotal?: number | undefined;
+  bestRank?: number | undefined;
+}
+
+/**
  * Service for reading and parsing C123 XML data files.
  *
  * Provides access to:
@@ -181,6 +249,257 @@ export class XmlDataService {
     await this.loadIfNeeded();
     const results = this.getResultsFromCache();
     return results.get(raceId) ?? null;
+  }
+
+  /**
+   * Get list of all races with basic info
+   */
+  async getRaces(): Promise<XmlRace[]> {
+    await this.loadIfNeeded();
+    const schedule = this.getScheduleFromCache();
+    const results = this.getResultsFromCache();
+    const participants = this.getParticipantsFromCache();
+
+    // Count participants per class
+    const participantsByClass = new Map<string, number>();
+    for (const p of participants) {
+      const count = participantsByClass.get(p.classId) ?? 0;
+      participantsByClass.set(p.classId, count + 1);
+    }
+
+    return schedule.map((s) => ({
+      raceId: s.raceId,
+      classId: s.classId ?? '',
+      disId: s.disId ?? '',
+      name: s.customTitle ?? s.raceId,
+      startTime: s.startTime,
+      raceOrder: s.raceOrder,
+      raceStatus: s.raceStatus,
+      participantCount: participantsByClass.get(s.classId ?? '') ?? 0,
+      hasResults: results.has(s.raceId),
+    }));
+  }
+
+  /**
+   * Get detailed info for a specific race
+   */
+  async getRaceDetail(raceId: string): Promise<XmlRaceDetail | null> {
+    await this.loadIfNeeded();
+    const schedule = this.getScheduleFromCache();
+    const scheduleItem = schedule.find((s) => s.raceId === raceId);
+
+    if (!scheduleItem) {
+      return null;
+    }
+
+    const results = this.getResultsFromCache();
+    const participants = this.getParticipantsFromCache();
+
+    // Count participants for this class
+    const classId = scheduleItem.classId ?? '';
+    const participantCount = participants.filter((p) => p.classId === classId).length;
+
+    // Find related races (same class, different run)
+    const relatedRaces = schedule
+      .filter((s) => s.classId === classId && s.raceId !== raceId)
+      .map((s) => s.raceId);
+
+    const raceResults = results.get(raceId) ?? [];
+
+    return {
+      raceId: scheduleItem.raceId,
+      classId,
+      disId: scheduleItem.disId ?? '',
+      name: scheduleItem.customTitle ?? scheduleItem.raceId,
+      startTime: scheduleItem.startTime,
+      raceOrder: scheduleItem.raceOrder,
+      raceStatus: scheduleItem.raceStatus,
+      participantCount,
+      hasResults: raceResults.length > 0,
+      startlistCount: participantCount,
+      resultsCount: raceResults.length,
+      relatedRaces,
+    };
+  }
+
+  /**
+   * Get startlist for a specific race
+   */
+  async getStartlist(raceId: string): Promise<XmlStartlistEntry[] | null> {
+    await this.loadIfNeeded();
+    const schedule = this.getScheduleFromCache();
+    const scheduleItem = schedule.find((s) => s.raceId === raceId);
+
+    if (!scheduleItem) {
+      return null;
+    }
+
+    const participants = this.getParticipantsFromCache();
+    const results = this.getResultsFromCache();
+    const raceResults = results.get(raceId) ?? [];
+
+    // Get participants for this class
+    const classId = scheduleItem.classId ?? '';
+    const classParticipants = participants.filter((p) => p.classId === classId);
+
+    // Build startlist from results (if available) or from participants
+    if (raceResults.length > 0) {
+      // Use results order
+      return raceResults
+        .sort((a, b) => a.startOrder - b.startOrder)
+        .map((r) => {
+          const participant = participants.find((p) => p.id === r.id);
+          return {
+            startOrder: r.startOrder,
+            bib: r.bib,
+            participantId: r.id,
+            startTime: r.startTime,
+            familyName: participant?.familyName ?? '',
+            givenName: participant?.givenName ?? '',
+            familyName2: participant?.familyName2,
+            givenName2: participant?.givenName2,
+            club: participant?.club ?? '',
+          };
+        });
+    }
+
+    // Fallback: use participants sorted by bib
+    return classParticipants
+      .sort((a, b) => Number(a.bib) - Number(b.bib))
+      .map((p, index) => ({
+        startOrder: index + 1,
+        bib: p.bib,
+        participantId: p.id,
+        startTime: undefined,
+        familyName: p.familyName,
+        givenName: p.givenName,
+        familyName2: p.familyName2,
+        givenName2: p.givenName2,
+        club: p.club,
+      }));
+  }
+
+  /**
+   * Get results for a specific race with participant data
+   */
+  async getResultsWithParticipants(raceId: string): Promise<(XmlResultRow & { participant?: XmlParticipant | undefined })[] | null> {
+    await this.loadIfNeeded();
+    const results = this.getResultsFromCache();
+    const raceResults = results.get(raceId);
+
+    if (!raceResults) {
+      return null;
+    }
+
+    const participants = this.getParticipantsFromCache();
+    const participantMap = new Map(participants.map((p) => [p.id, p]));
+
+    return raceResults
+      .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
+      .map((r) => ({
+        ...r,
+        participant: participantMap.get(r.id),
+      }));
+  }
+
+  /**
+   * Get merged results for both runs of a class
+   */
+  async getMergedResults(classId: string): Promise<XmlMergedResult[]> {
+    await this.loadIfNeeded();
+    const schedule = this.getScheduleFromCache();
+    const results = this.getResultsFromCache();
+    const participants = this.getParticipantsFromCache();
+
+    // Find BR1 and BR2 races for this class
+    const br1Race = schedule.find((s) => s.classId === classId && s.disId === 'BR1');
+    const br2Race = schedule.find((s) => s.classId === classId && s.disId === 'BR2');
+
+    const br1Results = br1Race ? results.get(br1Race.raceId) ?? [] : [];
+    const br2Results = br2Race ? results.get(br2Race.raceId) ?? [] : [];
+
+    // Build participant map
+    const participantMap = new Map(participants.map((p) => [p.id, p]));
+
+    // Merge results by participant ID
+    const mergedMap = new Map<string, XmlMergedResult>();
+
+    for (const r of br1Results) {
+      const participant = participantMap.get(r.id);
+      mergedMap.set(r.id, {
+        bib: r.bib,
+        participantId: r.id,
+        familyName: participant?.familyName ?? '',
+        givenName: participant?.givenName ?? '',
+        familyName2: participant?.familyName2,
+        givenName2: participant?.givenName2,
+        club: participant?.club ?? '',
+        run1: {
+          time: r.time,
+          pen: r.pen,
+          total: r.total,
+          rank: r.rank,
+          status: r.status,
+        },
+      });
+    }
+
+    for (const r of br2Results) {
+      const existing = mergedMap.get(r.id);
+      if (existing) {
+        existing.run2 = {
+          time: r.time,
+          pen: r.pen,
+          total: r.total,
+          rank: r.rank,
+          status: r.status,
+        };
+      } else {
+        const participant = participantMap.get(r.id);
+        mergedMap.set(r.id, {
+          bib: r.bib,
+          participantId: r.id,
+          familyName: participant?.familyName ?? '',
+          givenName: participant?.givenName ?? '',
+          familyName2: participant?.familyName2,
+          givenName2: participant?.givenName2,
+          club: participant?.club ?? '',
+          run2: {
+            time: r.time,
+            pen: r.pen,
+            total: r.total,
+            rank: r.rank,
+            status: r.status,
+          },
+        });
+      }
+    }
+
+    // Calculate best total and rank
+    const merged = Array.from(mergedMap.values()).map((m) => {
+      const run1Total = m.run1?.total;
+      const run2Total = m.run2?.total;
+
+      if (run1Total !== undefined && run2Total !== undefined) {
+        m.bestTotal = Math.min(run1Total, run2Total);
+      } else if (run1Total !== undefined) {
+        m.bestTotal = run1Total;
+      } else if (run2Total !== undefined) {
+        m.bestTotal = run2Total;
+      }
+
+      return m;
+    });
+
+    // Sort by best total and assign rank
+    merged.sort((a, b) => (a.bestTotal ?? Infinity) - (b.bestTotal ?? Infinity));
+    merged.forEach((m, index) => {
+      if (m.bestTotal !== undefined) {
+        m.bestRank = index + 1;
+      }
+    });
+
+    return merged;
   }
 
   /**

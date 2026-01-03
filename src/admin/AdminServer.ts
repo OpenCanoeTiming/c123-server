@@ -166,6 +166,11 @@ export class AdminServer {
     this.app.get('/api/xml/status', this.handleXmlStatus.bind(this));
     this.app.get('/api/xml/schedule', this.handleXmlSchedule.bind(this));
     this.app.get('/api/xml/participants', this.handleXmlParticipants.bind(this));
+    this.app.get('/api/xml/races', this.handleXmlRaces.bind(this));
+    this.app.get('/api/xml/races/:id', this.handleXmlRaceDetail.bind(this));
+    this.app.get('/api/xml/races/:id/startlist', this.handleXmlRaceStartlist.bind(this));
+    this.app.get('/api/xml/races/:id/results', this.handleXmlRaceResults.bind(this));
+    this.app.get('/api/xml/races/:id/results/:run', this.handleXmlRaceResultsByRun.bind(this));
 
     // Health check
     this.app.get('/health', (_req: Request, res: Response) => {
@@ -495,6 +500,167 @@ export class AdminServer {
     try {
       const participants = await this.xmlDataService.getParticipants();
       res.json({ participants });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * GET /api/xml/races - List of all races
+   */
+  private async handleXmlRaces(_req: Request, res: Response): Promise<void> {
+    if (!this.xmlDataService) {
+      res.status(503).json({ error: 'XML data service not available' });
+      return;
+    }
+
+    try {
+      const races = await this.xmlDataService.getRaces();
+      res.json({ races });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * GET /api/xml/races/:id - Race detail
+   */
+  private async handleXmlRaceDetail(req: Request, res: Response): Promise<void> {
+    if (!this.xmlDataService) {
+      res.status(503).json({ error: 'XML data service not available' });
+      return;
+    }
+
+    try {
+      const { id } = req.params;
+      const race = await this.xmlDataService.getRaceDetail(id);
+
+      if (!race) {
+        res.status(404).json({ error: 'Race not found' });
+        return;
+      }
+
+      res.json({ race });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * GET /api/xml/races/:id/startlist - Race startlist
+   */
+  private async handleXmlRaceStartlist(req: Request, res: Response): Promise<void> {
+    if (!this.xmlDataService) {
+      res.status(503).json({ error: 'XML data service not available' });
+      return;
+    }
+
+    try {
+      const { id } = req.params;
+      const startlist = await this.xmlDataService.getStartlist(id);
+
+      if (!startlist) {
+        res.status(404).json({ error: 'Race not found' });
+        return;
+      }
+
+      res.json({ startlist });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * GET /api/xml/races/:id/results - Race results (with optional ?merged=true)
+   */
+  private async handleXmlRaceResults(req: Request, res: Response): Promise<void> {
+    if (!this.xmlDataService) {
+      res.status(503).json({ error: 'XML data service not available' });
+      return;
+    }
+
+    try {
+      const { id } = req.params;
+      const merged = req.query.merged === 'true';
+
+      if (merged) {
+        // Get merged results for the class
+        const race = await this.xmlDataService.getRaceDetail(id);
+        if (!race) {
+          res.status(404).json({ error: 'Race not found' });
+          return;
+        }
+
+        const results = await this.xmlDataService.getMergedResults(race.classId);
+        res.json({ results, merged: true, classId: race.classId });
+        return;
+      }
+
+      const results = await this.xmlDataService.getResultsWithParticipants(id);
+
+      if (!results) {
+        res.status(404).json({ error: 'Race not found or no results' });
+        return;
+      }
+
+      res.json({ results });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * GET /api/xml/races/:id/results/:run - Race results for specific run (BR1 or BR2)
+   */
+  private async handleXmlRaceResultsByRun(req: Request, res: Response): Promise<void> {
+    if (!this.xmlDataService) {
+      res.status(503).json({ error: 'XML data service not available' });
+      return;
+    }
+
+    try {
+      const { id, run } = req.params;
+      const runUpper = run.toUpperCase();
+
+      if (runUpper !== 'BR1' && runUpper !== 'BR2') {
+        res.status(400).json({ error: 'Invalid run parameter. Use BR1 or BR2.' });
+        return;
+      }
+
+      // Find the race detail to get classId
+      const race = await this.xmlDataService.getRaceDetail(id);
+      if (!race) {
+        res.status(404).json({ error: 'Race not found' });
+        return;
+      }
+
+      // Find the specific run's raceId
+      const races = await this.xmlDataService.getRaces();
+      const targetRace = races.find((r) => r.classId === race.classId && r.disId === runUpper);
+
+      if (!targetRace) {
+        res.status(404).json({ error: `No ${runUpper} race found for this class` });
+        return;
+      }
+
+      const results = await this.xmlDataService.getResultsWithParticipants(targetRace.raceId);
+
+      if (!results) {
+        res.status(404).json({ error: 'No results available for this run' });
+        return;
+      }
+
+      res.json({ results, run: runUpper, raceId: targetRace.raceId });
     } catch (err) {
       res.status(500).json({
         error: err instanceof Error ? err.message : 'Unknown error',

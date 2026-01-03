@@ -171,16 +171,17 @@ Každý krok (7.1, 7.2, ...) je navržen tak, aby se dal zvládnout v rámci **j
 - [x] XmlDataService s cachováním a validací
 - [x] Unit testy (14 testů)
 
-#### 8.2 Results a Startlists API ⏱️ ~1 session
+#### 8.2 Results a Startlists API ✅
 **Vstup:** REST základ z 8.1
 **Výstup:** Kompletní race endpoints
 
-- [ ] `GET /api/xml/races` - seznam závodů (id, name, status)
-- [ ] `GET /api/xml/races/:id` - detail závodu
-- [ ] `GET /api/xml/races/:id/startlist` - startovka závodu
-- [ ] `GET /api/xml/races/:id/results` - výsledky (obě jízdy)
-- [ ] `GET /api/xml/races/:id/results/:run` - BR1 nebo BR2
-- [ ] Query params: `?merged=true` pro spojené výsledky
+- [x] `GET /api/xml/races` - seznam závodů (id, name, status)
+- [x] `GET /api/xml/races/:id` - detail závodu
+- [x] `GET /api/xml/races/:id/startlist` - startovka závodu
+- [x] `GET /api/xml/races/:id/results` - výsledky (obě jízdy)
+- [x] `GET /api/xml/races/:id/results/:run` - BR1 nebo BR2
+- [x] Query params: `?merged=true` pro spojené výsledky
+- [x] Unit testy (25 testů pro XmlDataService)
 
 #### 8.3 Windows file monitoring ⏱️ ~1 session
 **Vstup:** Existující XmlFileSource

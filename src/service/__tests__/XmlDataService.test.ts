@@ -291,4 +291,258 @@ describe('XmlDataService', () => {
       await expect(service.getParticipants()).rejects.toThrow('Invalid XML: not a Canoe123 file');
     });
   });
+
+  describe('getRaces', () => {
+    it('returns list of races with basic info', async () => {
+      service.setPath(xmlPath);
+      const races = await service.getRaces();
+
+      expect(races).toHaveLength(2);
+
+      expect(races[0]).toMatchObject({
+        raceId: 'K1M_ST_BR1_6',
+        classId: 'K1M_ST',
+        disId: 'BR1',
+        name: 'K1m - střední trať - 1. jízda',
+        participantCount: 2,
+        hasResults: true,
+      });
+
+      expect(races[1]).toMatchObject({
+        raceId: 'K1M_ST_BR2_6',
+        classId: 'K1M_ST',
+        disId: 'BR2',
+        name: 'K1m - střední trať - 2. jízda',
+        participantCount: 2,
+        hasResults: false,
+      });
+    });
+  });
+
+  describe('getRaceDetail', () => {
+    it('returns detailed race info', async () => {
+      service.setPath(xmlPath);
+      const race = await service.getRaceDetail('K1M_ST_BR1_6');
+
+      expect(race).not.toBeNull();
+      expect(race).toMatchObject({
+        raceId: 'K1M_ST_BR1_6',
+        classId: 'K1M_ST',
+        disId: 'BR1',
+        name: 'K1m - střední trať - 1. jízda',
+        participantCount: 2,
+        hasResults: true,
+        startlistCount: 2,
+        resultsCount: 2,
+      });
+      expect(race!.relatedRaces).toContain('K1M_ST_BR2_6');
+    });
+
+    it('returns null for non-existent race', async () => {
+      service.setPath(xmlPath);
+      const race = await service.getRaceDetail('NONEXISTENT');
+
+      expect(race).toBeNull();
+    });
+  });
+
+  describe('getStartlist', () => {
+    it('returns startlist from results data', async () => {
+      service.setPath(xmlPath);
+      const startlist = await service.getStartlist('K1M_ST_BR1_6');
+
+      expect(startlist).not.toBeNull();
+      expect(startlist).toHaveLength(2);
+
+      expect(startlist![0]).toMatchObject({
+        startOrder: 1,
+        bib: '1',
+        participantId: '12054.K1M_ST',
+        familyName: 'PRSKAVEC',
+        givenName: 'Jiří',
+        club: 'USK Praha',
+      });
+    });
+
+    it('returns startlist from participants when no results', async () => {
+      service.setPath(xmlPath);
+      const startlist = await service.getStartlist('K1M_ST_BR2_6');
+
+      expect(startlist).not.toBeNull();
+      expect(startlist).toHaveLength(2);
+      expect(startlist![0].bib).toBe('1');
+      expect(startlist![1].bib).toBe('2');
+    });
+
+    it('returns null for non-existent race', async () => {
+      service.setPath(xmlPath);
+      const startlist = await service.getStartlist('NONEXISTENT');
+
+      expect(startlist).toBeNull();
+    });
+  });
+
+  describe('getResultsWithParticipants', () => {
+    it('returns results with participant data', async () => {
+      service.setPath(xmlPath);
+      const results = await service.getResultsWithParticipants('K1M_ST_BR1_6');
+
+      expect(results).not.toBeNull();
+      expect(results).toHaveLength(2);
+
+      // Sorted by rank
+      expect(results![0].rank).toBe(1);
+      expect(results![0].participant).toMatchObject({
+        familyName: 'PRSKAVEC',
+        givenName: 'Jiří',
+      });
+
+      expect(results![1].rank).toBe(2);
+      expect(results![1].participant).toMatchObject({
+        familyName: 'FUKSA',
+        givenName: 'Martin',
+      });
+    });
+
+    it('returns null for non-existent race', async () => {
+      service.setPath(xmlPath);
+      const results = await service.getResultsWithParticipants('NONEXISTENT');
+
+      expect(results).toBeNull();
+    });
+  });
+
+  describe('getMergedResults', () => {
+    const xmlWithBothRuns = `<?xml version="1.0"?>
+<Canoe123Data>
+  <Participants>
+    <Id>12054.K1M_ST</Id>
+    <ClassId>K1M_ST</ClassId>
+    <EventBib>1</EventBib>
+    <FamilyName>PRSKAVEC</FamilyName>
+    <GivenName>Jiří</GivenName>
+    <Club>USK Praha</Club>
+    <IsTeam>false</IsTeam>
+  </Participants>
+  <Participants>
+    <Id>12055.K1M_ST</Id>
+    <ClassId>K1M_ST</ClassId>
+    <EventBib>2</EventBib>
+    <FamilyName>FUKSA</FamilyName>
+    <GivenName>Martin</GivenName>
+    <Club>DUKLA Praha</Club>
+    <IsTeam>false</IsTeam>
+  </Participants>
+  <Schedule>
+    <RaceId>K1M_ST_BR1_6</RaceId>
+    <ClassId>K1M_ST</ClassId>
+    <DisId>BR1</DisId>
+  </Schedule>
+  <Schedule>
+    <RaceId>K1M_ST_BR2_6</RaceId>
+    <ClassId>K1M_ST</ClassId>
+    <DisId>BR2</DisId>
+  </Schedule>
+  <Results>
+    <RaceId>K1M_ST_BR1_6</RaceId>
+    <Id>12054.K1M_ST</Id>
+    <Bib>1</Bib>
+    <Total>80000</Total>
+    <Rnk>2</Rnk>
+  </Results>
+  <Results>
+    <RaceId>K1M_ST_BR1_6</RaceId>
+    <Id>12055.K1M_ST</Id>
+    <Bib>2</Bib>
+    <Total>78000</Total>
+    <Rnk>1</Rnk>
+  </Results>
+  <Results>
+    <RaceId>K1M_ST_BR2_6</RaceId>
+    <Id>12054.K1M_ST</Id>
+    <Bib>1</Bib>
+    <Total>77000</Total>
+    <Rnk>1</Rnk>
+  </Results>
+  <Results>
+    <RaceId>K1M_ST_BR2_6</RaceId>
+    <Id>12055.K1M_ST</Id>
+    <Bib>2</Bib>
+    <Total>79000</Total>
+    <Rnk>2</Rnk>
+  </Results>
+</Canoe123Data>`;
+
+    it('merges results from both runs', async () => {
+      await fsPromises.writeFile(xmlPath, xmlWithBothRuns);
+      service.setPath(xmlPath);
+
+      const merged = await service.getMergedResults('K1M_ST');
+
+      expect(merged).toHaveLength(2);
+
+      // Sorted by best total
+      expect(merged[0].bib).toBe('1'); // Best: 77000 from BR2
+      expect(merged[0].run1?.total).toBe(80000);
+      expect(merged[0].run2?.total).toBe(77000);
+      expect(merged[0].bestTotal).toBe(77000);
+      expect(merged[0].bestRank).toBe(1);
+
+      expect(merged[1].bib).toBe('2'); // Best: 78000 from BR1
+      expect(merged[1].run1?.total).toBe(78000);
+      expect(merged[1].run2?.total).toBe(79000);
+      expect(merged[1].bestTotal).toBe(78000);
+      expect(merged[1].bestRank).toBe(2);
+    });
+
+    it('handles participants with only one run', async () => {
+      const xmlOneRun = `<?xml version="1.0"?>
+<Canoe123Data>
+  <Participants>
+    <Id>12054.K1M_ST</Id>
+    <ClassId>K1M_ST</ClassId>
+    <EventBib>1</EventBib>
+    <FamilyName>PRSKAVEC</FamilyName>
+    <GivenName>Jiří</GivenName>
+    <Club>USK Praha</Club>
+    <IsTeam>false</IsTeam>
+  </Participants>
+  <Schedule>
+    <RaceId>K1M_ST_BR1_6</RaceId>
+    <ClassId>K1M_ST</ClassId>
+    <DisId>BR1</DisId>
+  </Schedule>
+  <Schedule>
+    <RaceId>K1M_ST_BR2_6</RaceId>
+    <ClassId>K1M_ST</ClassId>
+    <DisId>BR2</DisId>
+  </Schedule>
+  <Results>
+    <RaceId>K1M_ST_BR1_6</RaceId>
+    <Id>12054.K1M_ST</Id>
+    <Bib>1</Bib>
+    <Total>80000</Total>
+    <Rnk>1</Rnk>
+  </Results>
+</Canoe123Data>`;
+
+      await fsPromises.writeFile(xmlPath, xmlOneRun);
+      service.setPath(xmlPath);
+
+      const merged = await service.getMergedResults('K1M_ST');
+
+      expect(merged).toHaveLength(1);
+      expect(merged[0].run1?.total).toBe(80000);
+      expect(merged[0].run2).toBeUndefined();
+      expect(merged[0].bestTotal).toBe(80000);
+      expect(merged[0].bestRank).toBe(1);
+    });
+
+    it('returns empty array for non-existent class', async () => {
+      service.setPath(xmlPath);
+      const merged = await service.getMergedResults('NONEXISTENT');
+
+      expect(merged).toHaveLength(0);
+    });
+  });
 });
