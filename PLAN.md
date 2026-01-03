@@ -148,14 +148,14 @@ Každý krok (7.1, 7.2, ...) je navržen tak, aby se dal zvládnout v rámci **j
 - [x] WebSocket posílá přímo parsované C123 zprávy s envelope
 - [x] Aktualizovat testy (157 testů)
 
-#### 7.3 Cleanup a reorganizace ⏱️ ~1 session
+#### 7.3 Cleanup a reorganizace ✅
 **Vstup:** Refaktorovaný kód z 7.2
 **Výstup:** Čistá struktura projektu
 
-- [ ] Smazat nepoužívaný CLI kód
-- [ ] Reorganizovat adresáře (output/ → ws/, parsers/ → protocol/)
-- [ ] Aktualizovat importy
-- [ ] Ověřit všechny testy
+- [x] Smazat nepoužívaný CLI kód
+- [x] Reorganizovat adresáře (output/ → ws/, parsers/ → protocol/)
+- [x] Aktualizovat importy
+- [x] Ověřit všechny testy (157 testů)
 
 ---
 
