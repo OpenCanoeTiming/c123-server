@@ -103,6 +103,25 @@ export interface C123Error extends C123MessageBase {
 }
 
 /**
+ * XML section that can change
+ */
+export type XmlSection = 'Participants' | 'Schedule' | 'Results' | 'Classes';
+
+/**
+ * XML change notification (server-generated)
+ * Sent when XML file changes, clients should fetch updated data via REST API
+ */
+export interface C123XmlChange extends C123MessageBase {
+  type: 'XmlChange';
+  data: {
+    /** Which sections of the XML changed */
+    sections: XmlSection[];
+    /** New checksum of the XML file */
+    checksum: string;
+  };
+}
+
+/**
  * Union of all C123 protocol messages
  */
 export type C123Message =
@@ -112,7 +131,8 @@ export type C123Message =
   | C123RaceConfig
   | C123Schedule
   | C123Connected
-  | C123Error;
+  | C123Error
+  | C123XmlChange;
 
 /**
  * Type guard for C123TimeOfDay
@@ -161,4 +181,11 @@ export function isConnected(msg: C123Message): msg is C123Connected {
  */
 export function isError(msg: C123Message): msg is C123Error {
   return msg.type === 'Error';
+}
+
+/**
+ * Type guard for C123XmlChange
+ */
+export function isXmlChange(msg: C123Message): msg is C123XmlChange {
+  return msg.type === 'XmlChange';
 }

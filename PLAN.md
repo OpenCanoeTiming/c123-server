@@ -194,14 +194,15 @@ Každý krok (7.1, 7.2, ...) je navržen tak, aby se dal zvládnout v rámci **j
 - [x] Debounce pro rapid changes (C123 píše často)
 - [x] Unit testy (10 testů pro FileWatcher)
 
-#### 8.4 XML change notifications ⏱️ ~1 session
+#### 8.4 XML change notifications ✅
 **Vstup:** File watcher z 8.3
 **Výstup:** Push notifikace pro změny
 
-- [ ] WebSocket kanál `/ws/xml` pro změny
-- [ ] Message: `{ type: "xml-change", sections: ["Results", "StartList"], timestamp }`
-- [ ] Klient si stáhne změněná data přes REST
-- [ ] Diff detection (které sekce se změnily)
+- [x] WebSocket kanál `/ws/xml` pro změny (XmlWebSocketServer na portu 27085)
+- [x] Message: `{ type: "XmlChange", data: { sections, checksum }, timestamp }`
+- [x] Klient si stáhne změněná data přes REST
+- [x] Diff detection (XmlChangeNotifier s per-section MD5 hash)
+- [x] Unit testy (23 testů pro XmlChangeNotifier a XmlWebSocketServer)
 
 ---
 

@@ -10,6 +10,8 @@ import { BR1BR2Merger } from './state/BR1BR2Merger.js';
 import { WebSocketServer } from './ws/WebSocketServer.js';
 import { AdminServer } from './admin/AdminServer.js';
 import { XmlDataService } from './service/XmlDataService.js';
+import { XmlChangeNotifier } from './xml/XmlChangeNotifier.js';
+import { XmlWebSocketServer } from './xml/XmlWebSocketServer.js';
 import { Logger } from './utils/logger.js';
 import {
   createTimeOfDay,
@@ -53,6 +55,8 @@ export interface ServerConfig {
   wsPort?: number;
   /** Admin server port (default: 8084) */
   adminPort?: number;
+  /** XML WebSocket server port (default: 27085) */
+  xmlWsPort?: number;
 }
 
 /**
@@ -75,6 +79,7 @@ const DEFAULT_CONFIG: Required<ServerConfig> = {
   xmlPollInterval: 2000,
   wsPort: 27084,
   adminPort: 8084,
+  xmlWsPort: 0, // Use dynamic port by default for test safety
 };
 
 /**
@@ -95,11 +100,13 @@ export class Server extends EventEmitter<ServerEvents> {
   private udpDiscovery: UdpDiscovery | null = null;
   private tcpSource: TcpSource | null = null;
   private xmlSource: XmlFileSource | null = null;
+  private xmlChangeNotifier: XmlChangeNotifier | null = null;
   private eventState: EventState;
   private merger: BR1BR2Merger;
   private wsServer: WebSocketServer;
   private adminServer: AdminServer;
   private xmlDataService: XmlDataService;
+  private xmlWsServer: XmlWebSocketServer;
 
   private isRunning = false;
   private discoveredHost: string | null = null;
@@ -113,6 +120,7 @@ export class Server extends EventEmitter<ServerEvents> {
     this.wsServer = new WebSocketServer({ port: this.config.wsPort });
     this.adminServer = new AdminServer({ port: this.config.adminPort });
     this.xmlDataService = new XmlDataService();
+    this.xmlWsServer = new XmlWebSocketServer({ port: this.config.xmlWsPort });
 
     this.setupEventHandlers();
   }
@@ -128,6 +136,7 @@ export class Server extends EventEmitter<ServerEvents> {
     // Start output servers first
     await this.wsServer.start();
     await this.adminServer.start();
+    await this.xmlWsServer.start();
 
     // Register state with admin
     this.adminServer.setEventState(this.eventState);
@@ -143,6 +152,7 @@ export class Server extends EventEmitter<ServerEvents> {
 
     if (this.config.xmlPath) {
       this.startXmlSource();
+      this.startXmlChangeNotifier();
       // Also configure XmlDataService for REST API
       this.xmlDataService.setPath(this.config.xmlPath);
     }
@@ -163,10 +173,12 @@ export class Server extends EventEmitter<ServerEvents> {
     this.udpDiscovery?.stop();
     this.tcpSource?.stop();
     this.xmlSource?.stop();
+    await this.xmlChangeNotifier?.stop();
 
     // Stop output servers
     await this.wsServer.stop();
     await this.adminServer.stop();
+    await this.xmlWsServer.stop();
 
     // Cleanup
     this.eventState.destroy();
@@ -201,6 +213,13 @@ export class Server extends EventEmitter<ServerEvents> {
    */
   getAdminPort(): number {
     return this.adminServer.getPort();
+  }
+
+  /**
+   * Get the XML WebSocket server port
+   */
+  getXmlWsPort(): number {
+    return this.xmlWsServer.getPort();
   }
 
   /**
@@ -315,6 +334,27 @@ export class Server extends EventEmitter<ServerEvents> {
     });
 
     this.xmlSource.start();
+  }
+
+  private startXmlChangeNotifier(): void {
+    this.xmlChangeNotifier = new XmlChangeNotifier({
+      path: this.config.xmlPath,
+      pollInterval: this.config.xmlPollInterval,
+      debounceMs: 200, // Slightly higher debounce for change notifications
+    });
+
+    this.xmlChangeNotifier.on('change', (sections, checksum) => {
+      Logger.info('Server', `XML changed: ${sections.join(', ')}`);
+      this.xmlWsServer.broadcastChange(sections, checksum);
+      // Clear XmlDataService cache so next REST request gets fresh data
+      this.xmlDataService.clearCache();
+    });
+
+    this.xmlChangeNotifier.on('error', (err) => {
+      this.emit('error', err);
+    });
+
+    this.xmlChangeNotifier.start();
   }
 
   private handleXmlMessage(xml: string): void {
