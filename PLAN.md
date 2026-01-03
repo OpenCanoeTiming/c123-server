@@ -327,11 +327,11 @@ Automatické nalezení c123-server ve stejné síti pro scoreboard aplikace.
 3. **Cache** - pamatovat si poslední nalezený server
 4. **Fallback** - URL parametr jako dosud (`?server=192.168.1.50:27123`)
 
-#### 12.1 Discovery endpoint na serveru
+#### 12.1 Discovery endpoint na serveru ✅
 **Vstup:** UnifiedServer z fáze 11
 **Výstup:** Identifikační endpoint
 
-- [ ] `GET /api/discover` endpoint
+- [x] `GET /api/discover` endpoint
   ```json
   {
     "service": "c123-server",
@@ -340,13 +340,13 @@ Automatické nalezení c123-server ve stejné síti pro scoreboard aplikace.
     "eventName": "Český pohár 2025"  // z XML pokud dostupné
   }
   ```
-- [ ] CORS hlavičky pro `/api/discover`:
+- [x] CORS hlavičky pro `/api/discover`:
   ```
   Access-Control-Allow-Origin: *
   Access-Control-Allow-Methods: GET, OPTIONS
   ```
-- [ ] Rychlá odpověď (< 50ms) - žádné I/O blokování
-- [ ] Unit testy
+- [x] Rychlá odpověď (< 50ms) - žádné I/O blokování
+- [x] Unit testy
 
 #### 12.2 Discovery utilita pro scoreboard
 **Výstup:** `docs/discovery-client.ts` - referenční implementace

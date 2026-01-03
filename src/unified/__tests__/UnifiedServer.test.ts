@@ -194,6 +194,33 @@ describe('UnifiedServer', () => {
       });
     });
 
+    describe('GET /api/discover', () => {
+      it('should return discovery info without XML service', async () => {
+        const response = await fetch(`http://localhost:${port}/api/discover`);
+        expect(response.ok).toBe(true);
+
+        const data = await response.json();
+        expect(data).toMatchObject({
+          service: 'c123-server',
+          version: expect.any(String),
+          port: expect.any(Number),
+          eventName: null,
+        });
+      });
+
+      it('should include CORS headers for cross-origin access', async () => {
+        const response = await fetch(`http://localhost:${port}/api/discover`);
+        expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
+        expect(response.headers.get('Access-Control-Allow-Methods')).toContain('GET');
+      });
+
+      it('should return correct port', async () => {
+        const response = await fetch(`http://localhost:${port}/api/discover`);
+        const data = (await response.json()) as { port: number };
+        expect(data.port).toBe(port);
+      });
+    });
+
     describe('Dashboard UI', () => {
       it('should serve dashboard HTML at root', async () => {
         const response = await fetch(`http://localhost:${port}/`);

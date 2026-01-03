@@ -351,6 +351,9 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       next();
     });
 
+    // Discovery endpoint (for autodiscovery by scoreboards)
+    this.app.get('/api/discover', this.handleDiscover.bind(this));
+
     // API routes
     this.app.get('/api/status', this.handleStatus.bind(this));
     this.app.get('/api/sources', this.handleSources.bind(this));
@@ -382,6 +385,30 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     // Dashboard UI
     this.app.get('/', (_req: Request, res: Response) => {
       res.send(this.getDashboardHtml());
+    });
+  }
+
+  /**
+   * GET /api/discover - Discovery endpoint for autodiscovery
+   * Returns minimal info for quick identification by scoreboards.
+   * Must respond fast (< 50ms) - no I/O blocking.
+   */
+  private async handleDiscover(_req: Request, res: Response): Promise<void> {
+    // Get event name from XML if available (cached, so fast)
+    let eventName: string | null = null;
+    if (this.xmlDataService) {
+      try {
+        eventName = await this.xmlDataService.getEventName();
+      } catch {
+        // Ignore errors - eventName stays null
+      }
+    }
+
+    res.json({
+      service: 'c123-server',
+      version: VERSION,
+      port: this.getPort(),
+      eventName,
     });
   }
 

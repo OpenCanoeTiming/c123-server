@@ -181,6 +181,29 @@ export class XmlDataService {
   }
 
   /**
+   * Get event name from XML (MainTitle element)
+   * Returns null if not available
+   */
+  async getEventName(): Promise<string | null> {
+    if (!this.xmlPath) {
+      return null;
+    }
+
+    try {
+      await this.loadIfNeeded();
+      if (!this.cachedData) {
+        return null;
+      }
+
+      // MainTitle is at the root level of Canoe123Data
+      const mainTitle = (this.cachedData as Canoe123DataWithEvent).MainTitle;
+      return mainTitle ? String(mainTitle) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Get XML data status
    */
   async getStatus(): Promise<XmlDataStatus> {
@@ -654,6 +677,14 @@ interface Canoe123Data {
   Schedule?: RawSchedule | RawSchedule[];
   Results?: RawResult | RawResult[];
   Classes?: unknown;
+}
+
+/**
+ * Extended Canoe123Data with event-level fields
+ */
+interface Canoe123DataWithEvent extends Canoe123Data {
+  MainTitle?: string;
+  CompetitionCode?: string;
 }
 
 interface RawParticipant {
