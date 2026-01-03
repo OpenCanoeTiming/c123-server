@@ -5,18 +5,18 @@ import fs from 'node:fs';
 import readline from 'node:readline';
 import path from 'node:path';
 import { WebSocket } from 'ws';
+import type { C123Message, C123OnCourse, C123Results } from '../protocol/types.js';
 
 /**
  * Scoreboard Integration Test
  *
- * Tests that C123 Server output is compatible with the scoreboard CLIProvider.
- * Uses the same message parsing logic as the scoreboard to validate compatibility.
+ * Tests that C123 Server emits valid C123 protocol messages.
  *
  * This test:
  * 1. Creates a mock TCP server replaying recorded C123 messages
  * 2. Starts the C123 Server connected to the mock
- * 3. Connects a WebSocket client simulating CLIProvider
- * 4. Validates received messages match expected CLI format
+ * 3. Connects a WebSocket client
+ * 4. Validates received messages match C123 protocol format
  */
 
 interface RecordingEntry {
@@ -32,43 +32,31 @@ const RECORDING_PATH = path.resolve(
   '../../../analysis/recordings/rec-2025-12-28T09-34-10.jsonl'
 );
 
-// CLI message validation (mirrors scoreboard validation logic)
+// C123 protocol message validation
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function validateTopMessage(
-  msg: Record<string, unknown>
-): { valid: true } | { valid: false; error: string } {
-  if (!isObject(msg.data)) {
-    return { valid: false, error: 'data must be an object' };
+function validateC123Message(
+  msg: unknown
+): { valid: true; type: string } | { valid: false; error: string } {
+  if (!isObject(msg)) {
+    return { valid: false, error: 'Message is not an object' };
   }
-  const data = msg.data;
-  if (typeof data.RaceName !== 'string') {
-    return { valid: false, error: 'RaceName must be a string' };
-  }
-  if (!Array.isArray(data.list)) {
-    return { valid: false, error: 'list must be an array' };
-  }
-  return { valid: true };
-}
 
-function validateOnCourseMessage(
-  msg: Record<string, unknown>
-): { valid: true } | { valid: false; error: string } {
-  if (!Array.isArray(msg.data)) {
-    return { valid: false, error: 'data must be an array' };
+  if (typeof msg.type !== 'string') {
+    return { valid: false, error: 'type must be a string' };
   }
-  return { valid: true };
-}
 
-function validateCompMessage(
-  msg: Record<string, unknown>
-): { valid: true } | { valid: false; error: string } {
-  if (!isObject(msg.data)) {
-    return { valid: false, error: 'data must be an object' };
+  if (typeof msg.timestamp !== 'string') {
+    return { valid: false, error: 'timestamp must be a string' };
   }
-  return { valid: true };
+
+  if (!isObject(msg.data) && !Array.isArray(msg.data)) {
+    return { valid: false, error: 'data must be an object or array' };
+  }
+
+  return { valid: true, type: msg.type };
 }
 
 async function loadRecording(): Promise<RecordingEntry[]> {
@@ -160,15 +148,17 @@ async function createTestEnv() {
 }
 
 describe('Scoreboard Integration', () => {
-  it('should emit valid CLI-compatible messages that scoreboard can parse', async () => {
+  it('should emit valid C123 protocol messages', async () => {
     const { server, cleanup } = await createTestEnv();
 
     try {
       // Track received messages by type
-      const receivedByType: Record<string, unknown[]> = {
-        top: [],
-        oncourse: [],
-        comp: [],
+      const receivedByType: Record<string, C123Message[]> = {
+        TimeOfDay: [],
+        OnCourse: [],
+        Results: [],
+        Schedule: [],
+        RaceConfig: [],
       };
 
       // Validation errors
@@ -178,7 +168,7 @@ describe('Scoreboard Integration', () => {
       const wsPort = server.getWsPort();
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Connect WebSocket client (simulating scoreboard CLIProvider)
+      // Connect WebSocket client
       const ws = new WebSocket(`ws://127.0.0.1:${wsPort}`);
 
       await new Promise<void>((resolve, reject) => {
@@ -197,7 +187,7 @@ describe('Scoreboard Integration', () => {
         });
       });
 
-      // Process messages like CLIProvider would
+      // Process messages
       ws.on('message', (data) => {
         let message: unknown;
 
@@ -208,42 +198,14 @@ describe('Scoreboard Integration', () => {
           return;
         }
 
-        if (!isObject(message)) {
-          validationErrors.push('Message is not an object');
+        const validation = validateC123Message(message);
+        if (!validation.valid) {
+          validationErrors.push(validation.error);
           return;
         }
 
-        const type = (message.msg || message.type) as string;
-
-        switch (type) {
-          case 'top': {
-            const validation = validateTopMessage(message);
-            if (!validation.valid) {
-              validationErrors.push(`top: ${validation.error}`);
-            } else {
-              receivedByType.top.push(message);
-            }
-            break;
-          }
-          case 'oncourse': {
-            const validation = validateOnCourseMessage(message);
-            if (!validation.valid) {
-              validationErrors.push(`oncourse: ${validation.error}`);
-            } else {
-              receivedByType.oncourse.push(message);
-            }
-            break;
-          }
-          case 'comp': {
-            const validation = validateCompMessage(message);
-            if (!validation.valid) {
-              validationErrors.push(`comp: ${validation.error}`);
-            } else {
-              receivedByType.comp.push(message);
-            }
-            break;
-          }
-          // Other message types are optional, ignore silently
+        if (validation.type in receivedByType) {
+          receivedByType[validation.type].push(message as C123Message);
         }
       });
 
@@ -255,38 +217,25 @@ describe('Scoreboard Integration', () => {
 
       // Assertions
       expect(validationErrors).toEqual([]);
-      expect(receivedByType.top.length).toBeGreaterThan(0);
-      expect(receivedByType.oncourse.length).toBeGreaterThan(0);
+      expect(receivedByType.OnCourse.length).toBeGreaterThan(0);
+      expect(receivedByType.TimeOfDay.length).toBeGreaterThan(0);
 
-      // Verify top message structure matches what scoreboard expects
-      const firstTop = receivedByType.top[0] as {
-        msg: string;
-        data: Record<string, unknown>;
-      };
-      expect(firstTop.msg).toBe('top');
-      expect(firstTop.data).toHaveProperty('RaceName');
-      expect(firstTop.data).toHaveProperty('RaceStatus');
-      expect(firstTop.data).toHaveProperty('list');
-      expect(Array.isArray(firstTop.data.list)).toBe(true);
-
-      // Verify oncourse message structure
-      const firstOnCourse = receivedByType.oncourse[0] as {
-        msg: string;
-        data: unknown[];
-      };
-      expect(firstOnCourse.msg).toBe('oncourse');
-      expect(Array.isArray(firstOnCourse.data)).toBe(true);
+      // Verify OnCourse message structure
+      const firstOnCourse = receivedByType.OnCourse[0] as C123OnCourse;
+      expect(firstOnCourse.type).toBe('OnCourse');
+      expect(firstOnCourse.timestamp).toBeDefined();
+      expect(firstOnCourse.data).toHaveProperty('competitors');
+      expect(Array.isArray(firstOnCourse.data.competitors)).toBe(true);
     } finally {
       await cleanup();
     }
   }, 15000);
 
-  it('should include required fields in top message results', async () => {
+  it('should include required fields in Results message', async () => {
     const { server, cleanup } = await createTestEnv();
 
     try {
-      let topMessage: { data: { list: Record<string, unknown>[] } } | null =
-        null;
+      let resultsMessage: C123Results | null = null;
 
       await server.start();
       const wsPort = server.getWsPort();
@@ -305,9 +254,9 @@ describe('Scoreboard Integration', () => {
 
       ws.on('message', (data) => {
         try {
-          const msg = JSON.parse(data.toString());
-          if (msg.msg === 'top' && msg.data?.list?.length > 0 && !topMessage) {
-            topMessage = msg;
+          const msg = JSON.parse(data.toString()) as C123Message;
+          if (msg.type === 'Results' && msg.data.rows?.length > 0 && !resultsMessage) {
+            resultsMessage = msg as C123Results;
           }
         } catch {
           // Ignore
@@ -317,26 +266,31 @@ describe('Scoreboard Integration', () => {
       await new Promise((resolve) => setTimeout(resolve, 2000));
       ws.close();
 
-      // Verify result item has required fields for scoreboard
-      expect(topMessage).not.toBeNull();
-      const firstResult = topMessage!.data.list[0];
+      // Verify Results message has required fields
+      expect(resultsMessage).not.toBeNull();
+      expect(resultsMessage!.type).toBe('Results');
+      expect(resultsMessage!.timestamp).toBeDefined();
+      expect(resultsMessage!.data.raceId).toBeDefined();
+      expect(resultsMessage!.data.rows).toBeDefined();
 
-      // Required fields that scoreboard uses
-      expect(firstResult).toHaveProperty('Rank');
-      expect(firstResult).toHaveProperty('Bib');
-      expect(firstResult).toHaveProperty('Name');
-      expect(firstResult).toHaveProperty('Total');
-      expect(firstResult).toHaveProperty('Pen');
+      const firstResult = resultsMessage!.data.rows[0];
+
+      // Required fields
+      expect(firstResult).toHaveProperty('rank');
+      expect(firstResult).toHaveProperty('bib');
+      expect(firstResult).toHaveProperty('name');
+      expect(firstResult).toHaveProperty('total');
+      expect(firstResult).toHaveProperty('pen');
     } finally {
       await cleanup();
     }
   }, 15000);
 
-  it('should include required fields in oncourse message', async () => {
+  it('should include required fields in OnCourse message', async () => {
     const { server, cleanup } = await createTestEnv();
 
     try {
-      let onCourseMessage: { data: Record<string, unknown>[] } | null = null;
+      let onCourseMessage: C123OnCourse | null = null;
 
       await server.start();
       const wsPort = server.getWsPort();
@@ -355,13 +309,13 @@ describe('Scoreboard Integration', () => {
 
       ws.on('message', (data) => {
         try {
-          const msg = JSON.parse(data.toString());
+          const msg = JSON.parse(data.toString()) as C123Message;
           if (
-            msg.msg === 'oncourse' &&
-            msg.data?.length > 0 &&
+            msg.type === 'OnCourse' &&
+            msg.data.competitors?.length > 0 &&
             !onCourseMessage
           ) {
-            onCourseMessage = msg;
+            onCourseMessage = msg as C123OnCourse;
           }
         } catch {
           // Ignore
@@ -371,13 +325,19 @@ describe('Scoreboard Integration', () => {
       await new Promise((resolve) => setTimeout(resolve, 2000));
       ws.close();
 
-      // Verify oncourse item has required fields for scoreboard
+      // Verify OnCourse message has required fields
       expect(onCourseMessage).not.toBeNull();
-      const firstCompetitor = onCourseMessage!.data[0];
+      expect(onCourseMessage!.type).toBe('OnCourse');
+      expect(onCourseMessage!.timestamp).toBeDefined();
+      expect(onCourseMessage!.data.competitors).toBeDefined();
 
-      // Required fields that scoreboard uses
-      expect(firstCompetitor).toHaveProperty('Bib');
-      expect(firstCompetitor).toHaveProperty('Name');
+      const firstCompetitor = onCourseMessage!.data.competitors[0];
+
+      // Required fields
+      expect(firstCompetitor).toHaveProperty('bib');
+      expect(firstCompetitor).toHaveProperty('name');
+      expect(firstCompetitor).toHaveProperty('raceId');
+      expect(firstCompetitor).toHaveProperty('position');
     } finally {
       await cleanup();
     }

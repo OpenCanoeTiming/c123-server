@@ -1,21 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { WebSocket } from 'ws';
 import { WebSocketServer } from '../WebSocketServer.js';
-import type { EventStateData } from '../../state/types.js';
-
-function createMockState(overrides: Partial<EventStateData> = {}): EventStateData {
-  return {
-    timeOfDay: '10:30:00',
-    raceConfig: null,
-    schedule: [],
-    currentRaceId: null,
-    onCourse: [],
-    results: null,
-    highlightBib: null,
-    scheduleFingerprint: null,
-    ...overrides,
-  };
-}
+import { createOnCourse, createTimeOfDay, createResults } from '../../protocol/factory.js';
+import type { C123Message } from '../../protocol/types.js';
 
 describe('WebSocketServer', () => {
   let server: WebSocketServer;
@@ -119,22 +106,23 @@ describe('WebSocketServer', () => {
   });
 
   describe('broadcast', () => {
-    it('should send messages to connected clients', async () => {
+    it('should send C123 message to connected clients', async () => {
       await server.start();
 
       const client = new WebSocket(`ws://localhost:${testPort}`);
-      const receivedMessages: string[] = [];
+      const receivedMessages: C123Message[] = [];
 
       await new Promise<void>((resolve) => {
         client.on('open', () => resolve());
       });
 
       client.on('message', (data) => {
-        receivedMessages.push(data.toString());
+        receivedMessages.push(JSON.parse(data.toString()));
       });
 
-      const state = createMockState({
-        onCourse: [
+      const message = createOnCourse({
+        total: 1,
+        competitors: [
           {
             bib: '5',
             name: 'Test',
@@ -159,17 +147,15 @@ describe('WebSocketServer', () => {
         ],
       });
 
-      server.broadcast(state);
+      server.broadcast(message);
 
       // Wait for messages to arrive
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      expect(receivedMessages.length).toBeGreaterThan(0);
-
-      const parsed = receivedMessages.map((m) => JSON.parse(m));
-      const oncourse = parsed.find((m) => m.msg === 'oncourse');
-      expect(oncourse).toBeDefined();
-      expect(oncourse.data).toHaveLength(1);
+      expect(receivedMessages.length).toBe(1);
+      expect(receivedMessages[0].type).toBe('OnCourse');
+      expect(receivedMessages[0].data.competitors).toHaveLength(1);
+      expect(receivedMessages[0].data.competitors[0].bib).toBe('5');
 
       client.close();
     });
@@ -198,71 +184,204 @@ describe('WebSocketServer', () => {
 
       expect(server.getClientCount()).toBe(2);
 
-      server.broadcast(createMockState());
+      server.broadcast(createTimeOfDay({ time: '10:30:00' }));
 
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      expect(messageCounters[0]).toBeGreaterThan(0);
-      expect(messageCounters[1]).toBeGreaterThan(0);
-      expect(messageCounters[0]).toBe(messageCounters[1]);
+      expect(messageCounters[0]).toBe(1);
+      expect(messageCounters[1]).toBe(1);
 
       clients.forEach((c) => c.close());
     });
-  });
 
-  describe('new client receives current state', () => {
-    it('should send last state to newly connected client', async () => {
+    it('should broadcast TimeOfDay messages', async () => {
       await server.start();
 
-      // Set state before client connects
-      const state = createMockState({
-        onCourse: [
-          {
-            bib: '7',
-            name: 'Pre-connected',
-            club: 'Club',
-            nat: '',
-            raceId: 'RACE1',
-            raceName: 'Race',
-            startOrder: 7,
-            warning: '',
-            gates: '',
-            completed: false,
-            dtStart: '10:00:00',
-            dtFinish: null,
-            pen: 0,
-            time: '3000',
-            total: '3000',
-            ttbDiff: '',
-            ttbName: '',
-            rank: 1,
-            position: 1,
-          },
-        ],
-      });
-
-      server.broadcast(state);
-
-      // Now connect client - register message handler BEFORE waiting for open
       const client = new WebSocket(`ws://localhost:${testPort}`);
-      const receivedMessages: string[] = [];
+      const receivedMessages: C123Message[] = [];
 
       client.on('message', (data) => {
-        receivedMessages.push(data.toString());
+        receivedMessages.push(JSON.parse(data.toString()));
       });
 
       await new Promise<void>((resolve) => {
         client.on('open', () => resolve());
       });
 
-      // Wait for initial messages
+      server.broadcast(createTimeOfDay({ time: '15:45:30' }));
+
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      expect(receivedMessages.length).toBeGreaterThan(0);
+      expect(receivedMessages.length).toBe(1);
+      expect(receivedMessages[0].type).toBe('TimeOfDay');
+      expect(receivedMessages[0].data.time).toBe('15:45:30');
+      expect(receivedMessages[0].timestamp).toBeDefined();
 
-      const parsed = receivedMessages.map((m) => JSON.parse(m));
-      const oncourse = parsed.find((m) => m.msg === 'oncourse');
-      expect(oncourse.data[0].Bib).toBe('   7');
+      client.close();
+    });
+
+    it('should broadcast Results messages', async () => {
+      await server.start();
+
+      const client = new WebSocket(`ws://localhost:${testPort}`);
+      const receivedMessages: C123Message[] = [];
+
+      client.on('message', (data) => {
+        receivedMessages.push(JSON.parse(data.toString()));
+      });
+
+      await new Promise<void>((resolve) => {
+        client.on('open', () => resolve());
+      });
+
+      server.broadcast(
+        createResults({
+          raceId: 'K1M_ST_BR1_1',
+          classId: 'K1M_ST',
+          isCurrent: true,
+          mainTitle: 'K1 Men',
+          subTitle: '1st Run',
+          rows: [
+            {
+              rank: 1,
+              bib: '1',
+              name: 'Test Athlete',
+              givenName: 'Test',
+              familyName: 'Athlete',
+              club: 'Club',
+              nat: 'CZE',
+              startOrder: 1,
+              startTime: '10:00:00',
+              gates: '',
+              pen: 0,
+              time: '85.50',
+              total: '85.50',
+              behind: '',
+            },
+          ],
+        })
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(receivedMessages.length).toBe(1);
+      expect(receivedMessages[0].type).toBe('Results');
+      expect(receivedMessages[0].data.raceId).toBe('K1M_ST_BR1_1');
+      expect(receivedMessages[0].data.rows).toHaveLength(1);
+
+      client.close();
+    });
+  });
+
+  describe('session configuration', () => {
+    it('should filter OnCourse messages when showOnCourse is false', async () => {
+      await server.start();
+
+      const connectionPromise = new Promise<string>((resolve) => {
+        server.on('connection', (clientId) => resolve(clientId));
+      });
+
+      const client = new WebSocket(`ws://localhost:${testPort}`);
+      const receivedMessages: C123Message[] = [];
+
+      client.on('message', (data) => {
+        receivedMessages.push(JSON.parse(data.toString()));
+      });
+
+      await new Promise<void>((resolve) => {
+        client.on('open', () => resolve());
+      });
+
+      const clientId = await connectionPromise;
+
+      // Disable OnCourse messages for this session
+      server.setSessionConfig(clientId, { showOnCourse: false });
+
+      // Send OnCourse - should be filtered
+      server.broadcast(
+        createOnCourse({
+          total: 1,
+          competitors: [
+            {
+              bib: '1',
+              name: 'Test',
+              club: '',
+              nat: '',
+              raceId: 'RACE1',
+              raceName: '',
+              startOrder: 1,
+              warning: '',
+              gates: '',
+              completed: false,
+              dtStart: null,
+              dtFinish: null,
+              pen: 0,
+              time: null,
+              total: null,
+              ttbDiff: '',
+              ttbName: '',
+              rank: 0,
+              position: 1,
+            },
+          ],
+        })
+      );
+
+      // Send TimeOfDay - should pass through
+      server.broadcast(createTimeOfDay({ time: '10:00:00' }));
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Should only receive TimeOfDay, not OnCourse
+      expect(receivedMessages.length).toBe(1);
+      expect(receivedMessages[0].type).toBe('TimeOfDay');
+
+      client.close();
+    });
+
+    it('should filter Results messages when showResults is false', async () => {
+      await server.start();
+
+      const connectionPromise = new Promise<string>((resolve) => {
+        server.on('connection', (clientId) => resolve(clientId));
+      });
+
+      const client = new WebSocket(`ws://localhost:${testPort}`);
+      const receivedMessages: C123Message[] = [];
+
+      client.on('message', (data) => {
+        receivedMessages.push(JSON.parse(data.toString()));
+      });
+
+      await new Promise<void>((resolve) => {
+        client.on('open', () => resolve());
+      });
+
+      const clientId = await connectionPromise;
+
+      // Disable Results messages for this session
+      server.setSessionConfig(clientId, { showResults: false });
+
+      // Send Results - should be filtered
+      server.broadcast(
+        createResults({
+          raceId: 'K1M_ST_BR1_1',
+          classId: 'K1M_ST',
+          isCurrent: true,
+          mainTitle: '',
+          subTitle: '',
+          rows: [],
+        })
+      );
+
+      // Send TimeOfDay - should pass through
+      server.broadcast(createTimeOfDay({ time: '10:00:00' }));
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Should only receive TimeOfDay, not Results
+      expect(receivedMessages.length).toBe(1);
+      expect(receivedMessages[0].type).toBe('TimeOfDay');
 
       client.close();
     });

@@ -5,6 +5,7 @@ import net from 'node:net';
 import fs from 'node:fs';
 import readline from 'node:readline';
 import path from 'node:path';
+import type { C123Message } from '../protocol/types.js';
 
 /**
  * E2E test using recorded data from a real C123 timing session.
@@ -93,7 +94,7 @@ describe('E2E Recording Replay', () => {
     expect(tcpMessages.some((m) => m.includes('Schedule'))).toBe(true);
   });
 
-  it('should process recording and emit messages to WebSocket clients', async () => {
+  it('should process recording and emit C123 messages to WebSocket clients', async () => {
     const wsPort = 27184;
     const adminPort = 8184;
 
@@ -107,7 +108,7 @@ describe('E2E Recording Replay', () => {
     });
 
     // Track received WebSocket messages
-    const receivedMessages: unknown[] = [];
+    const receivedMessages: C123Message[] = [];
 
     // When TCP client connects, send recorded messages
     mockTcpServer.on('connection', (socket) => {
@@ -153,7 +154,7 @@ describe('E2E Recording Replay', () => {
     // Collect messages for a while
     ws.on('message', (data) => {
       try {
-        const msg = JSON.parse(data.toString());
+        const msg = JSON.parse(data.toString()) as C123Message;
         receivedMessages.push(msg);
       } catch {
         // Ignore non-JSON
@@ -170,13 +171,12 @@ describe('E2E Recording Replay', () => {
     // Verify we received messages
     expect(receivedMessages.length).toBeGreaterThan(0);
 
-    // Check for expected message types
-    const messageTypes = new Set(
-      receivedMessages.map((m) => (m as { msg?: string }).msg).filter(Boolean)
-    );
+    // Check for expected message types (C123 protocol format)
+    const messageTypes = new Set(receivedMessages.map((m) => m.type).filter(Boolean));
 
-    // Should have at least 'top' and 'oncourse' messages
-    expect(messageTypes.has('top')).toBe(true);
+    // Should have at least 'OnCourse' and 'TimeOfDay' messages
+    expect(messageTypes.has('OnCourse')).toBe(true);
+    expect(messageTypes.has('TimeOfDay')).toBe(true);
   }, 15000);
 
   it('should correctly parse race information from Schedule', async () => {

@@ -1,8 +1,8 @@
 import { WebSocketServer as WsServer, WebSocket } from 'ws';
 import { EventEmitter } from 'node:events';
-import type { EventStateData } from '../state/types.js';
 import type { ScoreboardConfig } from '../admin/types.js';
 import type { WebSocketServerConfig, WebSocketServerEvents } from './types.js';
+import type { C123Message } from '../protocol/types.js';
 import { ScoreboardSession } from './ScoreboardSession.js';
 import { Logger } from '../utils/logger.js';
 
@@ -11,8 +11,7 @@ const DEFAULT_PORT = 27084;
 /**
  * WebSocket server for scoreboard connections.
  *
- * Provides CLI-compatible JSON messages to connected scoreboards.
- * Broadcasts state changes to all connected clients.
+ * Broadcasts C123 protocol messages to connected scoreboards.
  * Supports per-scoreboard configuration via ScoreboardSession.
  */
 export class WebSocketServer extends EventEmitter<WebSocketServerEvents> {
@@ -20,7 +19,6 @@ export class WebSocketServer extends EventEmitter<WebSocketServerEvents> {
   private server: WsServer | null = null;
   private sessions: Map<string, ScoreboardSession> = new Map();
   private clientIdCounter = 0;
-  private lastState: EventStateData | null = null;
 
   constructor(config?: Partial<WebSocketServerConfig>) {
     super();
@@ -129,23 +127,16 @@ export class WebSocketServer extends EventEmitter<WebSocketServerEvents> {
       return false;
     }
     session.setConfig(config);
-
-    // Send updated state with new config applied
-    if (this.lastState) {
-      session.send(this.lastState);
-    }
     return true;
   }
 
   /**
-   * Broadcast state to all connected clients
+   * Broadcast a C123 message to all connected clients
    */
-  broadcast(state: EventStateData): void {
-    this.lastState = state;
-
+  broadcast(message: C123Message): void {
     for (const [clientId, session] of this.sessions) {
       if (session.isConnected()) {
-        session.send(state);
+        session.send(message);
       } else {
         // Clean up dead connections
         this.sessions.delete(clientId);
@@ -163,11 +154,6 @@ export class WebSocketServer extends EventEmitter<WebSocketServerEvents> {
     this.sessions.set(clientId, session);
     Logger.info('WebSocket', `Client connected: ${clientId}`);
     this.emit('connection', clientId);
-
-    // Send current state to new client
-    if (this.lastState) {
-      session.send(this.lastState);
-    }
 
     ws.on('close', () => {
       this.sessions.delete(clientId);

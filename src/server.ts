@@ -10,6 +10,13 @@ import { BR1BR2Merger } from './state/BR1BR2Merger.js';
 import { WebSocketServer } from './output/WebSocketServer.js';
 import { AdminServer } from './admin/AdminServer.js';
 import { Logger } from './utils/logger.js';
+import {
+  createTimeOfDay,
+  createOnCourse,
+  createResults,
+  createRaceConfig,
+  createSchedule,
+} from './protocol/factory.js';
 
 /**
  * Wrapper to make UdpDiscovery compatible with Source interface for admin display
@@ -76,9 +83,9 @@ const DEFAULT_CONFIG: Required<ServerConfig> = {
  * - UDP discovery (auto-find C123)
  * - TCP source (C123 connection)
  * - XML file source (optional)
- * - Event state (aggregation)
+ * - Event state (finish detection, race tracking)
  * - BR1/BR2 merger
- * - WebSocket server (scoreboard output)
+ * - WebSocket server (C123 protocol output)
  * - Admin server (dashboard)
  */
 export class Server extends EventEmitter<ServerEvents> {
@@ -210,11 +217,6 @@ export class Server extends EventEmitter<ServerEvents> {
   }
 
   private setupEventHandlers(): void {
-    // Forward state changes to WebSocket clients
-    this.eventState.on('change', (state) => {
-      this.wsServer.broadcast(state);
-    });
-
     // Handle schedule change (different event loaded in C123)
     this.eventState.on('scheduleChange', () => {
       Logger.warn('Server', 'Event change detected, clearing BR1/BR2 cache');
@@ -326,10 +328,40 @@ export class Server extends EventEmitter<ServerEvents> {
           };
         }
 
+        // Update internal state (for finish detection, etc.)
         this.eventState.processMessage(message);
+
+        // Broadcast C123 message to all clients
+        this.broadcastParsedMessage(message);
       }
     } catch (err) {
       this.emit('error', err instanceof Error ? err : new Error(String(err)));
+    }
+  }
+
+  /**
+   * Convert parsed message to C123 protocol format and broadcast
+   */
+  private broadcastParsedMessage(message: ParsedMessage): void {
+    switch (message.type) {
+      case 'timeofday':
+        this.wsServer.broadcast(createTimeOfDay(message.data));
+        break;
+      case 'oncourse':
+        this.wsServer.broadcast(createOnCourse(message.data));
+        break;
+      case 'results':
+        // Only broadcast results marked as current (active race)
+        if (message.data.isCurrent) {
+          this.wsServer.broadcast(createResults(message.data));
+        }
+        break;
+      case 'raceconfig':
+        this.wsServer.broadcast(createRaceConfig(message.data));
+        break;
+      case 'schedule':
+        this.wsServer.broadcast(createSchedule(message.data));
+        break;
     }
   }
 }

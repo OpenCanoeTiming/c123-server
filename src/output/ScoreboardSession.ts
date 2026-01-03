@@ -1,13 +1,12 @@
 import type { WebSocket } from 'ws';
 import type { ScoreboardConfig } from '../admin/types.js';
-import type { EventStateData } from '../state/types.js';
-import { formatAllMessages, formatFilteredMessages } from './MessageFormatter.js';
+import type { C123Message } from '../protocol/types.js';
 
 /**
  * Per-scoreboard session with individual configuration.
  *
- * Manages connection state and filtering for a single scoreboard client.
- * Allows runtime configuration changes via admin API.
+ * Manages connection state for a single scoreboard client.
+ * Sends C123 protocol messages directly without transformation.
  */
 export class ScoreboardSession {
   readonly id: string;
@@ -77,27 +76,24 @@ export class ScoreboardSession {
   }
 
   /**
-   * Send state to this scoreboard, applying configured filters
+   * Send a C123 protocol message to this scoreboard
    */
-  send(state: EventStateData): void {
+  send(message: C123Message): void {
     if (!this.isConnected()) {
       return;
     }
 
-    this.lastActivity = new Date();
-
-    // Apply filters
-    const messages = this.hasFilters()
-      ? formatFilteredMessages(state, this.config)
-      : formatAllMessages(state);
-
-    for (const message of messages) {
-      this.ws.send(message);
+    // Apply filters based on message type
+    if (!this.shouldSendMessage(message)) {
+      return;
     }
+
+    this.lastActivity = new Date();
+    this.ws.send(JSON.stringify(message));
   }
 
   /**
-   * Send raw message without filtering
+   * Send raw JSON string without filtering
    */
   sendRaw(message: string): void {
     if (!this.isConnected()) {
@@ -108,13 +104,32 @@ export class ScoreboardSession {
   }
 
   /**
-   * Check if any filters are configured
+   * Check if message should be sent based on config filters
    */
-  private hasFilters(): boolean {
-    return (
-      this.config.showOnCourse === false ||
-      this.config.showResults === false ||
-      (this.config.raceFilter !== undefined && this.config.raceFilter.length > 0)
-    );
+  private shouldSendMessage(message: C123Message): boolean {
+    // OnCourse filtering
+    if (message.type === 'OnCourse' && this.config.showOnCourse === false) {
+      return false;
+    }
+
+    // Results filtering
+    if (message.type === 'Results' && this.config.showResults === false) {
+      return false;
+    }
+
+    // Race filter for Results and OnCourse
+    if (this.config.raceFilter && this.config.raceFilter.length > 0) {
+      if (message.type === 'Results') {
+        const raceId = message.data.raceId;
+        if (!this.config.raceFilter.includes(raceId)) {
+          return false;
+        }
+      }
+      // Note: OnCourse doesn't have a single raceId, competitors may be from different races
+      // For now, we don't filter OnCourse by race - let the client handle it
+    }
+
+    // Always send TimeOfDay, Schedule, RaceConfig, Connected, Error
+    return true;
   }
 }

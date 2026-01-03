@@ -128,25 +128,25 @@ Každý krok (7.1, 7.2, ...) je navržen tak, aby se dal zvládnout v rámci **j
 
 ### Fáze 7: Čistý C123 protokol
 
-#### 7.1 Nové typy a protokol ⏱️ ~1 session
+#### 7.1 Nové typy a protokol ✅
 **Vstup:** Analýza C123 XML formátu
 **Výstup:** `src/protocol/` s novými typy
 
-- [ ] Vytvořit `src/protocol/types.ts`
-- [ ] Definovat zprávy: `TimeOfDay`, `OnCourse`, `Results`, `Schedule`, `RaceConfig`
-- [ ] Zachovat strukturu atributů z XML (Bib, Name, Time, dtFinish, ...)
-- [ ] Přidat envelope s metadaty: `{ type, timestamp, data }`
-- [ ] Unit testy
+- [x] Vytvořit `src/protocol/types.ts`
+- [x] Definovat zprávy: `TimeOfDay`, `OnCourse`, `Results`, `Schedule`, `RaceConfig`
+- [x] Zachovat strukturu atributů z XML (Bib, Name, Time, dtFinish, ...)
+- [x] Přidat envelope s metadaty: `{ type, timestamp, data }`
+- [x] Unit testy
 
-#### 7.2 Refaktoring na čistý passthrough ⏱️ ~1 session
+#### 7.2 Refaktoring na čistý passthrough ✅
 **Vstup:** Nové typy z 7.1
 **Výstup:** Zjednodušený server bez CLI logiky
 
-- [ ] Odstranit MessageFormatter (CLI formát)
-- [ ] Odstranit CLI-specifické typy (top, oncourse, comp)
-- [ ] EventState → jednoduchý C123State (jen cache, žádná transformace)
-- [ ] WebSocket posílá přímo parsované C123 zprávy
-- [ ] Aktualizovat testy
+- [x] Odstranit MessageFormatter (CLI formát)
+- [x] Odstranit CLI-specifické typy (top, oncourse, comp)
+- [x] EventState zůstává pro finish detection, ale neposílá se celý stav
+- [x] WebSocket posílá přímo parsované C123 zprávy s envelope
+- [x] Aktualizovat testy (157 testů)
 
 #### 7.3 Cleanup a reorganizace ⏱️ ~1 session
 **Vstup:** Refaktorovaný kód z 7.2
