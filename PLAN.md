@@ -208,14 +208,14 @@ Každý krok (7.1, 7.2, ...) je navržen tak, aby se dal zvládnout v rámci **j
 
 ### Fáze 9: Dokumentace (podklady pro scoreboard)
 
-#### 9.1 C123 protokol dokumentace ⏱️ ~1 session
+#### 9.1 C123 protokol dokumentace ✅
 **Výstup:** `docs/C123-PROTOCOL.md`
 
-- [ ] Popis všech C123 zpráv (TimeOfDay, OnCourse, Results, ...)
-- [ ] Timing chování (frekvence, rotace Results)
-- [ ] Struktura atributů s příklady
-- [ ] Detekce dojetí (dtFinish logika)
-- [ ] RaceId formát a význam Current atributu
+- [x] Popis všech C123 zpráv (TimeOfDay, OnCourse, Results, ...)
+- [x] Timing chování (frekvence, rotace Results)
+- [x] Struktura atributů s příklady
+- [x] Detekce dojetí (dtFinish logika)
+- [x] RaceId formát a význam Current atributu
 
 #### 9.2 REST API dokumentace ⏱️ ~1 session
 **Výstup:** `docs/REST-API.md`
