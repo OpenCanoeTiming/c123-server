@@ -225,7 +225,7 @@ Každý krok (7.1, 7.2, ...) je navržen tak, aby se dal zvládnout v rámci **j
 - [x] Error handling
 - [x] WebSocket change notifications
 
-#### 9.3 Odlišnosti od CLI ⏱️ ~1 session
+#### 9.3 Odlišnosti od CLI ✅
 **Výstup:** `docs/CLI-DIFFERENCES.md`
 
 Pro migrace z CLI na C123 Server:
@@ -238,9 +238,9 @@ Pro migrace z CLI na C123 Server:
 | `HighlightBib` | Není | Scoreboard sleduje dtFinish |
 | `RaceStatus` | `Current` atribut | Y/N místo číselného stavu |
 
-- [ ] Kompletní mapování CLI → C123 formát
-- [ ] Co musí scoreboard implementovat sám
-- [ ] Příklady kódu pro adaptaci
+- [x] Kompletní mapování CLI → C123 formát
+- [x] Co musí scoreboard implementovat sám
+- [x] Příklady kódu pro adaptaci
 
 ---
 
