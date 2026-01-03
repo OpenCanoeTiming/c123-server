@@ -183,15 +183,16 @@ Každý krok (7.1, 7.2, ...) je navržen tak, aby se dal zvládnout v rámci **j
 - [x] Query params: `?merged=true` pro spojené výsledky
 - [x] Unit testy (25 testů pro XmlDataService)
 
-#### 8.3 Windows file monitoring ⏱️ ~1 session
+#### 8.3 Windows file monitoring ✅
 **Vstup:** Existující XmlFileSource
 **Výstup:** Optimalizovaný file watcher pro Windows
 
-- [ ] Použít `chokidar` pro cross-platform watching
-- [ ] Windows: využívá ReadDirectoryChangesW (NTFS events)
-- [ ] Fallback na polling pro síťové cesty (SMB)
-- [ ] Konfigurovatelný polling interval
-- [ ] Debounce pro rapid changes (C123 píše často)
+- [x] Použít `chokidar` pro cross-platform watching
+- [x] Windows: využívá ReadDirectoryChangesW (NTFS events)
+- [x] Fallback na polling pro síťové cesty (SMB)
+- [x] Konfigurovatelný polling interval
+- [x] Debounce pro rapid changes (C123 píše často)
+- [x] Unit testy (10 testů pro FileWatcher)
 
 #### 8.4 XML change notifications ⏱️ ~1 session
 **Vstup:** File watcher z 8.3
