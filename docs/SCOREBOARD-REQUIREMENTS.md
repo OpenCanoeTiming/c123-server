@@ -96,11 +96,39 @@ After finish detection:
 
 ### What It Is
 
-Combining first run (BR1) and second run (BR2) results to show overall standings.
+**BR = BetterRun** (Best Run) - combining first run (BR1) and second run (BR2) results to show overall standings based on the better of two runs.
 
-### When Needed
+This is a popular race format in Czech Republic where competitors get two attempts and only the better result counts.
 
-- Two-run slalom races
+### Scoreboard Challenge
+
+When displaying real-time results from C123 native data, the scoreboard faces a specific challenge with BetterRun format:
+
+| Problem | Description |
+|---------|-------------|
+| **During BR2** | C123 shows BR2 results in real-time, but overall standings require comparing with BR1 |
+| **Finish highlight** | Competitor finishes BR2, but their rank may differ between BR2-only and overall |
+| **Which result to show?** | BR2 time vs overall best time - scoreboard must decide |
+
+**Recommendation:** During BR2, fetch merged results via REST API after each finish to show correct overall standings.
+
+### Other Race Types (No Merge Needed)
+
+These competition formats don't have the BR1/BR2 merge problem:
+
+| Type | RaceId Pattern | Description |
+|------|----------------|-------------|
+| **Cross Quarterfinal** | `*_X4_*` | Single heat, direct elimination |
+| **Cross Semifinal** | `*_XS_*` | Single heat, direct elimination |
+| **Cross Final** | `*_XF_*` | Single heat, final standings |
+| **Time Trial** | `*_XT_*` | Qualification for Cross |
+| **Single Run** | No `_BR` suffix | One run only |
+
+For these formats, C123 results are directly usable without merge logic.
+
+### When Merge IS Needed
+
+- Two-run slalom races (BR1 + BR2)
 - Displaying overall results during BR2
 - Final standings after both runs
 

@@ -313,7 +313,25 @@ ws.on('message', (msg) => {
 
 ## BR1/BR2 Merge Logic
 
-For two-run races, the scoreboard may need to merge BR1 and BR2 results.
+**BR = BetterRun** (Best Run) - a popular format in Czech Republic where competitors get two runs and only the better result counts.
+
+### The Challenge
+
+For two-run races, the scoreboard may need to merge BR1 and BR2 results. This creates a specific challenge during BR2:
+
+| Issue | Description |
+|-------|-------------|
+| Real-time vs overall | C123 shows BR2 results, but scoreboard needs overall standings |
+| Finish rank mismatch | Competitor's BR2 rank may differ from overall best rank |
+| User expectation | Viewers expect to see overall standings, not just current run |
+
+### Other Race Types (No Problem)
+
+These formats work directly without merge:
+
+- **Cross (X4/XS/XF)** - single heats with direct elimination
+- **Time Trial (XT)** - single run qualification
+- **Single Run events** - no BR suffix in RaceId
 
 ### Option 1: Use REST API (Recommended)
 

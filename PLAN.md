@@ -279,7 +279,13 @@ Co musí scoreboard implementovat:
    - Týmové soutěže: `Member1`, `Member2`, `Member3`, `NOC`
    - **Rozhraní není třeba měnit** - REST API předává raw data, scoreboard si vytáhne co potřebuje.
    - XML přidán do `.gitignore` (velký soubor, testovací data)
-   - [ ] není potřeba s ohledem na zištěné disciplíny a typy jízd měnit REST API nebo něco kolem BR1/BR2 merge logika ? Pokud ano, proveď. Možná jen poznámka že BR je BetterRun, tedy lepší ze dvou jízd, což je v CZ oblíbený model, ale má problém při zobrazení výsledku na scoreboardu z ntivních C123 dat. Jiné typy soutěží by problém mít neměly. 
+   - [x] není potřeba s ohledem na zištěné disciplíny a typy jízd měnit REST API nebo něco kolem BR1/BR2 merge logika ? Pokud ano, proveď. Možná jen poznámka že BR je BetterRun, tedy lepší ze dvou jízd, což je v CZ oblíbený model, ale má problém při zobrazení výsledku na scoreboardu z ntivních C123 dat. Jiné typy soutěží by problém mít neměly.
+     - **Vyřešeno dokumentací.** REST API není třeba měnit - předává raw data, scoreboard si vytáhne co potřebuje.
+     - Doplněno do `docs/SCOREBOARD-REQUIREMENTS.md` a `docs/CLI-DIFFERENCES.md`:
+       - Vysvětlení BR = BetterRun (nejlepší ze dvou jízd)
+       - Popis problému při zobrazení na scoreboardu během BR2
+       - Tabulka dalších typů soutěží (Cross X4/XS/XF, Time Trial XT) které problém nemají
+       - Doporučení: použít REST API merge endpoint pro správné celkové pořadí 
  - [x] `EventState` zůstává pro detekci dojetí a sledování závodů -- není to nějaký relikt principu CLI nebo to je v C123 rozhraní ok?
    - **Není relikt CLI.** EventState poskytuje užitečné funkce pro C123 protokol:
    - **Finish detection:** Detekuje přechod `dtFinish` z prázdného na timestamp, emituje `finish` event
