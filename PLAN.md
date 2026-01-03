@@ -248,13 +248,13 @@ Pro migrace z CLI na C123 Server:
 
 *Implementace scoreboardu je mimo scope tohoto projektu.*
 
-#### 10.1 Integration guide
+#### 10.1 Integration guide ✅
 **Výstup:** `docs/INTEGRATION.md`
 
-- [ ] Jak se připojit k WebSocket
-- [ ] Jak používat REST API
-- [ ] Doporučená architektura klienta
-- [ ] Příklady v JS/TS
+- [x] Jak se připojit k WebSocket
+- [x] Jak používat REST API
+- [x] Doporučená architektura klienta
+- [x] Příklady v JS/TS
 
 #### 10.2 Scoreboard requirements
 **Výstup:** `docs/SCOREBOARD-REQUIREMENTS.md`
@@ -264,6 +264,13 @@ Co musí scoreboard implementovat:
 - [ ] BR1/BR2 merge logika
 - [ ] Results filtering (Current vs historické)
 - [ ] OnCourse → aktuální závodník
+
+---
+## Dodatecna zjisteni a ukoly
+
+ - [ ] Kešují se XML data, nebo každý dotaz na API vede na čtení XML?
+ - [ ] přikládám komplexní XML  závod LODM včetně cross a dalších disciplin sem do slozky - pro zobecnění rozhraní
+ - [ ] `EventState` zůstává pro detekci dojetí a sledování závodů -- není to nějaký relikt principu CLI nebo to je v C123 rozhraní ok?
 
 ---
 
