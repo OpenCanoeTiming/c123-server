@@ -279,7 +279,13 @@ Co musí scoreboard implementovat:
    - Týmové soutěže: `Member1`, `Member2`, `Member3`, `NOC`
    - **Rozhraní není třeba měnit** - REST API předává raw data, scoreboard si vytáhne co potřebuje.
    - XML přidán do `.gitignore` (velký soubor, testovací data)
- - [ ] `EventState` zůstává pro detekci dojetí a sledování závodů -- není to nějaký relikt principu CLI nebo to je v C123 rozhraní ok?
+ - [x] `EventState` zůstává pro detekci dojetí a sledování závodů -- není to nějaký relikt principu CLI nebo to je v C123 rozhraní ok?
+   - **Není relikt CLI.** EventState poskytuje užitečné funkce pro C123 protokol:
+   - **Finish detection:** Detekuje přechod `dtFinish` z prázdného na timestamp, emituje `finish` event
+   - **Race tracking:** Sleduje `currentRaceId` z OnCourse zpráv, filtruje rotující Results
+   - **Results filtering:** C123 posílá Results různých kategorií, EventState přijímá pouze `Current=Y` nebo odpovídající currentRaceId
+   - **Schedule fingerprint:** Detekuje změnu závodu pro reset cache
+   - Tyto funkce zůstávají v serveru, scoreboard dostává již filtrovaná data
 
 ---
 
