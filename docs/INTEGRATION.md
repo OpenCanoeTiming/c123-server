@@ -98,172 +98,45 @@ The endpoint has CORS enabled (`Access-Control-Allow-Origin: *`) to allow cross-
 
 ### Reference Implementation
 
+A complete TypeScript implementation is available at [`discovery-client.ts`](./discovery-client.ts).
+
+Copy the file into your scoreboard project and use it:
+
 ```typescript
-const C123_PORT = 27123;
-const DISCOVERY_TIMEOUT = 200; // ms
-const STORAGE_KEY = 'c123-server-url';
+import {
+  discoverC123Server,
+  getWebSocketUrl,
+  isServerAlive,
+  getServerInfo,
+} from './discovery-client';
 
-interface DiscoverResult {
-  service: string;
-  version: string;
-  port: number;
-  eventName?: string;
+// Basic usage
+const serverUrl = await discoverC123Server();
+if (serverUrl) {
+  const ws = new WebSocket(getWebSocketUrl(serverUrl));
 }
 
-/**
- * Discover C123 Server on the local network.
- * Priority: URL param > cached > subnet scan
- */
-async function discoverC123Server(): Promise<string | null> {
-  // 1. Check URL parameter
-  const urlParam = new URLSearchParams(location.search).get('server');
-  if (urlParam) {
-    const url = normalizeServerUrl(urlParam);
-    if (await isServerAlive(url)) {
-      saveToCache(url);
-      return url;
-    }
-  }
+// With options
+const serverUrl = await discoverC123Server({
+  timeout: 500,           // Longer probe timeout
+  subnets: ['10.0.0'],    // Scan specific subnet
+});
 
-  // 2. Check cached server
-  const cached = localStorage.getItem(STORAGE_KEY);
-  if (cached && await isServerAlive(cached)) {
-    return cached;
-  }
-
-  // 3. Scan subnet starting from hosting server IP
-  const hostIP = getHostingServerIP();
-  const discovered = await scanSubnet(hostIP);
-
-  if (discovered) {
-    saveToCache(discovered);
-    return discovered;
-  }
-
-  return null;
-}
-
-/**
- * Get IP address of the server hosting the scoreboard.
- * Falls back to common gateway IPs if hostname is not an IP.
- */
-function getHostingServerIP(): string {
-  const hostname = location.hostname;
-
-  // If already an IP address, use it
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
-    return hostname;
-  }
-
-  // Fallback: common local network gateways
-  return '192.168.1.1';
-}
-
-/**
- * Scan subnet for C123 Server.
- * Starts from the given IP and expands outward.
- */
-async function scanSubnet(startIP: string): Promise<string | null> {
-  const parts = startIP.split('.');
-  const subnet = parts.slice(0, 3).join('.');
-  const startHost = parseInt(parts[3], 10);
-
-  // Generate IPs in order: startHost, startHost±1, startHost±2, ...
-  const ipsToScan: string[] = [];
-  for (let offset = 0; offset <= 254; offset++) {
-    if (startHost + offset <= 254) {
-      ipsToScan.push(`${subnet}.${startHost + offset}`);
-    }
-    if (offset > 0 && startHost - offset >= 1) {
-      ipsToScan.push(`${subnet}.${startHost - offset}`);
-    }
-  }
-
-  // Scan in batches of 20 for performance
-  const BATCH_SIZE = 20;
-  for (let i = 0; i < ipsToScan.length; i += BATCH_SIZE) {
-    const batch = ipsToScan.slice(i, i + BATCH_SIZE);
-    const results = await Promise.all(
-      batch.map(ip => probeServer(ip).catch(() => null))
-    );
-
-    const found = results.find(r => r !== null);
-    if (found) return found;
-  }
-
-  return null;
-}
-
-/**
- * Probe a single IP for C123 Server.
- */
-async function probeServer(ip: string): Promise<string | null> {
-  const url = `http://${ip}:${C123_PORT}`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), DISCOVERY_TIMEOUT);
-
-  try {
-    const response = await fetch(`${url}/api/discover`, {
-      signal: controller.signal
-    });
-
-    if (response.ok) {
-      const data: DiscoverResult = await response.json();
-      if (data.service === 'c123-server') {
-        return url;
-      }
-    }
-  } catch {
-    // Timeout or network error - server not found at this IP
-  } finally {
-    clearTimeout(timeout);
-  }
-
-  return null;
-}
-
-/**
- * Check if a server URL is responding.
- */
-async function isServerAlive(url: string): Promise<boolean> {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), DISCOVERY_TIMEOUT);
-
-    const response = await fetch(`${url}/api/discover`, {
-      signal: controller.signal
-    });
-
-    clearTimeout(timeout);
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Normalize server URL (add protocol and port if missing).
- */
-function normalizeServerUrl(input: string): string {
-  let url = input.trim();
-
-  // Add protocol if missing
-  if (!url.startsWith('http://') && !url.startsWith('https://')) {
-    url = `http://${url}`;
-  }
-
-  // Add port if missing
-  if (!url.includes(':', url.indexOf('//') + 2)) {
-    url = `${url}:${C123_PORT}`;
-  }
-
-  return url;
-}
-
-function saveToCache(url: string): void {
-  localStorage.setItem(STORAGE_KEY, url);
-}
+// Check server info
+const info = await getServerInfo('http://192.168.1.50:27123');
+console.log(info?.eventName); // "Czech Cup 2025"
 ```
+
+The implementation includes:
+
+- `discoverC123Server()` - Main discovery function with caching
+- `getLocalIPViaWebRTC()` - WebRTC-based local IP detection
+- `scanSubnet()` - Parallel subnet scanning with optimized order
+- `probeServer()` - Single server probe with timeout
+- `isServerAlive()` - Server availability check
+- `getServerInfo()` - Get server details (version, event name)
+- `normalizeServerUrl()` - URL normalization helper
+- `getWebSocketUrl()` - Convert HTTP URL to WebSocket URL
 
 ### Usage in Scoreboard
 

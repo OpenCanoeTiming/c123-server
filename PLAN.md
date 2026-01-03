@@ -348,7 +348,7 @@ Automatické nalezení c123-server ve stejné síti pro scoreboard aplikace.
 - [x] Rychlá odpověď (< 50ms) - žádné I/O blokování
 - [x] Unit testy
 
-#### 12.2 Discovery utilita pro scoreboard
+#### 12.2 Discovery utilita pro scoreboard ✅
 **Výstup:** `docs/discovery-client.ts` - referenční implementace
 
 Algoritmus:
@@ -358,18 +358,19 @@ Algoritmus:
 4. Scanovat subnet začínající od této IP (nejprve .1, pak okolní)
 5. Při nalezení uložit do localStorage
 
-- [ ] Referenční TypeScript implementace v docs/
-- [ ] `getLocalIP()` - zjištění IP (z `location.hostname` nebo WebRTC)
-- [ ] `scanSubnet()` - paralelní fetch s 200ms timeout
-- [ ] `discoverC123Server()` - orchestrace celého flow
-- [ ] Optimalizace: začít od IP serveru kde běží scoreboard
+- [x] Referenční TypeScript implementace v docs/
+- [x] `getLocalIPViaWebRTC()` - zjištění IP pomocí WebRTC
+- [x] `getHostingServerIP()` - zjištění IP z `location.hostname`
+- [x] `scanSubnet()` - paralelní fetch s 200ms timeout, optimalizované pořadí
+- [x] `discoverC123Server()` - orchestrace celého flow s options
+- [x] Optimalizace: prioritní IP adresy (.1, .2, .10, .100, ...)
 
-#### 12.3 Aktualizace dokumentace
+#### 12.3 Aktualizace dokumentace ✅
 **Výstup:** Aktualizovaná dokumentace
 
-- [ ] `docs/INTEGRATION.md` - sekce Discovery
-- [ ] Příklady kódu pro scoreboard implementaci
-- [ ] Popis fallback mechanismů
+- [x] `docs/INTEGRATION.md` - sekce Discovery (odkaz na discovery-client.ts)
+- [x] Příklady kódu pro scoreboard implementaci (v discovery-client.ts)
+- [x] Popis fallback mechanismů (URL param → cache → subnet scan)
 
 ---
 ## Dodatecna zjisteni a ukoly
