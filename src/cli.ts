@@ -11,6 +11,15 @@ function parseArgs(): { command: string; config: ServerConfig; debug: boolean } 
   let debug = false;
   const config: ServerConfig = {};
 
+  // Environment variables for port (C123_SERVER_PORT takes precedence over PORT)
+  const envPort = process.env.C123_SERVER_PORT || process.env.PORT;
+  if (envPort) {
+    const parsed = parseInt(envPort, 10);
+    if (!isNaN(parsed) && parsed > 0 && parsed < 65536) {
+      config.port = parsed;
+    }
+  }
+
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
 
@@ -88,6 +97,10 @@ Options:
   -d, --debug         Enable verbose debug logging
   -h, --help          Show this help message
   -v, --version       Show version
+
+Environment variables:
+  C123_SERVER_PORT    Server port (overrides default, overridden by --server-port)
+  PORT                Fallback for server port (if C123_SERVER_PORT not set)
 
 Examples:
   c123-server                     # Run with auto-discovery

@@ -142,6 +142,20 @@ export class AppSettingsManager {
   }
 
   /**
+   * Set server port
+   */
+  setPort(port: number): void {
+    this.update({ port });
+  }
+
+  /**
+   * Get server port (or undefined for default)
+   */
+  getPort(): number | undefined {
+    return this.settings.port;
+  }
+
+  /**
    * Get the settings file path (for debugging/logging)
    */
   getPath(): string {

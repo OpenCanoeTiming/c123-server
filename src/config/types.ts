@@ -36,6 +36,8 @@ export interface XmlPathDetectionResult {
  * Persistent application settings
  */
 export interface AppSettings {
+  /** Server port for HTTP + WebSocket (default: 27123) */
+  port?: number;
   /** XML file path (manually configured) */
   xmlPath?: string;
   /** Enable Canoe123 XML autodetection */

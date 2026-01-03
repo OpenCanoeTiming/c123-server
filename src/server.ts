@@ -273,6 +273,14 @@ export class Server extends EventEmitter<ServerEvents> {
     const settings = getAppSettings().load();
     Logger.info('Server', `Loaded settings from ${getAppSettings().getPath()}`);
 
+    // Apply saved port if not overridden by CLI/env
+    if (settings.port && this.config.port === DEFAULT_CONFIG.port) {
+      this.config.port = settings.port;
+      // Update UnifiedServer with new port
+      this.unifiedServer = new UnifiedServer({ port: this.config.port });
+      this.setupEventHandlers();
+    }
+
     // Apply autodetect interval if set
     if (settings.xmlAutoDetectInterval) {
       this.config.xmlAutoDetectInterval = settings.xmlAutoDetectInterval;
