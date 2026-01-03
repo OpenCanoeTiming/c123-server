@@ -82,7 +82,7 @@ describe('MessageFormatter', () => {
             },
           ],
         },
-        highlightBib: '5',
+        highlightBib: '   5',
       });
 
       const msg = formatTopMessage(state);
@@ -91,15 +91,15 @@ describe('MessageFormatter', () => {
       expect(msg!.msg).toBe('top');
       expect(msg!.data.RaceName).toBe('K1m - střední trať');
       expect(msg!.data.RaceStatus).toBe('3');
-      expect(msg!.data.HighlightBib).toBe('5');
+      expect(msg!.data.HighlightBib).toBe(5);
       expect(msg!.data.list).toHaveLength(2);
       expect(msg!.data.list[0]).toEqual({
-        Rank: 1,
-        Bib: '5',
+        Rank: '1',
+        Bib: '   5',
         Name: 'NOVÁK Jan',
         Club: 'TJ Slavia',
         Total: '75.50',
-        Pen: 0,
+        Pen: '0',
         Behind: '',
         Time: '75.50', // Time is always included when present
       });
@@ -187,7 +187,7 @@ describe('MessageFormatter', () => {
       // First competitor - BR2 was better
       const first = msg!.data.list[0];
       expect(first.Rank).toBe(1);
-      expect(first.Bib).toBe('1');
+      expect(first.Bib).toBe('   1');
       expect(first.Time).toBe('82.36');
       expect(first.PrevTime).toBe(7999);
       expect(first.PrevPen).toBe(2);
@@ -297,8 +297,8 @@ describe('MessageFormatter', () => {
             dtStart: '16:14:00.000',
             dtFinish: null,
             pen: 2,
-            time: 8115,
-            total: 8117,
+            time: '8115',
+            total: '8117',
             ttbDiff: '+12.79',
             ttbName: 'J. KREJČÍ',
             rank: 8,
@@ -312,7 +312,7 @@ describe('MessageFormatter', () => {
       expect(msg.msg).toBe('oncourse');
       expect(msg.data).toHaveLength(1);
       expect(msg.data[0]).toEqual({
-        Bib: '9',
+        Bib: '   9',
         BibKey: 'K1M_ST_BR2_6-9',
         Name: 'KOPEČEK Michal',
         Club: 'VS Tábor',
@@ -320,6 +320,7 @@ describe('MessageFormatter', () => {
         Pen: '2',
         Time: '8115',
         Total: '8117',
+        dtStart: '16:14:00.000',
         dtFinish: '',
         _pos: 1,
       });
@@ -342,8 +343,8 @@ describe('MessageFormatter', () => {
             dtStart: '10:00:00',
             dtFinish: null,
             pen: 0,
-            time: 5000,
-            total: 5000,
+            time: '5000',
+            total: '5000',
             ttbDiff: '',
             ttbName: '',
             rank: 1,
@@ -363,8 +364,8 @@ describe('MessageFormatter', () => {
             dtStart: '10:01:00',
             dtFinish: null,
             pen: 0,
-            time: 3000,
-            total: 3000,
+            time: '3000',
+            total: '3000',
             ttbDiff: '',
             ttbName: '',
             rank: 2,
@@ -404,8 +405,8 @@ describe('MessageFormatter', () => {
             dtStart: '16:14:00.000',
             dtFinish: null,
             pen: 2,
-            time: 8115,
-            total: 8117,
+            time: '8115',
+            total: '8117',
             ttbDiff: '+12.79',
             ttbName: 'J. KREJČÍ',
             rank: 8,
@@ -419,7 +420,7 @@ describe('MessageFormatter', () => {
       expect(msg).not.toBeNull();
       expect(msg!.msg).toBe('comp');
       expect(msg!.data).toEqual({
-        Bib: '9',
+        Bib: '   9',
         Name: 'KOPEČEK Michal',
         Club: 'VS Tábor',
         Time: '8115',
@@ -448,8 +449,8 @@ describe('MessageFormatter', () => {
             dtStart: '10:01:00',
             dtFinish: null,
             pen: 0,
-            time: 3000,
-            total: 3000,
+            time: '3000',
+            total: '3000',
             ttbDiff: '',
             ttbName: '',
             rank: 2,
@@ -469,8 +470,8 @@ describe('MessageFormatter', () => {
             dtStart: '10:00:00',
             dtFinish: null,
             pen: 0,
-            time: 5000,
-            total: 5000,
+            time: '5000',
+            total: '5000',
             ttbDiff: '',
             ttbName: '',
             rank: 1,
@@ -481,7 +482,7 @@ describe('MessageFormatter', () => {
 
       const msg = formatCompMessage(state);
 
-      expect(msg!.data.Bib).toBe('9');
+      expect(msg!.data.Bib).toBe('   9');
     });
   });
 
@@ -528,8 +529,8 @@ describe('MessageFormatter', () => {
             dtStart: '10:00:00',
             dtFinish: null,
             pen: 0,
-            time: 5000,
-            total: 5000,
+            time: '5000',
+            total: '5000',
             ttbDiff: '',
             ttbName: '',
             rank: 2,

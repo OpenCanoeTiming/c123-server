@@ -63,8 +63,8 @@ describe('parseXmlMessage', () => {
       expect(comp.dtStart).toBe('16:14:00.000');
       expect(comp.dtFinish).toBeNull();
       expect(comp.pen).toBe(54);
-      expect(comp.time).toBe(8115);
-      expect(comp.total).toBe(8169);
+      expect(comp.time).toBe('8115');
+      expect(comp.total).toBe('8169');
       expect(comp.ttbDiff).toBe('+12.79');
       expect(comp.ttbName).toBe('J. KREJČÍ');
       expect(comp.rank).toBe(8);

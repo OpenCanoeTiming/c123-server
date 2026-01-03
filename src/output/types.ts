@@ -9,8 +9,8 @@
  * Result row in top results list
  */
 export interface TopResultItem {
-  /** Rank in results */
-  Rank: number;
+  /** Rank in results (CLI sends as string) */
+  Rank: string;
   /** Start number */
   Bib: string;
   /** Full name */
@@ -19,8 +19,8 @@ export interface TopResultItem {
   Club: string;
   /** Total time as formatted string (e.g., "78.99") */
   Total: string;
-  /** Total penalty seconds */
-  Pen: number;
+  /** Total penalty seconds (CLI sends as string) */
+  Pen: string;
   /** Behind leader (e.g., "+1.23") */
   Behind: string;
 
@@ -53,8 +53,8 @@ export interface TopMessage {
     RaceName: string;
     /** Race status (3=running, 5=finished) */
     RaceStatus: string;
-    /** Bib to highlight (recent finish) */
-    HighlightBib: string;
+    /** Bib to highlight (recent finish), 0 = none */
+    HighlightBib: number;
     /** Results list */
     list: TopResultItem[];
   };
@@ -72,16 +72,28 @@ export interface OnCourseItem {
   Name: string;
   /** Club name */
   Club: string;
+  /** Nationality */
+  Nat: string;
+  /** Race ID */
+  RaceId: string;
   /** Gate penalties as comma-separated string */
   Gates: string;
   /** Total penalty seconds as string */
   Pen: string;
-  /** Running time in centiseconds as string */
+  /** Running time as string */
   Time: string;
-  /** Total time in centiseconds as string */
+  /** Total time as string */
   Total: string;
-  /** Finish timestamp or empty string */
+  /** Start timestamp or empty string (scoreboard expects lowercase) */
+  dtStart: string;
+  /** Finish timestamp or empty string (scoreboard expects lowercase) */
   dtFinish: string;
+  /** Difference to time-to-beat */
+  TTBDiff: string;
+  /** Leader name */
+  TTBName: string;
+  /** Current rank */
+  Rank: number;
   /** Position in list (1 = closest to finish) */
   _pos: number;
 }
@@ -106,12 +118,22 @@ export interface CompMessage {
     Name: string;
     /** Club name */
     Club: string;
-    /** Running time in centiseconds as string */
+    /** Nationality */
+    Nat: string;
+    /** Race ID */
+    RaceId: string;
+    /** Running time as string */
     Time: string;
+    /** Total time as string */
+    Total: string;
     /** Total penalty seconds as string */
     Pen: string;
     /** Gate penalties as comma-separated string */
     Gates: string;
+    /** Start timestamp (scoreboard expects lowercase) */
+    dtStart: string;
+    /** Finish timestamp (scoreboard expects lowercase) */
+    dtFinish: string;
     /** Current rank */
     Rank: string;
     /** Difference to leader */

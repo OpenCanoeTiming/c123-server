@@ -16,6 +16,14 @@ import type {
  */
 
 /**
+ * Pad bib number with leading spaces to match CLI format
+ * CLI uses right-aligned 4-character bibs: "   1", "  10", " 103"
+ */
+function padBib(bib: string): string {
+  return bib.padStart(4, ' ');
+}
+
+/**
  * Format results as CLI "top" message
  */
 export function formatTopMessage(state: EventStateData): TopMessage | null {
@@ -31,12 +39,12 @@ export function formatTopMessage(state: EventStateData): TopMessage | null {
 
   const list: TopResultItem[] = results.rows.map((row) => {
     const item: TopResultItem = {
-      Rank: row.rank,
-      Bib: row.bib,
+      Rank: String(row.rank),
+      Bib: padBib(row.bib),
       Name: row.name,
       Club: row.club,
       Total: row.total,
-      Pen: row.pen,
+      Pen: String(row.pen),
       Behind: row.behind,
     };
 
@@ -74,7 +82,7 @@ export function formatTopMessage(state: EventStateData): TopMessage | null {
     data: {
       RaceName: results.mainTitle || '',
       RaceStatus: raceStatus,
-      HighlightBib: highlightBib || '',
+      HighlightBib: highlightBib ? parseInt(highlightBib, 10) : 0,
       list,
     },
   };
@@ -85,15 +93,21 @@ export function formatTopMessage(state: EventStateData): TopMessage | null {
  */
 export function formatOnCourseMessage(state: EventStateData): CliOnCourseMessage {
   const items: OnCourseItem[] = state.onCourse.map((comp, index) => ({
-    Bib: comp.bib,
+    Bib: padBib(comp.bib),
     BibKey: `${comp.raceId}-${comp.bib}`,
     Name: comp.name,
     Club: comp.club,
+    Nat: comp.nat,
+    RaceId: comp.raceId,
     Gates: comp.gates,
     Pen: comp.pen.toString(),
-    Time: comp.time?.toString() ?? '',
-    Total: comp.total?.toString() ?? '',
+    Time: comp.time ?? '',
+    Total: comp.total ?? '',
+    dtStart: comp.dtStart ?? '',
     dtFinish: comp.dtFinish ?? '',
+    TTBDiff: comp.ttbDiff,
+    TTBName: comp.ttbName,
+    Rank: comp.rank,
     _pos: index + 1,
   }));
 
@@ -120,12 +134,17 @@ export function formatCompMessage(state: EventStateData): CompMessage | null {
   return {
     msg: 'comp',
     data: {
-      Bib: current.bib,
+      Bib: padBib(current.bib),
       Name: current.name,
       Club: current.club,
-      Time: current.time?.toString() ?? '',
+      Nat: current.nat,
+      RaceId: current.raceId,
+      Time: current.time ?? '',
+      Total: current.total ?? '',
       Pen: current.pen.toString(),
       Gates: current.gates,
+      dtStart: current.dtStart ?? '',
+      dtFinish: current.dtFinish ?? '',
       Rank: current.rank.toString(),
       TTBDiff: current.ttbDiff,
       TTBName: current.ttbName,

@@ -149,8 +149,8 @@ describe('WebSocketServer', () => {
             dtStart: '10:00:00',
             dtFinish: null,
             pen: 0,
-            time: 5000,
-            total: 5000,
+            time: '5000',
+            total: '5000',
             ttbDiff: '',
             ttbName: '',
             rank: 1,
@@ -231,8 +231,8 @@ describe('WebSocketServer', () => {
             dtStart: '10:00:00',
             dtFinish: null,
             pen: 0,
-            time: 3000,
-            total: 3000,
+            time: '3000',
+            total: '3000',
             ttbDiff: '',
             ttbName: '',
             rank: 1,
@@ -262,7 +262,7 @@ describe('WebSocketServer', () => {
 
       const parsed = receivedMessages.map((m) => JSON.parse(m));
       const oncourse = parsed.find((m) => m.msg === 'oncourse');
-      expect(oncourse.data[0].Bib).toBe('7');
+      expect(oncourse.data[0].Bib).toBe('   7');
 
       client.close();
     });

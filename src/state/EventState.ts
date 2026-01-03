@@ -140,17 +140,42 @@ export class EventState extends EventEmitter<EventStateEvents> {
 
   /**
    * Update results
+   *
+   * Only accepts results that are for the current race:
+   * - Results marked as isCurrent=true (C123 indicates this is the active race)
+   * - Results matching the currentRaceId (from OnCourse competitors)
+   *
+   * This prevents results from other categories rotated by C123 from
+   * overwriting the active race's results.
    */
   private updateResults(results: typeof this._state.results): void {
-    this._state.results = results;
+    if (!results) {
+      this._state.results = null;
+      return;
+    }
 
-    // Update current race if this is the current race results
-    if (results?.isCurrent && results.raceId) {
-      if (this._state.currentRaceId !== results.raceId) {
+    // Accept results if marked as current by C123
+    if (results.isCurrent) {
+      this._state.results = results;
+      // Update current race ID if different
+      if (results.raceId && this._state.currentRaceId !== results.raceId) {
         this._state.currentRaceId = results.raceId;
         this.emit('raceChange', results.raceId);
       }
+      return;
     }
+
+    // Accept results if they match the current race (from OnCourse)
+    if (this._state.currentRaceId && results.raceId === this._state.currentRaceId) {
+      this._state.results = results;
+      return;
+    }
+
+    // Ignore results for other races - don't overwrite current results
+    Logger.debug(
+      'EventState',
+      `Ignoring results for ${results.raceId} (current: ${this._state.currentRaceId})`
+    );
   }
 
   /**

@@ -28,10 +28,10 @@ export interface OnCourseCompetitor {
   dtFinish: string | null;
   /** Total penalty seconds */
   pen: number;
-  /** Running time in centiseconds (e.g., 8115 = 81.15s) */
-  time: number | null;
-  /** Total time in centiseconds */
-  total: number | null;
+  /** Running time as formatted string (e.g., "75.09") */
+  time: string | null;
+  /** Total time as formatted string (e.g., "127.09") */
+  total: string | null;
   /** Difference to time-to-beat (e.g., "+12.79") */
   ttbDiff: string;
   /** Name of leader */
