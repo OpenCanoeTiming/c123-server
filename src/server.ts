@@ -20,6 +20,8 @@ import {
   createRaceConfig,
   createSchedule,
 } from './protocol/index.js';
+import { WindowsConfigDetector, getAppSettings } from './config/index.js';
+import type { XmlPathDetectionResult } from './config/index.js';
 
 /**
  * Wrapper to make UdpDiscovery compatible with Source interface for admin display
@@ -57,6 +59,10 @@ export interface ServerConfig {
   adminPort?: number;
   /** XML WebSocket server port (default: 27085) */
   xmlWsPort?: number;
+  /** Enable Canoe123 XML autodetection on Windows (default: true) */
+  xmlAutoDetect?: boolean;
+  /** Canoe123 autodetection check interval in ms (default: 30000) */
+  xmlAutoDetectInterval?: number;
 }
 
 /**
@@ -80,6 +86,8 @@ const DEFAULT_CONFIG: Required<ServerConfig> = {
   wsPort: 27084,
   adminPort: 8084,
   xmlWsPort: 0, // Use dynamic port by default for test safety
+  xmlAutoDetect: true,
+  xmlAutoDetectInterval: 30000,
 };
 
 /**
@@ -107,9 +115,11 @@ export class Server extends EventEmitter<ServerEvents> {
   private adminServer: AdminServer;
   private xmlDataService: XmlDataService;
   private xmlWsServer: XmlWebSocketServer;
+  private windowsConfigDetector: WindowsConfigDetector | null = null;
 
   private isRunning = false;
   private discoveredHost: string | null = null;
+  private xmlPathSource: 'manual' | 'autodetect' | null = null;
 
   constructor(config?: ServerConfig) {
     super();
@@ -142,6 +152,7 @@ export class Server extends EventEmitter<ServerEvents> {
     this.adminServer.setEventState(this.eventState);
     this.adminServer.setWebSocketServer(this.wsServer);
     this.adminServer.setXmlDataService(this.xmlDataService);
+    this.adminServer.setServer(this);
 
     // Start data sources
     if (this.config.autoDiscovery && !this.config.tcpHost) {
@@ -155,6 +166,12 @@ export class Server extends EventEmitter<ServerEvents> {
       this.startXmlChangeNotifier();
       // Also configure XmlDataService for REST API
       this.xmlDataService.setPath(this.config.xmlPath);
+      this.xmlPathSource = 'manual';
+    }
+
+    // Start XML autodetection if enabled and no manual path set
+    if (this.config.xmlAutoDetect && !this.config.xmlPath) {
+      this.startAutoDetection();
     }
 
     this.isRunning = true;
@@ -174,6 +191,7 @@ export class Server extends EventEmitter<ServerEvents> {
     this.tcpSource?.stop();
     this.xmlSource?.stop();
     await this.xmlChangeNotifier?.stop();
+    this.stopAutoDetection();
 
     // Stop output servers
     await this.wsServer.stop();
@@ -231,14 +249,124 @@ export class Server extends EventEmitter<ServerEvents> {
   }
 
   /**
-   * Set XML source path
+   * Set XML source path manually (disables autodetect)
    */
-  setXmlPath(path: string): void {
+  setXmlPath(path: string, saveToSettings: boolean = true): void {
     this.xmlSource?.stop();
+    this.xmlChangeNotifier?.stop();
     this.config.xmlPath = path;
     this.xmlDataService.setPath(path);
+    this.xmlPathSource = path ? 'manual' : null;
+
+    if (saveToSettings && path) {
+      getAppSettings().setXmlPath(path);
+      this.stopAutoDetection();
+    }
+
     if (path) {
       this.startXmlSource();
+      this.startXmlChangeNotifier();
+    }
+  }
+
+  /**
+   * Enable XML autodetection (Windows only)
+   */
+  enableXmlAutoDetect(): void {
+    getAppSettings().enableAutoDetect();
+    this.config.xmlAutoDetect = true;
+    this.startAutoDetection();
+  }
+
+  /**
+   * Disable XML autodetection
+   */
+  disableXmlAutoDetect(): void {
+    getAppSettings().disableAutoDetect();
+    this.config.xmlAutoDetect = false;
+    this.stopAutoDetection();
+  }
+
+  /**
+   * Get current XML path info
+   */
+  getXmlPathInfo(): { path: string | null; source: 'manual' | 'autodetect' | null; autoDetectEnabled: boolean } {
+    return {
+      path: this.config.xmlPath || null,
+      source: this.xmlPathSource,
+      autoDetectEnabled: this.config.xmlAutoDetect,
+    };
+  }
+
+  /**
+   * Initialize from saved settings
+   */
+  initFromSettings(): void {
+    const settings = getAppSettings().load();
+    Logger.info('Server', `Loaded settings from ${getAppSettings().getPath()}`);
+
+    // Apply autodetect interval if set
+    if (settings.xmlAutoDetectInterval) {
+      this.config.xmlAutoDetectInterval = settings.xmlAutoDetectInterval;
+    }
+
+    // If autodetect is enabled and no manual path is set via CLI, try autodetection
+    if (settings.xmlAutoDetect && !this.config.xmlPath) {
+      this.config.xmlAutoDetect = true;
+    } else if (settings.xmlPath && !this.config.xmlPath) {
+      // Use saved manual path if no CLI path provided
+      this.config.xmlPath = settings.xmlPath;
+      this.xmlPathSource = 'manual';
+    }
+  }
+
+  private startAutoDetection(): void {
+    if (!WindowsConfigDetector.isWindows()) {
+      Logger.info('Server', 'XML autodetection is only available on Windows');
+      return;
+    }
+
+    this.stopAutoDetection();
+
+    this.windowsConfigDetector = new WindowsConfigDetector();
+
+    this.windowsConfigDetector.on('detected', (result: XmlPathDetectionResult) => {
+      this.handleAutoDetectedPath(result);
+    });
+
+    this.windowsConfigDetector.on('changed', (result: XmlPathDetectionResult) => {
+      Logger.info('Server', 'Canoe123 XML path changed, updating...');
+      this.handleAutoDetectedPath(result);
+    });
+
+    this.windowsConfigDetector.on('error', (error: Error) => {
+      Logger.error('Server', `Autodetection error: ${error.message}`);
+    });
+
+    this.windowsConfigDetector.startMonitoring(this.config.xmlAutoDetectInterval);
+  }
+
+  private stopAutoDetection(): void {
+    if (this.windowsConfigDetector) {
+      this.windowsConfigDetector.stopMonitoring();
+      this.windowsConfigDetector = null;
+    }
+  }
+
+  private handleAutoDetectedPath(result: XmlPathDetectionResult): void {
+    if (result.path && result.exists) {
+      Logger.info('Server', `Autodetected XML: ${result.path} (source: ${result.source})`);
+
+      // Only update if path changed
+      if (result.path !== this.config.xmlPath) {
+        this.setXmlPath(result.path, false); // Don't save to settings, it's autodetected
+        this.xmlPathSource = 'autodetect';
+
+        // Update last autodetected path in settings
+        getAppSettings().update({ lastAutoDetectedPath: result.path });
+      }
+    } else if (result.error) {
+      Logger.warn('Server', `Autodetection: ${result.error}`);
     }
   }
 

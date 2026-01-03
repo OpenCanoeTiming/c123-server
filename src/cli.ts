@@ -54,6 +54,10 @@ function parseArgs(): { command: string; config: ServerConfig; debug: boolean } 
       config.autoDiscovery = false;
     }
 
+    if (arg === '--no-autodetect') {
+      config.xmlAutoDetect = false;
+    }
+
     if (arg === '--debug' || arg === '-d') {
       debug = true;
     }
@@ -85,6 +89,7 @@ Options:
   --admin-port <p>  Admin dashboard port (default: 8084)
   --xml <path>      XML file path for results data
   --no-discovery    Disable UDP auto-discovery
+  --no-autodetect   Disable Canoe123 XML autodetection (Windows)
   -d, --debug       Enable verbose debug logging
   -h, --help        Show this help message
   -v, --version     Show version
@@ -106,6 +111,9 @@ async function runServer(config: ServerConfig, debug: boolean): Promise<void> {
   }
 
   const server = new Server(config);
+
+  // Initialize from saved settings (unless overridden by CLI args)
+  server.initFromSettings();
 
   // Handle shutdown signals
   const shutdown = async () => {

@@ -6,3 +6,6 @@ core
 
 # Test XML files (large, not needed in repo)
 *.xml
+
+# Test config files (reference only)
+user.config

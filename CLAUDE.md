@@ -82,6 +82,19 @@ Proces: vzdy, zejmena u dodateckych pozadavku a zmen, nejprve aktualizovat dokum
 
 ---
 
+## Persistentní nastavení
+
+Aplikace ukládá uživatelská nastavení do souboru, aby přežila restart:
+
+| Platforma | Cesta |
+|-----------|-------|
+| Windows | `%APPDATA%\c123-server\settings.json` |
+| Linux/macOS | `~/.c123-server/settings.json` |
+
+**Princip:** Každé manuální nastavení (XML path, autodetekce on/off) se automaticky ukládá. Při dalších úpravách vždy používat `AppSettingsManager` z `src/config/AppSettings.ts`.
+
+---
+
 ## Oddělitelnost
 
 Tento projekt je připraven na vyčlenění do samostatného repozitáře:

@@ -1,9 +1,10 @@
 import express, { Express, Request, Response } from 'express';
-import { Server } from 'node:http';
+import { Server as HttpServer } from 'node:http';
 import type { EventState } from '../state/EventState.js';
 import type { Source } from '../sources/types.js';
 import type { WebSocketServer } from '../ws/WebSocketServer.js';
 import type { XmlDataService } from '../service/XmlDataService.js';
+import type { Server } from '../server.js';
 import type {
   AdminServerConfig,
   ServerStatusResponse,
@@ -11,6 +12,7 @@ import type {
   ScoreboardConfig,
 } from './types.js';
 import { Logger } from '../utils/logger.js';
+import { getAppSettings, WindowsConfigDetector } from '../config/index.js';
 
 const DEFAULT_PORT = 8084;
 const VERSION = '0.1.0';
@@ -35,13 +37,14 @@ interface RegisteredSource {
 export class AdminServer {
   private readonly port: number;
   private readonly app: Express;
-  private server: Server | null = null;
+  private server: HttpServer | null = null;
   private startTime: number = Date.now();
 
   private eventState: EventState | null = null;
   private sources: RegisteredSource[] = [];
   private wsServer: WebSocketServer | null = null;
   private xmlDataService: XmlDataService | null = null;
+  private c123Server: Server | null = null;
 
   constructor(config?: Partial<AdminServerConfig>) {
     this.port = config?.port ?? DEFAULT_PORT;
@@ -68,6 +71,13 @@ export class AdminServer {
    */
   setXmlDataService(service: XmlDataService): void {
     this.xmlDataService = service;
+  }
+
+  /**
+   * Register main Server for config management
+   */
+  setServer(server: Server): void {
+    this.c123Server = server;
   }
 
   /**
@@ -172,6 +182,13 @@ export class AdminServer {
     this.app.get('/api/xml/races/:id/results', this.handleXmlRaceResults.bind(this));
     this.app.get('/api/xml/races/:id/results/:run', this.handleXmlRaceResultsByRun.bind(this));
 
+    // Config API routes
+    this.app.get('/api/config', this.handleGetConfig.bind(this));
+    this.app.get('/api/config/xml', this.handleGetXmlConfig.bind(this));
+    this.app.post('/api/config/xml', this.handleSetXmlConfig.bind(this));
+    this.app.post('/api/config/xml/autodetect', this.handleToggleAutodetect.bind(this));
+    this.app.get('/api/config/xml/detect', this.handleDetectXml.bind(this));
+
     // Health check
     this.app.get('/health', (_req: Request, res: Response) => {
       res.json({ status: 'ok' });
@@ -252,6 +269,23 @@ export class AdminServer {
       <thead><tr><th>Name</th><th>Type</th><th>Status</th><th>Details</th></tr></thead>
       <tbody></tbody>
     </table>
+  </div>
+
+  <h2>XML Configuration</h2>
+  <div class="card" id="xmlConfigCard">
+    <div style="margin-bottom: 10px;">
+      <strong>Path:</strong> <span id="xmlPath">-</span>
+      <span id="xmlSource" style="margin-left: 10px; color: #888;"></span>
+    </div>
+    <div class="config-form">
+      <label id="autodetectLabel" style="display: none;">
+        <input type="checkbox" id="autodetectToggle">
+        Autodetect (Windows)
+      </label>
+      <input type="text" id="xmlPathInput" placeholder="XML file path" style="flex: 1; min-width: 200px; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #0f0f23; color: #eee;">
+      <button class="btn" onclick="setXmlPath()">Set Path</button>
+    </div>
+    <div id="xmlConfigError" class="error" style="margin-top: 10px; display: none;"></div>
   </div>
 
   <h2>Connected Scoreboards</h2>
@@ -346,8 +380,93 @@ export class AdminServer {
       return parts.length ? parts.join('; ') : 'default';
     }
 
+    // XML Config functions
+    async function loadXmlConfig() {
+      try {
+        const res = await fetch('/api/config/xml');
+        const data = await res.json();
+
+        document.getElementById('xmlPath').textContent = data.path || '(not set)';
+        document.getElementById('xmlSource').textContent = data.source ? '(' + data.source + ')' : '';
+
+        if (data.isWindows) {
+          document.getElementById('autodetectLabel').style.display = 'flex';
+          document.getElementById('autodetectToggle').checked = data.autoDetectEnabled;
+        }
+
+        if (data.path) {
+          document.getElementById('xmlPathInput').value = data.path;
+        }
+
+        document.getElementById('xmlConfigError').style.display = 'none';
+      } catch (e) {
+        showXmlError('Failed to load config: ' + e.message);
+      }
+    }
+
+    async function setXmlPath() {
+      const path = document.getElementById('xmlPathInput').value.trim();
+      if (!path) {
+        showXmlError('Please enter a path');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/config/xml', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path })
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          showXmlError(data.error);
+          return;
+        }
+
+        document.getElementById('xmlPath').textContent = data.path || '(not set)';
+        document.getElementById('xmlSource').textContent = data.source ? '(' + data.source + ')' : '';
+        document.getElementById('autodetectToggle').checked = data.autoDetectEnabled;
+        document.getElementById('xmlConfigError').style.display = 'none';
+      } catch (e) {
+        showXmlError('Failed to set path: ' + e.message);
+      }
+    }
+
+    document.getElementById('autodetectToggle').addEventListener('change', async function() {
+      try {
+        const res = await fetch('/api/config/xml/autodetect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: this.checked })
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          showXmlError(data.error);
+          this.checked = !this.checked;
+          return;
+        }
+
+        document.getElementById('xmlPath').textContent = data.path || '(not set)';
+        document.getElementById('xmlSource').textContent = data.source ? '(' + data.source + ')' : '';
+        document.getElementById('xmlConfigError').style.display = 'none';
+      } catch (e) {
+        showXmlError('Failed to toggle autodetect: ' + e.message);
+        this.checked = !this.checked;
+      }
+    });
+
+    function showXmlError(msg) {
+      const el = document.getElementById('xmlConfigError');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
     refresh();
+    loadXmlConfig();
     setInterval(refresh, 2000);
+    setInterval(loadXmlConfig, 5000);
   </script>
 </body>
 </html>`;
@@ -661,6 +780,145 @@ export class AdminServer {
       }
 
       res.json({ results, run: runUpper, raceId: targetRace.raceId });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * GET /api/config - Get all configuration
+   */
+  private handleGetConfig(_req: Request, res: Response): void {
+    const settings = getAppSettings().get();
+    const xmlInfo = this.c123Server?.getXmlPathInfo() ?? {
+      path: null,
+      source: null,
+      autoDetectEnabled: settings.xmlAutoDetect,
+    };
+
+    res.json({
+      settings,
+      xml: xmlInfo,
+      isWindows: WindowsConfigDetector.isWindows(),
+      settingsPath: getAppSettings().getPath(),
+    });
+  }
+
+  /**
+   * GET /api/config/xml - Get XML configuration
+   */
+  private handleGetXmlConfig(_req: Request, res: Response): void {
+    const settings = getAppSettings().get();
+    const xmlInfo = this.c123Server?.getXmlPathInfo() ?? {
+      path: null,
+      source: null,
+      autoDetectEnabled: settings.xmlAutoDetect,
+    };
+
+    res.json({
+      path: xmlInfo.path,
+      source: xmlInfo.source,
+      autoDetectEnabled: xmlInfo.autoDetectEnabled,
+      isWindows: WindowsConfigDetector.isWindows(),
+    });
+  }
+
+  /**
+   * POST /api/config/xml - Set XML path manually
+   */
+  private handleSetXmlConfig(req: Request, res: Response): void {
+    const { path } = req.body;
+
+    if (!path || typeof path !== 'string') {
+      res.status(400).json({ error: 'path is required and must be a string' });
+      return;
+    }
+
+    if (!this.c123Server) {
+      res.status(503).json({ error: 'Server not available' });
+      return;
+    }
+
+    try {
+      this.c123Server.setXmlPath(path);
+      const xmlInfo = this.c123Server.getXmlPathInfo();
+      res.json({
+        success: true,
+        path: xmlInfo.path,
+        source: xmlInfo.source,
+        autoDetectEnabled: xmlInfo.autoDetectEnabled,
+      });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * POST /api/config/xml/autodetect - Toggle autodetection
+   */
+  private handleToggleAutodetect(req: Request, res: Response): void {
+    const { enabled } = req.body;
+
+    if (typeof enabled !== 'boolean') {
+      res.status(400).json({ error: 'enabled must be a boolean' });
+      return;
+    }
+
+    if (!this.c123Server) {
+      res.status(503).json({ error: 'Server not available' });
+      return;
+    }
+
+    if (!WindowsConfigDetector.isWindows() && enabled) {
+      res.status(400).json({ error: 'Autodetection is only available on Windows' });
+      return;
+    }
+
+    try {
+      if (enabled) {
+        this.c123Server.enableXmlAutoDetect();
+      } else {
+        this.c123Server.disableXmlAutoDetect();
+      }
+
+      const xmlInfo = this.c123Server.getXmlPathInfo();
+      res.json({
+        success: true,
+        autoDetectEnabled: xmlInfo.autoDetectEnabled,
+        path: xmlInfo.path,
+        source: xmlInfo.source,
+      });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * GET /api/config/xml/detect - Manually trigger detection (for testing)
+   */
+  private handleDetectXml(_req: Request, res: Response): void {
+    if (!WindowsConfigDetector.isWindows()) {
+      res.status(400).json({
+        error: 'Autodetection is only available on Windows',
+        isWindows: false,
+      });
+      return;
+    }
+
+    try {
+      const detector = new WindowsConfigDetector();
+      const result = detector.detect();
+
+      res.json({
+        detected: result,
+        isWindows: true,
+      });
     } catch (err) {
       res.status(500).json({
         error: err instanceof Error ? err.message : 'Unknown error',

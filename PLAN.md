@@ -279,6 +279,7 @@ Co musí scoreboard implementovat:
    - Týmové soutěže: `Member1`, `Member2`, `Member3`, `NOC`
    - **Rozhraní není třeba měnit** - REST API předává raw data, scoreboard si vytáhne co potřebuje.
    - XML přidán do `.gitignore` (velký soubor, testovací data)
+   - [ ] není potřeba s ohledem na zištěné disciplíny a typy jízd měnit REST API nebo něco kolem BR1/BR2 merge logika ? Pokud ano, proveď. Možná jen poznámka že BR je BetterRun, tedy lepší ze dvou jízd, což je v CZ oblíbený model, ale má problém při zobrazení výsledku na scoreboardu z ntivních C123 dat. Jiné typy soutěží by problém mít neměly. 
  - [x] `EventState` zůstává pro detekci dojetí a sledování závodů -- není to nějaký relikt principu CLI nebo to je v C123 rozhraní ok?
    - **Není relikt CLI.** EventState poskytuje užitečné funkce pro C123 protokol:
    - **Finish detection:** Detekuje přechod `dtFinish` z prázdného na timestamp, emituje `finish` event
@@ -286,6 +287,22 @@ Co musí scoreboard implementovat:
    - **Results filtering:** C123 posílá Results různých kategorií, EventState přijímá pouze `Current=Y` nebo odpovídající currentRaceId
    - **Schedule fingerprint:** Detekuje změnu závodu pro reset cache
    - Tyto funkce zůstávají v serveru, scoreboard dostává již filtrovaná data
+ 
+ - [x] Rozvinutý autoconfig: c123 server na windows provede detekci aktuálního XML a nastaví ho
+   - `WindowsConfigDetector` hledá v `%LOCALAPPDATA%\SIWIDATA\Canoe123.exe_Url_*\<version>\user.config`
+   - Parsuje `CurrentEventFile` a `AutoCopyFolder` z XML konfigurace
+   - Preferuje AutoCopyFolder + filename (offline kopie), fallback na CurrentEventFile
+   - Periodické monitorování změn (výchozí: 30s interval)
+   - Admin dashboard zobrazuje aktuální cestu, source (manual/autodetect), umožňuje přepínání
+   - API: `GET /api/config/xml`, `POST /api/config/xml`, `POST /api/config/xml/autodetect`
+
+ - [x] persistentní nastavení na Windows: služba/aplikace na windows si uchová nastavení i přes vypnutí/restart
+   - `AppSettingsManager` ukládá settings do JSON souboru:
+     - Windows: `%APPDATA%\c123-server\settings.json`
+     - Linux/macOS: `~/.c123-server/settings.json`
+   - Ukládá: xmlPath (ruční), xmlAutoDetect, xmlAutoDetectInterval, lastAutoDetectedPath
+   - Server.initFromSettings() načítá nastavení při startu
+   - Každá změna se automaticky ukládá
 
 ---
 
