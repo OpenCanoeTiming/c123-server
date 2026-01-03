@@ -1,337 +1,279 @@
-# Plán: C123 Server - Chytrá mezivrstva pro Canoe Scoreboard
+# Plán: C123 Server v2 - Lean Data Proxy
 
-## Cíl
+## Vize
 
-Vytvořit **C123 Server** - samostatnou službu, která:
-1. Automaticky najde C123 přes UDP broadcast (bez konfigurace)
-2. Čte nativní XML (lokálně/URL) pro kompletní data obou jízd
-3. Poskytuje "učesaná" data scoreboardům přes WebSocket (CLI-kompatibilní formát)
-4. Nabízí admin dashboard pro správu připojených scoreboardů
+**C123 Server** = štíhlá mezivrstva předávající **autentická data z C123** s minimální transformací.
 
-**CLI zůstává jako záložní varianta**, ale C123 Server bude primární.
+Předchozí verze (v1.0.0-cli) emulovala CLI rozhraní. Nový přístup se zbavuje CLI závislosti - scoreboard bude pracovat přímo s autentickými C123 daty.
 
 ---
 
-## Architektura
+## Architektura v2
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         C123 Server                                  │
-│                                                                      │
-│   Sources                    State                    Output         │
-│  ┌──────────────┐       ┌──────────────┐       ┌──────────────┐     │
-│  │ UdpDiscovery │──────▶│              │       │  WebSocket   │     │
-│  │   :27333     │       │  EventState  │──────▶│   :27084     │────▶│ Scoreboardy
-│  ├──────────────┤       │              │       └──────────────┘     │
-│  │ TcpSource    │──────▶│ - RaceState  │                            │
-│  │   :27333     │       │ - BR1BR2Merge│       ┌──────────────┐     │
-│  ├──────────────┤       │ - FinishDet. │──────▶│ AdminServer  │     │
-│  │ XmlFileSource│──────▶│              │       │   :8084      │     │
-│  └──────────────┘       └──────────────┘       └──────────────┘     │
-│                                                                      │
+│                         C123 Server v2                              │
+│                                                                     │
+│   Sources                    Core                     Output        │
+│  ┌──────────────┐       ┌──────────────┐       ┌──────────────┐    │
+│  │ TcpSource    │──────▶│              │       │  WebSocket   │    │
+│  │   :27333     │       │  C123Proxy   │──────▶│   :27084     │───▶│ Scoreboardy
+│  ├──────────────┤       │              │       └──────────────┘    │
+│  │ UdpDiscovery │──────▶│ (min. transf)│                           │
+│  │   :27333     │       │              │       ┌──────────────┐    │
+│  └──────────────┘       └──────────────┘       │  REST API    │    │
+│                                                │   :8084      │───▶│ Web clients
+│  ┌──────────────┐       ┌──────────────┐       └──────────────┘    │
+│  │ XmlSource    │──────▶│  XmlService  │──────────────┘            │
+│  │ (file/URL)   │       │ (API + push) │                           │
+│  └──────────────┘       └──────────────┘                           │
+│                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Adresářová struktura
+## Klíčové principy
 
+1. **Autentická data** - žádná emulace CLI, předáváme co přijde z C123
+2. **Minimální transformace** - XML→JSON je přijatelné, ale žádné "učesávání"
+3. **XML jako samostatná služba** - API nad XML databází, nezávislé na scoreboardu
+4. **Scoreboard se adaptuje** - práce s nativními C123 daty, ne s CLI formátem
+
+---
+
+## Datové toky
+
+### 1. Real-time C123 stream (TCP)
 ```
-c123-server/
-├── package.json
-├── tsconfig.json
-├── CLAUDE.md
-├── PLAN.md
-│
-├── src/
-│   ├── index.ts              # Entry point
-│   ├── server.ts             # Hlavní orchestrace
-│   │
-│   ├── sources/              # Zdroje dat
-│   │   ├── types.ts
-│   │   ├── UdpDiscovery.ts   # UDP broadcast listener + auto-discovery
-│   │   ├── TcpSource.ts      # TCP:27333 připojení
-│   │   └── XmlFileSource.ts  # XML soubory (lokální/URL)
-│   │
-│   ├── parsers/              # XML parsování
-│   │   ├── xml-parser.ts
-│   │   ├── oncourse.ts
-│   │   ├── results.ts
-│   │   └── participants.ts
-│   │
-│   ├── state/                # Agregovaný stav
-│   │   ├── EventState.ts
-│   │   ├── RaceState.ts
-│   │   ├── BR1BR2Merger.ts   # Spojování jízd
-│   │   └── FinishDetector.ts # Detekce dojetí
-│   │
-│   ├── output/               # Výstupy
-│   │   ├── WebSocketServer.ts
-│   │   ├── ScoreboardSession.ts
-│   │   └── MessageFormatter.ts
-│   │
-│   ├── admin/                # Admin dashboard
-│   │   ├── AdminServer.ts
-│   │   ├── api/
-│   │   └── static/
-│   │
-│   └── service/              # Windows služba
-│       └── windows-service.ts
-│
-└── shared/                   # Sdílené typy (pro budoucí npm package)
-    └── types/
-        ├── messages.ts       # CLI message format
-        └── scoreboard.ts
+C123 (Canoe123) ──TCP:27333──▶ C123 Server ──WS:27084──▶ Scoreboard
+
+Zprávy: TimeOfDay, OnCourse, Schedule, Results (pipe-delimited XML)
+Transformace: XML→JSON, případně envelope s metadaty (timestamp, source)
+```
+
+### 2. XML databáze (file/URL)
+```
+C123 XML soubor ──poll/watch──▶ C123 Server ──REST/WS──▶ Web clients
+
+Přístupy:
+- Lokální cesta: fs.watch() pro real-time změny
+- SMB síťová cesta: polling (fs.watch nemusí fungovat)
+- HTTP/HTTPS URL: polling s ETag/Last-Modified
+- OneDrive: speciální handling (SharePoint API nebo download link)
 ```
 
 ---
 
-## Klíčové kvality
+## Archivovaná verze (v1.0.0-cli)
 
-1. **Sledování flow závodu** - zobrazovat výsledky kategorie, která zrovna jede, dokud se nerozjede další
-2. **XML validace** - identifikovat správný XML soubor, detekovat nekompatibilitu s real-time daty (jiný závod)
-3. **XML je živá databáze** - soubor se průběžně mění, polling pro aktualizace
-4. **Cross-platform** - Windows primární, ale schopno běžet i jinde (Linux, macOS)
+<details>
+<summary>CLI-kompatibilní implementace - DOKONČENO</summary>
 
----
+### Fáze 0-6: Kompletní implementace ✅
 
-## Vývoj a testování
+Verze tagovaná jako `v1.0.0-cli` obsahuje:
+- TcpSource, UdpDiscovery, XmlFileSource
+- EventState s BR1/BR2 mergováním
+- MessageFormatter s CLI-kompatibilním formátem
+- WebSocketServer emitující top/oncourse/comp zprávy
+- AdminServer s dashboard UI
+- 148 unit testů
 
-Vývoj běží proti **nahraným datům z analýzy** (`../analysis/recordings/`):
-- Obsahují nativní C123 data (TCP) i CLI data (WS)
-- Lze pustit vedle sebe a sledovat rozdíly
-- Dobré pro odladění logiky, která má fungovat ve scoreboardu
+Tato verze funguje, ale zavádí zbytečnou závislost na CLI formátu.
 
----
-
-## Implementační fáze
-
-### Fáze 0: Inicializace projektu [DONE]
-
-1. `c123-server/CLAUDE.md` - instrukce pro Claude Code
-2. `c123-server/PLAN.md` - kopie tohoto plánu
-3. `c123-server/package.json` - základní setup
-4. `c123-server/tsconfig.json`
+</details>
 
 ---
 
-### Fáze 1: Základ (MVP) [DONE]
+## Nové fáze implementace
 
-**Cíl:** Funkční server, který nahradí c123-proxy.js
-
-1. ✅ **TcpSource** (rozšíření c123-proxy.js)
-   - TCP připojení k C123:27333
-   - Pipe-delimited XML parsing
-   - Reconnect s exponential backoff
-
-2. ✅ **Základní XML parsery** (převzít z C123Provider.ts)
-   - `parseOnCourse()` - závodníci na trati
-   - `parseResults()` - výsledky
-   - `parseTimeOfDay()` - systémový čas
-
-3. ✅ **EventState** - jednoduchý stav
-   - Aktuální závod, závodníci, výsledky
-
-4. ✅ **WebSocketServer** - CLI-kompatibilní výstup
-   - Port 27084 (vedle C123)
-   - Emituje `top`, `oncourse`, `comp` zprávy
-
-**Reference:**
-- `../canoe-scoreboard-v2/scripts/c123-proxy.js` - základ pro TcpSource
-- `../canoe-scoreboard-v2/src/providers/C123Provider.ts` - XML parsing
+Každý krok (7.1, 7.2, ...) je navržen tak, aby se dal zvládnout v rámci **jednoho Claude Code session**.
 
 ---
 
-### Fáze 2: Auto-discovery + Detekce dojetí
+### Fáze 7: Lean protokol a refaktoring
 
-1. ✅ **UdpDiscovery**
-   - Poslouchá UDP broadcast 27333
-   - Automaticky najde C123 IP
-   - Spustí TcpSource bez manuální konfigurace
+#### 7.1 Definice nového protokolu ⏱️ ~1 session
+**Vstup:** Analýza stávajícího C123 XML formátu
+**Výstup:** `src/protocol/types.ts` s novými typy
 
-2. ✅ **FinishDetector** (implementováno v EventState)
-   - Sleduje změnu `dtFinish` (z "" na timestamp)
-   - Emituje `HighlightBib` pro scoreboard
-   - Zajistí highlight i bez CLI
+- [ ] Vytvořit `src/protocol/types.ts`
+- [ ] Definovat envelope: `C123Message<T>` s source, type, timestamp
+- [ ] Definovat payloady: `OnCoursePayload`, `ResultsPayload`, `SchedulePayload`
+- [ ] Zachovat strukturu blízkou raw XML (jen JSON konverze)
+- [ ] Unit testy pro typy (validace struktury)
 
-3. ✅ **MessageFormatter**
-   - Transformace EventState → CLI JSON zprávy
-   - Kompletní formát: top, oncourse, comp, control
+#### 7.2 Nový MessageFormatter ⏱️ ~1 session
+**Vstup:** Nové typy z 7.1
+**Výstup:** `src/output/MessageFormatterV2.ts`
 
----
+- [ ] Vytvořit `MessageFormatterV2.ts` (vedle stávajícího)
+- [ ] Jednoduchá transformace: XML data → C123Message envelope
+- [ ] Žádné CLI mapování (HighlightBib, RaceStatus)
+- [ ] Unit testy
 
-### Fáze 3: XML soubory + BR1/BR2 [DONE]
+#### 7.3 WebSocket s dual-mode ⏱️ ~1 session
+**Vstup:** Nový formatter z 7.2
+**Výstup:** WebSocket podporující oba protokoly
 
-1. ✅ **XmlFileSource**
-   - Načítání XML z lokální cesty nebo URL (OneDrive)
-   - Polling pro změny
-   - Poskytuje Participants, kompletní Results
+- [ ] Přidat config flag: `protocolVersion: "v1-cli" | "v2-lean"`
+- [ ] V2 klienti dostávají nový formát
+- [ ] V1 klienti (legacy) dostávají CLI formát
+- [ ] Handshake při připojení (client posílá preferovanou verzi)
 
-2. ✅ **BR1BR2Merger**
-   - Cache BR1 výsledků při jejich příjmu
-   - Spojení s BR2 daty (PrevTime, PrevPen)
-   - Výpočet TotalTotal (nejlepší z obou jízd)
+#### 7.4 Cleanup CLI kódu ⏱️ ~1 session
+**Vstup:** Funkční v2 protokol
+**Výstup:** Odstraněný CLI-specifický kód
 
-3. ✅ **Rozšířené zprávy**
-   - Nový formát pro obě jízdy v UI
-   - Zachování zpětné kompatibility
-
----
-
-### Fáze 4: Admin dashboard + Per-scoreboard config
-
-1. ✅ **AdminServer** (Express, port 8084)
-   - REST API: `/api/status`, `/api/scoreboards`, `/api/sources`
-   - POST `/api/scoreboards/:id/config` - nastavení
-
-2. ✅ **ScoreboardSession**
-   - Individuální konfigurace per scoreboard
-   - Filtrace kategorií (raceFilter)
-   - Custom visibility
-
-3. ✅ **Dashboard UI** (minimalistické)
-   - Přehled připojených scoreboardů
-   - Status zdrojů (C123, XML)
-   - Auto-refresh každé 2 sekundy
+- [ ] Odstranit staré CLI typy (nebo přesunout do legacy/)
+- [ ] Zjednodušit EventState na pouhou agregaci
+- [ ] Aktualizovat/odstranit staré testy
 
 ---
 
-### Fáze 5: Windows služba + Produkční hardening [DONE]
+### Fáze 8: XML REST API
 
-1. ✅ **Server orchestration** (`src/server.ts`)
-   - Hlavní `Server` třída koordinuje všechny komponenty
-   - UDP auto-discovery → TCP připojení
-   - XML source polling
-   - BR1/BR2 merging
-   - WebSocket broadcast do scoreboardů
+#### 8.1 Základní XML REST ⏱️ ~1 session
+**Vstup:** Existující XmlFileSource
+**Výstup:** REST endpoints v AdminServer
 
-2. ✅ **CLI interface** (`src/cli.ts`)
-   - `c123-server` - spustí server
-   - `c123-server --host <ip>` - připojí na konkrétní C123
-   - `c123-server --xml <path>` - použije XML zdroj
-   - `c123-server install/uninstall/start/stop` - Windows service
+- [ ] `GET /api/xml/status` - je XML dostupné, checksum, timestamp
+- [ ] `GET /api/xml/schedule` - rozpis závodů
+- [ ] `GET /api/xml/participants` - všichni závodníci
+- [ ] Swagger/OpenAPI dokumentace (komentáře v kódu)
 
-3. ✅ **Windows service wrapper** (`src/service/windows-service.ts`)
-   - Instalace: `c123-server install`
-   - Auto-start při boot
-   - Auto-recovery při pádu
-   - Volitelná závislost `node-windows`
+#### 8.2 Results API ⏱️ ~1 session
+**Vstup:** REST základ z 8.1
+**Výstup:** Kompletní results endpoints
 
-4. ✅ **Robustnost**
-   - Detekce výměny závodu (schedule fingerprint)
-   - Automatický reset BR1/BR2 cache při změně závodu
-   - Logger utility pro strukturované logování
+- [ ] `GET /api/xml/races` - seznam závodů (id, name, status)
+- [ ] `GET /api/xml/races/:id` - detail závodu
+- [ ] `GET /api/xml/races/:id/results` - výsledky (obě jízdy)
+- [ ] `GET /api/xml/races/:id/results/:run` - BR1 nebo BR2
+- [ ] Query params: `?merged=true` pro spojené výsledky
 
----
+#### 8.3 XML source improvements ⏱️ ~1 session
+**Vstup:** Existující XmlFileSource
+**Výstup:** Robustnější XML handling
 
-### Fáze 6: Testování a integrace [DONE]
+- [ ] `fs.watch()` pro lokální soubory (real-time)
+- [ ] Fallback na polling když watch nefunguje (SMB)
+- [ ] ETag/Last-Modified pro HTTP URLs
+- [ ] Debounce pro rapid changes
 
-1. ✅ **Unit testy pro všechny komponenty**
-   - TcpSource, UdpDiscovery, XmlFileSource (29 testů)
-   - XML parser (19 testů)
-   - EventState, BR1BR2Merger (31 testů)
-   - MessageFormatter, WebSocketServer (24 testů)
-   - AdminServer (14 testů)
-   - Server orchestration (9 testů)
+#### 8.4 XML change notifications ⏱️ ~1 session
+**Vstup:** Vylepšený XML source z 8.3
+**Výstup:** Push notifikace pro změny
 
-2. ✅ **E2E test proti nahrávce**
-   - Replay nahrané C123 session (`rec-2025-12-28T09-34-10.jsonl`)
-   - Ověření správného parsování TimeOfDay, OnCourse, Schedule
-   - Ověření emitování zpráv přes WebSocket (5 testů)
-
-3. ✅ **Scoreboard integration test**
-   - Validace CLI-kompatibilního formátu zpráv
-   - Ověření struktury `top`, `oncourse`, `comp` zpráv
-   - Ověření požadovaných polí pro scoreboard (3 testy)
-
-**Celkem: 148 testů, všechny procházejí**
-
----
-## dalsi instrukce
-
- - [x] poradne README.md k pouziti a konfiguraci, strucnejsi verze do readme ke scoreboardu v2
- - [x] dokladne overeni toho, ze mame spravne highlight zavodnika po dojeti
-
-   **Vysledek analyzy:** Implementace je spravna a CLI-kompatibilni.
-
-   Jak to funguje:
-   1. **Server (c123-server)** posila `HighlightBib` v `top` zprave ihned po detekci `dtFinish` (prechod z null na timestamp) - viz `src/state/EventState.ts:118-123`
-   2. **Scoreboard** ma interni dvoustupnovy system:
-      - Faze 1: Pri dtFinish zmene nastavi `pendingHighlightBib` + `pendingHighlightTotal`
-      - Faze 2: Highlight se aktivuje az kdyz Results obsahuji odpovidajici `total`
-
-   Timing (z analyzy nahravek `../analysis/07-sitova-komunikace.md`):
-   - C123 `dtFinish` prijde prvni
-   - CLI `HighlightBib` nasleduje o 28-43ms
-   - Zavodnik zustava v oncourse ~4 sekundy po dojeti
-
-   Reference: `../canoe-scoreboard-v2/src/context/ScoreboardContext.tsx:247-266`
-
- - [x] korektni management logu, mozna i nahled na dulezite logyaktualni v te konzoli pro okamzity problemsolving
-
-   **Implementováno:**
-   - Barevný logger s úrovněmi (debug/info/warn/error)
-   - Logování ve všech komponentách (TcpSource, UdpDiscovery, WebSocketServer, AdminServer)
-   - CLI flag `--debug` pro verbose výstup
-   - Automatická detekce TTY pro barevný výstup
+- [ ] WebSocket kanál `/ws/xml` pro změny
+- [ ] Message: `{ type: "xml-change", section, timestamp }`
+- [ ] Klient si stáhne data přes REST (pull)
+- [ ] Subscription model (které sekce sledovat)
 
 ---
 
+### Fáze 9: Dokumentace
+
+#### 9.1 Protokol dokumentace ⏱️ ~1 session
+**Výstup:** `docs/PROTOCOL.md`
+
+- [ ] WebSocket protokol v2 specifikace
+- [ ] Všechny message typy s příklady
+- [ ] Handshake a connection lifecycle
+- [ ] Error handling
+
+#### 9.2 REST API dokumentace ⏱️ ~1 session
+**Výstup:** `docs/API.md` nebo OpenAPI spec
+
+- [ ] Všechny endpoints
+- [ ] Request/response příklady
+- [ ] Error codes
+- [ ] Rate limiting (pokud bude)
+
+#### 9.3 Integration guide ⏱️ ~1 session
+**Výstup:** `docs/INTEGRATION.md`
+
+- [ ] Jak napojit scoreboard
+- [ ] Jak napojit jiné klienty
+- [ ] Příklady kódu (JS/TS)
+- [ ] Migrace z CLI
+
+---
+
+### Fáze 10: Scoreboard adaptace (external repo)
+
+*Poznámka: Tyto kroky jsou v `canoe-scoreboard-v2/`, ne zde*
+
+#### 10.1 Nový C123 Provider
+- [ ] `C123ServerProvider.ts` - připojení na v2 protokol
+- [ ] Mapování C123 dat na scoreboard state
+- [ ] Finish detection na straně scoreboardu
+
+#### 10.2 Integrace a testování
+- [ ] E2E test s C123 Server v2
+- [ ] Ověření všech funkcí scoreboardu
+
+---
+
+## Formát zpráv v2
+
+### WebSocket (real-time C123 data)
+
+```json
+{
+  "source": "c123",
+  "type": "OnCourse",
+  "timestamp": "2025-01-02T10:30:45.123Z",
+  "data": {
+    "runners": [
+      { "Bib": "9", "Name": "PRSKAVEC Jiří", "Time": "8115", "dtFinish": "" }
+    ]
+  }
+}
+```
+
+```json
+{
+  "source": "c123",
+  "type": "Results",
+  "timestamp": "2025-01-02T10:30:46.456Z",
+  "data": {
+    "Race": "K1m - střední trať",
+    "Run": "BR1",
+    "results": [
+      { "Bib": "1", "Rank": 1, "Time": "78.99", "Pen": 2 }
+    ]
+  }
+}
+```
+
+### WebSocket (XML změny)
+
+```json
+{
+  "source": "xml",
+  "type": "update",
+  "timestamp": "2025-01-02T10:31:00.000Z",
+  "section": "Results",
+  "raceId": "K1m_stredni"
+}
+```
+
+---
 
 ## Porty
 
 | Služba | Port | Poznámka |
 |--------|------|----------|
 | **C123** | 27333 | Existující (TCP + UDP) |
-| **C123 Server WS** | 27084 | Pro scoreboardy (vedle C123) |
-| **C123 Server Admin** | 8084 | Web dashboard |
+| **C123 Server WS** | 27084 | Real-time data |
+| **C123 Server API** | 8084 | REST + Admin |
 
 ---
 
-## Formát zpráv (CLI-kompatibilní)
+## Reference
 
-Server emituje **identické zprávy jako CLI**, takže scoreboard nepotřebuje změny:
-
-```json
-// top (výsledky)
-{
-  "msg": "top",
-  "data": {
-    "RaceName": "K1m - střední trať",
-    "RaceStatus": "3",
-    "HighlightBib": "9",
-    "list": [{ "Rank": 1, "Bib": "1", "Name": "...", "Total": "78.99", "Pen": 2 }]
-  }
-}
-
-// oncourse (na trati)
-{
-  "msg": "oncourse",
-  "data": [{ "Bib": "9", "Name": "...", "Time": "8115", "dtFinish": "" }]
-}
-
-// comp (aktuální závodník)
-{
-  "msg": "comp",
-  "data": { "Bib": "9", "Name": "...", "Time": "8115" }
-}
-```
-
----
-
-## Reference z analýzy
-
-- `../analysis/07-sitova-komunikace.md` - C123 protokol, detekce dojetí
-- `../analysis/captures/xboardtest02_jarni_v1.xml` - XML struktura, BR1/BR2 formát
-- `../canoe-scoreboard-v2/src/providers/C123Provider.ts` - existující XML parsing
-- `../canoe-scoreboard-v2/scripts/c123-proxy.js` - TCP socket handling
-
----
-
-## Oddělitelnost
-
-Pro budoucí vyčlenění do samostatného projektu:
-- Sdílené typy v `shared/types/` (CLI message format)
-- Žádné importy z `canoe-scoreboard-v2/src/`
-- Samostatný package.json bez workspace závislostí
-- Publikovatelný jako `@canoe-scoreboard/c123-server`
+- `../analysis/07-sitova-komunikace.md` - C123 protokol
+- `../analysis/captures/xboardtest02_jarni_v1.xml` - XML struktura
+- Tag `v1.0.0-cli` - předchozí CLI-kompatibilní verze
