@@ -18,10 +18,10 @@ Předchozí verze (v1.0.0-cli) emulovala CLI rozhraní. Nový přístup se zbavu
 │  ┌──────────────┐       ┌──────────────┐       ┌──────────────┐    │
 │  │ TcpSource    │──────▶│              │       │  WebSocket   │    │
 │  │   :27333     │       │  C123Proxy   │──────▶│   :27084     │───▶│ Scoreboardy
-│  ├──────────────┤       │              │       └──────────────┘    │
-│  │ UdpDiscovery │──────▶│ (min. transf)│                           │
-│  │   :27333     │       │              │       ┌──────────────┐    │
-│  └──────────────┘       └──────────────┘       │  REST API    │    │
+│  ├──────────────┤       │ (XML → JSON) │       └──────────────┘    │
+│  │ UdpDiscovery │──────▶│              │                           │
+│  │   :27333     │       └──────────────┘       ┌──────────────┐    │
+│  └──────────────┘                              │  REST API    │    │
 │                                                │   :8084      │───▶│ Web clients
 │  ┌──────────────┐       ┌──────────────┐       └──────────────┘    │
 │  │ XmlSource    │──────▶│  XmlService  │──────────────┘            │
@@ -36,9 +36,44 @@ Předchozí verze (v1.0.0-cli) emulovala CLI rozhraní. Nový přístup se zbavu
 ## Klíčové principy
 
 1. **Autentická data** - žádná emulace CLI, předáváme co přijde z C123
-2. **Minimální transformace** - XML→JSON je přijatelné, ale žádné "učesávání"
-3. **XML jako samostatná služba** - API nad XML databází, nezávislé na scoreboardu
+2. **XML → JSON parsing** - C123 posílá pipe-delimited XML fragmenty, parsujeme je na JSON objekty se zachováním původní struktury atributů
+3. **XML soubor jako samostatná služba** - REST API nad XML databází, nezávislé na real-time streamu
 4. **Scoreboard se adaptuje** - práce s nativními C123 daty, ne s CLI formátem
+
+---
+
+## Chování C123 (z analýzy nahrávky)
+
+### Typy zpráv a jejich frekvence
+
+| Zpráva | Frekvence | Popis |
+|--------|-----------|-------|
+| **TimeOfDay** | ~1× za sekundu | Heartbeat, aktuální čas |
+| **OnCourse** | Vícekrát za sekundu | Závodníci na trati, aktualizuje se při každé změně |
+| **RaceConfig** | ~20 sekund | Konfigurace aktuální kategorie |
+| **Schedule** | ~40 sekund | Rozpis všech závodů |
+| **Results** | Nepravidelně | Výsledky, rotují se různé kategorie |
+| **TVS** | Občasně | Time Video Sync |
+
+### Rotace Results
+
+C123 rotuje výsledky různých kategorií. Atribut `Current="Y"` označuje aktuálně jedoucí kategorii:
+
+```
+ts=26971  RaceId=K1W_ST_BR1_7  Current=N  (historické)
+ts=57129  RaceId=C1M_ST_BR2_7  Current=N  (historické)
+ts=62985  RaceId=K1M_ST_BR2_6  Current=Y  (aktuální závod!)
+ts=87253  RaceId=K1W_ST_BR2_7  Current=N  (historické)
+...
+```
+
+### Detekce dojetí
+
+Závodník dojel = `dtFinish` přechází z prázdného řetězce na timestamp:
+- Před dojetím: `dtFinish=""`
+- Po dojetí: `dtFinish="2025-01-02T10:30:45"`
+
+Závodník zůstává v OnCourse ~4 sekundy po dojetí, pak zmizí.
 
 ---
 
@@ -48,19 +83,18 @@ Předchozí verze (v1.0.0-cli) emulovala CLI rozhraní. Nový přístup se zbavu
 ```
 C123 (Canoe123) ──TCP:27333──▶ C123 Server ──WS:27084──▶ Scoreboard
 
-Zprávy: TimeOfDay, OnCourse, Schedule, Results (pipe-delimited XML)
-Transformace: XML→JSON, případně envelope s metadaty (timestamp, source)
+Formát: pipe-delimited XML fragmenty
+Transformace: XML parsing → JSON objekty (zachování struktury)
 ```
 
-### 2. XML databáze (file/URL)
+### 2. XML databáze (file)
 ```
-C123 XML soubor ──poll/watch──▶ C123 Server ──REST/WS──▶ Web clients
+C123 XML soubor ──watch/poll──▶ C123 Server ──REST/WS──▶ Web clients
 
-Přístupy:
-- Lokální cesta: fs.watch() pro real-time změny
-- SMB síťová cesta: polling (fs.watch nemusí fungovat)
+Přístupy (Windows priorita):
+- Lokální cesta: fs.watch() nebo chokidar (Windows NTFS events)
+- SMB síťová cesta: polling (ReadDirectoryChangesW nefunguje přes síť)
 - HTTP/HTTPS URL: polling s ETag/Last-Modified
-- OneDrive: speciální handling (SharePoint API nebo download link)
 ```
 
 ---
@@ -80,7 +114,7 @@ Verze tagovaná jako `v1.0.0-cli` obsahuje:
 - AdminServer s dashboard UI
 - 148 unit testů
 
-Tato verze funguje, ale zavádí zbytečnou závislost na CLI formátu.
+Tato verze funguje, ale zavádí zbytečnou závislost na CLI formátem.
 
 </details>
 
@@ -92,43 +126,36 @@ Každý krok (7.1, 7.2, ...) je navržen tak, aby se dal zvládnout v rámci **j
 
 ---
 
-### Fáze 7: Lean protokol a refaktoring
+### Fáze 7: Čistý C123 protokol
 
-#### 7.1 Definice nového protokolu ⏱️ ~1 session
-**Vstup:** Analýza stávajícího C123 XML formátu
-**Výstup:** `src/protocol/types.ts` s novými typy
+#### 7.1 Nové typy a protokol ⏱️ ~1 session
+**Vstup:** Analýza C123 XML formátu
+**Výstup:** `src/protocol/` s novými typy
 
 - [ ] Vytvořit `src/protocol/types.ts`
-- [ ] Definovat envelope: `C123Message<T>` s source, type, timestamp
-- [ ] Definovat payloady: `OnCoursePayload`, `ResultsPayload`, `SchedulePayload`
-- [ ] Zachovat strukturu blízkou raw XML (jen JSON konverze)
-- [ ] Unit testy pro typy (validace struktury)
-
-#### 7.2 Nový MessageFormatter ⏱️ ~1 session
-**Vstup:** Nové typy z 7.1
-**Výstup:** `src/output/MessageFormatterV2.ts`
-
-- [ ] Vytvořit `MessageFormatterV2.ts` (vedle stávajícího)
-- [ ] Jednoduchá transformace: XML data → C123Message envelope
-- [ ] Žádné CLI mapování (HighlightBib, RaceStatus)
+- [ ] Definovat zprávy: `TimeOfDay`, `OnCourse`, `Results`, `Schedule`, `RaceConfig`
+- [ ] Zachovat strukturu atributů z XML (Bib, Name, Time, dtFinish, ...)
+- [ ] Přidat envelope s metadaty: `{ type, timestamp, data }`
 - [ ] Unit testy
 
-#### 7.3 WebSocket s dual-mode ⏱️ ~1 session
-**Vstup:** Nový formatter z 7.2
-**Výstup:** WebSocket podporující oba protokoly
+#### 7.2 Refaktoring na čistý passthrough ⏱️ ~1 session
+**Vstup:** Nové typy z 7.1
+**Výstup:** Zjednodušený server bez CLI logiky
 
-- [ ] Přidat config flag: `protocolVersion: "v1-cli" | "v2-lean"`
-- [ ] V2 klienti dostávají nový formát
-- [ ] V1 klienti (legacy) dostávají CLI formát
-- [ ] Handshake při připojení (client posílá preferovanou verzi)
+- [ ] Odstranit MessageFormatter (CLI formát)
+- [ ] Odstranit CLI-specifické typy (top, oncourse, comp)
+- [ ] EventState → jednoduchý C123State (jen cache, žádná transformace)
+- [ ] WebSocket posílá přímo parsované C123 zprávy
+- [ ] Aktualizovat testy
 
-#### 7.4 Cleanup CLI kódu ⏱️ ~1 session
-**Vstup:** Funkční v2 protokol
-**Výstup:** Odstraněný CLI-specifický kód
+#### 7.3 Cleanup a reorganizace ⏱️ ~1 session
+**Vstup:** Refaktorovaný kód z 7.2
+**Výstup:** Čistá struktura projektu
 
-- [ ] Odstranit staré CLI typy (nebo přesunout do legacy/)
-- [ ] Zjednodušit EventState na pouhou agregaci
-- [ ] Aktualizovat/odstranit staré testy
+- [ ] Smazat nepoužívaný CLI kód
+- [ ] Reorganizovat adresáře (output/ → ws/, parsers/ → protocol/)
+- [ ] Aktualizovat importy
+- [ ] Ověřit všechny testy
 
 ---
 
@@ -139,80 +166,101 @@ Každý krok (7.1, 7.2, ...) je navržen tak, aby se dal zvládnout v rámci **j
 **Výstup:** REST endpoints v AdminServer
 
 - [ ] `GET /api/xml/status` - je XML dostupné, checksum, timestamp
-- [ ] `GET /api/xml/schedule` - rozpis závodů
+- [ ] `GET /api/xml/schedule` - rozpis závodů (RaceList)
 - [ ] `GET /api/xml/participants` - všichni závodníci
+- [ ] `GET /api/xml/startlists` - startovní listiny
 - [ ] Swagger/OpenAPI dokumentace (komentáře v kódu)
 
-#### 8.2 Results API ⏱️ ~1 session
+#### 8.2 Results a Startlists API ⏱️ ~1 session
 **Vstup:** REST základ z 8.1
-**Výstup:** Kompletní results endpoints
+**Výstup:** Kompletní race endpoints
 
 - [ ] `GET /api/xml/races` - seznam závodů (id, name, status)
 - [ ] `GET /api/xml/races/:id` - detail závodu
+- [ ] `GET /api/xml/races/:id/startlist` - startovka závodu
 - [ ] `GET /api/xml/races/:id/results` - výsledky (obě jízdy)
 - [ ] `GET /api/xml/races/:id/results/:run` - BR1 nebo BR2
 - [ ] Query params: `?merged=true` pro spojené výsledky
 
-#### 8.3 XML source improvements ⏱️ ~1 session
+#### 8.3 Windows file monitoring ⏱️ ~1 session
 **Vstup:** Existující XmlFileSource
-**Výstup:** Robustnější XML handling
+**Výstup:** Optimalizovaný file watcher pro Windows
 
-- [ ] `fs.watch()` pro lokální soubory (real-time)
-- [ ] Fallback na polling když watch nefunguje (SMB)
-- [ ] ETag/Last-Modified pro HTTP URLs
-- [ ] Debounce pro rapid changes
+- [ ] Použít `chokidar` pro cross-platform watching
+- [ ] Windows: využívá ReadDirectoryChangesW (NTFS events)
+- [ ] Fallback na polling pro síťové cesty (SMB)
+- [ ] Konfigurovatelný polling interval
+- [ ] Debounce pro rapid changes (C123 píše často)
 
 #### 8.4 XML change notifications ⏱️ ~1 session
-**Vstup:** Vylepšený XML source z 8.3
+**Vstup:** File watcher z 8.3
 **Výstup:** Push notifikace pro změny
 
 - [ ] WebSocket kanál `/ws/xml` pro změny
-- [ ] Message: `{ type: "xml-change", section, timestamp }`
-- [ ] Klient si stáhne data přes REST (pull)
-- [ ] Subscription model (které sekce sledovat)
+- [ ] Message: `{ type: "xml-change", sections: ["Results", "StartList"], timestamp }`
+- [ ] Klient si stáhne změněná data přes REST
+- [ ] Diff detection (které sekce se změnily)
 
 ---
 
-### Fáze 9: Dokumentace
+### Fáze 9: Dokumentace (podklady pro scoreboard)
 
-#### 9.1 Protokol dokumentace ⏱️ ~1 session
-**Výstup:** `docs/PROTOCOL.md`
+#### 9.1 C123 protokol dokumentace ⏱️ ~1 session
+**Výstup:** `docs/C123-PROTOCOL.md`
 
-- [ ] WebSocket protokol v2 specifikace
-- [ ] Všechny message typy s příklady
-- [ ] Handshake a connection lifecycle
-- [ ] Error handling
+- [ ] Popis všech C123 zpráv (TimeOfDay, OnCourse, Results, ...)
+- [ ] Timing chování (frekvence, rotace Results)
+- [ ] Struktura atributů s příklady
+- [ ] Detekce dojetí (dtFinish logika)
+- [ ] RaceId formát a význam Current atributu
 
 #### 9.2 REST API dokumentace ⏱️ ~1 session
-**Výstup:** `docs/API.md` nebo OpenAPI spec
+**Výstup:** `docs/REST-API.md`
 
-- [ ] Všechny endpoints
-- [ ] Request/response příklady
-- [ ] Error codes
-- [ ] Rate limiting (pokud bude)
+- [ ] Všechny endpoints s příklady
+- [ ] Request/response formáty
+- [ ] Error handling
+- [ ] WebSocket change notifications
 
-#### 9.3 Integration guide ⏱️ ~1 session
-**Výstup:** `docs/INTEGRATION.md`
+#### 9.3 Odlišnosti od CLI ⏱️ ~1 session
+**Výstup:** `docs/CLI-DIFFERENCES.md`
 
-- [ ] Jak napojit scoreboard
-- [ ] Jak napojit jiné klienty
-- [ ] Příklady kódu (JS/TS)
-- [ ] Migrace z CLI
+Pro migrace z CLI na C123 Server:
+
+| CLI | C123 Server | Poznámka |
+|-----|-------------|----------|
+| `msg: "top"` | `type: "Results"` | Žádný HighlightBib, RaceStatus |
+| `msg: "oncourse"` | `type: "OnCourse"` | Surová data, žádný "comp" |
+| `msg: "comp"` | Není | Scoreboard si určí sám |
+| `HighlightBib` | Není | Scoreboard sleduje dtFinish |
+| `RaceStatus` | `Current` atribut | Y/N místo číselného stavu |
+
+- [ ] Kompletní mapování CLI → C123 formát
+- [ ] Co musí scoreboard implementovat sám
+- [ ] Příklady kódu pro adaptaci
 
 ---
 
-### Fáze 10: Scoreboard adaptace (external repo)
+### Fáze 10: Podklady pro scoreboard (pouze dokumentace)
 
-*Poznámka: Tyto kroky jsou v `canoe-scoreboard-v2/`, ne zde*
+*Implementace scoreboardu je mimo scope tohoto projektu.*
 
-#### 10.1 Nový C123 Provider
-- [ ] `C123ServerProvider.ts` - připojení na v2 protokol
-- [ ] Mapování C123 dat na scoreboard state
-- [ ] Finish detection na straně scoreboardu
+#### 10.1 Integration guide
+**Výstup:** `docs/INTEGRATION.md`
 
-#### 10.2 Integrace a testování
-- [ ] E2E test s C123 Server v2
-- [ ] Ověření všech funkcí scoreboardu
+- [ ] Jak se připojit k WebSocket
+- [ ] Jak používat REST API
+- [ ] Doporučená architektura klienta
+- [ ] Příklady v JS/TS
+
+#### 10.2 Scoreboard requirements
+**Výstup:** `docs/SCOREBOARD-REQUIREMENTS.md`
+
+Co musí scoreboard implementovat:
+- [ ] Finish detection (sledování dtFinish)
+- [ ] BR1/BR2 merge logika
+- [ ] Results filtering (Current vs historické)
+- [ ] OnCourse → aktuální závodník
 
 ---
 
@@ -222,12 +270,28 @@ Každý krok (7.1, 7.2, ...) je navržen tak, aby se dal zvládnout v rámci **j
 
 ```json
 {
-  "source": "c123",
+  "type": "TimeOfDay",
+  "timestamp": "2025-01-02T10:30:45.123Z",
+  "data": {
+    "Time": "10:30:45"
+  }
+}
+```
+
+```json
+{
   "type": "OnCourse",
   "timestamp": "2025-01-02T10:30:45.123Z",
   "data": {
     "runners": [
-      { "Bib": "9", "Name": "PRSKAVEC Jiří", "Time": "8115", "dtFinish": "" }
+      {
+        "Bib": "9",
+        "Name": "PRSKAVEC Jiří",
+        "Time": "8115",
+        "dtFinish": "",
+        "StartOrder": "9",
+        "StartTime": "10:30:00"
+      }
     ]
   }
 }
@@ -235,14 +299,29 @@ Každý krok (7.1, 7.2, ...) je navržen tak, aby se dal zvládnout v rámci **j
 
 ```json
 {
-  "source": "c123",
   "type": "Results",
   "timestamp": "2025-01-02T10:30:46.456Z",
   "data": {
-    "Race": "K1m - střední trať",
-    "Run": "BR1",
-    "results": [
-      { "Bib": "1", "Rank": 1, "Time": "78.99", "Pen": 2 }
+    "RaceId": "K1M_ST_BR2_6",
+    "ClassId": "K1M_ST",
+    "Current": "Y",
+    "MainTitle": "K1m - střední trať",
+    "SubTitle": "2nd Run",
+    "rows": [
+      {
+        "Number": "1",
+        "Participant": {
+          "Bib": "1",
+          "Name": "PRSKAVEC Jiří",
+          "Club": "USK Praha"
+        },
+        "Result": {
+          "Time": "78.99",
+          "Pen": "2",
+          "Total": "80.99",
+          "Rank": "1"
+        }
+      }
     ]
   }
 }
@@ -252,11 +331,9 @@ Každý krok (7.1, 7.2, ...) je navržen tak, aby se dal zvládnout v rámci **j
 
 ```json
 {
-  "source": "xml",
-  "type": "update",
+  "type": "xml-change",
   "timestamp": "2025-01-02T10:31:00.000Z",
-  "section": "Results",
-  "raceId": "K1m_stredni"
+  "sections": ["Results", "StartList"]
 }
 ```
 
@@ -276,4 +353,5 @@ Každý krok (7.1, 7.2, ...) je navržen tak, aby se dal zvládnout v rámci **j
 
 - `../analysis/07-sitova-komunikace.md` - C123 protokol
 - `../analysis/captures/xboardtest02_jarni_v1.xml` - XML struktura
+- `../analysis/recordings/rec-2025-12-28T09-34-10.jsonl` - timing analýza
 - Tag `v1.0.0-cli` - předchozí CLI-kompatibilní verze
