@@ -5,6 +5,8 @@ import { EventState } from '../../state/EventState.js';
 import { EventEmitter } from 'node:events';
 import type { Source, SourceEvents, SourceStatus } from '../../sources/types.js';
 import type { C123Message } from '../../protocol/types.js';
+import { getLogBuffer, resetLogBuffer } from '../../utils/LogBuffer.js';
+import { Logger } from '../../utils/logger.js';
 
 // Mock source for testing
 class MockSource extends EventEmitter<SourceEvents> implements Source {
@@ -551,7 +553,11 @@ describe('UnifiedServer', () => {
 
         const receivedMessages: Array<{ type: string; timestamp: string; data: { reason?: string } }> = [];
         client.on('message', (data) => {
-          receivedMessages.push(JSON.parse(data.toString()));
+          const msg = JSON.parse(data.toString());
+          // Filter only ForceRefresh messages (ignore LogEntry)
+          if (msg.type === 'ForceRefresh') {
+            receivedMessages.push(msg);
+          }
         });
 
         server.broadcastForceRefresh('Admin triggered refresh');
@@ -580,7 +586,11 @@ describe('UnifiedServer', () => {
 
         const receivedMessages: Array<{ type: string; data: { reason?: string } }> = [];
         client.on('message', (data) => {
-          receivedMessages.push(JSON.parse(data.toString()));
+          const msg = JSON.parse(data.toString());
+          // Filter only ForceRefresh messages (ignore LogEntry)
+          if (msg.type === 'ForceRefresh') {
+            receivedMessages.push(msg);
+          }
         });
 
         server.broadcastForceRefresh();
@@ -608,8 +618,14 @@ describe('UnifiedServer', () => {
 
         const messages1: Array<{ type: string }> = [];
         const messages2: Array<{ type: string }> = [];
-        client1.on('message', (data) => messages1.push(JSON.parse(data.toString())));
-        client2.on('message', (data) => messages2.push(JSON.parse(data.toString())));
+        client1.on('message', (data) => {
+          const msg = JSON.parse(data.toString());
+          if (msg.type === 'ForceRefresh') messages1.push(msg);
+        });
+        client2.on('message', (data) => {
+          const msg = JSON.parse(data.toString());
+          if (msg.type === 'ForceRefresh') messages2.push(msg);
+        });
 
         const count = server.broadcastForceRefresh('Refresh all');
 
@@ -683,7 +699,11 @@ describe('UnifiedServer', () => {
 
         const receivedMessages: Array<{ type: string; data: { reason?: string } }> = [];
         client.on('message', (data) => {
-          receivedMessages.push(JSON.parse(data.toString()));
+          const msg = JSON.parse(data.toString());
+          // Filter only ForceRefresh messages (ignore LogEntry)
+          if (msg.type === 'ForceRefresh') {
+            receivedMessages.push(msg);
+          }
         });
 
         const response = await fetch(`http://localhost:${port}/api/broadcast/refresh`, {
@@ -702,6 +722,226 @@ describe('UnifiedServer', () => {
         expect(receivedMessages).toHaveLength(1);
         expect(receivedMessages[0].type).toBe('ForceRefresh');
         expect(receivedMessages[0].data.reason).toBe('API triggered');
+
+        client.close();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+    });
+  });
+
+  describe('Log viewer functionality', () => {
+    let server: UnifiedServer;
+    let port: number;
+
+    beforeEach(async () => {
+      // Reset log buffer for clean state
+      resetLogBuffer();
+
+      // Temporarily disable buffer during server start to avoid pollution
+      Logger.setBufferEnabled(false);
+      server = new UnifiedServer({ port: 0 });
+      await server.start();
+      port = server.getPort();
+      Logger.setBufferEnabled(true);
+    });
+
+    afterEach(async () => {
+      Logger.setBufferEnabled(false);
+      await server.stop();
+      resetLogBuffer();
+    });
+
+    describe('GET /api/logs', () => {
+      it('should return empty entries when buffer is empty', async () => {
+        // Reset buffer after server start logs
+        resetLogBuffer();
+
+        const response = await fetch(`http://localhost:${port}/api/logs`);
+        expect(response.ok).toBe(true);
+
+        interface LogsResponse {
+          entries: Array<{ level: string; component: string; message: string }>;
+          total: number;
+          limit: number;
+          offset: number;
+          bufferSize: number;
+        }
+        const data = await response.json() as LogsResponse;
+        expect(data.entries).toHaveLength(0);
+        expect(data.total).toBe(0);
+        expect(data.bufferSize).toBe(500); // Default buffer size
+      });
+
+      it('should return log entries from buffer', async () => {
+        const buffer = getLogBuffer();
+        buffer.add('info', 'Test', 'test message 1');
+        buffer.add('warn', 'Test', 'test message 2');
+        buffer.add('error', 'Test', 'test message 3');
+
+        const response = await fetch(`http://localhost:${port}/api/logs`);
+        expect(response.ok).toBe(true);
+
+        interface LogsResponse {
+          entries: Array<{ level: string; component: string; message: string }>;
+          total: number;
+        }
+        const data = await response.json() as LogsResponse;
+        expect(data.entries).toHaveLength(3);
+        expect(data.total).toBe(3);
+      });
+
+      it('should apply limit parameter', async () => {
+        const buffer = getLogBuffer();
+        for (let i = 0; i < 10; i++) {
+          buffer.add('info', 'Test', `message ${i}`);
+        }
+
+        const response = await fetch(`http://localhost:${port}/api/logs?limit=5`);
+        expect(response.ok).toBe(true);
+
+        interface LogsResponse {
+          entries: Array<{ level: string; message: string }>;
+          limit: number;
+        }
+        const data = await response.json() as LogsResponse;
+        expect(data.entries).toHaveLength(5);
+        expect(data.limit).toBe(5);
+      });
+
+      it('should apply offset parameter', async () => {
+        const buffer = getLogBuffer();
+        for (let i = 0; i < 5; i++) {
+          buffer.add('info', 'Test', `message ${i}`);
+        }
+
+        const response = await fetch(`http://localhost:${port}/api/logs?offset=2&order=asc`);
+        expect(response.ok).toBe(true);
+
+        interface LogsResponse {
+          entries: Array<{ message: string }>;
+          offset: number;
+        }
+        const data = await response.json() as LogsResponse;
+        expect(data.entries).toHaveLength(3);
+        expect(data.offset).toBe(2);
+        expect(data.entries[0].message).toBe('message 2');
+      });
+
+      it('should filter by minimum level', async () => {
+        const buffer = getLogBuffer();
+        buffer.add('debug', 'Test', 'debug msg');
+        buffer.add('info', 'Test', 'info msg');
+        buffer.add('warn', 'Test', 'warn msg');
+        buffer.add('error', 'Test', 'error msg');
+
+        const response = await fetch(`http://localhost:${port}/api/logs?level=warn`);
+        expect(response.ok).toBe(true);
+
+        interface LogsResponse {
+          entries: Array<{ level: string }>;
+        }
+        const data = await response.json() as LogsResponse;
+        expect(data.entries).toHaveLength(2);
+        expect(data.entries.every((e) => e.level === 'warn' || e.level === 'error')).toBe(true);
+      });
+
+      it('should filter by specific levels', async () => {
+        const buffer = getLogBuffer();
+        buffer.add('debug', 'Test', 'debug msg');
+        buffer.add('info', 'Test', 'info msg');
+        buffer.add('warn', 'Test', 'warn msg');
+        buffer.add('error', 'Test', 'error msg');
+
+        const response = await fetch(`http://localhost:${port}/api/logs?levels=debug,error`);
+        expect(response.ok).toBe(true);
+
+        interface LogsResponse {
+          entries: Array<{ level: string }>;
+        }
+        const data = await response.json() as LogsResponse;
+        expect(data.entries).toHaveLength(2);
+        expect(data.entries.map((e) => e.level).sort()).toEqual(['debug', 'error']);
+      });
+
+      it('should filter by search text', async () => {
+        const buffer = getLogBuffer();
+        buffer.add('info', 'Server', 'started on port 8080');
+        buffer.add('info', 'Client', 'connected');
+        buffer.add('warn', 'Server', 'high memory usage');
+
+        const response = await fetch(`http://localhost:${port}/api/logs?search=server`);
+        expect(response.ok).toBe(true);
+
+        interface LogsResponse {
+          entries: Array<{ component: string }>;
+        }
+        const data = await response.json() as LogsResponse;
+        expect(data.entries).toHaveLength(2);
+        expect(data.entries.every((e) => e.component === 'Server')).toBe(true);
+      });
+
+      it('should return entries in descending order by default', async () => {
+        const buffer = getLogBuffer();
+        buffer.add('info', 'Test', 'first');
+        buffer.add('info', 'Test', 'second');
+        buffer.add('info', 'Test', 'third');
+
+        const response = await fetch(`http://localhost:${port}/api/logs`);
+        expect(response.ok).toBe(true);
+
+        interface LogsResponse {
+          entries: Array<{ message: string }>;
+        }
+        const data = await response.json() as LogsResponse;
+        expect(data.entries[0].message).toBe('third');
+        expect(data.entries[2].message).toBe('first');
+      });
+
+      it('should return entries in ascending order when specified', async () => {
+        const buffer = getLogBuffer();
+        buffer.add('info', 'Test', 'first');
+        buffer.add('info', 'Test', 'second');
+        buffer.add('info', 'Test', 'third');
+
+        const response = await fetch(`http://localhost:${port}/api/logs?order=asc`);
+        expect(response.ok).toBe(true);
+
+        interface LogsResponse {
+          entries: Array<{ message: string }>;
+        }
+        const data = await response.json() as LogsResponse;
+        expect(data.entries[0].message).toBe('first');
+        expect(data.entries[2].message).toBe('third');
+      });
+    });
+
+    describe('WebSocket LogEntry broadcast', () => {
+      it('should broadcast log entries to connected clients', async () => {
+        const client = new WebSocket(`ws://localhost:${port}/ws`);
+
+        await new Promise<void>((resolve) => {
+          client.on('open', () => resolve());
+        });
+
+        const receivedLogEntries: Array<{ type: string; data: { level: string; message: string } }> = [];
+        client.on('message', (data) => {
+          const msg = JSON.parse(data.toString());
+          if (msg.type === 'LogEntry') {
+            receivedLogEntries.push(msg);
+          }
+        });
+
+        // Log something
+        Logger.info('TestComponent', 'Test log message');
+
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        expect(receivedLogEntries.length).toBeGreaterThan(0);
+        const testLog = receivedLogEntries.find(
+          (e) => e.data.message === 'Test log message'
+        );
+        expect(testLog).toBeDefined();
+        expect(testLog?.data.level).toBe('info');
 
         client.close();
         await new Promise((resolve) => setTimeout(resolve, 50));

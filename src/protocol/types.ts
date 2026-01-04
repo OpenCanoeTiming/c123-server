@@ -134,6 +134,29 @@ export interface C123ForceRefresh extends C123MessageBase {
 }
 
 /**
+ * Log level type
+ */
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+/**
+ * Log entry message (server-generated)
+ * Sent to admin clients for real-time log viewing
+ */
+export interface C123LogEntry extends C123MessageBase {
+  type: 'LogEntry';
+  data: {
+    /** Log level */
+    level: LogLevel;
+    /** Component/module name */
+    component: string;
+    /** Log message */
+    message: string;
+    /** Optional additional data */
+    data?: unknown;
+  };
+}
+
+/**
  * Union of all C123 protocol messages
  */
 export type C123Message =
@@ -145,7 +168,8 @@ export type C123Message =
   | C123Connected
   | C123Error
   | C123XmlChange
-  | C123ForceRefresh;
+  | C123ForceRefresh
+  | C123LogEntry;
 
 /**
  * Type guard for C123TimeOfDay
@@ -208,4 +232,11 @@ export function isXmlChange(msg: C123Message): msg is C123XmlChange {
  */
 export function isForceRefresh(msg: C123Message): msg is C123ForceRefresh {
   return msg.type === 'ForceRefresh';
+}
+
+/**
+ * Type guard for C123LogEntry
+ */
+export function isLogEntry(msg: C123Message): msg is C123LogEntry {
+  return msg.type === 'LogEntry';
 }

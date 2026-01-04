@@ -570,16 +570,29 @@ Use case: Admin chce vynutit reload všech připojených scoreboardů.
 - [x] Scoreboard dokumentace: jak reagovat na ForceRefresh (C123-PROTOCOL.md, INTEGRATION.md, REST-API.md)
 - [x] Unit testy (11 nových testů pro ForceRefresh funkcionalitu)
 
-#### 13.4 Log viewer v admin UI
+#### 13.4 Log viewer v admin UI ✅
 **Vstup:** Console output aplikace
 **Výstup:** Zobrazení logů v admin dashboard
 
-- [ ] Implementovat in-memory ring buffer pro logy (posledních N záznamů)
-- [ ] REST API: `GET /api/logs` - vrací posledních N log entries
-- [ ] WebSocket: `{ type: "LogEntry", data: { level, message, timestamp } }`
-- [ ] Admin UI: log viewer panel (scrollable, auto-update)
-- [ ] Filtry: level (info, warn, error), search
-- [ ] Unit testy
+- [x] Implementovat in-memory ring buffer pro logy (posledních N záznamů)
+  - `LogBuffer` class s ring buffer implementací
+  - Globální instance přes `getLogBuffer()`
+  - Podpora filtrování, offsetu, limitu
+- [x] REST API: `GET /api/logs` - vrací posledních N log entries
+  - Query params: `limit`, `offset`, `level`, `levels`, `search`, `order`
+  - Vrací `{ entries, total, limit, offset, bufferSize }`
+- [x] WebSocket: `{ type: "LogEntry", data: { level, component, message, data?, timestamp } }`
+  - Broadcast přes `Logger.setBroadcastCallback()`
+  - Automaticky se odesílá při každém logu
+- [x] Admin UI: log viewer panel (scrollable, auto-update)
+  - WebSocket připojení pro real-time logy
+  - Initial load přes REST API
+  - Auto-scroll, max 200 entries v UI
+- [x] Filtry: level (debug, info, warn, error), search
+  - Checkboxy pro jednotlivé úrovně
+  - Textové vyhledávání v component/message
+  - Clear tlačítko
+- [x] Unit testy (19 nových testů pro LogBuffer a API)
 
 #### 13.5 README aktualizace
 **Vstup:** Zastaralý README.md

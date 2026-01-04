@@ -3,7 +3,8 @@ import { createServer, Server as HttpServer } from 'node:http';
 import { WebSocketServer as WsServer, WebSocket } from 'ws';
 import { EventEmitter } from 'node:events';
 import type { ScoreboardConfig } from '../admin/types.js';
-import type { C123Message, C123XmlChange, C123ForceRefresh, XmlSection } from '../protocol/types.js';
+import type { C123Message, C123XmlChange, C123ForceRefresh, C123LogEntry, XmlSection } from '../protocol/types.js';
+import { getLogBuffer, type LogEntry, type LogFilterOptions } from '../utils/LogBuffer.js';
 import { ScoreboardSession } from '../ws/ScoreboardSession.js';
 import { Logger } from '../utils/logger.js';
 import type { EventState } from '../state/EventState.js';
@@ -153,6 +154,11 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
       this.startTime = Date.now();
 
+      // Set up log broadcast callback
+      Logger.setBroadcastCallback((entry) => {
+        this.broadcastLogEntry(entry);
+      });
+
       // Create HTTP server from Express app
       this.httpServer = createServer(this.app);
 
@@ -201,6 +207,9 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         resolve();
         return;
       }
+
+      // Clear log broadcast callback
+      Logger.setBroadcastCallback(null);
 
       // Close all WebSocket connections
       if (this.wss) {
@@ -344,6 +353,35 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
+   * Broadcast a log entry to all connected clients
+   * Used for real-time log viewing in admin dashboard
+   */
+  broadcastLogEntry(entry: LogEntry): void {
+    const message: C123LogEntry = {
+      type: 'LogEntry',
+      timestamp: entry.timestamp,
+      data: {
+        level: entry.level,
+        component: entry.component,
+        message: entry.message,
+        data: entry.data,
+      },
+    };
+
+    const json = JSON.stringify(message);
+
+    for (const [clientId, session] of this.sessions) {
+      if (session.isConnected()) {
+        session.sendRaw(json);
+      } else {
+        // Clean up dead connections
+        this.sessions.delete(clientId);
+        this.emit('disconnection', clientId);
+      }
+    }
+  }
+
+  /**
    * Handle WebSocket connection
    */
   private handleWebSocketConnection(ws: WebSocket): void {
@@ -412,6 +450,9 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
     // Broadcast API routes
     this.app.post('/api/broadcast/refresh', this.handleBroadcastRefresh.bind(this));
+
+    // Logs API route
+    this.app.get('/api/logs', this.handleGetLogs.bind(this));
 
     // Health check
     this.app.get('/health', (_req: Request, res: Response) => {
@@ -1039,6 +1080,66 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
+   * GET /api/logs - Get log entries from buffer
+   *
+   * Query parameters:
+   * - limit: Maximum number of entries to return (default: 100, max: 500)
+   * - offset: Number of entries to skip (for pagination)
+   * - level: Filter by log level (debug, info, warn, error) - minimum level
+   * - levels: Comma-separated list of specific levels to include
+   * - search: Search text (case-insensitive, matches component or message)
+   * - order: 'asc' (oldest first) or 'desc' (newest first, default)
+   */
+  private handleGetLogs(req: Request, res: Response): void {
+    const buffer = getLogBuffer();
+
+    // Parse query parameters
+    const limitParam = parseInt(req.query.limit as string, 10);
+    const offsetParam = parseInt(req.query.offset as string, 10);
+    const limit = isNaN(limitParam) ? 100 : Math.min(Math.max(1, limitParam), 500);
+    const offset = isNaN(offsetParam) ? 0 : Math.max(0, offsetParam);
+
+    const options: LogFilterOptions = {
+      limit,
+      offset,
+    };
+
+    // Level filter (minimum level)
+    const minLevel = req.query.level as string;
+    if (minLevel && ['debug', 'info', 'warn', 'error'].includes(minLevel)) {
+      options.minLevel = minLevel as LogFilterOptions['minLevel'];
+    }
+
+    // Specific levels filter
+    const levelsParam = req.query.levels as string;
+    if (levelsParam) {
+      const validLevels = ['debug', 'info', 'warn', 'error'];
+      const requestedLevels = levelsParam.split(',').filter((l) => validLevels.includes(l.trim()));
+      if (requestedLevels.length > 0) {
+        options.levels = requestedLevels as LogFilterOptions['levels'];
+      }
+    }
+
+    // Search filter
+    const search = req.query.search as string;
+    if (search && search.trim()) {
+      options.search = search.trim();
+    }
+
+    // Get entries
+    const order = req.query.order as string;
+    const entries = order === 'asc' ? buffer.getEntries(options) : buffer.getEntriesReversed(options);
+
+    res.json({
+      entries,
+      total: buffer.getCount(),
+      limit,
+      offset,
+      bufferSize: buffer.getMaxSize(),
+    });
+  }
+
+  /**
    * Generate inline dashboard HTML
    */
   private getDashboardHtml(): string {
@@ -1174,6 +1275,38 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     </table>
     <div id="noScoreboards" style="color: #666; padding: 10px;">No scoreboards connected</div>
     <div id="refreshMessage" style="color: #00ff88; margin-top: 10px; display: none;"></div>
+  </div>
+
+  <h2>Server Logs</h2>
+  <div class="card">
+    <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; align-items: center;">
+      <div style="display: flex; gap: 5px; align-items: center;">
+        <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
+          <input type="checkbox" id="logLevelDebug" onchange="filterLogs()"> <span style="color: #888;">debug</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
+          <input type="checkbox" id="logLevelInfo" checked onchange="filterLogs()"> <span style="color: #00ff88;">info</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
+          <input type="checkbox" id="logLevelWarn" checked onchange="filterLogs()"> <span style="color: #ffaa00;">warn</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
+          <input type="checkbox" id="logLevelError" checked onchange="filterLogs()"> <span style="color: #ff6b6b;">error</span>
+        </label>
+      </div>
+      <input type="text" id="logSearch" placeholder="Search logs..." onkeyup="filterLogs()" style="flex: 1; min-width: 150px; padding: 4px 8px; border-radius: 4px; border: 1px solid #333; background: #0f0f23; color: #eee;">
+      <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
+        <input type="checkbox" id="logAutoScroll" checked> Auto-scroll
+      </label>
+      <button class="btn" onclick="clearLogDisplay()" style="background: #666; padding: 4px 8px;">Clear</button>
+    </div>
+    <div id="logContainer" style="max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; background: #0f0f23; border-radius: 4px; padding: 8px;">
+      <div id="logEntries"></div>
+      <div id="noLogs" style="color: #666; padding: 10px; text-align: center;">No log entries</div>
+    </div>
+    <div style="margin-top: 5px; color: #666; font-size: 0.8em;">
+      <span id="logStats">0 entries</span>
+    </div>
   </div>
 
   <div id="lastUpdate"></div>
@@ -1501,9 +1634,158 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       setTimeout(function() { el.style.display = 'none'; }, 3000);
     }
 
+    // Log viewer functions
+    let logEntries = [];
+    let ws = null;
+    const MAX_LOG_ENTRIES = 200;
+
+    const levelColors = {
+      debug: '#888',
+      info: '#00ff88',
+      warn: '#ffaa00',
+      error: '#ff6b6b'
+    };
+
+    function formatLogTime(iso) {
+      if (!iso) return '';
+      return iso.slice(11, 23); // HH:mm:ss.SSS
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function renderLogEntry(entry) {
+      const time = formatLogTime(entry.timestamp);
+      const color = levelColors[entry.level] || '#eee';
+      const level = entry.level.toUpperCase().padEnd(5);
+      return '<div class="log-entry" data-level="' + entry.level + '" style="margin-bottom: 2px;">' +
+        '<span style="color: #666;">' + time + '</span> ' +
+        '<span style="color: ' + color + ';">' + level + '</span> ' +
+        '<span style="color: #00d4ff;">[' + escapeHtml(entry.component) + ']</span> ' +
+        '<span>' + escapeHtml(entry.message) + '</span>' +
+        '</div>';
+    }
+
+    function renderAllLogs() {
+      const container = document.getElementById('logEntries');
+      const noLogs = document.getElementById('noLogs');
+      const filtered = getFilteredLogs();
+
+      if (filtered.length === 0) {
+        container.innerHTML = '';
+        noLogs.style.display = 'block';
+      } else {
+        noLogs.style.display = 'none';
+        container.innerHTML = filtered.map(renderLogEntry).join('');
+      }
+
+      updateLogStats();
+
+      if (document.getElementById('logAutoScroll').checked) {
+        const logContainer = document.getElementById('logContainer');
+        logContainer.scrollTop = logContainer.scrollHeight;
+      }
+    }
+
+    function getFilteredLogs() {
+      const showDebug = document.getElementById('logLevelDebug').checked;
+      const showInfo = document.getElementById('logLevelInfo').checked;
+      const showWarn = document.getElementById('logLevelWarn').checked;
+      const showError = document.getElementById('logLevelError').checked;
+      const search = document.getElementById('logSearch').value.toLowerCase().trim();
+
+      return logEntries.filter(function(entry) {
+        // Level filter
+        if (entry.level === 'debug' && !showDebug) return false;
+        if (entry.level === 'info' && !showInfo) return false;
+        if (entry.level === 'warn' && !showWarn) return false;
+        if (entry.level === 'error' && !showError) return false;
+
+        // Search filter
+        if (search) {
+          const matchComponent = entry.component.toLowerCase().includes(search);
+          const matchMessage = entry.message.toLowerCase().includes(search);
+          if (!matchComponent && !matchMessage) return false;
+        }
+
+        return true;
+      });
+    }
+
+    function filterLogs() {
+      renderAllLogs();
+    }
+
+    function updateLogStats() {
+      const filtered = getFilteredLogs();
+      document.getElementById('logStats').textContent =
+        filtered.length + ' of ' + logEntries.length + ' entries shown';
+    }
+
+    function clearLogDisplay() {
+      logEntries = [];
+      renderAllLogs();
+    }
+
+    function addLogEntry(entry) {
+      logEntries.push(entry);
+      // Keep buffer limited
+      if (logEntries.length > MAX_LOG_ENTRIES) {
+        logEntries = logEntries.slice(-MAX_LOG_ENTRIES);
+      }
+      renderAllLogs();
+    }
+
+    async function loadInitialLogs() {
+      try {
+        const res = await fetch('/api/logs?limit=100&order=asc');
+        const data = await res.json();
+        logEntries = data.entries || [];
+        renderAllLogs();
+      } catch (e) {
+        console.error('Failed to load logs:', e);
+      }
+    }
+
+    function connectLogWebSocket() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(protocol + '//' + window.location.host + '/ws');
+
+      ws.onmessage = function(event) {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'LogEntry') {
+            addLogEntry({
+              level: msg.data.level,
+              component: msg.data.component,
+              message: msg.data.message,
+              timestamp: msg.timestamp,
+              data: msg.data.data
+            });
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
+      };
+
+      ws.onclose = function() {
+        // Reconnect after 3 seconds
+        setTimeout(connectLogWebSocket, 3000);
+      };
+
+      ws.onerror = function() {
+        ws.close();
+      };
+    }
+
     refresh();
     loadXmlConfig();
     loadEventName();
+    loadInitialLogs();
+    connectLogWebSocket();
     setInterval(refresh, 2000);
     setInterval(loadXmlConfig, 5000);
     setInterval(loadEventName, 5000);

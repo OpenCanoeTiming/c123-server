@@ -5,10 +5,19 @@
  * and optional color output for terminal readability.
  */
 
+import { getLogBuffer, type LogEntry } from './LogBuffer.js';
+
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+/**
+ * Callback for broadcasting log entries (e.g., via WebSocket)
+ */
+export type LogBroadcastCallback = (entry: LogEntry) => void;
 
 let currentLevel: LogLevel = 'info';
 let useColors = process.stdout.isTTY ?? false;
+let logToBuffer = true;
+let broadcastCallback: LogBroadcastCallback | null = null;
 
 const levels: Record<LogLevel, number> = {
   debug: 0,
@@ -69,6 +78,20 @@ function formatMessage(level: LogLevel, component: string, message: string): str
 }
 
 /**
+ * Internal function to store and broadcast log entry
+ */
+function storeAndBroadcast(level: LogLevel, component: string, message: string, data?: unknown): void {
+  if (logToBuffer) {
+    const entry = getLogBuffer().add(level, component, message, data);
+
+    // Broadcast to connected clients if callback is set
+    if (broadcastCallback) {
+      broadcastCallback(entry);
+    }
+  }
+}
+
+/**
  * Logger with component prefixes and color support
  */
 export const Logger = {
@@ -94,6 +117,27 @@ export const Logger = {
   },
 
   /**
+   * Enable or disable storing logs to buffer
+   */
+  setBufferEnabled(enabled: boolean): void {
+    logToBuffer = enabled;
+  },
+
+  /**
+   * Check if buffer is enabled
+   */
+  isBufferEnabled(): boolean {
+    return logToBuffer;
+  },
+
+  /**
+   * Set callback for broadcasting log entries (e.g., via WebSocket)
+   */
+  setBroadcastCallback(callback: LogBroadcastCallback | null): void {
+    broadcastCallback = callback;
+  },
+
+  /**
    * Log debug message (verbose, for development)
    */
   debug(component: string, message: string, data?: unknown): void {
@@ -104,6 +148,7 @@ export const Logger = {
       } else {
         console.debug(formatted);
       }
+      storeAndBroadcast('debug', component, message, data);
     }
   },
 
@@ -118,6 +163,7 @@ export const Logger = {
       } else {
         console.log(formatted);
       }
+      storeAndBroadcast('info', component, message, data);
     }
   },
 
@@ -132,6 +178,7 @@ export const Logger = {
       } else {
         console.warn(formatted);
       }
+      storeAndBroadcast('warn', component, message, data);
     }
   },
 
@@ -146,6 +193,7 @@ export const Logger = {
       } else {
         console.error(formatted);
       }
+      storeAndBroadcast('error', component, message, error);
     }
   },
 };
