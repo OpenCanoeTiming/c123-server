@@ -517,6 +517,77 @@ http://server:27123/api/*  → REST API (status, config, XML data)
 
 ---
 
+### Fáze 13: Admin vylepšení a UX
+
+#### 13.1 XML source selector - 3 režimy
+**Vstup:** Současný autodetect (pouze offline kopie)
+**Výstup:** Rozšířené možnosti výběru XML souboru
+
+Tři režimy:
+1. **auto main** - hlavní event file (`CurrentEventFile` z C123 konfigurace)
+2. **auto offline** - offline kopie (`AutoCopyFolder` + filename) - současný default
+3. **manual** - uživatel zadá cestu ručně
+
+- [ ] Rozšířit `WindowsConfigDetector` o extrakci obou cest (main + offline)
+- [ ] Přidat typ `XmlSourceMode`: `'auto-main' | 'auto-offline' | 'manual'`
+- [ ] Upravit `AppSettings` pro ukládání zvoleného režimu
+- [ ] REST API: rozšířit `GET /api/config/xml` o `availablePaths` (main, offline)
+- [ ] REST API: rozšířit `POST /api/config/xml` o parametr `mode`
+- [ ] Admin UI: radio buttons pro výběr režimu, zobrazení obou cest
+- [ ] Unit testy
+
+#### 13.2 Event name management
+**Vstup:** Částečná detekce event name
+**Výstup:** Správná detekce + manuální override + API
+
+Současný stav: něco svítí v admin, ale není to správné.
+
+- [ ] Analyzovat XML strukturu pro správný event name (název akce)
+- [ ] `XmlDataService.getEventName()` - extrakce z XML
+- [ ] Přidat `eventNameOverride` do `AppSettings` pro manuální přepsání
+- [ ] REST API: `GET /api/event` - vrací { name, source: 'xml' | 'manual' }
+- [ ] REST API: `POST /api/event` - nastaví manuální override
+- [ ] Upravit `/api/discover` - použít správný event name
+- [ ] Admin UI: zobrazení event name, možnost přepsat
+- [ ] Unit testy
+
+#### 13.3 Force refresh signál pro klienty
+**Vstup:** WebSocket komunikace
+**Výstup:** Mechanismus pro vynucení refreshe klientů
+
+Use case: Admin chce vynutit reload všech připojených scoreboardů.
+
+- [ ] Definovat WS zprávu `{ type: "ForceRefresh", timestamp }`
+- [ ] Admin UI: tlačítko "Refresh klienty"
+- [ ] REST API: `POST /api/broadcast/refresh` - trigger force refresh
+- [ ] Scoreboard dokumentace: jak reagovat na ForceRefresh
+- [ ] Unit testy
+
+#### 13.4 Log viewer v admin UI
+**Vstup:** Console output aplikace
+**Výstup:** Zobrazení logů v admin dashboard
+
+- [ ] Implementovat in-memory ring buffer pro logy (posledních N záznamů)
+- [ ] REST API: `GET /api/logs` - vrací posledních N log entries
+- [ ] WebSocket: `{ type: "LogEntry", data: { level, message, timestamp } }`
+- [ ] Admin UI: log viewer panel (scrollable, auto-update)
+- [ ] Filtry: level (info, warn, error), search
+- [ ] Unit testy
+
+#### 13.5 README aktualizace
+**Vstup:** Zastaralý README.md
+**Výstup:** Aktuální dokumentace pro deployment
+
+- [ ] Přepsat Quick Start sekci
+- [ ] Aktualizovat Installation (npm, binary, Docker?)
+- [ ] Přepsat Configuration sekci (env variables, settings.json)
+- [ ] Deployment instrukce pro Windows
+- [ ] Deployment instrukce pro Linux/Docker (optional)
+- [ ] Troubleshooting sekce (firewall, porty, ...)
+- [ ] Screenshots admin UI (optional)
+
+---
+
 ## Reference
 
 - `../analysis/07-sitova-komunikace.md` - C123 protokol
