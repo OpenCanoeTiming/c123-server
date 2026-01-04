@@ -84,6 +84,8 @@ export interface ResultRow {
   total: string;
   /** Behind leader (e.g., "+1.23") */
   behind: string;
+  /** Status for invalid results (IRM field: DNS, DNF, DSQ) */
+  status?: string;
 
   // BR1/BR2 fields (only present in second run results)
   /** Previous run time in centiseconds */

@@ -258,6 +258,9 @@ export function parseResults(element: unknown): ResultsMessage | null {
       const totalRankRaw = resultT?.['@_TotalRank'];
       const betterRunRaw = resultT?.['@_BetterRunNr'];
 
+      // Parse IRM (Invalid Result Mark) status
+      const irm = String(resultT?.['@_IRM'] ?? '').toUpperCase();
+
       const resultRow: ResultRow = {
         rank,
         bib,
@@ -274,6 +277,11 @@ export function parseResults(element: unknown): ResultsMessage | null {
         total: String(resultT?.['@_Total'] ?? ''),
         behind: String(resultT?.['@_Behind'] ?? ''),
       };
+
+      // Add IRM status if present (DNS, DNF, DSQ)
+      if (irm === 'DNS' || irm === 'DNF' || irm === 'DSQ') {
+        resultRow.status = irm;
+      }
 
       // Add optional BR1/BR2 fields
       if (prevTimeRaw !== undefined) {
