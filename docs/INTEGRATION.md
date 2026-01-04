@@ -213,6 +213,8 @@ Upon connection, the server sends a `Connected` message:
 | `Results` | ~20-40s | Result tables (rotates through categories) |
 | `RaceConfig` | ~20s | Gate configuration |
 | `Schedule` | ~40s | Race schedule |
+| `XmlChange` | On change | XML file was updated |
+| `ForceRefresh` | Manual | Admin triggered refresh of all clients |
 
 ### Message Format
 
@@ -453,9 +455,9 @@ async function getRunResults(raceId: string, run: 'BR1' | 'BR2') {
 
 ---
 
-## XML Change Notifications
+## XML Change and Admin Notifications
 
-The main WebSocket connection (`/ws`) also receives XML change notifications. Listen for `XmlChange` messages:
+The main WebSocket connection (`/ws`) also receives XML change notifications and admin commands. Listen for `XmlChange` and `ForceRefresh` messages:
 
 ```typescript
 // Same WebSocket connection used for real-time data
@@ -481,9 +483,37 @@ ws.onmessage = (event) => {
         refreshParticipants();
       }
       break;
+
+    case 'ForceRefresh':
+      // Admin triggered a refresh - reload all data
+      console.log('Force refresh:', message.data.reason);
+      refreshAllData();
+      break;
   }
 };
 ```
+
+### Handling ForceRefresh
+
+When the admin triggers a refresh from the dashboard, all connected clients receive a `ForceRefresh` message:
+
+```typescript
+function handleForceRefresh(message: { data: { reason?: string } }) {
+  console.log('Refresh requested:', message.data.reason || 'No reason given');
+
+  // Reload all cached data
+  Promise.all([
+    refreshSchedule(),
+    refreshParticipants(),
+    refreshResults(),
+  ]).then(() => {
+    // Re-render UI
+    render();
+  });
+}
+```
+
+This is useful when the admin needs to force all scoreboards to update immediately, for example after fixing a configuration issue or uploading corrected data.
 
 ---
 

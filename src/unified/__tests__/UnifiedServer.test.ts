@@ -505,4 +505,207 @@ describe('UnifiedServer', () => {
       expect(result).toBe(false);
     });
   });
+
+  describe('ForceRefresh functionality', () => {
+    let server: UnifiedServer;
+    let port: number;
+
+    beforeEach(async () => {
+      server = new UnifiedServer({ port: 0 });
+      await server.start();
+      port = server.getPort();
+    });
+
+    afterEach(async () => {
+      await server.stop();
+    });
+
+    describe('broadcastForceRefresh method', () => {
+      it('should return 0 when no clients connected', () => {
+        const count = server.broadcastForceRefresh();
+        expect(count).toBe(0);
+      });
+
+      it('should broadcast to connected clients and return count', async () => {
+        const client = new WebSocket(`ws://localhost:${port}/ws`);
+
+        await new Promise<void>((resolve) => {
+          client.on('open', () => resolve());
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        const count = server.broadcastForceRefresh('Test refresh');
+        expect(count).toBe(1);
+
+        client.close();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+
+      it('should send ForceRefresh message to clients', async () => {
+        const client = new WebSocket(`ws://localhost:${port}/ws`);
+
+        await new Promise<void>((resolve) => {
+          client.on('open', () => resolve());
+        });
+
+        const receivedMessages: Array<{ type: string; timestamp: string; data: { reason?: string } }> = [];
+        client.on('message', (data) => {
+          receivedMessages.push(JSON.parse(data.toString()));
+        });
+
+        server.broadcastForceRefresh('Admin triggered refresh');
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect(receivedMessages).toHaveLength(1);
+        expect(receivedMessages[0]).toMatchObject({
+          type: 'ForceRefresh',
+          timestamp: expect.any(String),
+          data: {
+            reason: 'Admin triggered refresh',
+          },
+        });
+
+        client.close();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+
+      it('should send ForceRefresh without reason', async () => {
+        const client = new WebSocket(`ws://localhost:${port}/ws`);
+
+        await new Promise<void>((resolve) => {
+          client.on('open', () => resolve());
+        });
+
+        const receivedMessages: Array<{ type: string; data: { reason?: string } }> = [];
+        client.on('message', (data) => {
+          receivedMessages.push(JSON.parse(data.toString()));
+        });
+
+        server.broadcastForceRefresh();
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect(receivedMessages).toHaveLength(1);
+        expect(receivedMessages[0].type).toBe('ForceRefresh');
+        expect(receivedMessages[0].data.reason).toBeUndefined();
+
+        client.close();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+
+      it('should broadcast to multiple clients', async () => {
+        const client1 = new WebSocket(`ws://localhost:${port}/ws`);
+        const client2 = new WebSocket(`ws://localhost:${port}/ws`);
+
+        await Promise.all([
+          new Promise<void>((resolve) => client1.on('open', () => resolve())),
+          new Promise<void>((resolve) => client2.on('open', () => resolve())),
+        ]);
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        const messages1: Array<{ type: string }> = [];
+        const messages2: Array<{ type: string }> = [];
+        client1.on('message', (data) => messages1.push(JSON.parse(data.toString())));
+        client2.on('message', (data) => messages2.push(JSON.parse(data.toString())));
+
+        const count = server.broadcastForceRefresh('Refresh all');
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect(count).toBe(2);
+        expect(messages1).toHaveLength(1);
+        expect(messages1[0].type).toBe('ForceRefresh');
+        expect(messages2).toHaveLength(1);
+        expect(messages2[0].type).toBe('ForceRefresh');
+
+        client1.close();
+        client2.close();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+    });
+
+    describe('POST /api/broadcast/refresh', () => {
+      it('should trigger ForceRefresh and return success', async () => {
+        const response = await fetch(`http://localhost:${port}/api/broadcast/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: 'Test refresh' }),
+        });
+
+        expect(response.ok).toBe(true);
+
+        const data = await response.json() as { success: boolean; clientsNotified: number; reason: string | null };
+        expect(data).toMatchObject({
+          success: true,
+          clientsNotified: 0,
+          reason: 'Test refresh',
+        });
+      });
+
+      it('should work without reason', async () => {
+        const response = await fetch(`http://localhost:${port}/api/broadcast/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+
+        expect(response.ok).toBe(true);
+
+        const data = await response.json() as { success: boolean; reason: string | null };
+        expect(data.success).toBe(true);
+        expect(data.reason).toBeNull();
+      });
+
+      it('should validate reason type', async () => {
+        const response = await fetch(`http://localhost:${port}/api/broadcast/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: 123 }),
+        });
+
+        expect(response.status).toBe(400);
+
+        const data = await response.json() as { error: string };
+        expect(data.error).toBe('reason must be a string');
+      });
+
+      it('should notify connected clients via API call', async () => {
+        const client = new WebSocket(`ws://localhost:${port}/ws`);
+
+        await new Promise<void>((resolve) => {
+          client.on('open', () => resolve());
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        const receivedMessages: Array<{ type: string; data: { reason?: string } }> = [];
+        client.on('message', (data) => {
+          receivedMessages.push(JSON.parse(data.toString()));
+        });
+
+        const response = await fetch(`http://localhost:${port}/api/broadcast/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: 'API triggered' }),
+        });
+
+        expect(response.ok).toBe(true);
+
+        const data = await response.json() as { clientsNotified: number };
+        expect(data.clientsNotified).toBe(1);
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect(receivedMessages).toHaveLength(1);
+        expect(receivedMessages[0].type).toBe('ForceRefresh');
+        expect(receivedMessages[0].data.reason).toBe('API triggered');
+
+        client.close();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+    });
+  });
 });

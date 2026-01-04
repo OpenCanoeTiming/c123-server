@@ -3,7 +3,7 @@ import { createServer, Server as HttpServer } from 'node:http';
 import { WebSocketServer as WsServer, WebSocket } from 'ws';
 import { EventEmitter } from 'node:events';
 import type { ScoreboardConfig } from '../admin/types.js';
-import type { C123Message, C123XmlChange, XmlSection } from '../protocol/types.js';
+import type { C123Message, C123XmlChange, C123ForceRefresh, XmlSection } from '../protocol/types.js';
 import { ScoreboardSession } from '../ws/ScoreboardSession.js';
 import { Logger } from '../utils/logger.js';
 import type { EventState } from '../state/EventState.js';
@@ -315,6 +315,35 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
+   * Broadcast a force refresh command to all connected clients
+   * This tells clients to reload their data and UI
+   */
+  broadcastForceRefresh(reason?: string): number {
+    const message: C123ForceRefresh = {
+      type: 'ForceRefresh',
+      timestamp: new Date().toISOString(),
+      data: reason !== undefined ? { reason } : {},
+    };
+
+    const json = JSON.stringify(message);
+    let sentCount = 0;
+
+    for (const [clientId, session] of this.sessions) {
+      if (session.isConnected()) {
+        session.sendRaw(json);
+        sentCount++;
+      } else {
+        // Clean up dead connections
+        this.sessions.delete(clientId);
+        this.emit('disconnection', clientId);
+      }
+    }
+
+    Logger.info('Unified', `Broadcast ForceRefresh to ${sentCount} clients${reason ? `: ${reason}` : ''}`);
+    return sentCount;
+  }
+
+  /**
    * Handle WebSocket connection
    */
   private handleWebSocketConnection(ws: WebSocket): void {
@@ -380,6 +409,9 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     // Event API routes
     this.app.get('/api/event', this.handleGetEvent.bind(this));
     this.app.post('/api/event', this.handleSetEvent.bind(this));
+
+    // Broadcast API routes
+    this.app.post('/api/broadcast/refresh', this.handleBroadcastRefresh.bind(this));
 
     // Health check
     this.app.get('/health', (_req: Request, res: Response) => {
@@ -986,6 +1018,27 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
+   * POST /api/broadcast/refresh - Force refresh all connected clients
+   * Body: { reason?: string } - optional reason for the refresh
+   */
+  private handleBroadcastRefresh(req: Request, res: Response): void {
+    const { reason } = req.body;
+
+    if (reason !== undefined && typeof reason !== 'string') {
+      res.status(400).json({ error: 'reason must be a string' });
+      return;
+    }
+
+    const clientCount = this.broadcastForceRefresh(reason);
+
+    res.json({
+      success: true,
+      clientsNotified: clientCount,
+      reason: reason || null,
+    });
+  }
+
+  /**
    * Generate inline dashboard HTML
    */
   private getDashboardHtml(): string {
@@ -1111,11 +1164,16 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
   <h2>Connected Scoreboards</h2>
   <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+      <span id="scoreboardStatus"></span>
+      <button class="btn" onclick="refreshClients()" style="background: #ff9800;">Refresh All Clients</button>
+    </div>
     <table id="scoreboardsTable">
       <thead><tr><th>ID</th><th>Connected</th><th>Last Activity</th><th>Config</th></tr></thead>
       <tbody></tbody>
     </table>
     <div id="noScoreboards" style="color: #666; padding: 10px;">No scoreboards connected</div>
+    <div id="refreshMessage" style="color: #00ff88; margin-top: 10px; display: none;"></div>
   </div>
 
   <div id="lastUpdate"></div>
@@ -1412,6 +1470,35 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       const el = document.getElementById('eventError');
       el.textContent = msg;
       el.style.display = 'block';
+    }
+
+    // Refresh clients function
+    async function refreshClients() {
+      try {
+        const res = await fetch('/api/broadcast/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: 'Admin triggered refresh' })
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          showRefreshMessage('Error: ' + data.error, true);
+          return;
+        }
+
+        showRefreshMessage('Refresh signal sent to ' + data.clientsNotified + ' client(s)', false);
+      } catch (e) {
+        showRefreshMessage('Failed: ' + e.message, true);
+      }
+    }
+
+    function showRefreshMessage(msg, isError) {
+      const el = document.getElementById('refreshMessage');
+      el.textContent = msg;
+      el.style.color = isError ? '#ff6b6b' : '#00ff88';
+      el.style.display = 'block';
+      setTimeout(function() { el.style.display = 'none'; }, 3000);
     }
 
     refresh();

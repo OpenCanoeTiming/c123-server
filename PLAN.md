@@ -558,17 +558,17 @@ XML struktura: `<Events><MainTitle>` obsahuje název akce (např. "Jarní slalom
 - [x] Admin UI: sekce Event s event name, source, input pro override, tlačítka Set/Clear
 - [x] Unit testy (6 nových testů)
 
-#### 13.3 Force refresh signál pro klienty
+#### 13.3 Force refresh signál pro klienty ✅
 **Vstup:** WebSocket komunikace
 **Výstup:** Mechanismus pro vynucení refreshe klientů
 
 Use case: Admin chce vynutit reload všech připojených scoreboardů.
 
-- [ ] Definovat WS zprávu `{ type: "ForceRefresh", timestamp }`
-- [ ] Admin UI: tlačítko "Refresh klienty"
-- [ ] REST API: `POST /api/broadcast/refresh` - trigger force refresh
-- [ ] Scoreboard dokumentace: jak reagovat na ForceRefresh
-- [ ] Unit testy
+- [x] Definovat WS zprávu `{ type: "ForceRefresh", timestamp, data: { reason? } }`
+- [x] Admin UI: tlačítko "Refresh All Clients" v sekci Connected Scoreboards
+- [x] REST API: `POST /api/broadcast/refresh` - trigger force refresh
+- [x] Scoreboard dokumentace: jak reagovat na ForceRefresh (C123-PROTOCOL.md, INTEGRATION.md, REST-API.md)
+- [x] Unit testy (11 nových testů pro ForceRefresh funkcionalitu)
 
 #### 13.4 Log viewer v admin UI
 **Vstup:** Console output aplikace

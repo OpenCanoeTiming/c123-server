@@ -536,6 +536,59 @@ Get results for a specific run (BR1 or BR2) of a race.
 
 ---
 
+## Broadcast API
+
+### POST /api/broadcast/refresh
+
+Force all connected WebSocket clients to refresh their data. Sends a `ForceRefresh` message to all connected scoreboards.
+
+**Request:**
+
+```json
+{
+  "reason": "Admin triggered refresh"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `reason` | string | No | Optional reason for the refresh (sent to clients) |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "clientsNotified": 3,
+  "reason": "Admin triggered refresh"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | Always `true` if request was processed |
+| `clientsNotified` | number | Number of clients that received the message |
+| `reason` | string | The reason sent to clients (or `null` if none) |
+
+**WebSocket Message Sent:**
+
+```json
+{
+  "type": "ForceRefresh",
+  "timestamp": "2025-01-02T10:32:00.000Z",
+  "data": {
+    "reason": "Admin triggered refresh"
+  }
+}
+```
+
+**Use cases:**
+- After fixing a configuration issue that affected all scoreboards
+- After manually updating or replacing the XML file
+- When scoreboards appear to be showing stale data
+
+---
+
 ## WebSocket Change Notifications
 
 For real-time updates when the XML file changes, connect to the main WebSocket endpoint.

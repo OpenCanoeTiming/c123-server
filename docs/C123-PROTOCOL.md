@@ -524,6 +524,30 @@ Sent when the XML file changes (on the main `/ws` endpoint):
 }
 ```
 
+### ForceRefresh
+
+Sent by admin to force all clients to reload/refresh their data and UI:
+
+```json
+{
+  "type": "ForceRefresh",
+  "timestamp": "2025-01-02T10:32:00.000Z",
+  "data": {
+    "reason": "Admin triggered refresh"
+  }
+}
+```
+
+**Fields:**
+- `reason` (optional): Human-readable reason for the refresh
+
+**Client behavior:** When receiving this message, clients should:
+1. Reload any cached data from the REST API
+2. Re-render the UI
+3. Optionally show a notification to the user
+
+This is typically triggered manually by the admin when they want to force all scoreboards to update immediately (e.g., after fixing a configuration issue or uploading new data).
+
 ---
 
 ## Connection Details

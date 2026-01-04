@@ -122,6 +122,18 @@ export interface C123XmlChange extends C123MessageBase {
 }
 
 /**
+ * Force refresh command (server-generated)
+ * Sent by admin to force all clients to reload/refresh their data
+ */
+export interface C123ForceRefresh extends C123MessageBase {
+  type: 'ForceRefresh';
+  data: {
+    /** Optional reason for the refresh */
+    reason?: string;
+  };
+}
+
+/**
  * Union of all C123 protocol messages
  */
 export type C123Message =
@@ -132,7 +144,8 @@ export type C123Message =
   | C123Schedule
   | C123Connected
   | C123Error
-  | C123XmlChange;
+  | C123XmlChange
+  | C123ForceRefresh;
 
 /**
  * Type guard for C123TimeOfDay
@@ -188,4 +201,11 @@ export function isError(msg: C123Message): msg is C123Error {
  */
 export function isXmlChange(msg: C123Message): msg is C123XmlChange {
   return msg.type === 'XmlChange';
+}
+
+/**
+ * Type guard for C123ForceRefresh
+ */
+export function isForceRefresh(msg: C123Message): msg is C123ForceRefresh {
+  return msg.type === 'ForceRefresh';
 }
