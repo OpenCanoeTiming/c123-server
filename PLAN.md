@@ -594,17 +594,15 @@ Use case: Admin chce vynutit reload všech připojených scoreboardů.
   - Clear tlačítko
 - [x] Unit testy (19 nových testů pro LogBuffer a API)
 
-#### 13.5 README aktualizace
+#### 13.5 README aktualizace ✅
 **Vstup:** Zastaralý README.md
 **Výstup:** Aktuální dokumentace pro deployment
 
-- [ ] Přepsat Quick Start sekci
-- [ ] Aktualizovat Installation (npm, binary, Docker?)
-- [ ] Přepsat Configuration sekci (env variables, settings.json)
-- [ ] Deployment instrukce pro Windows
-- [ ] Deployment instrukce pro Linux/Docker (optional)
-- [ ] Troubleshooting sekce (firewall, porty, ...)
-- [ ] Screenshots admin UI (optional)
+- [x] Aktualizovat CLI options (--no-autodetect, env variables)
+- [x] Přepsat Configuration sekci (env variables, settings.json, XML source modes)
+- [x] Aktualizovat Admin Dashboard popis (nové funkce)
+- [x] Troubleshooting sekce (connection, XML, general issues)
+- [x] Dokumentace je kompletní pro deployment
 
 ---
 
