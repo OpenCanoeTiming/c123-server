@@ -745,40 +745,94 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       path: null,
       source: null,
       autoDetectEnabled: settings.xmlAutoDetect,
+      mode: settings.xmlSourceMode ?? 'auto-offline',
+    };
+    const availablePaths = this.c123Server?.getAvailableXmlPaths() ?? {
+      main: { path: null, exists: false },
+      offline: { path: null, exists: false },
     };
 
     res.json({
       path: xmlInfo.path,
       source: xmlInfo.source,
       autoDetectEnabled: xmlInfo.autoDetectEnabled,
+      mode: xmlInfo.mode,
+      availablePaths: {
+        main: availablePaths.main,
+        offline: availablePaths.offline,
+      },
       isWindows: WindowsConfigDetector.isWindows(),
     });
   }
 
   /**
-   * POST /api/config/xml - Set XML path manually
+   * POST /api/config/xml - Set XML path manually or change mode
+   *
+   * Body options:
+   * - { path: string } - Set manual path (sets mode to 'manual')
+   * - { mode: 'auto-main' | 'auto-offline' | 'manual' } - Switch mode
+   * - { mode: 'manual', path: string } - Switch to manual with path
    */
   private handleSetXmlConfig(req: Request, res: Response): void {
-    const { path } = req.body;
-
-    if (!path || typeof path !== 'string') {
-      res.status(400).json({ error: 'path is required and must be a string' });
-      return;
-    }
+    const { path, mode } = req.body;
 
     if (!this.c123Server) {
       res.status(503).json({ error: 'Server not available' });
       return;
     }
 
+    // Validate mode if provided
+    const validModes = ['auto-main', 'auto-offline', 'manual'];
+    if (mode !== undefined && !validModes.includes(mode)) {
+      res.status(400).json({
+        error: `Invalid mode. Must be one of: ${validModes.join(', ')}`,
+      });
+      return;
+    }
+
     try {
-      this.c123Server.setXmlPath(path);
+      // If mode is specified, handle mode change
+      if (mode !== undefined) {
+        if (mode === 'manual') {
+          // Manual mode requires a path
+          if (!path || typeof path !== 'string') {
+            res.status(400).json({ error: 'path is required for manual mode' });
+            return;
+          }
+          this.c123Server.setXmlPath(path);
+        } else {
+          // Auto mode
+          if (!WindowsConfigDetector.isWindows()) {
+            res.status(400).json({ error: 'Auto modes are only available on Windows' });
+            return;
+          }
+          this.c123Server.setXmlSourceMode(mode);
+        }
+      } else if (path) {
+        // Legacy: just setting path (implies manual mode)
+        if (typeof path !== 'string') {
+          res.status(400).json({ error: 'path must be a string' });
+          return;
+        }
+        this.c123Server.setXmlPath(path);
+      } else {
+        res.status(400).json({ error: 'Either path or mode is required' });
+        return;
+      }
+
       const xmlInfo = this.c123Server.getXmlPathInfo();
+      const availablePaths = this.c123Server.getAvailableXmlPaths();
+
       res.json({
         success: true,
         path: xmlInfo.path,
         source: xmlInfo.source,
         autoDetectEnabled: xmlInfo.autoDetectEnabled,
+        mode: xmlInfo.mode,
+        availablePaths: {
+          main: availablePaths.main,
+          offline: availablePaths.offline,
+        },
       });
     } catch (err) {
       res.status(500).json({
@@ -789,6 +843,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
   /**
    * POST /api/config/xml/autodetect - Toggle autodetection
+   * Note: This is a legacy endpoint. Prefer using POST /api/config/xml with mode parameter.
    */
   private handleToggleAutodetect(req: Request, res: Response): void {
     const { enabled } = req.body;
@@ -819,6 +874,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       res.json({
         success: true,
         autoDetectEnabled: xmlInfo.autoDetectEnabled,
+        mode: xmlInfo.mode,
         path: xmlInfo.path,
         source: xmlInfo.source,
       });
@@ -931,14 +987,37 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   <h2>XML Configuration</h2>
   <div class="card" id="xmlConfigCard">
     <div style="margin-bottom: 10px;">
-      <strong>Path:</strong> <span id="xmlPath">-</span>
+      <strong>Current path:</strong> <span id="xmlPath">-</span>
       <span id="xmlSource" style="margin-left: 10px; color: #888;"></span>
     </div>
-    <div class="config-form">
-      <label id="autodetectLabel" style="display: none;">
-        <input type="checkbox" id="autodetectToggle">
-        Autodetect (Windows)
-      </label>
+
+    <!-- Mode selector (Windows only) -->
+    <div id="modeSelector" style="display: none; margin-bottom: 15px;">
+      <strong style="display: block; margin-bottom: 8px;">Source mode:</strong>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
+          <input type="radio" name="xmlMode" value="auto-offline" style="margin-top: 3px;">
+          <div>
+            <div>Auto - offline copy (recommended)</div>
+            <div id="offlinePath" style="font-size: 0.85em; color: #888;"></div>
+          </div>
+        </label>
+        <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
+          <input type="radio" name="xmlMode" value="auto-main" style="margin-top: 3px;">
+          <div>
+            <div>Auto - main event file</div>
+            <div id="mainPath" style="font-size: 0.85em; color: #888;"></div>
+          </div>
+        </label>
+        <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
+          <input type="radio" name="xmlMode" value="manual" style="margin-top: 3px;">
+          <div>Manual path</div>
+        </label>
+      </div>
+    </div>
+
+    <!-- Manual path input -->
+    <div id="manualPathSection" class="config-form">
       <input type="text" id="xmlPathInput" placeholder="XML file path" style="flex: 1; min-width: 200px; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #0f0f23; color: #eee;">
       <button class="btn" onclick="setXmlPath()">Set Path</button>
     </div>
@@ -1038,6 +1117,8 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     }
 
     // XML Config functions
+    let currentMode = 'manual';
+
     async function loadXmlConfig() {
       try {
         const res = await fetch('/api/config/xml');
@@ -1047,8 +1128,34 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         document.getElementById('xmlSource').textContent = data.source ? '(' + data.source + ')' : '';
 
         if (data.isWindows) {
-          document.getElementById('autodetectLabel').style.display = 'flex';
-          document.getElementById('autodetectToggle').checked = data.autoDetectEnabled;
+          document.getElementById('modeSelector').style.display = 'block';
+
+          // Update available paths display
+          const mainPathEl = document.getElementById('mainPath');
+          const offlinePathEl = document.getElementById('offlinePath');
+
+          if (data.availablePaths) {
+            const mainPath = data.availablePaths.main;
+            const offlinePath = data.availablePaths.offline;
+
+            mainPathEl.textContent = mainPath.path
+              ? (mainPath.exists ? mainPath.path : mainPath.path + ' (not found)')
+              : '(not configured)';
+            mainPathEl.style.color = mainPath.exists ? '#00ff88' : '#ff6b6b';
+
+            offlinePathEl.textContent = offlinePath.path
+              ? (offlinePath.exists ? offlinePath.path : offlinePath.path + ' (not found)')
+              : '(not configured)';
+            offlinePathEl.style.color = offlinePath.exists ? '#00ff88' : '#ff6b6b';
+          }
+
+          // Select current mode radio
+          currentMode = data.mode || 'manual';
+          const modeRadio = document.querySelector('input[name="xmlMode"][value="' + currentMode + '"]');
+          if (modeRadio) modeRadio.checked = true;
+
+          // Show/hide manual path input based on mode
+          updateManualPathVisibility(currentMode);
         }
 
         if (data.path) {
@@ -1058,6 +1165,15 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         document.getElementById('xmlConfigError').style.display = 'none';
       } catch (e) {
         showXmlError('Failed to load config: ' + e.message);
+      }
+    }
+
+    function updateManualPathVisibility(mode) {
+      const manualSection = document.getElementById('manualPathSection');
+      if (mode === 'manual') {
+        manualSection.style.display = 'flex';
+      } else {
+        manualSection.style.display = 'none';
       }
     }
 
@@ -1072,7 +1188,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         const res = await fetch('/api/config/xml', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path })
+          body: JSON.stringify({ mode: 'manual', path })
         });
         const data = await res.json();
 
@@ -1083,35 +1199,51 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
         document.getElementById('xmlPath').textContent = data.path || '(not set)';
         document.getElementById('xmlSource').textContent = data.source ? '(' + data.source + ')' : '';
-        document.getElementById('autodetectToggle').checked = data.autoDetectEnabled;
         document.getElementById('xmlConfigError').style.display = 'none';
+        loadXmlConfig(); // Reload to update all fields
       } catch (e) {
         showXmlError('Failed to set path: ' + e.message);
       }
     }
 
-    document.getElementById('autodetectToggle').addEventListener('change', async function() {
-      try {
-        const res = await fetch('/api/config/xml/autodetect', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled: this.checked })
-        });
-        const data = await res.json();
+    // Mode radio change handler
+    document.querySelectorAll('input[name="xmlMode"]').forEach(function(radio) {
+      radio.addEventListener('change', async function() {
+        const newMode = this.value;
 
-        if (data.error) {
-          showXmlError(data.error);
-          this.checked = !this.checked;
-          return;
+        if (newMode === 'manual') {
+          updateManualPathVisibility('manual');
+          return; // Wait for user to enter path and click Set Path
         }
 
-        document.getElementById('xmlPath').textContent = data.path || '(not set)';
-        document.getElementById('xmlSource').textContent = data.source ? '(' + data.source + ')' : '';
-        document.getElementById('xmlConfigError').style.display = 'none';
-      } catch (e) {
-        showXmlError('Failed to toggle autodetect: ' + e.message);
-        this.checked = !this.checked;
-      }
+        try {
+          const res = await fetch('/api/config/xml', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: newMode })
+          });
+          const data = await res.json();
+
+          if (data.error) {
+            showXmlError(data.error);
+            // Revert to previous mode
+            const prevRadio = document.querySelector('input[name="xmlMode"][value="' + currentMode + '"]');
+            if (prevRadio) prevRadio.checked = true;
+            return;
+          }
+
+          currentMode = newMode;
+          document.getElementById('xmlPath').textContent = data.path || '(not set)';
+          document.getElementById('xmlSource').textContent = data.source ? '(' + data.source + ')' : '';
+          document.getElementById('xmlConfigError').style.display = 'none';
+          updateManualPathVisibility(newMode);
+        } catch (e) {
+          showXmlError('Failed to change mode: ' + e.message);
+          // Revert to previous mode
+          const prevRadio = document.querySelector('input[name="xmlMode"][value="' + currentMode + '"]');
+          if (prevRadio) prevRadio.checked = true;
+        }
+      });
     });
 
     function showXmlError(msg) {

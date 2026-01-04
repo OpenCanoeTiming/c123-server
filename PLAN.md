@@ -519,7 +519,7 @@ http://server:27123/api/*  → REST API (status, config, XML data)
 
 ### Fáze 13: Admin vylepšení a UX
 
-#### 13.1 XML source selector - 3 režimy
+#### 13.1 XML source selector - 3 režimy ✅
 **Vstup:** Současný autodetect (pouze offline kopie)
 **Výstup:** Rozšířené možnosti výběru XML souboru
 
@@ -528,13 +528,17 @@ Tři režimy:
 2. **auto offline** - offline kopie (`AutoCopyFolder` + filename) - současný default
 3. **manual** - uživatel zadá cestu ručně
 
-- [ ] Rozšířit `WindowsConfigDetector` o extrakci obou cest (main + offline)
-- [ ] Přidat typ `XmlSourceMode`: `'auto-main' | 'auto-offline' | 'manual'`
-- [ ] Upravit `AppSettings` pro ukládání zvoleného režimu
-- [ ] REST API: rozšířit `GET /api/config/xml` o `availablePaths` (main, offline)
-- [ ] REST API: rozšířit `POST /api/config/xml` o parametr `mode`
-- [ ] Admin UI: radio buttons pro výběr režimu, zobrazení obou cest
-- [ ] Unit testy
+- [x] Rozšířit `WindowsConfigDetector` o extrakci obou cest (main + offline)
+  - `getAvailablePaths()` - vrací obě cesty s informací o existenci
+  - `detectByMode(mode)` - detekce podle zvoleného režimu
+- [x] Přidat typ `XmlSourceMode`: `'auto-main' | 'auto-offline' | 'manual'`
+- [x] Upravit `AppSettings` pro ukládání zvoleného režimu
+  - `setXmlSourceMode(mode)` - nastaví režim
+  - `getXmlSourceMode()` - vrátí aktuální režim
+- [x] REST API: rozšířit `GET /api/config/xml` o `availablePaths` (main, offline) a `mode`
+- [x] REST API: rozšířit `POST /api/config/xml` o parametr `mode`
+- [x] Admin UI: radio buttons pro výběr režimu, zobrazení obou cest s existencí
+- [x] Unit testy (11 nových testů)
 
 #### 13.2 Event name management
 **Vstup:** Částečná detekce event name

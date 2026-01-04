@@ -15,7 +15,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { EventEmitter } from 'events';
-import { Canoe123Config, XmlPathDetectionResult } from './types.js';
+import { AvailableXmlPaths, Canoe123Config, XmlPathDetectionResult, XmlSourceMode } from './types.js';
 
 export interface WindowsConfigDetectorEvents {
   detected: (result: XmlPathDetectionResult) => void;
@@ -262,6 +262,159 @@ export class WindowsConfigDetector extends EventEmitter {
       clearInterval(this.checkInterval);
       this.checkInterval = null;
     }
+  }
+
+  /**
+   * Get available XML paths from Canoe123 configuration
+   * Returns both main and offline paths with existence info.
+   */
+  getAvailablePaths(): AvailableXmlPaths & { canoe123Config?: Canoe123Config; error?: string } {
+    const result: AvailableXmlPaths & { canoe123Config?: Canoe123Config; error?: string } = {
+      main: { path: null, exists: false },
+      offline: { path: null, exists: false },
+    };
+
+    // Check if we're on Windows
+    if (process.platform !== 'win32') {
+      result.error = 'Autodetection is only available on Windows';
+      return result;
+    }
+
+    // Find latest Canoe123 config folder
+    const configFolder = this.findLatestCanoe123Folder();
+    if (!configFolder) {
+      result.error = 'Canoe123 configuration not found in AppData';
+      return result;
+    }
+
+    const configPath = path.join(configFolder, 'user.config');
+    if (!fs.existsSync(configPath)) {
+      result.error = 'user.config file not found';
+      return result;
+    }
+
+    // Parse the config
+    const canoe123Config = this.parseUserConfig(configPath);
+    result.canoe123Config = canoe123Config;
+
+    if (!canoe123Config.currentEventFile) {
+      result.error = 'CurrentEventFile not set in Canoe123 configuration';
+      return result;
+    }
+
+    // Main path (CurrentEventFile)
+    result.main.path = canoe123Config.currentEventFile;
+    result.main.exists = fs.existsSync(canoe123Config.currentEventFile);
+
+    // Offline path (AutoCopyFolder + filename)
+    if (canoe123Config.autoCopyFolder && canoe123Config.currentEventFile) {
+      const filename = path.basename(canoe123Config.currentEventFile);
+      const offlinePath = path.join(canoe123Config.autoCopyFolder, filename);
+      result.offline.path = offlinePath;
+      result.offline.exists = fs.existsSync(offlinePath);
+    }
+
+    return result;
+  }
+
+  /**
+   * Detect XML path based on specified mode
+   */
+  detectByMode(mode: XmlSourceMode): XmlPathDetectionResult {
+    if (mode === 'manual') {
+      return {
+        path: null,
+        source: null,
+        exists: false,
+        error: 'Manual mode - no autodetection',
+      };
+    }
+
+    // Check if we're on Windows
+    if (process.platform !== 'win32') {
+      return {
+        path: null,
+        source: null,
+        exists: false,
+        error: 'Autodetection is only available on Windows',
+      };
+    }
+
+    const available = this.getAvailablePaths();
+
+    if (available.error && !available.main.path && !available.offline.path) {
+      const result: XmlPathDetectionResult = {
+        path: null,
+        source: null,
+        exists: false,
+        error: available.error,
+      };
+      if (available.canoe123Config) {
+        result.canoe123Config = available.canoe123Config;
+      }
+      return result;
+    }
+
+    if (mode === 'auto-main') {
+      const result: XmlPathDetectionResult = {
+        path: available.main.path,
+        source: 'current',
+        exists: available.main.exists,
+      };
+      if (!available.main.exists) {
+        result.error = 'Main event file does not exist';
+      }
+      if (available.canoe123Config) {
+        result.canoe123Config = available.canoe123Config;
+      }
+      return result;
+    }
+
+    if (mode === 'auto-offline') {
+      // Prefer offline, fallback to main if offline not available
+      if (available.offline.path && available.offline.exists) {
+        const result: XmlPathDetectionResult = {
+          path: available.offline.path,
+          source: 'autocopy',
+          exists: true,
+        };
+        if (available.canoe123Config) {
+          result.canoe123Config = available.canoe123Config;
+        }
+        return result;
+      }
+
+      // Fallback to main if offline doesn't exist
+      if (available.main.path && available.main.exists) {
+        const result: XmlPathDetectionResult = {
+          path: available.main.path,
+          source: 'current',
+          exists: true,
+        };
+        if (available.canoe123Config) {
+          result.canoe123Config = available.canoe123Config;
+        }
+        return result;
+      }
+
+      const result: XmlPathDetectionResult = {
+        path: available.offline.path || available.main.path,
+        source: available.offline.path ? 'autocopy' : 'current',
+        exists: false,
+        error: 'Neither offline nor main event file exists',
+      };
+      if (available.canoe123Config) {
+        result.canoe123Config = available.canoe123Config;
+      }
+      return result;
+    }
+
+    return {
+      path: null,
+      source: null,
+      exists: false,
+      error: `Unknown mode: ${mode}`,
+    };
   }
 
   /**

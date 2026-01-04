@@ -11,7 +11,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { AppSettings as AppSettingsType, DEFAULT_APP_SETTINGS } from './types.js';
+import { AppSettings as AppSettingsType, DEFAULT_APP_SETTINGS, XmlSourceMode } from './types.js';
 
 export class AppSettingsManager {
   private settings: AppSettingsType;
@@ -113,31 +113,58 @@ export class AppSettingsManager {
   }
 
   /**
-   * Set XML path manually (disables autodetect)
+   * Set XML path manually (sets mode to 'manual')
    */
   setXmlPath(xmlPath: string): void {
     this.update({
       xmlPath,
+      xmlSourceMode: 'manual',
       xmlAutoDetect: false,
     });
   }
 
   /**
-   * Enable autodetection
+   * Set XML source mode
+   */
+  setXmlSourceMode(mode: XmlSourceMode): void {
+    const updates: Partial<AppSettingsType> = {
+      xmlSourceMode: mode,
+      xmlAutoDetect: mode !== 'manual',
+    };
+
+    // Clear manual path when switching to auto mode
+    if (mode !== 'manual') {
+      delete this.settings.xmlPath;
+    }
+
+    this.update(updates);
+  }
+
+  /**
+   * Get XML source mode
+   */
+  getXmlSourceMode(): XmlSourceMode {
+    return this.settings.xmlSourceMode ?? DEFAULT_APP_SETTINGS.xmlSourceMode;
+  }
+
+  /**
+   * Enable autodetection (sets mode to 'auto-offline')
    */
   enableAutoDetect(): void {
     // Clear manual path and enable autodetect
     delete this.settings.xmlPath;
     this.settings.xmlAutoDetect = true;
+    this.settings.xmlSourceMode = 'auto-offline';
     this.save();
   }
 
   /**
-   * Disable autodetection
+   * Disable autodetection (sets mode to 'manual')
    */
   disableAutoDetect(): void {
     this.update({
       xmlAutoDetect: false,
+      xmlSourceMode: 'manual',
     });
   }
 

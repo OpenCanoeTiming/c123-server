@@ -19,7 +19,7 @@ import {
   createSchedule,
 } from './protocol/index.js';
 import { WindowsConfigDetector, getAppSettings } from './config/index.js';
-import type { XmlPathDetectionResult } from './config/index.js';
+import type { AvailableXmlPaths, XmlPathDetectionResult, XmlSourceMode } from './config/index.js';
 
 /**
  * Wrapper to make UdpDiscovery compatible with Source interface for admin display
@@ -258,12 +258,107 @@ export class Server extends EventEmitter<ServerEvents> {
   /**
    * Get current XML path info
    */
-  getXmlPathInfo(): { path: string | null; source: 'manual' | 'autodetect' | null; autoDetectEnabled: boolean } {
+  getXmlPathInfo(): {
+    path: string | null;
+    source: 'manual' | 'autodetect' | null;
+    autoDetectEnabled: boolean;
+    mode: XmlSourceMode;
+  } {
     return {
       path: this.config.xmlPath || null,
       source: this.xmlPathSource,
       autoDetectEnabled: this.config.xmlAutoDetect,
+      mode: getAppSettings().getXmlSourceMode(),
     };
+  }
+
+  /**
+   * Get available XML paths (from Canoe123 config)
+   */
+  getAvailableXmlPaths(): AvailableXmlPaths & { error?: string } {
+    if (!WindowsConfigDetector.isWindows()) {
+      return {
+        main: { path: null, exists: false },
+        offline: { path: null, exists: false },
+        error: 'Autodetection is only available on Windows',
+      };
+    }
+
+    const detector = new WindowsConfigDetector();
+    return detector.getAvailablePaths();
+  }
+
+  /**
+   * Set XML source mode
+   */
+  setXmlSourceMode(mode: XmlSourceMode): void {
+    getAppSettings().setXmlSourceMode(mode);
+
+    if (mode === 'manual') {
+      // Keep current manual path if any
+      this.stopAutoDetection();
+    } else {
+      // Clear manual path, start autodetection with selected mode
+      this.config.xmlPath = '';
+      this.config.xmlAutoDetect = true;
+
+      // Detect immediately with the new mode
+      const detector = new WindowsConfigDetector();
+      const result = detector.detectByMode(mode);
+      if (result.path && result.exists) {
+        this.setXmlPath(result.path, false);
+        this.xmlPathSource = 'autodetect';
+        getAppSettings().update({ lastAutoDetectedPath: result.path });
+      }
+
+      // Start monitoring with the mode-aware detection
+      this.startAutoDetectionWithMode(mode);
+    }
+  }
+
+  /**
+   * Start auto-detection with a specific mode
+   */
+  private startAutoDetectionWithMode(mode: XmlSourceMode): void {
+    if (!WindowsConfigDetector.isWindows()) {
+      Logger.info('Server', 'XML autodetection is only available on Windows');
+      return;
+    }
+
+    this.stopAutoDetection();
+
+    this.windowsConfigDetector = new WindowsConfigDetector();
+
+    const handleResult = (result: XmlPathDetectionResult) => {
+      if (result.path && result.exists) {
+        Logger.info('Server', `Autodetected XML (${mode}): ${result.path}`);
+        if (result.path !== this.config.xmlPath) {
+          this.setXmlPath(result.path, false);
+          this.xmlPathSource = 'autodetect';
+          getAppSettings().update({ lastAutoDetectedPath: result.path });
+        }
+      } else if (result.error) {
+        Logger.warn('Server', `Autodetection (${mode}): ${result.error}`);
+      }
+    };
+
+    // Initial detection with mode
+    const initialResult = this.windowsConfigDetector.detectByMode(mode);
+    handleResult(initialResult);
+
+    // Periodic check
+    const checkInterval = setInterval(() => {
+      try {
+        const detector = new WindowsConfigDetector();
+        const result = detector.detectByMode(mode);
+        handleResult(result);
+      } catch (error) {
+        Logger.error('Server', `Autodetection error: ${(error as Error).message}`);
+      }
+    }, this.config.xmlAutoDetectInterval);
+
+    // Store interval for cleanup - we need to override the detector's internal interval
+    (this.windowsConfigDetector as unknown as { customInterval: NodeJS.Timeout }).customInterval = checkInterval;
   }
 
   /**
@@ -286,13 +381,17 @@ export class Server extends EventEmitter<ServerEvents> {
       this.config.xmlAutoDetectInterval = settings.xmlAutoDetectInterval;
     }
 
-    // If autodetect is enabled and no manual path is set via CLI, try autodetection
-    if (settings.xmlAutoDetect && !this.config.xmlPath) {
-      this.config.xmlAutoDetect = true;
-    } else if (settings.xmlPath && !this.config.xmlPath) {
+    // Handle XML source mode
+    const mode = settings.xmlSourceMode ?? 'auto-offline';
+
+    if (mode === 'manual' && settings.xmlPath && !this.config.xmlPath) {
       // Use saved manual path if no CLI path provided
       this.config.xmlPath = settings.xmlPath;
       this.xmlPathSource = 'manual';
+      this.config.xmlAutoDetect = false;
+    } else if (mode !== 'manual' && !this.config.xmlPath) {
+      // Auto mode - enable autodetection
+      this.config.xmlAutoDetect = true;
     }
   }
 
@@ -325,6 +424,12 @@ export class Server extends EventEmitter<ServerEvents> {
   private stopAutoDetection(): void {
     if (this.windowsConfigDetector) {
       this.windowsConfigDetector.stopMonitoring();
+      // Also clear custom interval if set
+      const customInterval = (this.windowsConfigDetector as unknown as { customInterval?: NodeJS.Timeout })
+        .customInterval;
+      if (customInterval) {
+        clearInterval(customInterval);
+      }
       this.windowsConfigDetector = null;
     }
   }

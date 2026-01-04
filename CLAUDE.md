@@ -77,7 +77,12 @@ Vývoj běží proti **nahraným datům z analýzy**:
 ```
 
 
-Proces: vzdy, zejmena u dodateckych pozadavku a zmen, nejprve aktualizovat dokumentaci jako plan a zamer, doplnit pripadne kroky do planu a ty pak postupne realizovat
+Proces: vzdy, zejmena u dodateckych pozadavku a zmen, nejprve aktualizovat dokumentaci jako plan a zamer, doplnit pripadne kroky do planu a ty pak postupne realizovat. Snažit se plánované úkoly dělit do bloků, které jdou zvládnout pomocí claude code s opus 4.5 do cca 70% použitého kontextu, protože budeme pouštět na bloky postupně čerstvé instance. Commit nejpozději po každém bloku. Nedělat víc než jeden blok před clear nebo compact.
+
+Pokud se zjistí nějaká odchylka od požadovaného chování, nebo se nedaří nějaký problém vyřešit nebo se ukáže že je větší, tak další postup je takový, že aktualizuješ plán o nové sekce a kroky dle potřeby a skončíš a necháš další práci na čerstvé instance.
+
+Piš si deníček vývoje - co šlo, co nešlo, co se zkusilo, atd. Ať se neprozkoumávají slepé uličky.
+
 
 ---
 
