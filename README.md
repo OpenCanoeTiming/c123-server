@@ -51,14 +51,19 @@ Commands:
   stop        Stop the Windows service
 
 Options:
-  --host <ip>          C123 host IP (disables auto-discovery)
-  --port <port>        C123 port (default: 27333)
-  --server-port <p>    Server port for all services (default: 27123)
-  --xml <path>         XML file path for results data
-  --no-discovery       Disable UDP auto-discovery
-  -d, --debug          Enable verbose debug logging
-  -h, --help           Show help message
-  -v, --version        Show version
+  --host <ip>         C123 host IP (disables auto-discovery)
+  --port <port>       C123 source port (default: 27333)
+  --server-port <p>   Server port for HTTP + WebSocket (default: 27123)
+  --xml <path>        XML file path for results data
+  --no-discovery      Disable UDP auto-discovery
+  --no-autodetect     Disable Canoe123 XML autodetection (Windows)
+  -d, --debug         Enable verbose debug logging
+  -h, --help          Show help message
+  -v, --version       Show version
+
+Environment variables:
+  C123_SERVER_PORT    Server port (overrides default, overridden by --server-port)
+  PORT                Fallback for server port (if C123_SERVER_PORT not set)
 ```
 
 ## Ports
@@ -139,14 +144,44 @@ c123-server stop
 c123-server uninstall
 ```
 
+## Configuration
+
+### Persistent Settings
+
+Settings are automatically saved and restored across restarts:
+
+| Platform | Settings Path |
+|----------|---------------|
+| Windows | `%APPDATA%\c123-server\settings.json` |
+| Linux/macOS | `~/.c123-server/settings.json` |
+
+Settings include:
+- XML file path and source mode
+- Event name override
+- Server port
+
+### XML Source Modes
+
+Three modes for selecting the XML data source:
+
+| Mode | Description |
+|------|-------------|
+| **auto-offline** | Offline copy from `AutoCopyFolder` (default, recommended) |
+| **auto-main** | Main event file (`CurrentEventFile` from C123 config) |
+| **manual** | User-specified path |
+
+On Windows, the server automatically detects Canoe123 configuration and extracts XML paths.
+
 ## Admin Dashboard
 
 Open http://localhost:27123 to access the admin dashboard:
 
 - View connected scoreboards
 - Monitor data sources (C123, XML)
-- Configure XML path (manual or auto-detect from Canoe123)
-- View server status and connections
+- Configure XML source mode (auto-main, auto-offline, manual)
+- Set event name override
+- View real-time logs
+- Force refresh all connected clients
 
 ## Architecture
 
@@ -189,6 +224,46 @@ npm run lint
 # Build
 npm run build
 ```
+
+## Troubleshooting
+
+### Connection Issues
+
+**Cannot connect to C123 (Canoe123)**
+- Verify C123 is running and broadcasting on port 27333
+- Check that both machines are on the same network
+- On Windows, ensure Windows Firewall allows UDP/TCP port 27333
+- Try specifying the C123 host directly: `c123-server --host 192.168.1.5`
+
+**Scoreboards cannot connect**
+- Ensure port 27123 is not blocked by firewall
+- On Windows, add firewall rule: `netsh advfirewall firewall add rule name="C123 Server" dir=in action=allow protocol=TCP localport=27123`
+- Check that the server is listening: visit http://localhost:27123 in browser
+
+### XML Issues
+
+**XML not detected on Windows**
+- Ensure Canoe123 has been run at least once (creates user.config)
+- Check if AutoCopyFolder is configured in Canoe123
+- Use `--xml <path>` to specify path manually
+- Use `--no-autodetect` to disable autodetection and set path via admin UI
+
+**XML not updating**
+- For network paths (SMB), the server uses polling (not filesystem events)
+- Default poll interval is 1 second (configurable via debounce settings)
+- Verify the XML file is being modified by Canoe123
+
+### General
+
+**Server won't start**
+- Check if port 27123 is already in use: `netstat -an | find "27123"`
+- Use a different port: `c123-server --server-port 8080`
+- Check logs for specific error messages
+
+**Windows Service issues**
+- Ensure you run the command prompt as Administrator
+- Check Windows Event Log for service-related errors
+- Verify node-windows optional dependency is installed
 
 ## Documentation
 
