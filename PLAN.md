@@ -540,20 +540,23 @@ Tři režimy:
 - [x] Admin UI: radio buttons pro výběr režimu, zobrazení obou cest s existencí
 - [x] Unit testy (11 nových testů)
 
-#### 13.2 Event name management
+#### 13.2 Event name management ✅
 **Vstup:** Částečná detekce event name
 **Výstup:** Správná detekce + manuální override + API
 
-Současný stav: něco svítí v admin, ale není to správné.
+XML struktura: `<Events><MainTitle>` obsahuje název akce (např. "Jarní slalomy 2024")
 
-- [ ] Analyzovat XML strukturu pro správný event name (název akce)
-- [ ] `XmlDataService.getEventName()` - extrakce z XML
-- [ ] Přidat `eventNameOverride` do `AppSettings` pro manuální přepsání
-- [ ] REST API: `GET /api/event` - vrací { name, source: 'xml' | 'manual' }
-- [ ] REST API: `POST /api/event` - nastaví manuální override
-- [ ] Upravit `/api/discover` - použít správný event name
-- [ ] Admin UI: zobrazení event name, možnost přepsat
-- [ ] Unit testy
+- [x] Analyzovat XML strukturu pro správný event name (název akce)
+  - Element `<Events><MainTitle>` obsahuje název
+  - `XmlDataService.getEventName()` již existuje a extrahuje správně
+- [x] Přidat `eventNameOverride` do `AppSettings` pro manuální přepsání
+  - `setEventNameOverride(name)`, `getEventNameOverride()`, `clearEventNameOverride()`
+  - Persists do settings.json
+- [x] REST API: `GET /api/event` - vrací { name, source: 'xml' | 'manual' | null }
+- [x] REST API: `POST /api/event` - nastaví manuální override, `{ name: null }` vymaže
+- [x] Upravit `/api/discover` - použije override pokud nastaven, jinak XML
+- [x] Admin UI: sekce Event s event name, source, input pro override, tlačítka Set/Clear
+- [x] Unit testy (6 nových testů)
 
 #### 13.3 Force refresh signál pro klienty
 **Vstup:** WebSocket komunikace

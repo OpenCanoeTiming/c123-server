@@ -377,6 +377,10 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     this.app.post('/api/config/xml/autodetect', this.handleToggleAutodetect.bind(this));
     this.app.get('/api/config/xml/detect', this.handleDetectXml.bind(this));
 
+    // Event API routes
+    this.app.get('/api/event', this.handleGetEvent.bind(this));
+    this.app.post('/api/event', this.handleSetEvent.bind(this));
+
     // Health check
     this.app.get('/health', (_req: Request, res: Response) => {
       res.json({ status: 'ok' });
@@ -394,9 +398,12 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    * Must respond fast (< 50ms) - no I/O blocking.
    */
   private async handleDiscover(_req: Request, res: Response): Promise<void> {
-    // Get event name from XML if available (cached, so fast)
-    let eventName: string | null = null;
-    if (this.xmlDataService) {
+    // Check for manual override first (synchronous, fast)
+    const settings = getAppSettings();
+    let eventName: string | null = settings.getEventNameOverride() ?? null;
+
+    // If no override, get from XML if available (cached, so fast)
+    if (!eventName && this.xmlDataService) {
       try {
         eventName = await this.xmlDataService.getEventName();
       } catch {
@@ -913,6 +920,72 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
+   * GET /api/event - Get event name
+   * Returns event name (from override or XML MainTitle) and its source.
+   */
+  private async handleGetEvent(_req: Request, res: Response): Promise<void> {
+    const settings = getAppSettings();
+    const override = settings.getEventNameOverride();
+
+    // If override is set, return it
+    if (override) {
+      res.json({
+        name: override,
+        source: 'manual',
+      });
+      return;
+    }
+
+    // Otherwise try to get from XML
+    if (this.xmlDataService) {
+      try {
+        const xmlName = await this.xmlDataService.getEventName();
+        res.json({
+          name: xmlName,
+          source: xmlName ? 'xml' : null,
+        });
+        return;
+      } catch {
+        // Ignore errors
+      }
+    }
+
+    res.json({
+      name: null,
+      source: null,
+    });
+  }
+
+  /**
+   * POST /api/event - Set event name override
+   * Body: { name: string } to set, { name: null } or {} to clear
+   */
+  private handleSetEvent(req: Request, res: Response): void {
+    const { name } = req.body;
+
+    const settings = getAppSettings();
+
+    if (name === null || name === undefined || name === '') {
+      settings.clearEventNameOverride();
+      res.json({
+        success: true,
+        name: null,
+        source: null,
+        message: 'Event name override cleared, will use XML MainTitle if available',
+      });
+    } else if (typeof name !== 'string') {
+      res.status(400).json({ error: 'name must be a string or null' });
+    } else {
+      settings.setEventNameOverride(name);
+      res.json({
+        success: true,
+        name,
+        source: 'manual',
+      });
+    }
+  }
+
+  /**
    * Generate inline dashboard HTML
    */
   private getDashboardHtml(): string {
@@ -973,7 +1046,19 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
   <h2>Event</h2>
   <div class="card">
-    <div id="eventInfo">Loading...</div>
+    <div style="margin-bottom: 10px;">
+      <strong>Current race:</strong> <span id="currentRace">-</span>
+    </div>
+    <div style="margin-bottom: 10px;">
+      <strong>Event name:</strong> <span id="eventName">-</span>
+      <span id="eventSource" style="margin-left: 10px; color: #888;"></span>
+    </div>
+    <div class="config-form">
+      <input type="text" id="eventNameInput" placeholder="Event name override" style="flex: 1; min-width: 200px; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #0f0f23; color: #eee;">
+      <button class="btn" onclick="setEventName()">Set</button>
+      <button class="btn" onclick="clearEventName()" style="background: #666;">Clear</button>
+    </div>
+    <div id="eventError" class="error" style="margin-top: 10px; display: none;"></div>
   </div>
 
   <h2>Sources</h2>
@@ -1067,10 +1152,11 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         document.getElementById('onCourseCount').textContent = data.event.onCourseCount;
         document.getElementById('resultsCount').textContent = data.event.resultsCount;
 
-        const eventInfo = data.event.raceName
-          ? '<strong>' + data.event.raceName + '</strong> (ID: ' + (data.event.currentRaceId || '-') + ')'
+        // Current race display
+        const currentRace = data.event.raceName
+          ? data.event.raceName + ' (ID: ' + (data.event.currentRaceId || '-') + ')'
           : 'No active race';
-        document.getElementById('eventInfo').innerHTML = eventInfo;
+        document.getElementById('currentRace').textContent = currentRace;
 
         // Sources
         const sourcesBody = document.querySelector('#sourcesTable tbody');
@@ -1252,10 +1338,88 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       el.style.display = 'block';
     }
 
+    // Event name functions
+    async function loadEventName() {
+      try {
+        const res = await fetch('/api/event');
+        const data = await res.json();
+
+        document.getElementById('eventName').textContent = data.name || '(not set)';
+        document.getElementById('eventSource').textContent = data.source ? '(' + data.source + ')' : '';
+
+        if (data.source === 'manual') {
+          document.getElementById('eventNameInput').value = data.name || '';
+        } else {
+          document.getElementById('eventNameInput').value = '';
+          document.getElementById('eventNameInput').placeholder = data.name ? 'Override: ' + data.name : 'Event name override';
+        }
+
+        document.getElementById('eventError').style.display = 'none';
+      } catch (e) {
+        showEventError('Failed to load event name: ' + e.message);
+      }
+    }
+
+    async function setEventName() {
+      const name = document.getElementById('eventNameInput').value.trim();
+      if (!name) {
+        showEventError('Please enter an event name');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          showEventError(data.error);
+          return;
+        }
+
+        document.getElementById('eventName').textContent = data.name || '(not set)';
+        document.getElementById('eventSource').textContent = data.source ? '(' + data.source + ')' : '';
+        document.getElementById('eventError').style.display = 'none';
+      } catch (e) {
+        showEventError('Failed to set event name: ' + e.message);
+      }
+    }
+
+    async function clearEventName() {
+      try {
+        const res = await fetch('/api/event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: null })
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          showEventError(data.error);
+          return;
+        }
+
+        loadEventName(); // Reload to get XML name if available
+      } catch (e) {
+        showEventError('Failed to clear event name: ' + e.message);
+      }
+    }
+
+    function showEventError(msg) {
+      const el = document.getElementById('eventError');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
     refresh();
     loadXmlConfig();
+    loadEventName();
     setInterval(refresh, 2000);
     setInterval(loadXmlConfig, 5000);
+    setInterval(loadEventName, 5000);
   </script>
 </body>
 </html>`;

@@ -183,6 +183,33 @@ export class AppSettingsManager {
   }
 
   /**
+   * Set event name override
+   */
+  setEventNameOverride(name: string | undefined): void {
+    if (name === undefined || name === '') {
+      delete this.settings.eventNameOverride;
+    } else {
+      this.settings.eventNameOverride = name;
+    }
+    this.save();
+  }
+
+  /**
+   * Get event name override (or undefined if not set)
+   */
+  getEventNameOverride(): string | undefined {
+    return this.settings.eventNameOverride;
+  }
+
+  /**
+   * Clear event name override
+   */
+  clearEventNameOverride(): void {
+    delete this.settings.eventNameOverride;
+    this.save();
+  }
+
+  /**
    * Get the settings file path (for debugging/logging)
    */
   getPath(): string {

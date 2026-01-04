@@ -72,6 +72,8 @@ export interface AppSettings {
   xmlAutoDetectInterval: number;
   /** Last autodetected path (for change detection) */
   lastAutoDetectedPath?: string;
+  /** Manual override for event name (if set, used instead of XML MainTitle) */
+  eventNameOverride?: string;
   /** Timestamp of settings last update */
   lastUpdated?: string;
 }

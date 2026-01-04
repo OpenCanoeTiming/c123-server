@@ -2,7 +2,7 @@
  * Tests for XmlSourceMode and related functionality
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -174,6 +174,69 @@ describe('XmlSourceMode', () => {
       for (const mode of validModes) {
         expect(typeof mode).toBe('string');
       }
+    });
+  });
+
+  describe('AppSettingsManager.eventNameOverride', () => {
+    let tempDir: string;
+    let settingsManager: AppSettingsManager;
+
+    beforeEach(() => {
+      resetAppSettings();
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'c123-test-'));
+      settingsManager = new AppSettingsManager();
+      (settingsManager as unknown as { settingsPath: string }).settingsPath = path.join(
+        tempDir,
+        'settings.json'
+      );
+    });
+
+    afterEach(() => {
+      resetAppSettings();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    it('should return undefined by default', () => {
+      expect(settingsManager.getEventNameOverride()).toBeUndefined();
+    });
+
+    it('should set and get event name override', () => {
+      settingsManager.setEventNameOverride('Test Event 2025');
+      expect(settingsManager.getEventNameOverride()).toBe('Test Event 2025');
+    });
+
+    it('should persist event name override', () => {
+      settingsManager.setEventNameOverride('Persistent Event');
+
+      // Create a new instance and load
+      const newManager = new AppSettingsManager();
+      (newManager as unknown as { settingsPath: string }).settingsPath = path.join(
+        tempDir,
+        'settings.json'
+      );
+      newManager.load();
+
+      expect(newManager.getEventNameOverride()).toBe('Persistent Event');
+    });
+
+    it('should clear event name override with undefined', () => {
+      settingsManager.setEventNameOverride('Some Event');
+      expect(settingsManager.getEventNameOverride()).toBe('Some Event');
+
+      settingsManager.setEventNameOverride(undefined);
+      expect(settingsManager.getEventNameOverride()).toBeUndefined();
+    });
+
+    it('should clear event name override with empty string', () => {
+      settingsManager.setEventNameOverride('Some Event');
+      settingsManager.setEventNameOverride('');
+      expect(settingsManager.getEventNameOverride()).toBeUndefined();
+    });
+
+    it('should clear event name override with clearEventNameOverride', () => {
+      settingsManager.setEventNameOverride('Some Event');
+      settingsManager.clearEventNameOverride();
+      expect(settingsManager.getEventNameOverride()).toBeUndefined();
     });
   });
 });
