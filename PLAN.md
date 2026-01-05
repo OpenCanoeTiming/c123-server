@@ -774,11 +774,11 @@ Centrální správa parametrů klientů (scoreboardů) ze serveru. Admin může 
   - `pushConfigToIp(ip)` - push config ke klientům s danou IP
 - [x] Unit testy (31 nových testů pro ScoreboardSession a UnifiedServer)
 
-#### 15.3 Config storage a persistence
+#### 15.3 Config storage a persistence ✅
 **Vstup:** AppSettingsManager
 **Výstup:** Metody pro správu client configs
 
-- [ ] Přidat do `AppSettingsManager`:
+- [x] Přidat do `AppSettingsManager`:
   - `getClientConfig(ip): ClientConfig | undefined`
   - `setClientConfig(ip, config: Partial<ClientConfig>): ClientConfig`
   - `setClientLabel(ip, label): void`
@@ -787,9 +787,11 @@ Centrální správa parametrů klientů (scoreboardů) ze serveru. Admin může 
   - `getCustomParamDefinitions(): CustomParamDefinition[]`
   - `setCustomParamDefinitions(defs): void`
   - `addCustomParamDefinition(def): void`
-- [ ] Automatické uložení při změně
-- [ ] Merge logika (partial update zachová ostatní hodnoty)
-- [ ] Unit testy
+  - `removeCustomParamDefinition(key): boolean` (bonus)
+  - `updateClientLastSeen(ip): void` (bonus)
+- [x] Automatické uložení při změně
+- [x] Merge logika (partial update zachová ostatní hodnoty)
+- [x] Unit testy (26 nových testů pro AppSettingsManager)
 
 #### 15.4 REST API pro client management
 **Vstup:** UnifiedServer routes
