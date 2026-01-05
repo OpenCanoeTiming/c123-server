@@ -1836,25 +1836,6 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 <body>
   <h1>C123 Server Dashboard <span class="port-info">:${this.port}</span></h1>
 
-  <div class="grid">
-    <div class="card stat">
-      <div class="stat-value" id="uptime">-</div>
-      <div class="stat-label">Uptime</div>
-    </div>
-    <div class="card stat">
-      <div class="stat-value" id="scoreboardCount">0</div>
-      <div class="stat-label">Scoreboards</div>
-    </div>
-    <div class="card stat">
-      <div class="stat-value" id="onCourseCount">0</div>
-      <div class="stat-label">On Course</div>
-    </div>
-    <div class="card stat">
-      <div class="stat-value" id="resultsCount">0</div>
-      <div class="stat-label">Results</div>
-    </div>
-  </div>
-
   <h2>Event</h2>
   <div class="card">
     <div style="margin-bottom: 10px;">
@@ -1878,15 +1859,6 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       <thead><tr><th>Name</th><th>Type</th><th>Status</th><th>Details</th></tr></thead>
       <tbody></tbody>
     </table>
-  </div>
-
-  <h2>Connected Scoreboards</h2>
-  <div class="card">
-    <table id="scoreboardsTable">
-      <thead><tr><th>ID</th><th>Connected</th><th>Last Activity</th><th>Config</th></tr></thead>
-      <tbody></tbody>
-    </table>
-    <div id="noScoreboards" style="color: #666; padding: 10px;">No scoreboards connected</div>
   </div>
 
   <h2>XML Configuration</h2>
@@ -2026,15 +1998,6 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   <div id="lastUpdate"></div>
 
   <script>
-    function formatUptime(seconds) {
-      const h = Math.floor(seconds / 3600);
-      const m = Math.floor((seconds % 3600) / 60);
-      const s = seconds % 60;
-      if (h > 0) return h + 'h ' + m + 'm';
-      if (m > 0) return m + 'm ' + s + 's';
-      return s + 's';
-    }
-
     function formatTime(iso) {
       if (!iso) return '-';
       const d = new Date(iso);
@@ -2051,12 +2014,6 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       try {
         const res = await fetch('/api/status');
         const data = await res.json();
-
-        // Always update simple text values
-        document.getElementById('uptime').textContent = formatUptime(data.uptime);
-        document.getElementById('scoreboardCount').textContent = data.scoreboards.connected;
-        document.getElementById('onCourseCount').textContent = data.event.onCourseCount;
-        document.getElementById('resultsCount').textContent = data.event.resultsCount;
 
         // Current race display
         const currentRace = data.event.raceName
@@ -2076,39 +2033,12 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
             '<td>' + (s.host ? s.host + ':' + s.port : (s.path || '-')) + '</td>' +
             '</tr>'
           ).join('');
-
-          // Scoreboards
-          const scoreboardsBody = document.querySelector('#scoreboardsTable tbody');
-          const noScoreboards = document.getElementById('noScoreboards');
-          if (data.scoreboards.list.length === 0) {
-            scoreboardsBody.innerHTML = '';
-            noScoreboards.style.display = 'block';
-          } else {
-            noScoreboards.style.display = 'none';
-            scoreboardsBody.innerHTML = data.scoreboards.list.map(s =>
-              '<tr>' +
-              '<td>' + s.id.substring(0, 8) + '</td>' +
-              '<td>' + formatTime(s.connectedAt) + '</td>' +
-              '<td>' + formatTime(s.lastActivity) + '</td>' +
-              '<td>' + formatConfig(s.config) + '</td>' +
-              '</tr>'
-            ).join('');
-          }
         }
 
         document.getElementById('lastUpdate').textContent = 'Last update: ' + new Date().toLocaleTimeString();
       } catch (e) {
         document.getElementById('lastUpdate').innerHTML = '<span class="error">Error: ' + e.message + '</span>';
       }
-    }
-
-    function formatConfig(cfg) {
-      if (!cfg) return '-';
-      const parts = [];
-      if (cfg.showOnCourse === false) parts.push('oncourse: off');
-      if (cfg.showResults === false) parts.push('results: off');
-      if (cfg.raceFilter && cfg.raceFilter.length) parts.push('filter: ' + cfg.raceFilter.join(', '));
-      return parts.length ? parts.join('; ') : 'default';
     }
 
     // XML Config functions
