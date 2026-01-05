@@ -138,6 +138,12 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     source: Source,
     meta?: { host?: string; port?: number; path?: string }
   ): void {
+    // Remove existing source with same name (e.g., when XML path changes)
+    const existingIndex = this.sources.findIndex((s) => s.name === name);
+    if (existingIndex !== -1) {
+      this.sources.splice(existingIndex, 1);
+    }
+
     this.sources.push({
       name,
       type,
