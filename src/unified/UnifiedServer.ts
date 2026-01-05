@@ -1978,6 +1978,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         const res = await fetch('/api/status');
         const data = await res.json();
 
+        // Always update simple text values
         document.getElementById('uptime').textContent = formatUptime(data.uptime);
         document.getElementById('scoreboardCount').textContent = data.scoreboards.connected;
         document.getElementById('onCourseCount').textContent = data.event.onCourseCount;
@@ -1989,33 +1990,36 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
           : 'No active race';
         document.getElementById('currentRace').textContent = currentRace;
 
-        // Sources
-        const sourcesBody = document.querySelector('#sourcesTable tbody');
-        sourcesBody.innerHTML = data.sources.map(s =>
-          '<tr>' +
-          '<td>' + s.name + '</td>' +
-          '<td>' + s.type.toUpperCase() + '</td>' +
-          '<td><span class="status ' + statusClass(s.status) + '"></span>' + s.status + '</td>' +
-          '<td>' + (s.host ? s.host + ':' + s.port : (s.path || '-')) + '</td>' +
-          '</tr>'
-        ).join('');
-
-        // Scoreboards
-        const scoreboardsBody = document.querySelector('#scoreboardsTable tbody');
-        const noScoreboards = document.getElementById('noScoreboards');
-        if (data.scoreboards.list.length === 0) {
-          scoreboardsBody.innerHTML = '';
-          noScoreboards.style.display = 'block';
-        } else {
-          noScoreboards.style.display = 'none';
-          scoreboardsBody.innerHTML = data.scoreboards.list.map(s =>
+        // Skip table updates if user has text selected (to preserve copy ability)
+        if (!hasTextSelection()) {
+          // Sources
+          const sourcesBody = document.querySelector('#sourcesTable tbody');
+          sourcesBody.innerHTML = data.sources.map(s =>
             '<tr>' +
-            '<td>' + s.id.substring(0, 8) + '</td>' +
-            '<td>' + formatTime(s.connectedAt) + '</td>' +
-            '<td>' + formatTime(s.lastActivity) + '</td>' +
-            '<td>' + formatConfig(s.config) + '</td>' +
+            '<td>' + s.name + '</td>' +
+            '<td>' + s.type.toUpperCase() + '</td>' +
+            '<td><span class="status ' + statusClass(s.status) + '"></span>' + s.status + '</td>' +
+            '<td>' + (s.host ? s.host + ':' + s.port : (s.path || '-')) + '</td>' +
             '</tr>'
           ).join('');
+
+          // Scoreboards
+          const scoreboardsBody = document.querySelector('#scoreboardsTable tbody');
+          const noScoreboards = document.getElementById('noScoreboards');
+          if (data.scoreboards.list.length === 0) {
+            scoreboardsBody.innerHTML = '';
+            noScoreboards.style.display = 'block';
+          } else {
+            noScoreboards.style.display = 'none';
+            scoreboardsBody.innerHTML = data.scoreboards.list.map(s =>
+              '<tr>' +
+              '<td>' + s.id.substring(0, 8) + '</td>' +
+              '<td>' + formatTime(s.connectedAt) + '</td>' +
+              '<td>' + formatTime(s.lastActivity) + '</td>' +
+              '<td>' + formatConfig(s.config) + '</td>' +
+              '</tr>'
+            ).join('');
+          }
         }
 
         document.getElementById('lastUpdate').textContent = 'Last update: ' + new Date().toLocaleTimeString();
@@ -2035,6 +2039,17 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
     // XML Config functions
     let currentMode = 'manual';
+
+    // Helper: check if given element has focus
+    function hasFocus(el) {
+      return document.activeElement === el;
+    }
+
+    // Helper: check if there's any text selection on the page
+    function hasTextSelection() {
+      const sel = window.getSelection();
+      return sel && sel.toString().length > 0;
+    }
 
     async function loadXmlConfig() {
       try {
@@ -2075,8 +2090,10 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
           updateManualPathVisibility(currentMode);
         }
 
-        if (data.path) {
-          document.getElementById('xmlPathInput').value = data.path;
+        // Only update input value if it doesn't have focus (user might be typing)
+        const xmlPathInput = document.getElementById('xmlPathInput');
+        if (data.path && !hasFocus(xmlPathInput)) {
+          xmlPathInput.value = data.path;
         }
 
         document.getElementById('xmlConfigError').style.display = 'none';
@@ -2178,11 +2195,15 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         document.getElementById('eventName').textContent = data.name || '(not set)';
         document.getElementById('eventSource').textContent = data.source ? '(' + data.source + ')' : '';
 
-        if (data.source === 'manual') {
-          document.getElementById('eventNameInput').value = data.name || '';
-        } else {
-          document.getElementById('eventNameInput').value = '';
-          document.getElementById('eventNameInput').placeholder = data.name ? 'Override: ' + data.name : 'Event name override';
+        // Only update input if it doesn't have focus (user might be typing)
+        const eventNameInput = document.getElementById('eventNameInput');
+        if (!hasFocus(eventNameInput)) {
+          if (data.source === 'manual') {
+            eventNameInput.value = data.name || '';
+          } else {
+            eventNameInput.value = '';
+            eventNameInput.placeholder = data.name ? 'Override: ' + data.name : 'Event name override';
+          }
         }
 
         document.getElementById('eventError').style.display = 'none';
@@ -2445,6 +2466,11 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
       const onlineCount = clientsData.filter(c => c.online).length;
       status.textContent = onlineCount + ' online, ' + clientsData.length + ' total';
+
+      // Skip grid update if user has text selected (to preserve copy ability)
+      if (hasTextSelection()) {
+        return;
+      }
 
       if (clientsData.length === 0) {
         grid.innerHTML = '';
