@@ -6,7 +6,6 @@ import { TcpSource } from './sources/TcpSource.js';
 import { UdpDiscovery } from './sources/UdpDiscovery.js';
 import { XmlFileSource } from './sources/XmlFileSource.js';
 import { EventState } from './state/EventState.js';
-import { BR1BR2Merger } from './state/BR1BR2Merger.js';
 import { UnifiedServer } from './unified/UnifiedServer.js';
 import { XmlDataService } from './service/XmlDataService.js';
 import { XmlChangeNotifier } from './xml/XmlChangeNotifier.js';
@@ -90,7 +89,6 @@ const DEFAULT_CONFIG: Required<ServerConfig> = {
  * - TCP source (C123 connection)
  * - XML file source (optional)
  * - Event state (finish detection, race tracking)
- * - BR1/BR2 merger
  * - UnifiedServer (HTTP + WebSocket on single port 27123)
  */
 export class Server extends EventEmitter<ServerEvents> {
@@ -101,7 +99,6 @@ export class Server extends EventEmitter<ServerEvents> {
   private xmlSource: XmlFileSource | null = null;
   private xmlChangeNotifier: XmlChangeNotifier | null = null;
   private eventState: EventState;
-  private merger: BR1BR2Merger;
   private unifiedServer: UnifiedServer;
   private xmlDataService: XmlDataService;
   private windowsConfigDetector: WindowsConfigDetector | null = null;
@@ -115,7 +112,6 @@ export class Server extends EventEmitter<ServerEvents> {
     this.config = { ...DEFAULT_CONFIG, ...config };
 
     this.eventState = new EventState();
-    this.merger = new BR1BR2Merger();
     this.unifiedServer = new UnifiedServer({ port: this.config.port });
     this.xmlDataService = new XmlDataService();
 
@@ -470,12 +466,6 @@ export class Server extends EventEmitter<ServerEvents> {
   }
 
   private setupEventHandlers(): void {
-    // Handle schedule change (different event loaded in C123)
-    this.eventState.on('scheduleChange', () => {
-      Logger.warn('Server', 'Event change detected, clearing BR1/BR2 cache');
-      this.merger.clearAll();
-    });
-
     // Log race changes
     this.eventState.on('raceChange', (raceId) => {
       Logger.info('Server', `Race changed to: ${raceId}`);
@@ -612,20 +602,11 @@ export class Server extends EventEmitter<ServerEvents> {
           continue;
         }
 
-        // Apply BR1/BR2 merging for results
-        let message: ParsedMessage = parsed;
-        if (parsed.type === 'results') {
-          message = {
-            type: 'results',
-            data: this.merger.processResults(parsed.data),
-          };
-        }
-
         // Update internal state (for finish detection, etc.)
-        this.eventState.processMessage(message);
+        this.eventState.processMessage(parsed);
 
         // Broadcast C123 message to all clients
-        this.broadcastParsedMessage(message);
+        this.broadcastParsedMessage(parsed);
       }
     } catch (err) {
       this.emit('error', err instanceof Error ? err : new Error(String(err)));

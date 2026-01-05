@@ -1,5 +1,24 @@
 # Development Log - C123 Server
 
+## 2026-01-05: Odstranění BR1BR2Merger
+
+### Problém
+Server modifikoval TCP stream výsledky pomocí `BR1BR2Merger` třídy, která přidávala BR1 data k BR2 výsledkům. To bylo v rozporu se záměrem "tenkého serveru", který má předávat autentická C123 data bez transformace.
+
+### Řešení
+- Odstraněn `BR1BR2Merger.ts` a jeho testy
+- Odstraněno použití v `server.ts` (`handleXmlMessage`, `scheduleChange` handler)
+- Server nyní předává čistá C123 data
+
+### BR merge logika nyní
+- **TCP stream:** Server předává data bez modifikace
+- **REST API:** `GET /api/xml/races/:id/results?merged=true` vrací sloučené BR1+BR2 výsledky z XML
+- **Scoreboard:** Používá REST API pro dotažení BR1 dat během BR2 zobrazení
+
+Viz `../canoe-scoreboard-v3/docs/SolvingBR1BR2.md` pro kompletní analýzu řešení.
+
+---
+
 ## 2026-01-05: Fáze 14 - Connectivity opravy
 
 ### Problém 1: UDP status indikátor po odpojení TCP

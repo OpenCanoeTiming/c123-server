@@ -104,6 +104,23 @@ Detaily viz `docs/` a `DEV-LOG.md`.
 
 ---
 
+## Architektonická rozhodnutí
+
+### BR1/BR2 Merge - řeší scoreboard, NE server ✅
+
+Server **neimplementuje** BR1/BR2 merge logiku na TCP streamu. Princip:
+
+- Server předává autentická data z C123 bez transformace
+- BR merge logiku řeší **scoreboard** (klient)
+- Scoreboard využívá REST API `GET /api/xml/races/:raceId/results` pro dotažení BR1 dat během BR2
+- REST API `?merged=true` vrací sloučené výsledky obou jízd z XML souboru
+
+**Odstraněno:** `BR1BR2Merger` třída, která dříve modifikovala TCP stream výsledky.
+
+Viz `../canoe-scoreboard-v3/docs/SolvingBR1BR2.md` pro kompletní analýzu.
+
+---
+
 ## Future Work
 
 ### Nice-to-have vylepšení
