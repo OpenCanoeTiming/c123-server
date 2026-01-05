@@ -451,6 +451,24 @@ export class Server extends EventEmitter<ServerEvents> {
     }
   }
 
+  /**
+   * Handle TCP disconnection - reset UDP discovery status for correct indicator
+   */
+  private handleTcpDisconnect(): void {
+    // Only reset if we're using auto-discovery
+    if (!this.config.autoDiscovery || this.config.tcpHost) {
+      return;
+    }
+
+    // Reset UDP discovery state for correct status indicator
+    // Note: We keep discoveredHost so re-discovery of same host is ignored
+    // (TcpSource handles reconnect on its own)
+    if (this.udpDiscovery) {
+      this.udpDiscovery.reset();
+      Logger.info('Server', 'TCP disconnected - UDP discovery reset for status update');
+    }
+  }
+
   private setupEventHandlers(): void {
     // Handle schedule change (different event loaded in C123)
     this.eventState.on('scheduleChange', () => {
@@ -484,10 +502,21 @@ export class Server extends EventEmitter<ServerEvents> {
     });
 
     this.udpDiscovery.on('discovered', (host) => {
-      if (!this.discoveredHost) {
-        this.discoveredHost = host;
-        this.startTcpSource(host, this.config.tcpPort);
+      // Check if this is a new host or re-discovery of the same host
+      if (this.discoveredHost === host) {
+        // Same host re-discovered - TcpSource is already handling reconnect
+        Logger.debug('Server', `Re-discovered same C123 at ${host}, TcpSource handling reconnect`);
+        return;
       }
+
+      if (this.discoveredHost && this.discoveredHost !== host) {
+        // Different host discovered - stop old TcpSource and connect to new one
+        Logger.info('Server', `C123 moved from ${this.discoveredHost} to ${host}`);
+        this.tcpSource?.stop();
+      }
+
+      this.discoveredHost = host;
+      this.startTcpSource(host, this.config.tcpPort);
     });
 
     this.udpDiscovery.on('error', (err) => {
@@ -498,6 +527,11 @@ export class Server extends EventEmitter<ServerEvents> {
   }
 
   private startTcpSource(host: string, port: number): void {
+    // Stop existing TcpSource if any (prevents duplicate connections)
+    if (this.tcpSource) {
+      this.tcpSource.stop();
+    }
+
     this.tcpSource = new TcpSource({ host, port });
 
     this.unifiedServer.registerSource('C123 TCP', 'tcp', this.tcpSource, {
@@ -514,6 +548,9 @@ export class Server extends EventEmitter<ServerEvents> {
         this.emit('tcpConnected', host);
       } else if (status === 'disconnected') {
         this.emit('tcpDisconnected');
+        // Reset UDP discovery to allow re-discovery
+        // (C123 might have moved to a different IP)
+        this.handleTcpDisconnect();
       }
     });
 

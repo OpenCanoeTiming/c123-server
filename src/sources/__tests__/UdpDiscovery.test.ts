@@ -206,4 +206,84 @@ describe('UdpDiscovery', () => {
       blocker.close(() => resolve());
     });
   });
+
+  describe('reset()', () => {
+    it('should clear discovered host', async () => {
+      discovery = new UdpDiscovery({ port: testPort, timeout: 0 });
+
+      await discovery.start();
+
+      // First discovery
+      const xml = '<Canoe123 System="Main"><TimeOfDay>12:34:56</TimeOfDay></Canoe123>';
+      sender.send(Buffer.from(xml), testPort, '127.0.0.1');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(discovery.getDiscoveredHost()).toBe('127.0.0.1');
+
+      // Reset
+      discovery.reset();
+      expect(discovery.getDiscoveredHost()).toBeNull();
+    });
+
+    it('should allow re-discovery after reset', async () => {
+      discovery = new UdpDiscovery({ port: testPort, timeout: 0 });
+
+      let discoveredCount = 0;
+      discovery.on('discovered', () => {
+        discoveredCount++;
+      });
+
+      await discovery.start();
+
+      const xml = '<Canoe123 System="Main"><TimeOfDay>12:34:56</TimeOfDay></Canoe123>';
+
+      // First discovery
+      sender.send(Buffer.from(xml), testPort, '127.0.0.1');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(discoveredCount).toBe(1);
+
+      // Reset and re-discover
+      discovery.reset();
+      sender.send(Buffer.from(xml), testPort, '127.0.0.1');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(discoveredCount).toBe(2);
+      expect(discovery.getDiscoveredHost()).toBe('127.0.0.1');
+    });
+
+    it('should do nothing when not running', () => {
+      discovery = new UdpDiscovery({ port: testPort, timeout: 0 });
+
+      // Should not throw
+      discovery.reset();
+      expect(discovery.getDiscoveredHost()).toBeNull();
+    });
+
+    it('should restart timeout timer when running', async () => {
+      discovery = new UdpDiscovery({ port: testPort, timeout: 150 });
+
+      let timeoutCount = 0;
+      discovery.on('timeout', () => {
+        timeoutCount++;
+      });
+
+      await discovery.start();
+
+      // Wait less than timeout
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Reset should restart the timer
+      discovery.reset();
+
+      // Wait less than timeout again
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Should not have timed out yet (timer was reset)
+      expect(timeoutCount).toBe(0);
+
+      // Wait for timeout to fire
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(timeoutCount).toBe(1);
+    });
+  });
 });

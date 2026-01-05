@@ -66,6 +66,23 @@ export class UdpDiscovery extends EventEmitter<UdpDiscoveryEvents> {
   }
 
   /**
+   * Reset discovery state to search again.
+   * Clears the discovered host and restarts timeout timer if running.
+   * This should be called when TCP connection is lost to allow re-discovery.
+   */
+  reset(): void {
+    const previousHost = this.discoveredHost;
+    this.discoveredHost = null;
+
+    // Restart timeout timer if actively listening
+    if (this.isRunning) {
+      this.clearTimeoutTimer();
+      this.startTimeoutTimer();
+      Logger.info('UdpDiscovery', `Reset for re-discovery (was: ${previousHost || 'none'})`);
+    }
+  }
+
+  /**
    * Start listening for UDP broadcasts
    */
   start(): Promise<void> {

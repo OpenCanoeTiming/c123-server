@@ -606,6 +606,58 @@ Use case: Admin chce vynutit reload všech připojených scoreboardů.
 
 ---
 
+### Fáze 14: Connectivity a stability opravy
+
+Opravy chování při výpadku/obnovení spojení s Canoe123.
+
+#### 14.1 UDP status indikátor po odpojení TCP ✅
+**Problém:** Po odpojení TCP svítí UDP kontrolka zeleně, i když UDP v té chvíli nechodí.
+**Příčina:** UDP se po úvodním autodiscover dál netestuje - to je OK designově, ale po odpojení TCP by se mělo UDP znovu aktivovat.
+
+**Řešení implementováno:**
+- [x] Přidána `reset()` metoda do `UdpDiscovery` pro reset stavu
+- [x] Server reaguje na TCP disconnect voláním `handleTcpDisconnect()`
+- [x] `handleTcpDisconnect()` resetuje UDP discovery pro správný status indikátor
+- [x] Po resetu UDP status je `connecting` (hledá), po re-discovery `connected`
+- [x] Při re-discovery stejného hostu se nevolá nový TcpSource (existující reconnectuje)
+- [x] Při discovery jiného hostu se zastaví starý TcpSource a připojí k novému
+- [x] Unit testy pro `reset()` metodu (4 nové testy)
+
+#### 14.2 Korektní recovery po ztrátě Canoe123 ✅
+**Problém:** Zkontrolovat a opravit chování když Canoe123 na chvilku zmizí a pak se vrátí.
+
+**Analýza provedena - aktuální implementace je robustní:**
+
+- [x] **TcpSource reconnect**: Exponential backoff (1s → 2s → 4s → ... → 30s max)
+  - Po reconnect se delay resetuje na 1s
+  - Buffer se čistí při každém reconnect pokusu
+
+- [x] **EventState po reconnect**: Drží data během výpadku
+  - Krátký výpadek → data zůstanou platná, C123 pošle aktualizace
+  - `scheduleChange` event při změně závodu → BR1/BR2 cache se čistí
+  - `reset()` metoda existuje pro manuální reset
+
+- [x] **UDP discovery po TCP disconnect**: Resetuje se pro správný status
+  - Status indikátor správně ukazuje `connecting` místo `connected`
+  - Při re-discovery stejného hostu se nechává TcpSource reconnectovat
+  - Při discovery jiného hostu se přepne na nový
+
+- [x] **Změna Canoe123 instance**:
+  - Pokud C123 pošle jiný schedule → emituje `scheduleChange`
+  - Server čistí BR1/BR2 cache
+  - Klienti dostanou nová data
+
+**Scénáře fungují:**
+- ✓ Canoe123 restart (krátký výpadek ~5s) - TcpSource reconnectuje, data platná
+- ✓ Síťový výpadek (delší výpadek ~30s+) - reconnect do 30s, data platná
+- ✓ Změna Canoe123 instance - scheduleChange detekce, cache reset
+
+**Nice-to-have (budoucí vylepšení):**
+- [ ] WebSocket notifikace pro klienty o stavu C123 připojení (ConnectionStatus)
+- [ ] Admin UI zobrazení doby od posledního připojení/odpojení
+
+---
+
 ## Reference
 
 - `../analysis/07-sitova-komunikace.md` - C123 protokol
