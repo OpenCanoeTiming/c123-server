@@ -35,3 +35,61 @@
 ### Testy
 - 4 nové testy pro `reset()` metodu
 - Celkem 304 testů prochází
+
+---
+
+## 2026-01-05: Fáze 15 - Remote Client Configuration ✅ DOKONČENO
+
+### Co bylo implementováno
+
+1. **Datový model (15.1)**
+   - `ClientConfig` typ s known params (type, displayRows, customTitle) + custom params
+   - `CustomParamDefinition` pro uživatelsky definované parametry
+   - Nové WS zprávy: `ConfigPush`, `ClientState`
+
+2. **Session rozšíření (15.2)**
+   - Identifikace klientů podle IP adresy
+   - Automatický `ConfigPush` při připojení
+   - Podpora `ClientState` zpráv od klientů
+
+3. **Storage a persistence (15.3)**
+   - `AppSettingsManager` rozšířen o client configs
+   - Ukládání do `settings.json`
+   - Custom param definitions
+
+4. **REST API (15.4)**
+   - `GET /api/clients` - seznam klientů
+   - `PUT /api/clients/:ip/config` - nastavení konfigurace
+   - `PUT /api/clients/:ip/label` - pojmenování klienta
+   - `DELETE /api/clients/:ip` - smazání konfigurace
+   - `POST /api/clients/:ip/refresh` - force refresh jednoho klienta
+   - `GET/PUT /api/config/custom-params` - definice custom parametrů
+
+5. **Push mechanismus (15.5)**
+   - Automatický push při změně konfigurace
+   - Push při připojení klienta
+
+6. **Admin UI (15.6)**
+   - Kompaktní grid karet klientů
+   - Detail modal s editací
+   - Force refresh tlačítko
+   - Real-time aktualizace přes WebSocket
+
+7. **Dokumentace (15.7)**
+   - `docs/CLIENT-CONFIG.md` - kompletní dokumentace
+   - Aktualizace `docs/C123-PROTOCOL.md`, `docs/REST-API.md`
+
+### Poznámky k implementaci
+
+- **Identifikace podle IP**: Funguje dobře pro lokální síť. Při použití reverse proxy nutno nastavit X-Forwarded-For.
+- **ConfigPush**: Posílají se pouze nastavené hodnoty (undefined se neposílá) - scoreboard si zachová své defaults.
+- **Custom params**: Admin může definovat vlastní parametry pro budoucí rozšíření scoreboardu.
+
+### Testy
+- 130+ nových testů pro client config funkcionalitu
+- Celkem prochází všechny testy (git clean)
+
+### Co zbývá udělat (future work)
+- [ ] WebSocket notifikace o stavu C123 připojení (ConnectionStatus zpráva)
+- [ ] Admin UI zobrazení doby od posledního připojení/odpojení
+- [ ] Bulk operations pro více klientů najednou
