@@ -92,6 +92,9 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   private sessions: Map<string, ScoreboardSession> = new Map();
   private clientIdCounter = 0;
 
+  // Admin dashboard WebSocket connections (for log streaming only)
+  private adminConnections: Set<WebSocket> = new Set();
+
   // Registered components
   private eventState: EventState | null = null;
   private sources: RegisteredSource[] = [];
@@ -179,9 +182,11 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         }
       });
 
-      // Handle WebSocket connections (with request for IP extraction)
+      // Handle WebSocket connections (with request for IP extraction and admin detection)
       this.wss.on('connection', (ws, request) => {
-        this.handleWebSocketConnection(ws, request);
+        const url = new URL(request.url || '/', `http://${request.headers.host}`);
+        const isAdmin = url.searchParams.get('admin') === '1';
+        this.handleWebSocketConnection(ws, request, isAdmin);
       });
 
       this.httpServer.on('error', (err) => {
@@ -408,6 +413,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
     const json = JSON.stringify(message);
 
+    // Send to scoreboard sessions
     for (const [clientId, session] of this.sessions) {
       if (session.isConnected()) {
         session.sendRaw(json);
@@ -417,12 +423,42 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         this.emit('disconnection', clientId);
       }
     }
+
+    // Send to admin dashboard connections
+    for (const ws of this.adminConnections) {
+      if (ws.readyState === ws.OPEN) {
+        ws.send(json);
+      } else {
+        // Clean up dead connections
+        this.adminConnections.delete(ws);
+      }
+    }
   }
 
   /**
    * Handle WebSocket connection
+   *
+   * @param ws - WebSocket instance
+   * @param request - HTTP request (for IP extraction)
+   * @param isAdmin - True if this is an admin dashboard connection (for log streaming only)
    */
-  private handleWebSocketConnection(ws: WebSocket, request?: IncomingMessage): void {
+  private handleWebSocketConnection(ws: WebSocket, request?: IncomingMessage, isAdmin = false): void {
+    // Admin connections are for log streaming only - don't create ScoreboardSession
+    if (isAdmin) {
+      this.adminConnections.add(ws);
+      Logger.debug('Unified', 'Admin dashboard connected for log streaming');
+
+      ws.on('close', () => {
+        this.adminConnections.delete(ws);
+        Logger.debug('Unified', 'Admin dashboard disconnected');
+      });
+
+      ws.on('error', () => {
+        this.adminConnections.delete(ws);
+      });
+      return;
+    }
+
     const clientId = `client-${++this.clientIdCounter}`;
 
     // Extract client IP from request
@@ -2314,7 +2350,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
     function connectLogWebSocket() {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      ws = new WebSocket(protocol + '//' + window.location.host + '/ws');
+      ws = new WebSocket(protocol + '//' + window.location.host + '/ws?admin=1');
 
       ws.onmessage = function(event) {
         try {
