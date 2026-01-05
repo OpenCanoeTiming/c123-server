@@ -239,11 +239,11 @@ describe('UnifiedServer', () => {
         const response = await fetch(`http://localhost:${port}/`);
         const html = await response.text();
 
-        expect(html).toContain('Uptime');
-        expect(html).toContain('Scoreboards');
+        expect(html).toContain('Event');
         expect(html).toContain('Sources');
-        expect(html).toContain('On Course');
-        expect(html).toContain('Results');
+        expect(html).toContain('XML Configuration');
+        expect(html).toContain('Clients');
+        expect(html).toContain('Server Logs');
       });
     });
   });
@@ -917,7 +917,8 @@ describe('UnifiedServer', () => {
 
     describe('WebSocket LogEntry broadcast', () => {
       it('should broadcast log entries to connected clients', async () => {
-        const client = new WebSocket(`ws://localhost:${port}/ws`);
+        // Connect as admin to receive LogEntry messages
+        const client = new WebSocket(`ws://localhost:${port}/ws?admin=1`);
 
         await new Promise<void>((resolve) => {
           client.on('open', () => resolve());
@@ -930,6 +931,9 @@ describe('UnifiedServer', () => {
             receivedLogEntries.push(msg);
           }
         });
+
+        // Wait for connection to be fully established
+        await new Promise((resolve) => setTimeout(resolve, 50));
 
         // Log something
         Logger.info('TestComponent', 'Test log message');
