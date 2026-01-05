@@ -548,6 +548,75 @@ Sent by admin to force all clients to reload/refresh their data and UI:
 
 This is typically triggered manually by the admin when they want to force all scoreboards to update immediately (e.g., after fixing a configuration issue or uploading new data).
 
+### ConfigPush
+
+Sent by server to push configuration to a client (scoreboard). This is sent:
+1. Immediately when client connects (if config exists for that IP)
+2. When admin updates client configuration via REST API
+
+```json
+{
+  "type": "ConfigPush",
+  "timestamp": "2025-01-05T10:30:00.000Z",
+  "data": {
+    "type": "ledwall",
+    "displayRows": 8,
+    "customTitle": "Finish Line Display",
+    "label": "TV in Hall A"
+  }
+}
+```
+
+**Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | string | Layout mode: `'vertical'` or `'ledwall'` |
+| `displayRows` | number | Number of display rows (3-20) |
+| `customTitle` | string | Custom title override |
+| `raceFilter` | string[] | Only show these race IDs |
+| `showOnCourse` | boolean | Show OnCourse data |
+| `showResults` | boolean | Show Results data |
+| `custom` | object | Custom parameters (key-value) |
+| `label` | string | Admin-assigned label for this client |
+
+**Note:** Only explicitly set parameters are included. Undefined values are omitted, allowing clients to use their own defaults.
+
+**Client behavior:** When receiving this message, clients should:
+1. Merge pushed values with current configuration
+2. Apply layout/display changes immediately
+3. Optionally report current state back via `ClientState`
+
+### ClientState
+
+Sent by client to report its current state to the server (optional):
+
+```json
+{
+  "type": "ClientState",
+  "timestamp": "2025-01-05T10:30:01.000Z",
+  "data": {
+    "current": {
+      "type": "ledwall",
+      "displayRows": 8,
+      "customTitle": "Finish Line Display"
+    },
+    "version": "3.0.0",
+    "capabilities": ["configPush", "forceRefresh"]
+  }
+}
+```
+
+**Fields:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `current` | object | Yes | Current configuration values in use |
+| `version` | string | No | Client version |
+| `capabilities` | string[] | No | Supported features |
+
+**Server behavior:** The server stores this state and displays it in the admin dashboard, allowing administrators to see what values each client is actually using.
+
+See [CLIENT-CONFIG.md](CLIENT-CONFIG.md) for complete documentation on client configuration.
+
 ---
 
 ## Connection Details

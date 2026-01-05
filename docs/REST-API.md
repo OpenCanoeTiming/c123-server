@@ -13,6 +13,9 @@ The C123 Server provides the following APIs:
 | **Discovery API** | `/api/discover` | Server identification for auto-discovery |
 | **Server API** | `/api` | Server status, sources, scoreboards |
 | **XML Data API** | `/api/xml` | Race data from XML file (schedule, results, participants) |
+| **Broadcast API** | `/api/broadcast` | Broadcast messages to all clients |
+| **Client Management API** | `/api/clients` | Manage scoreboard client configurations |
+| **Custom Parameters API** | `/api/config/custom-params` | Define custom client parameters |
 
 **Base URL:** `http://<server>:27123`
 
@@ -589,6 +592,262 @@ Force all connected WebSocket clients to refresh their data. Sends a `ForceRefre
 
 ---
 
+## Client Management API
+
+These endpoints allow managing connected scoreboard clients and their configurations.
+
+### GET /api/clients
+
+Get list of all clients (online and known offline).
+
+**Response:**
+
+```json
+{
+  "clients": [
+    {
+      "ip": "192.168.1.50",
+      "label": "TV in Hall A",
+      "online": true,
+      "sessionId": "client-42",
+      "serverConfig": {
+        "type": "ledwall",
+        "displayRows": 8
+      },
+      "clientState": {
+        "current": {
+          "type": "ledwall",
+          "displayRows": 8
+        },
+        "version": "3.0.0"
+      },
+      "lastSeen": "2025-01-05T10:30:00.000Z"
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ip` | string | Client IP address |
+| `label` | string | Admin-assigned label |
+| `online` | boolean | Whether client is currently connected |
+| `sessionId` | string | WebSocket session ID (if online) |
+| `serverConfig` | object | Configuration stored on server |
+| `clientState` | object | Last reported state from client |
+| `lastSeen` | string | ISO timestamp of last connection |
+
+---
+
+### PUT /api/clients/:ip/config
+
+Update configuration for a client. If the client is online, changes are pushed immediately via WebSocket.
+
+**Parameters:**
+
+| Name | Description |
+|------|-------------|
+| `ip` | Client IP address |
+
+**Request:**
+
+```json
+{
+  "type": "ledwall",
+  "displayRows": 10,
+  "customTitle": "Finish Line"
+}
+```
+
+| Field | Type | Validation | Description |
+|-------|------|------------|-------------|
+| `type` | string | `'vertical'` or `'ledwall'` | Layout mode |
+| `displayRows` | number | 3-20 | Number of rows |
+| `customTitle` | string | any | Custom title |
+| `raceFilter` | string[] | array of strings | Race filter |
+| `showOnCourse` | boolean | true/false | Show OnCourse data |
+| `showResults` | boolean | true/false | Show Results data |
+| `custom` | object | key-value pairs | Custom parameters |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "config": {
+    "type": "ledwall",
+    "displayRows": 10,
+    "customTitle": "Finish Line",
+    "label": "TV in Hall A"
+  },
+  "pushed": true
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | Operation succeeded |
+| `config` | object | Updated configuration |
+| `pushed` | boolean | Whether config was pushed to online client |
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| 400 | `{ "error": "Invalid type. Must be 'vertical' or 'ledwall'." }` |
+| 400 | `{ "error": "displayRows must be between 3 and 20." }` |
+
+---
+
+### PUT /api/clients/:ip/label
+
+Set label for a client.
+
+**Request:**
+
+```json
+{
+  "label": "TV in Hall A"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "label": "TV in Hall A"
+}
+```
+
+---
+
+### DELETE /api/clients/:ip
+
+Delete stored configuration for a client.
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "deleted": true
+}
+```
+
+---
+
+### POST /api/clients/:ip/refresh
+
+Send ForceRefresh to a specific client.
+
+**Request:**
+
+```json
+{
+  "reason": "Manual refresh"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "refreshed": true
+}
+```
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| 404 | `{ "error": "Client not online" }` |
+
+---
+
+## Custom Parameters API
+
+Manage custom parameter definitions for client configuration.
+
+### GET /api/config/custom-params
+
+Get list of defined custom parameters.
+
+**Response:**
+
+```json
+{
+  "definitions": [
+    {
+      "key": "showSponsors",
+      "label": "Show Sponsors",
+      "type": "boolean",
+      "defaultValue": true
+    },
+    {
+      "key": "scrollSpeed",
+      "label": "Scroll Speed",
+      "type": "number",
+      "defaultValue": 5
+    }
+  ]
+}
+```
+
+---
+
+### PUT /api/config/custom-params
+
+Set custom parameter definitions.
+
+**Request:**
+
+```json
+{
+  "definitions": [
+    {
+      "key": "showSponsors",
+      "label": "Show Sponsors",
+      "type": "boolean",
+      "defaultValue": true
+    }
+  ]
+}
+```
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `key` | string | Yes | Non-empty |
+| `label` | string | Yes | Non-empty |
+| `type` | string | Yes | `'string'`, `'number'`, or `'boolean'` |
+| `defaultValue` | any | No | Must match type |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "definitions": [
+    {
+      "key": "showSponsors",
+      "label": "Show Sponsors",
+      "type": "boolean",
+      "defaultValue": true
+    }
+  ]
+}
+```
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| 400 | `{ "error": "Each definition must have a non-empty key." }` |
+| 400 | `{ "error": "Invalid type 'invalid'. Must be string, number, or boolean." }` |
+
+---
+
 ## WebSocket Change Notifications
 
 For real-time updates when the XML file changes, connect to the main WebSocket endpoint.
@@ -685,3 +944,4 @@ function formatTime(centiseconds) {
 
 - [C123-PROTOCOL.md](C123-PROTOCOL.md) - Real-time WebSocket protocol
 - [INTEGRATION.md](INTEGRATION.md) - Integration guide for clients
+- [CLIENT-CONFIG.md](CLIENT-CONFIG.md) - Remote client configuration

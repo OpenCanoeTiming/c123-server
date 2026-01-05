@@ -206,15 +206,18 @@ Upon connection, the server sends a `Connected` message:
 
 ### Message Types
 
-| Type | Frequency | Description |
-|------|-----------|-------------|
-| `TimeOfDay` | ~1/second | Heartbeat with current time |
-| `OnCourse` | ~2/second | Competitors currently on course |
-| `Results` | ~20-40s | Result tables (rotates through categories) |
-| `RaceConfig` | ~20s | Gate configuration |
-| `Schedule` | ~40s | Race schedule |
-| `XmlChange` | On change | XML file was updated |
-| `ForceRefresh` | Manual | Admin triggered refresh of all clients |
+| Type | Source | Description |
+|------|--------|-------------|
+| `TimeOfDay` | C123 | Heartbeat with current time (~1/second) |
+| `OnCourse` | C123 | Competitors currently on course (~2/second) |
+| `Results` | C123 | Result tables - rotates through categories (~20-40s) |
+| `RaceConfig` | C123 | Gate configuration (~20s) |
+| `Schedule` | C123 | Race schedule (~40s) |
+| `Connected` | Server | Sent on WebSocket connection |
+| `XmlChange` | Server | XML file was updated |
+| `ForceRefresh` | Server | Admin triggered refresh |
+| `ConfigPush` | Server | Configuration pushed to client |
+| `ClientState` | Client | Client reports its state (optional) |
 
 ### Message Format
 
@@ -514,6 +517,78 @@ function handleForceRefresh(message: { data: { reason?: string } }) {
 ```
 
 This is useful when the admin needs to force all scoreboards to update immediately, for example after fixing a configuration issue or uploading corrected data.
+
+---
+
+## Remote Configuration (ConfigPush)
+
+The C123 Server can push configuration to clients remotely. This allows administrators to set display parameters (layout, rows, title) from the dashboard without requiring manual configuration on each scoreboard.
+
+### Handling ConfigPush
+
+When connecting, the server may send a `ConfigPush` message with stored configuration for your client's IP address:
+
+```typescript
+interface ConfigPushData {
+  type?: 'vertical' | 'ledwall';
+  displayRows?: number;
+  customTitle?: string;
+  raceFilter?: string[];
+  showOnCourse?: boolean;
+  showResults?: boolean;
+  custom?: Record<string, string | number | boolean>;
+  label?: string;
+}
+
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+
+  if (message.type === 'ConfigPush') {
+    applyConfig(message.data as ConfigPushData);
+  }
+};
+
+function applyConfig(config: ConfigPushData) {
+  // Only apply values that are explicitly set (not undefined)
+  if (config.type) setLayout(config.type);
+  if (config.displayRows) setRowCount(config.displayRows);
+  if (config.customTitle) setTitle(config.customTitle);
+
+  // Handle custom parameters
+  if (config.custom) {
+    for (const [key, value] of Object.entries(config.custom)) {
+      setCustomParam(key, value);
+    }
+  }
+}
+```
+
+### Reporting Client State
+
+Optionally, your client can report its current state back to the server:
+
+```typescript
+function reportState() {
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'ClientState',
+      timestamp: new Date().toISOString(),
+      data: {
+        current: {
+          type: currentLayout,
+          displayRows: currentRows,
+        },
+        version: '3.0.0',
+        capabilities: ['configPush', 'forceRefresh'],
+      },
+    }));
+  }
+}
+```
+
+This helps administrators see what values each scoreboard is actually using.
+
+See [CLIENT-CONFIG.md](CLIENT-CONFIG.md) for complete documentation.
 
 ---
 
@@ -825,4 +900,5 @@ function formatTime(centiseconds: number): string {
 
 - [C123-PROTOCOL.md](C123-PROTOCOL.md) - Complete C123 protocol reference
 - [REST-API.md](REST-API.md) - REST API documentation
+- [CLIENT-CONFIG.md](CLIENT-CONFIG.md) - Remote client configuration
 - [CLI-DIFFERENCES.md](CLI-DIFFERENCES.md) - Migration guide from CLI format

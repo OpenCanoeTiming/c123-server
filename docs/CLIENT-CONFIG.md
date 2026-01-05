@@ -1,0 +1,613 @@
+# Client Configuration (Remote Scoreboard Management)
+
+This document describes how the C123 Server centrally manages scoreboard client configurations. Administrators can set display parameters (layout, rows, custom title) from the dashboard, and clients receive these settings automatically via WebSocket.
+
+---
+
+## Overview
+
+The client configuration system allows administrators to:
+
+1. **View all connected scoreboards** - See which clients are online
+2. **Name clients** - Assign labels like "TV in Hall A" for easy identification
+3. **Push configuration** - Set display parameters that are sent to clients
+4. **Define custom parameters** - Add organization-specific settings
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                      Client Config Flow                              │
+│                                                                      │
+│   Admin UI                 Server                    Scoreboard      │
+│  ┌────────┐           ┌──────────────┐           ┌──────────────┐   │
+│  │ Edit   │──PUT───▶  │ ClientConfig │──WS push──▶│ Apply config │   │
+│  │ config │           │  Storage     │            │ (displayRows │   │
+│  └────────┘           └──────────────┘            │  layout, etc)│   │
+│                             │                     └──────────────┘   │
+│                             ▼                                        │
+│                       settings.json                                  │
+│                       clientConfigs{}                                │
+│                                                                      │
+│      Identify by IP ◀──connect──  WS :27123/ws                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Known Parameters
+
+These parameters are recognized by the C123 Server and scoreboard implementations:
+
+| Parameter | Type | Range/Values | Description |
+|-----------|------|--------------|-------------|
+| `type` | string | `'vertical'` \| `'ledwall'` | Layout mode |
+| `displayRows` | number | 3-20 | Number of rows for LED wall scaling |
+| `customTitle` | string | any | Custom title override |
+| `raceFilter` | string[] | race IDs | Only show these races |
+| `showOnCourse` | boolean | true/false | Show OnCourse data |
+| `showResults` | boolean | true/false | Show Results data |
+
+### Parameter Behavior
+
+- **`undefined`** = "not set, use client default/auto-detection"
+- **explicit value** = "use this value"
+
+Only explicitly set parameters are pushed to clients. This allows clients to use their own defaults for unset values.
+
+---
+
+## WebSocket Messages
+
+Two new message types are used for client configuration:
+
+### ConfigPush (Server → Client)
+
+Sent by server when:
+1. Client connects (if config exists for that IP)
+2. Admin updates client configuration
+
+```json
+{
+  "type": "ConfigPush",
+  "timestamp": "2025-01-05T10:30:00.000Z",
+  "data": {
+    "type": "ledwall",
+    "displayRows": 8,
+    "customTitle": "Finish Line Display",
+    "label": "TV in Hall A"
+  }
+}
+```
+
+**Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | string | Layout mode (`vertical` or `ledwall`) |
+| `displayRows` | number | Number of display rows |
+| `customTitle` | string | Custom title for scoreboard |
+| `raceFilter` | string[] | Race ID filter |
+| `showOnCourse` | boolean | Show OnCourse data |
+| `showResults` | boolean | Show Results data |
+| `custom` | object | Custom parameters (key-value) |
+| `label` | string | Admin-assigned label |
+
+Only set parameters are included. Empty/undefined values are omitted.
+
+### ClientState (Client → Server)
+
+Optional message for client to report its current state:
+
+```json
+{
+  "type": "ClientState",
+  "timestamp": "2025-01-05T10:30:01.000Z",
+  "data": {
+    "current": {
+      "type": "ledwall",
+      "displayRows": 8,
+      "customTitle": "Finish Line Display"
+    },
+    "version": "3.0.0",
+    "capabilities": ["configPush", "forceRefresh"]
+  }
+}
+```
+
+**Fields:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `current` | object | Yes | Current parameter values in use |
+| `version` | string | No | Client version |
+| `capabilities` | string[] | No | Supported features |
+
+---
+
+## Scoreboard Implementation
+
+### Handling ConfigPush
+
+```typescript
+interface ConfigPushData {
+  type?: 'vertical' | 'ledwall';
+  displayRows?: number;
+  customTitle?: string;
+  raceFilter?: string[];
+  showOnCourse?: boolean;
+  showResults?: boolean;
+  custom?: Record<string, string | number | boolean>;
+  label?: string;
+}
+
+class ScoreboardClient {
+  private config: ConfigPushData = {};
+
+  constructor() {
+    // Initialize with URL params or defaults
+    this.config = this.getInitialConfig();
+  }
+
+  handleMessage(message: { type: string; data: unknown }) {
+    switch (message.type) {
+      case 'ConfigPush':
+        this.applyConfig(message.data as ConfigPushData);
+        break;
+      // ... other message types
+    }
+  }
+
+  private applyConfig(pushed: ConfigPushData) {
+    // Merge pushed config with current config
+    // Only override values that are explicitly set (not undefined)
+    for (const [key, value] of Object.entries(pushed)) {
+      if (value !== undefined) {
+        (this.config as Record<string, unknown>)[key] = value;
+      }
+    }
+
+    // Re-render with new config
+    this.render();
+
+    // Optionally report state back to server
+    this.reportState();
+  }
+
+  private reportState() {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({
+        type: 'ClientState',
+        timestamp: new Date().toISOString(),
+        data: {
+          current: this.config,
+          version: '3.0.0',
+          capabilities: ['configPush', 'forceRefresh'],
+        },
+      }));
+    }
+  }
+
+  private getInitialConfig(): ConfigPushData {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      type: params.get('type') as 'vertical' | 'ledwall' | undefined,
+      displayRows: params.has('displayRows')
+        ? parseInt(params.get('displayRows')!, 10)
+        : undefined,
+      customTitle: params.get('customTitle') || undefined,
+    };
+  }
+}
+```
+
+### Full Example with Connection
+
+```typescript
+class ConfigAwareScoreboard {
+  private ws: WebSocket | null = null;
+  private config: ConfigPushData = {};
+  private serverUrl: string;
+
+  constructor(serverUrl: string) {
+    this.serverUrl = serverUrl;
+    this.config = this.getDefaults();
+  }
+
+  connect() {
+    this.ws = new WebSocket(`ws://${this.serverUrl}/ws`);
+
+    this.ws.onopen = () => {
+      console.log('Connected - waiting for ConfigPush');
+    };
+
+    this.ws.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+
+      switch (message.type) {
+        case 'Connected':
+          // Server will send ConfigPush next if config exists
+          console.log('Server connected:', message.data);
+          break;
+
+        case 'ConfigPush':
+          console.log('Received config:', message.data);
+          this.applyConfig(message.data);
+          break;
+
+        case 'OnCourse':
+        case 'Results':
+          // Apply race filter if set
+          if (this.shouldShowMessage(message)) {
+            this.handleRaceData(message);
+          }
+          break;
+
+        case 'ForceRefresh':
+          console.log('Force refresh:', message.data.reason);
+          this.refresh();
+          break;
+      }
+    };
+
+    this.ws.onclose = () => {
+      setTimeout(() => this.connect(), 3000);
+    };
+  }
+
+  private applyConfig(pushed: ConfigPushData) {
+    // Merge with existing config
+    this.config = { ...this.config, ...this.filterDefined(pushed) };
+
+    // Apply layout changes
+    if (this.config.type === 'ledwall') {
+      this.setLedWallMode(this.config.displayRows || 10);
+    } else {
+      this.setVerticalMode();
+    }
+
+    // Apply title
+    if (this.config.customTitle) {
+      document.title = this.config.customTitle;
+    }
+
+    // Report state back
+    this.reportState();
+  }
+
+  private filterDefined(obj: Record<string, unknown>): Record<string, unknown> {
+    return Object.fromEntries(
+      Object.entries(obj).filter(([_, v]) => v !== undefined)
+    );
+  }
+
+  private shouldShowMessage(message: { type: string; data: { raceId?: string } }): boolean {
+    // If no filter, show everything
+    if (!this.config.raceFilter?.length) return true;
+
+    // Check if raceId matches filter
+    const raceId = message.data?.raceId;
+    if (!raceId) return true;
+
+    return this.config.raceFilter.includes(raceId);
+  }
+
+  private reportState() {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({
+        type: 'ClientState',
+        timestamp: new Date().toISOString(),
+        data: {
+          current: this.config,
+          version: '3.0.0',
+        },
+      }));
+    }
+  }
+
+  private getDefaults(): ConfigPushData {
+    return {
+      type: 'vertical',
+      displayRows: 10,
+      showOnCourse: true,
+      showResults: true,
+    };
+  }
+
+  // Implementation-specific methods
+  private setLedWallMode(rows: number) { /* ... */ }
+  private setVerticalMode() { /* ... */ }
+  private handleRaceData(message: unknown) { /* ... */ }
+  private refresh() { /* ... */ }
+}
+```
+
+---
+
+## REST API
+
+### GET /api/clients
+
+Get list of all clients (online and known offline).
+
+**Response:**
+```json
+{
+  "clients": [
+    {
+      "ip": "192.168.1.50",
+      "label": "TV in Hall A",
+      "online": true,
+      "sessionId": "client-42",
+      "serverConfig": {
+        "type": "ledwall",
+        "displayRows": 8
+      },
+      "clientState": {
+        "current": {
+          "type": "ledwall",
+          "displayRows": 8
+        },
+        "version": "3.0.0"
+      },
+      "lastSeen": "2025-01-05T10:30:00.000Z"
+    },
+    {
+      "ip": "192.168.1.51",
+      "label": "Start Display",
+      "online": false,
+      "serverConfig": {
+        "type": "vertical"
+      },
+      "lastSeen": "2025-01-04T18:00:00.000Z"
+    }
+  ]
+}
+```
+
+### PUT /api/clients/:ip/config
+
+Update configuration for a client. Automatically pushes changes if client is online.
+
+**Request:**
+```json
+{
+  "type": "ledwall",
+  "displayRows": 10,
+  "customTitle": "Finish Line"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "config": {
+    "type": "ledwall",
+    "displayRows": 10,
+    "customTitle": "Finish Line",
+    "label": "TV in Hall A"
+  },
+  "pushed": true
+}
+```
+
+**Validation:**
+- `type`: Must be `'vertical'` or `'ledwall'`
+- `displayRows`: Must be 3-20
+- `raceFilter`: Must be an array of strings
+- `showOnCourse`, `showResults`: Must be boolean
+
+### PUT /api/clients/:ip/label
+
+Set label for a client.
+
+**Request:**
+```json
+{
+  "label": "TV in Hall A"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "label": "TV in Hall A"
+}
+```
+
+### DELETE /api/clients/:ip
+
+Delete stored configuration for a client.
+
+**Response:**
+```json
+{
+  "success": true,
+  "deleted": true
+}
+```
+
+### POST /api/clients/:ip/refresh
+
+Send ForceRefresh to a specific client.
+
+**Request:**
+```json
+{
+  "reason": "Manual refresh"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "refreshed": true
+}
+```
+
+---
+
+## Custom Parameters
+
+Administrators can define additional parameters for organization-specific needs.
+
+### GET /api/config/custom-params
+
+Get list of defined custom parameters.
+
+**Response:**
+```json
+{
+  "definitions": [
+    {
+      "key": "showSponsors",
+      "label": "Show Sponsors",
+      "type": "boolean",
+      "defaultValue": true
+    },
+    {
+      "key": "scrollSpeed",
+      "label": "Scroll Speed",
+      "type": "number",
+      "defaultValue": 5
+    }
+  ]
+}
+```
+
+### PUT /api/config/custom-params
+
+Set custom parameter definitions.
+
+**Request:**
+```json
+{
+  "definitions": [
+    {
+      "key": "showSponsors",
+      "label": "Show Sponsors",
+      "type": "boolean",
+      "defaultValue": true
+    }
+  ]
+}
+```
+
+**Validation:**
+- `key`: Required, non-empty string
+- `label`: Required, non-empty string
+- `type`: Must be `'string'`, `'number'`, or `'boolean'`
+- `defaultValue`: Must match the specified type
+
+### Using Custom Parameters
+
+When set, custom parameters appear in the `custom` field of ConfigPush:
+
+```json
+{
+  "type": "ConfigPush",
+  "data": {
+    "type": "ledwall",
+    "displayRows": 8,
+    "custom": {
+      "showSponsors": false,
+      "scrollSpeed": 3
+    }
+  }
+}
+```
+
+Client implementation:
+
+```typescript
+function applyConfig(data: ConfigPushData) {
+  // Known parameters
+  if (data.type) setLayout(data.type);
+  if (data.displayRows) setRows(data.displayRows);
+
+  // Custom parameters
+  if (data.custom) {
+    if ('showSponsors' in data.custom) {
+      setSponsorVisibility(data.custom.showSponsors as boolean);
+    }
+    if ('scrollSpeed' in data.custom) {
+      setScrollSpeed(data.custom.scrollSpeed as number);
+    }
+  }
+}
+```
+
+---
+
+## Client Identification
+
+Clients are identified by their IP address. The server extracts the IP from:
+
+1. `X-Forwarded-For` header (if behind proxy)
+2. `X-Real-IP` header (if behind proxy)
+3. Socket remote address
+
+This means:
+- Multiple tabs/windows from the same machine share configuration
+- Configuration persists across reconnections
+- Admin can pre-configure clients before they connect
+
+### Behind Proxy
+
+If the server is behind a reverse proxy, ensure the proxy forwards client IP:
+
+**Nginx:**
+```nginx
+location /ws {
+    proxy_pass http://localhost:27123;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+```
+
+---
+
+## Persistence
+
+Client configurations are stored in `settings.json`:
+
+**Windows:** `%APPDATA%\c123-server\settings.json`
+**Linux/macOS:** `~/.c123-server/settings.json`
+
+```json
+{
+  "clientConfigs": {
+    "192.168.1.50": {
+      "type": "ledwall",
+      "displayRows": 8,
+      "label": "TV in Hall A",
+      "lastSeen": "2025-01-05T10:30:00.000Z"
+    },
+    "192.168.1.51": {
+      "type": "vertical",
+      "label": "Start Display",
+      "lastSeen": "2025-01-04T18:00:00.000Z"
+    }
+  },
+  "customParamDefinitions": [
+    {
+      "key": "showSponsors",
+      "label": "Show Sponsors",
+      "type": "boolean",
+      "defaultValue": true
+    }
+  ]
+}
+```
+
+---
+
+## See Also
+
+- [C123-PROTOCOL.md](C123-PROTOCOL.md) - WebSocket message types
+- [REST-API.md](REST-API.md) - Full REST API documentation
+- [INTEGRATION.md](INTEGRATION.md) - Integration guide for scoreboards
