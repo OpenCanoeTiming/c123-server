@@ -23,14 +23,15 @@ npm run build
 ## Quick Start
 
 ```bash
-# Auto-discovery mode
-c123-server
+# Development mode with hot reload
+npm run dev
 
-# Connect to specific C123
-c123-server --host 192.168.1.5
+# Production mode (after build)
+npm start
 
-# With XML file for complete results
-c123-server --xml /path/to/results.xml
+# With options (note the -- to pass arguments)
+npm start -- --host 192.168.1.5
+npm start -- --xml /path/to/results.xml
 ```
 
 The server starts on port **27123** with:
@@ -41,7 +42,7 @@ The server starts on port **27123** with:
 ## Command Line Options
 
 ```
-Usage: c123-server [command] [options]
+Usage: npm start -- [command] [options]
 
 Commands:
   run         Run the server (default)
@@ -133,15 +134,15 @@ See [docs/REST-API.md](docs/REST-API.md) for full API documentation.
 Install as a Windows service for automatic startup:
 
 ```bash
-c123-server install
-c123-server start
+npm start -- install
+npm start -- start
 ```
 
 Manage the service:
 
 ```bash
-c123-server stop
-c123-server uninstall
+npm start -- stop
+npm start -- uninstall
 ```
 
 ## Configuration
@@ -233,7 +234,7 @@ npm run build
 - Verify C123 is running and broadcasting on port 27333
 - Check that both machines are on the same network
 - On Windows, ensure Windows Firewall allows UDP/TCP port 27333
-- Try specifying the C123 host directly: `c123-server --host 192.168.1.5`
+- Try specifying the C123 host directly: `npm start -- --host 192.168.1.5`
 
 **Scoreboards cannot connect**
 - Ensure port 27123 is not blocked by firewall
@@ -257,7 +258,7 @@ npm run build
 
 **Server won't start**
 - Check if port 27123 is already in use: `netstat -an | find "27123"`
-- Use a different port: `c123-server --server-port 8080`
+- Use a different port: `npm start -- --server-port 8080`
 - Check logs for specific error messages
 
 **Windows Service issues**
