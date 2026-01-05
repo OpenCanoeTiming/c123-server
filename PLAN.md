@@ -867,18 +867,18 @@ Centrální správa parametrů klientů (scoreboardů) ze serveru. Admin může 
 - [x] Automatické obnovování seznamu klientů (každé 3s)
 - [x] TypeScript chyby v test souborech opraveny (JsonResponse type)
 
-#### 15.7 Dokumentace
+#### 15.7 Dokumentace ✅
 **Výstup:** Aktualizovaná dokumentace
 
-- [ ] `docs/CLIENT-CONFIG.md` - kompletní dokumentace:
+- [x] `docs/CLIENT-CONFIG.md` - kompletní dokumentace:
   - Jak klient implementuje ClientState zprávu
   - Jak reagovat na ConfigPush
   - Seznam známých parametrů
   - Jak definovat custom parametry
   - Příklady použití
-- [ ] Aktualizovat `docs/C123-PROTOCOL.md` - nové zprávy
-- [ ] Aktualizovat `docs/REST-API.md` - nové endpointy
-- [ ] Příklad implementace v scoreboardu
+- [x] Aktualizovat `docs/C123-PROTOCOL.md` - nové zprávy
+- [x] Aktualizovat `docs/REST-API.md` - nové endpointy
+- [x] Příklad implementace v scoreboardu (v CLIENT-CONFIG.md)
 
 ---
 
