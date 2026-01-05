@@ -413,18 +413,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
     const json = JSON.stringify(message);
 
-    // Send to scoreboard sessions
-    for (const [clientId, session] of this.sessions) {
-      if (session.isConnected()) {
-        session.sendRaw(json);
-      } else {
-        // Clean up dead connections
-        this.sessions.delete(clientId);
-        this.emit('disconnection', clientId);
-      }
-    }
-
-    // Send to admin dashboard connections
+    // Send only to admin dashboard connections (not to scoreboards)
     for (const ws of this.adminConnections) {
       if (ws.readyState === ws.OPEN) {
         ws.send(json);
