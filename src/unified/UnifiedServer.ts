@@ -1728,6 +1728,15 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     </table>
   </div>
 
+  <h2>Connected Scoreboards</h2>
+  <div class="card">
+    <table id="scoreboardsTable">
+      <thead><tr><th>ID</th><th>Connected</th><th>Last Activity</th><th>Config</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div id="noScoreboards" style="color: #666; padding: 10px;">No scoreboards connected</div>
+  </div>
+
   <h2>XML Configuration</h2>
   <div class="card" id="xmlConfigCard">
     <div style="margin-bottom: 10px;">
