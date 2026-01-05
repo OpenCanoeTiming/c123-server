@@ -2087,13 +2087,18 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
             offlinePathEl.style.color = offlinePath.exists ? '#00ff88' : '#ff6b6b';
           }
 
-          // Select current mode radio
-          currentMode = data.mode || 'manual';
-          const modeRadio = document.querySelector('input[name="xmlMode"][value="' + currentMode + '"]');
-          if (modeRadio) modeRadio.checked = true;
+          // Only update mode radio if user is not interacting with the XML config form
+          const isEditingXmlConfig = document.activeElement?.closest('#xmlConfigCard') !== null;
 
-          // Show/hide manual path input based on mode
-          updateManualPathVisibility(currentMode);
+          if (!isEditingXmlConfig) {
+            // Select current mode radio
+            currentMode = data.mode || 'manual';
+            const modeRadio = document.querySelector('input[name="xmlMode"][value="' + currentMode + '"]');
+            if (modeRadio) modeRadio.checked = true;
+
+            // Show/hide manual path input based on mode
+            updateManualPathVisibility(currentMode);
+          }
         }
 
         // Only update input value if it doesn't have focus (user might be typing)
