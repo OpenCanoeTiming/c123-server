@@ -181,6 +181,13 @@ export class XmlDataService {
   }
 
   /**
+   * Check if XML data is loaded and available
+   */
+  hasData(): boolean {
+    return this.xmlPath !== null && this.cachedData !== null;
+  }
+
+  /**
    * Get event name from XML (MainTitle element)
    * Returns null if not available
    */

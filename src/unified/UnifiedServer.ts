@@ -3,7 +3,7 @@ import { createServer, Server as HttpServer, IncomingMessage } from 'node:http';
 import { WebSocketServer as WsServer, WebSocket } from 'ws';
 import { EventEmitter } from 'node:events';
 import type { ScoreboardConfig } from '../admin/types.js';
-import type { C123Message, C123XmlChange, C123ForceRefresh, C123LogEntry, XmlSection, LogLevel, C123ClientState } from '../protocol/types.js';
+import type { C123Message, C123XmlChange, C123ForceRefresh, C123LogEntry, C123Connected, XmlSection, LogLevel, C123ClientState } from '../protocol/types.js';
 import { getLogBuffer, type LogEntry, type LogFilterOptions } from '../utils/LogBuffer.js';
 import { ScoreboardSession } from '../ws/ScoreboardSession.js';
 import { Logger } from '../utils/logger.js';
@@ -580,6 +580,21 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
     // Notify admin dashboard about new client
     this.broadcastClientsUpdate();
+
+    // Send Connected message to scoreboard
+    const tcpSource = this.sources.find((s) => s.type === 'tcp');
+    const c123Connected = tcpSource?.source.status === 'connected';
+    const xmlLoaded = this.xmlDataService?.hasData() ?? false;
+    const connectedMsg: C123Connected = {
+      type: 'Connected',
+      timestamp: new Date().toISOString(),
+      data: {
+        version: VERSION,
+        c123Connected,
+        xmlLoaded,
+      },
+    };
+    session.sendRaw(JSON.stringify(connectedMsg));
 
     // Send ConfigPush if there's stored config for this client
     if (storedConfig) {
