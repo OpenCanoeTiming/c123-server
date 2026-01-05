@@ -824,17 +824,18 @@ Centrální správa parametrů klientů (scoreboardů) ze serveru. Admin může 
   - Validace: key, label, type (string/number/boolean), defaultValue type match
 - [x] Unit testy (23 nových testů pro client management API)
 
-#### 15.5 Push mechanismus
+#### 15.5 Push mechanismus ✅
 **Vstup:** Config storage, WebSocket sessions
 **Výstup:** Real-time push změn klientům
 
-- [ ] Metoda `pushConfigToClient(ip)` v UnifiedServer
-- [ ] Při `PUT /api/clients/:ip/config`:
+- [x] Metoda `pushConfigToIp(ip)` v UnifiedServer
+- [x] Při `PUT /api/clients/:ip/config`:
   - Uložit do storage
   - Najít session s danou IP
   - Pokud online, poslat `ConfigPush` zprávu
-- [ ] Logování push eventů
-- [ ] Unit testy
+- [x] ConfigPush odeslán automaticky při připojení klienta (pokud má uloženou konfiguraci)
+- [x] Logování push eventů
+- [x] Unit testy (13 testů pro ConfigPush mechanismus)
 
 #### 15.6 Admin UI - Client Management panel
 **Vstup:** Existující dashboard HTML
