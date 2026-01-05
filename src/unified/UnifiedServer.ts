@@ -182,11 +182,12 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         }
       });
 
-      // Handle WebSocket connections (with request for IP extraction and admin detection)
+      // Handle WebSocket connections (with request for IP extraction and admin/clientId detection)
       this.wss.on('connection', (ws, request) => {
         const url = new URL(request.url || '/', `http://${request.headers.host}`);
         const isAdmin = url.searchParams.get('admin') === '1';
-        this.handleWebSocketConnection(ws, request, isAdmin);
+        const clientId = url.searchParams.get('clientId') || undefined;
+        this.handleWebSocketConnection(ws, request, isAdmin, clientId);
       });
 
       this.httpServer.on('error', (err) => {
@@ -275,13 +276,20 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
-   * Get sessions by IP address
-   * Returns all sessions from the same IP (usually just one, but could be multiple)
+   * Get sessions by config key (clientId or IP)
+   * Returns all sessions with the same configKey
+   */
+  getSessionsByConfigKey(configKey: string): ScoreboardSession[] {
+    return Array.from(this.sessions.values()).filter(
+      (session) => session.getConfigKey() === configKey,
+    );
+  }
+
+  /**
+   * @deprecated Use getSessionsByConfigKey instead
    */
   getSessionsByIp(ipAddress: string): ScoreboardSession[] {
-    return Array.from(this.sessions.values()).filter(
-      (session) => session.getIpAddress() === ipAddress,
-    );
+    return this.getSessionsByConfigKey(ipAddress);
   }
 
   /**
@@ -297,14 +305,14 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
-   * Push configuration to a client by IP address
-   * Updates server config and sends ConfigPush to all connected sessions from that IP
+   * Push configuration to a client by config key (clientId or IP)
+   * Updates server config and sends ConfigPush to all connected sessions with that configKey
    * Returns number of sessions that received the push
    */
-  pushConfigToIp(ipAddress: string): number {
-    const sessions = this.getSessionsByIp(ipAddress);
+  pushConfigToConfigKey(configKey: string): number {
+    const sessions = this.getSessionsByConfigKey(configKey);
     const settings = getAppSettings();
-    const config = settings.getClientConfig(ipAddress);
+    const config = settings.getClientConfig(configKey);
 
     if (!config) {
       return 0;
@@ -319,8 +327,15 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       }
     }
 
-    Logger.debug('Unified', `Pushed config to ${count} session(s) for IP ${ipAddress}`);
+    Logger.debug('Unified', `Pushed config to ${count} session(s) for configKey ${configKey}`);
     return count;
+  }
+
+  /**
+   * @deprecated Use pushConfigToConfigKey instead
+   */
+  pushConfigToIp(ipAddress: string): number {
+    return this.pushConfigToConfigKey(ipAddress);
   }
 
   /**
@@ -430,8 +445,14 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    * @param ws - WebSocket instance
    * @param request - HTTP request (for IP extraction)
    * @param isAdmin - True if this is an admin dashboard connection (for log streaming only)
+   * @param explicitClientId - Explicit clientId from URL query param (if provided)
    */
-  private handleWebSocketConnection(ws: WebSocket, request?: IncomingMessage, isAdmin = false): void {
+  private handleWebSocketConnection(
+    ws: WebSocket,
+    request?: IncomingMessage,
+    isAdmin = false,
+    explicitClientId?: string,
+  ): void {
     // Admin connections are for log streaming only - don't create ScoreboardSession
     if (isAdmin) {
       this.adminConnections.add(ws);
@@ -448,29 +469,41 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       return;
     }
 
-    const clientId = `client-${++this.clientIdCounter}`;
+    const sessionId = `client-${++this.clientIdCounter}`;
 
     // Extract client IP from request
     const ipAddress = this.extractClientIp(request);
 
-    // Load stored config for this IP (if any)
-    const settings = getAppSettings();
-    const storedConfig = settings.getClientConfig(ipAddress);
+    // Config key is explicit clientId if provided, otherwise IP
+    const configKey = explicitClientId || ipAddress;
 
-    // Create session with IP and stored config
-    const session = new ScoreboardSession(clientId, ws, ipAddress, undefined, storedConfig);
-    this.sessions.set(clientId, session);
-    Logger.info('Unified', `WebSocket client connected: ${clientId} from ${ipAddress}`);
-    this.emit('connection', clientId);
+    // Load stored config for this client (by configKey)
+    const settings = getAppSettings();
+    const storedConfig = settings.getClientConfig(configKey);
+
+    // Create session with IP, stored config, and explicit clientId
+    const session = new ScoreboardSession(
+      sessionId,
+      ws,
+      ipAddress,
+      undefined,
+      storedConfig,
+      explicitClientId,
+    );
+    this.sessions.set(sessionId, session);
+
+    const clientIdInfo = explicitClientId ? `clientId=${explicitClientId}` : `IP=${ipAddress}`;
+    Logger.info('Unified', `WebSocket client connected: ${sessionId} (${clientIdInfo})`);
+    this.emit('connection', sessionId);
 
     // Send ConfigPush if there's stored config for this client
     if (storedConfig) {
       session.sendConfigPush();
-      Logger.debug('Unified', `Sent ConfigPush to ${clientId}`, storedConfig);
+      Logger.debug('Unified', `Sent ConfigPush to ${sessionId}`, storedConfig);
     }
 
-    // Update lastSeen timestamp for this IP
-    settings.updateClientLastSeen(ipAddress);
+    // Update lastSeen timestamp for this configKey
+    settings.updateClientLastSeen(configKey);
 
     // Handle incoming messages
     ws.on('message', (data) => {
@@ -478,15 +511,15 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     });
 
     ws.on('close', () => {
-      this.sessions.delete(clientId);
-      Logger.info('Unified', `WebSocket client disconnected: ${clientId}`);
-      this.emit('disconnection', clientId);
+      this.sessions.delete(sessionId);
+      Logger.info('Unified', `WebSocket client disconnected: ${sessionId}`);
+      this.emit('disconnection', sessionId);
     });
 
     ws.on('error', (err) => {
       this.emit('error', err);
-      this.sessions.delete(clientId);
-      this.emit('disconnection', clientId);
+      this.sessions.delete(sessionId);
+      this.emit('disconnection', sessionId);
     });
   }
 
@@ -1311,19 +1344,27 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    * Response type for GET /api/clients
    */
   private buildClientInfo(
-    ip: string,
+    configKey: string,
     storedConfig: ClientConfig | undefined,
     onlineSessions: ScoreboardSession[],
   ): object {
     const isOnline = onlineSessions.length > 0;
     const firstSession = onlineSessions[0];
+    // Check if this is an explicit clientId (not IP-based)
+    const hasExplicitId = firstSession?.hasExplicitId ?? this.looksLikeClientId(configKey);
 
     return {
-      ip,
+      // Keep 'ip' for backwards compatibility, but it's actually configKey
+      ip: configKey,
+      // New fields for clientId support
+      configKey,
+      hasExplicitId,
       label: storedConfig?.label ?? null,
       online: isOnline,
       sessionId: firstSession?.id ?? null,
       sessionCount: onlineSessions.length,
+      // Show actual IP if available
+      ipAddress: firstSession?.ipAddress ?? null,
       serverConfig: storedConfig
         ? {
             type: storedConfig.type,
@@ -1341,35 +1382,47 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
+   * Heuristic to detect if a string looks like a clientId (not an IP)
+   */
+  private looksLikeClientId(key: string): boolean {
+    // IPv4: contains dots and numbers only
+    if (/^(\d{1,3}\.){3}\d{1,3}$/.test(key)) return false;
+    // IPv6: contains colons
+    if (key.includes(':')) return false;
+    // Anything else is probably a clientId
+    return true;
+  }
+
+  /**
    * GET /api/clients - List all clients (online + known offline)
    *
    * Returns combined list of:
-   * - Currently connected clients (from sessions)
+   * - Currently connected clients (from sessions, identified by configKey)
    * - Previously connected clients with stored config
    */
   private handleGetClients(_req: Request, res: Response): void {
     const settings = getAppSettings();
     const storedConfigs = settings.getAllClientConfigs();
 
-    // Collect all known IPs (from sessions + stored configs)
-    const knownIps = new Set<string>();
+    // Collect all known configKeys (from sessions + stored configs)
+    const knownConfigKeys = new Set<string>();
 
-    // Add IPs from active sessions
+    // Add configKeys from active sessions
     for (const session of this.sessions.values()) {
-      knownIps.add(session.getIpAddress());
+      knownConfigKeys.add(session.getConfigKey());
     }
 
-    // Add IPs from stored configs
-    for (const ip of Object.keys(storedConfigs)) {
-      knownIps.add(ip);
+    // Add configKeys from stored configs
+    for (const key of Object.keys(storedConfigs)) {
+      knownConfigKeys.add(key);
     }
 
     // Build client list
-    const clients = Array.from(knownIps)
-      .map((ip) => {
-        const storedConfig = storedConfigs[ip];
-        const onlineSessions = this.getSessionsByIp(ip).filter((s) => s.isConnected());
-        return this.buildClientInfo(ip, storedConfig, onlineSessions);
+    const clients = Array.from(knownConfigKeys)
+      .map((configKey) => {
+        const storedConfig = storedConfigs[configKey];
+        const onlineSessions = this.getSessionsByConfigKey(configKey).filter((s) => s.isConnected());
+        return this.buildClientInfo(configKey, storedConfig, onlineSessions);
       })
       // Sort: online first, then by IP
       .sort((a, b) => {
@@ -2421,19 +2474,26 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         ? params.map(p => '<span class="client-param">' + p.key + ': <span class="client-param-value">' + escapeHtml(String(p.value)) + '</span></span>').join('')
         : '<span class="client-param">default config</span>';
 
-      return '<div class="client-card ' + statusClass + '" data-ip="' + escapeHtml(client.ip) + '">' +
+      // Show configKey (clientId or IP) and actual IP if different
+      const configKey = client.configKey || client.ip;
+      const idTypeLabel = client.hasExplicitId ? 'ID' : 'IP';
+      const ipInfo = client.hasExplicitId && client.ipAddress
+        ? '<span style="font-size: 0.8em; color: #666; margin-left: 5px;">(' + escapeHtml(client.ipAddress) + ')</span>'
+        : '';
+
+      return '<div class="client-card ' + statusClass + '" data-ip="' + escapeHtml(configKey) + '">' +
         '<div class="client-header">' +
-        '<span class="client-ip">' + escapeHtml(client.ip) + '</span>' +
+        '<span class="client-ip" title="' + idTypeLabel + ': ' + escapeHtml(configKey) + '">' + escapeHtml(configKey) + '</span>' + ipInfo +
         '<div class="client-status">' +
         '<span class="client-status-dot ' + statusClass + '"></span>' +
         '<span style="font-size: 0.8em; color: #888;">' + statusText + '</span>' +
         '</div>' +
         '</div>' +
-        '<div class="client-label ' + labelClass + '" onclick="openClientModal(\\'' + escapeHtml(client.ip) + '\\')">' + escapeHtml(label) + '</div>' +
+        '<div class="client-label ' + labelClass + '" onclick="openClientModal(\\'' + escapeHtml(configKey) + '\\')">' + escapeHtml(label) + '</div>' +
         '<div class="client-params">' + paramsHtml + '</div>' +
         '<div class="client-actions">' +
-        '<button class="client-btn" onclick="openClientModal(\\'' + escapeHtml(client.ip) + '\\')">Edit</button>' +
-        (client.online ? '<button class="client-btn refresh" onclick="refreshClient(\\'' + escapeHtml(client.ip) + '\\')">Refresh</button>' : '') +
+        '<button class="client-btn" onclick="openClientModal(\\'' + escapeHtml(configKey) + '\\')">Edit</button>' +
+        (client.online ? '<button class="client-btn refresh" onclick="refreshClient(\\'' + escapeHtml(configKey) + '\\')">Refresh</button>' : '') +
         '</div>' +
         '</div>';
     }
@@ -2443,11 +2503,15 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       return str.length > len ? str.substring(0, len) + '...' : str;
     }
 
-    function openClientModal(ip) {
-      currentModalIp = ip;
-      const client = clientsData.find(c => c.ip === ip);
+    function openClientModal(configKey) {
+      currentModalIp = configKey;
+      const client = clientsData.find(c => (c.configKey || c.ip) === configKey);
 
-      document.getElementById('modalClientIp').textContent = ip;
+      // Show configKey and IP info
+      const idInfo = client?.hasExplicitId
+        ? configKey + ' (from ' + (client?.ipAddress || 'unknown IP') + ')'
+        : configKey;
+      document.getElementById('modalClientIp').textContent = idInfo;
       document.getElementById('modalLabel').value = client?.label || '';
 
       // Config fields

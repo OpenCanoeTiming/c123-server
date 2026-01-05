@@ -18,13 +18,17 @@ export interface ClientReportedState {
 }
 
 /**
- * Session info for admin API (extended with IP)
+ * Session info for admin API (extended with IP and configKey)
  */
 export interface SessionInfo {
   id: string;
   connectedAt: string;
   lastActivity: string;
   ipAddress: string;
+  /** Key used for config storage - either explicit clientId or IP fallback */
+  configKey: string;
+  /** True if configKey is an explicit clientId (not IP-based) */
+  hasExplicitId: boolean;
   config: ScoreboardConfig;
   clientState?: ClientReportedState | undefined;
 }
@@ -37,12 +41,17 @@ export interface SessionInfo {
  *
  * Extended with:
  * - IP address identification for persistent client config
+ * - configKey for config storage (explicit clientId or IP fallback)
  * - Client state tracking (what the client reports)
  */
 export class ScoreboardSession {
   readonly id: string;
   readonly connectedAt: Date;
   readonly ipAddress: string;
+  /** Key used for config storage - either explicit clientId or IP fallback */
+  readonly configKey: string;
+  /** True if configKey is an explicit clientId (not IP-based) */
+  readonly hasExplicitId: boolean;
   private lastActivity: Date;
   private config: ScoreboardConfig;
   private ws: WebSocket;
@@ -55,10 +64,15 @@ export class ScoreboardSession {
     ipAddress: string,
     config?: Partial<ScoreboardConfig>,
     serverConfig?: ClientConfig,
+    /** Explicit clientId from URL query param (if provided) */
+    explicitClientId?: string,
   ) {
     this.id = id;
     this.ws = ws;
     this.ipAddress = ipAddress;
+    // Use explicit clientId if provided, otherwise fall back to IP
+    this.configKey = explicitClientId || ipAddress;
+    this.hasExplicitId = !!explicitClientId;
     this.connectedAt = new Date();
     this.lastActivity = new Date();
     this.serverConfig = serverConfig;
@@ -80,9 +94,18 @@ export class ScoreboardSession {
       connectedAt: this.connectedAt.toISOString(),
       lastActivity: this.lastActivity.toISOString(),
       ipAddress: this.ipAddress,
+      configKey: this.configKey,
+      hasExplicitId: this.hasExplicitId,
       config: { ...this.config },
       clientState: this.clientState ? { ...this.clientState } : undefined,
     };
+  }
+
+  /**
+   * Get the config key (explicit clientId or IP fallback)
+   */
+  getConfigKey(): string {
+    return this.configKey;
   }
 
   /**

@@ -206,14 +206,26 @@ class ConfigAwareScoreboard {
   private ws: WebSocket | null = null;
   private config: ConfigPushData = {};
   private serverUrl: string;
+  private clientId: string | null;
 
-  constructor(serverUrl: string) {
+  constructor(serverUrl: string, clientId?: string) {
     this.serverUrl = serverUrl;
+    this.clientId = clientId || this.getClientIdFromUrl();
     this.config = this.getDefaults();
   }
 
+  private getClientIdFromUrl(): string | null {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('clientId');
+  }
+
   connect() {
-    this.ws = new WebSocket(`ws://${this.serverUrl}/ws`);
+    // Include clientId in WebSocket URL if available
+    const wsUrl = this.clientId
+      ? `ws://${this.serverUrl}/ws?clientId=${encodeURIComponent(this.clientId)}`
+      : `ws://${this.serverUrl}/ws`;
+
+    this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
       console.log('Connected - waiting for ConfigPush');
@@ -542,16 +554,94 @@ function applyConfig(data: ConfigPushData) {
 
 ## Client Identification
 
-Clients are identified by their IP address. The server extracts the IP from:
+Clients can be identified in two ways:
+
+### 1. Explicit Client ID (Recommended for multiple clients per machine)
+
+Clients can specify a unique `clientId` in the WebSocket URL:
+
+```
+ws://server:27123/ws?clientId=main-display
+ws://server:27123/ws?clientId=ledwall-1
+ws://server:27123/ws?clientId=start-area
+```
+
+**Benefits:**
+- Each client has independent configuration
+- Multiple scoreboards on the same machine work correctly
+- Configuration is tied to the `clientId`, not the IP
+- Easy to pre-configure clients before deployment
+
+**Implementation in scoreboard:**
+
+```typescript
+// URL-based configuration
+const url = new URL(window.location.href);
+const clientId = url.searchParams.get('clientId');
+
+// Connect with clientId
+const wsUrl = clientId
+  ? `ws://server:27123/ws?clientId=${encodeURIComponent(clientId)}`
+  : `ws://server:27123/ws`;
+
+const ws = new WebSocket(wsUrl);
+```
+
+**Example setup:**
+```
+# Main display at finish line
+http://scoreboard-app/?clientId=finish-main
+
+# LED wall near start
+http://scoreboard-app/?clientId=start-ledwall
+
+# Backup display
+http://scoreboard-app/?clientId=backup-1
+```
+
+### 2. IP-based Identification (Default fallback)
+
+If no `clientId` is provided, clients are identified by their IP address:
 
 1. `X-Forwarded-For` header (if behind proxy)
 2. `X-Real-IP` header (if behind proxy)
 3. Socket remote address
 
-This means:
-- Multiple tabs/windows from the same machine share configuration
-- Configuration persists across reconnections
-- Admin can pre-configure clients before they connect
+**Note:** All clients from the same IP share configuration when using IP-based identification. This can cause conflicts when running multiple scoreboards on one machine.
+
+### API Response Fields
+
+The `/api/clients` endpoint includes identification info:
+
+```json
+{
+  "clients": [
+    {
+      "ip": "main-display",
+      "configKey": "main-display",
+      "hasExplicitId": true,
+      "ipAddress": "192.168.1.50",
+      "label": "Finish Line Main",
+      "online": true
+    },
+    {
+      "ip": "192.168.1.51",
+      "configKey": "192.168.1.51",
+      "hasExplicitId": false,
+      "ipAddress": null,
+      "label": "Start Display",
+      "online": true
+    }
+  ]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `configKey` | Unique identifier used for config storage (clientId or IP) |
+| `hasExplicitId` | `true` if using explicit clientId, `false` if IP-based |
+| `ipAddress` | Actual IP address (only for online clients with explicit ID) |
+| `ip` | Alias for `configKey` (backwards compatibility) |
 
 ### Behind Proxy
 
