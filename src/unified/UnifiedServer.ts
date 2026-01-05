@@ -1,9 +1,9 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
-import { createServer, Server as HttpServer } from 'node:http';
+import { createServer, Server as HttpServer, IncomingMessage } from 'node:http';
 import { WebSocketServer as WsServer, WebSocket } from 'ws';
 import { EventEmitter } from 'node:events';
 import type { ScoreboardConfig } from '../admin/types.js';
-import type { C123Message, C123XmlChange, C123ForceRefresh, C123LogEntry, XmlSection, LogLevel } from '../protocol/types.js';
+import type { C123Message, C123XmlChange, C123ForceRefresh, C123LogEntry, XmlSection, LogLevel, C123ClientState } from '../protocol/types.js';
 import { getLogBuffer, type LogEntry, type LogFilterOptions } from '../utils/LogBuffer.js';
 import { ScoreboardSession } from '../ws/ScoreboardSession.js';
 import { Logger } from '../utils/logger.js';
@@ -178,9 +178,9 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         }
       });
 
-      // Handle WebSocket connections
-      this.wss.on('connection', (ws) => {
-        this.handleWebSocketConnection(ws);
+      // Handle WebSocket connections (with request for IP extraction)
+      this.wss.on('connection', (ws, request) => {
+        this.handleWebSocketConnection(ws, request);
       });
 
       this.httpServer.on('error', (err) => {
@@ -269,6 +269,16 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
+   * Get sessions by IP address
+   * Returns all sessions from the same IP (usually just one, but could be multiple)
+   */
+  getSessionsByIp(ipAddress: string): ScoreboardSession[] {
+    return Array.from(this.sessions.values()).filter(
+      (session) => session.getIpAddress() === ipAddress,
+    );
+  }
+
+  /**
    * Update configuration for a specific scoreboard
    */
   setSessionConfig(clientId: string, config: Partial<ScoreboardConfig>): boolean {
@@ -278,6 +288,33 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     }
     session.setConfig(config);
     return true;
+  }
+
+  /**
+   * Push configuration to a client by IP address
+   * Updates server config and sends ConfigPush to all connected sessions from that IP
+   * Returns number of sessions that received the push
+   */
+  pushConfigToIp(ipAddress: string): number {
+    const sessions = this.getSessionsByIp(ipAddress);
+    const settings = getAppSettings();
+    const config = settings.getClientConfig(ipAddress);
+
+    if (!config) {
+      return 0;
+    }
+
+    let count = 0;
+    for (const session of sessions) {
+      if (session.isConnected()) {
+        session.setServerConfig(config);
+        session.sendConfigPush();
+        count++;
+      }
+    }
+
+    Logger.debug('Unified', `Pushed config to ${count} session(s) for IP ${ipAddress}`);
+    return count;
   }
 
   /**
@@ -384,12 +421,35 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   /**
    * Handle WebSocket connection
    */
-  private handleWebSocketConnection(ws: WebSocket): void {
+  private handleWebSocketConnection(ws: WebSocket, request?: IncomingMessage): void {
     const clientId = `client-${++this.clientIdCounter}`;
-    const session = new ScoreboardSession(clientId, ws);
+
+    // Extract client IP from request
+    const ipAddress = this.extractClientIp(request);
+
+    // Load stored config for this IP (if any)
+    const settings = getAppSettings();
+    const storedConfig = settings.getClientConfig(ipAddress);
+
+    // Create session with IP and stored config
+    const session = new ScoreboardSession(clientId, ws, ipAddress, undefined, storedConfig);
     this.sessions.set(clientId, session);
-    Logger.info('Unified', `WebSocket client connected: ${clientId}`);
+    Logger.info('Unified', `WebSocket client connected: ${clientId} from ${ipAddress}`);
     this.emit('connection', clientId);
+
+    // Send ConfigPush if there's stored config for this client
+    if (storedConfig) {
+      session.sendConfigPush();
+      Logger.debug('Unified', `Sent ConfigPush to ${clientId}`, storedConfig);
+    }
+
+    // Update lastSeen timestamp for this IP
+    settings.updateClientLastSeen(ipAddress);
+
+    // Handle incoming messages
+    ws.on('message', (data) => {
+      this.handleWebSocketMessage(session, data);
+    });
 
     ws.on('close', () => {
       this.sessions.delete(clientId);
@@ -402,6 +462,68 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       this.sessions.delete(clientId);
       this.emit('disconnection', clientId);
     });
+  }
+
+  /**
+   * Extract client IP address from WebSocket request
+   */
+  private extractClientIp(request?: IncomingMessage): string {
+    if (!request) {
+      return 'unknown';
+    }
+
+    // Check X-Forwarded-For header (for proxies)
+    const forwardedFor = request.headers['x-forwarded-for'];
+    if (forwardedFor) {
+      // X-Forwarded-For can contain multiple IPs, take the first one
+      const ips = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
+      const firstIp = ips.split(',')[0].trim();
+      if (firstIp) {
+        return firstIp;
+      }
+    }
+
+    // Check X-Real-IP header (for nginx)
+    const realIp = request.headers['x-real-ip'];
+    if (realIp) {
+      return Array.isArray(realIp) ? realIp[0] : realIp;
+    }
+
+    // Use socket remote address
+    const socketAddress = request.socket?.remoteAddress;
+    if (socketAddress) {
+      // Handle IPv6-mapped IPv4 addresses (::ffff:192.168.1.1)
+      if (socketAddress.startsWith('::ffff:')) {
+        return socketAddress.substring(7);
+      }
+      return socketAddress;
+    }
+
+    return 'unknown';
+  }
+
+  /**
+   * Handle incoming WebSocket message from client
+   */
+  private handleWebSocketMessage(session: ScoreboardSession, data: unknown): void {
+    try {
+      const messageStr = data instanceof Buffer ? data.toString('utf-8') : String(data);
+      const message = JSON.parse(messageStr);
+
+      // Handle ClientState message
+      if (message.type === 'ClientState' && message.data) {
+        const clientStateMsg = message as C123ClientState;
+        session.setClientState({
+          current: clientStateMsg.data.current || {},
+          version: clientStateMsg.data.version,
+          capabilities: clientStateMsg.data.capabilities,
+        });
+        Logger.debug('Unified', `Received ClientState from ${session.id}`, clientStateMsg.data);
+      }
+    } catch {
+      // Ignore parse errors - client may send invalid messages
+      Logger.debug('Unified', `Invalid message from ${session.id}`);
+    }
   }
 
   /**

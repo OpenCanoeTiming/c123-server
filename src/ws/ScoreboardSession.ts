@@ -1,25 +1,67 @@
 import type { WebSocket } from 'ws';
 import type { ScoreboardConfig } from '../admin/types.js';
-import type { C123Message } from '../protocol/types.js';
+import type { C123Message, C123ConfigPush } from '../protocol/types.js';
+import type { ClientConfig } from '../config/types.js';
+
+/**
+ * Client state as reported by the client via ClientState message
+ */
+export interface ClientReportedState {
+  /** Current values the client is using */
+  current: Record<string, unknown>;
+  /** Client version (optional) */
+  version?: string;
+  /** Client capabilities (optional) */
+  capabilities?: string[];
+  /** Timestamp of last state update */
+  lastUpdated?: string;
+}
+
+/**
+ * Session info for admin API (extended with IP)
+ */
+export interface SessionInfo {
+  id: string;
+  connectedAt: string;
+  lastActivity: string;
+  ipAddress: string;
+  config: ScoreboardConfig;
+  clientState?: ClientReportedState;
+}
 
 /**
  * Per-scoreboard session with individual configuration.
  *
  * Manages connection state for a single scoreboard client.
  * Sends C123 protocol messages directly without transformation.
+ *
+ * Extended with:
+ * - IP address identification for persistent client config
+ * - Client state tracking (what the client reports)
  */
 export class ScoreboardSession {
   readonly id: string;
   readonly connectedAt: Date;
+  readonly ipAddress: string;
   private lastActivity: Date;
   private config: ScoreboardConfig;
   private ws: WebSocket;
+  private clientState: ClientReportedState | undefined;
+  private serverConfig: ClientConfig | undefined;
 
-  constructor(id: string, ws: WebSocket, config?: Partial<ScoreboardConfig>) {
+  constructor(
+    id: string,
+    ws: WebSocket,
+    ipAddress: string,
+    config?: Partial<ScoreboardConfig>,
+    serverConfig?: ClientConfig,
+  ) {
     this.id = id;
     this.ws = ws;
+    this.ipAddress = ipAddress;
     this.connectedAt = new Date();
     this.lastActivity = new Date();
+    this.serverConfig = serverConfig;
     this.config = {
       showOnCourse: config?.showOnCourse ?? true,
       showResults: config?.showResults ?? true,
@@ -32,17 +74,14 @@ export class ScoreboardSession {
   /**
    * Get session info for admin API
    */
-  getInfo(): {
-    id: string;
-    connectedAt: string;
-    lastActivity: string;
-    config: ScoreboardConfig;
-  } {
+  getInfo(): SessionInfo {
     return {
       id: this.id,
       connectedAt: this.connectedAt.toISOString(),
       lastActivity: this.lastActivity.toISOString(),
+      ipAddress: this.ipAddress,
       config: { ...this.config },
+      clientState: this.clientState ? { ...this.clientState } : undefined,
     };
   }
 
@@ -131,5 +170,113 @@ export class ScoreboardSession {
 
     // Always send TimeOfDay, Schedule, RaceConfig, Connected, Error
     return true;
+  }
+
+  // =========================================================================
+  // Client State Management
+  // =========================================================================
+
+  /**
+   * Get the IP address of this client
+   */
+  getIpAddress(): string {
+    return this.ipAddress;
+  }
+
+  /**
+   * Get the current client state (as reported by client)
+   */
+  getClientState(): ClientReportedState | undefined {
+    return this.clientState ? { ...this.clientState } : undefined;
+  }
+
+  /**
+   * Update client state (from ClientState message)
+   */
+  setClientState(state: Omit<ClientReportedState, 'lastUpdated'>): void {
+    this.clientState = {
+      ...state,
+      lastUpdated: new Date().toISOString(),
+    };
+    this.lastActivity = new Date();
+  }
+
+  /**
+   * Get server-side configuration for this client
+   */
+  getServerConfig(): ClientConfig | undefined {
+    return this.serverConfig ? { ...this.serverConfig } : undefined;
+  }
+
+  /**
+   * Set server-side configuration for this client
+   */
+  setServerConfig(config: ClientConfig): void {
+    this.serverConfig = { ...config };
+  }
+
+  /**
+   * Get effective configuration by merging server config with defaults.
+   * Server config values override defaults when set.
+   * Returns only the known scoreboard parameters from server config.
+   */
+  getEffectiveConfig(): ClientConfig {
+    const result: ClientConfig = {};
+
+    if (this.serverConfig) {
+      // Copy only defined values from server config
+      if (this.serverConfig.type !== undefined) {
+        result.type = this.serverConfig.type;
+      }
+      if (this.serverConfig.displayRows !== undefined) {
+        result.displayRows = this.serverConfig.displayRows;
+      }
+      if (this.serverConfig.customTitle !== undefined) {
+        result.customTitle = this.serverConfig.customTitle;
+      }
+      if (this.serverConfig.raceFilter !== undefined) {
+        result.raceFilter = [...this.serverConfig.raceFilter];
+      }
+      if (this.serverConfig.showOnCourse !== undefined) {
+        result.showOnCourse = this.serverConfig.showOnCourse;
+      }
+      if (this.serverConfig.showResults !== undefined) {
+        result.showResults = this.serverConfig.showResults;
+      }
+      if (this.serverConfig.custom !== undefined) {
+        result.custom = { ...this.serverConfig.custom };
+      }
+      if (this.serverConfig.label !== undefined) {
+        result.label = this.serverConfig.label;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Send ConfigPush message to this client
+   * Sends only defined parameters (undefined = client uses its default)
+   */
+  sendConfigPush(): void {
+    if (!this.isConnected()) {
+      return;
+    }
+
+    const config = this.getEffectiveConfig();
+
+    // Only send if there's something to push
+    if (Object.keys(config).length === 0) {
+      return;
+    }
+
+    const message: C123ConfigPush = {
+      type: 'ConfigPush',
+      timestamp: new Date().toISOString(),
+      data: config,
+    };
+
+    this.lastActivity = new Date();
+    this.ws.send(JSON.stringify(message));
   }
 }

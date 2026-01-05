@@ -752,22 +752,27 @@ Centrální správa parametrů klientů (scoreboardů) ze serveru. Admin může 
   - `ClientState` (client → server): `{ type: "ClientState", data: {...} }` - klient reportuje aktuální stav (volitelné)
 - [x] Unit testy pro nové typy (25 nových testů pro ClientConfig, 2 pro protokolové typy)
 
-#### 15.2 Session rozšíření o IP identifikaci
+#### 15.2 Session rozšíření o IP identifikaci ✅
 **Vstup:** Současný ScoreboardSession, UnifiedServer
 **Výstup:** Session s IP adresou a client config
 
-- [ ] Rozšířit `ScoreboardSession` o:
+- [x] Rozšířit `ScoreboardSession` o:
   - `ipAddress: string` - IP adresa klienta
-  - `clientState: Record<string, unknown>` - aktuální stav klienta (co poslal)
+  - `clientState: ClientReportedState` - aktuální stav klienta (co poslal)
   - `getEffectiveConfig()` - sloučí server config + client defaults
-- [ ] Při připojení:
-  - Extrahovat IP z WebSocket request
+  - `sendConfigPush()` - odeslat ConfigPush zprávu klientovi
+- [x] Při připojení:
+  - Extrahovat IP z WebSocket request (včetně X-Forwarded-For, X-Real-IP)
   - Načíst uloženou konfiguraci pro tuto IP (pokud existuje)
   - Poslat `ConfigPush` s uloženou konfigurací
-- [ ] Handler pro `ClientState` zprávu:
+  - Aktualizovat `lastSeen` timestamp
+- [x] Handler pro `ClientState` zprávu:
   - Uložit do session
-  - Aktualizovat `lastSeen` v uložené konfiguraci
-- [ ] Unit testy
+  - Podporuje current, version, capabilities
+- [x] Nové metody v `UnifiedServer`:
+  - `getSessionsByIp(ip)` - najít sessions podle IP
+  - `pushConfigToIp(ip)` - push config ke klientům s danou IP
+- [x] Unit testy (31 nových testů pro ScoreboardSession a UnifiedServer)
 
 #### 15.3 Config storage a persistence
 **Vstup:** AppSettingsManager

@@ -948,4 +948,195 @@ describe('UnifiedServer', () => {
       });
     });
   });
+
+  describe('Client IP identification', () => {
+    let server: UnifiedServer;
+    let port: number;
+
+    beforeEach(async () => {
+      server = new UnifiedServer({ port: 0 });
+      await server.start();
+      port = server.getPort();
+    });
+
+    afterEach(async () => {
+      await server.stop();
+    });
+
+    it('should capture client IP address from WebSocket connection', async () => {
+      const client = new WebSocket(`ws://localhost:${port}/ws`);
+
+      await new Promise<void>((resolve) => {
+        client.on('open', () => resolve());
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const sessions = server.getSessions();
+      expect(sessions).toHaveLength(1);
+
+      const session = sessions[0];
+      // Local connections will have loopback IP
+      expect(session.ipAddress).toBeDefined();
+      expect(['127.0.0.1', '::1', '::ffff:127.0.0.1']).toContain(session.ipAddress);
+
+      client.close();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    it('should include IP address in session info', async () => {
+      const client = new WebSocket(`ws://localhost:${port}/ws`);
+
+      await new Promise<void>((resolve) => {
+        client.on('open', () => resolve());
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const response = await fetch(`http://localhost:${port}/api/scoreboards`);
+      const data = await response.json() as { scoreboards: Array<{ ipAddress: string }> };
+
+      expect(data.scoreboards).toHaveLength(1);
+      expect(data.scoreboards[0].ipAddress).toBeDefined();
+
+      client.close();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    it('should find sessions by IP address', async () => {
+      const client = new WebSocket(`ws://localhost:${port}/ws`);
+
+      await new Promise<void>((resolve) => {
+        client.on('open', () => resolve());
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const sessions = server.getSessions();
+      const ip = sessions[0].ipAddress;
+
+      const foundSessions = server.getSessionsByIp(ip);
+      expect(foundSessions).toHaveLength(1);
+      expect(foundSessions[0].id).toBe(sessions[0].id);
+
+      client.close();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    it('should return empty array for unknown IP', () => {
+      const sessions = server.getSessionsByIp('192.168.99.99');
+      expect(sessions).toHaveLength(0);
+    });
+  });
+
+  describe('ClientState message handling', () => {
+    let server: UnifiedServer;
+    let port: number;
+
+    beforeEach(async () => {
+      server = new UnifiedServer({ port: 0 });
+      await server.start();
+      port = server.getPort();
+    });
+
+    afterEach(async () => {
+      await server.stop();
+    });
+
+    it('should receive and store ClientState from client', async () => {
+      const client = new WebSocket(`ws://localhost:${port}/ws`);
+
+      await new Promise<void>((resolve) => {
+        client.on('open', () => resolve());
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Send ClientState message
+      const clientStateMsg = {
+        type: 'ClientState',
+        timestamp: new Date().toISOString(),
+        data: {
+          current: { mode: 'ledwall', rows: 8 },
+          version: '2.0.0',
+          capabilities: ['configpush'],
+        },
+      };
+      client.send(JSON.stringify(clientStateMsg));
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const sessions = server.getSessions();
+      const state = sessions[0].getClientState();
+
+      expect(state).toBeDefined();
+      expect(state?.current).toEqual({ mode: 'ledwall', rows: 8 });
+      expect(state?.version).toBe('2.0.0');
+      expect(state?.capabilities).toEqual(['configpush']);
+
+      client.close();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    it('should ignore invalid messages gracefully', async () => {
+      const client = new WebSocket(`ws://localhost:${port}/ws`);
+
+      await new Promise<void>((resolve) => {
+        client.on('open', () => resolve());
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Send invalid message (not JSON)
+      client.send('not json');
+
+      // Send incomplete message
+      client.send(JSON.stringify({ type: 'Unknown' }));
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Server should still be working
+      const sessions = server.getSessions();
+      expect(sessions).toHaveLength(1);
+
+      client.close();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    it('should update client state on subsequent messages', async () => {
+      const client = new WebSocket(`ws://localhost:${port}/ws`);
+
+      await new Promise<void>((resolve) => {
+        client.on('open', () => resolve());
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // First state
+      client.send(JSON.stringify({
+        type: 'ClientState',
+        timestamp: new Date().toISOString(),
+        data: { current: { view: 'results' } },
+      }));
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Second state
+      client.send(JSON.stringify({
+        type: 'ClientState',
+        timestamp: new Date().toISOString(),
+        data: { current: { view: 'oncourse' } },
+      }));
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const sessions = server.getSessions();
+      const state = sessions[0].getClientState();
+
+      expect(state?.current).toEqual({ view: 'oncourse' });
+
+      client.close();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+  });
 });
