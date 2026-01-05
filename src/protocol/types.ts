@@ -12,6 +12,7 @@ import type {
   RaceConfigMessage,
   ScheduleMessage,
 } from './parser-types.js';
+import type { ClientConfig } from '../config/types.js';
 
 // Re-export parser types for convenience
 export type {
@@ -157,6 +158,32 @@ export interface C123LogEntry extends C123MessageBase {
 }
 
 /**
+ * Configuration push message (server → client)
+ * Server pushes configuration to a client (scoreboard)
+ * Only explicitly set parameters are included (undefined = use client default)
+ */
+export interface C123ConfigPush extends C123MessageBase {
+  type: 'ConfigPush';
+  data: Omit<ClientConfig, 'lastSeen'>;
+}
+
+/**
+ * Client state report (client → server)
+ * Client reports its current state/configuration to the server (optional)
+ */
+export interface C123ClientState extends C123MessageBase {
+  type: 'ClientState';
+  data: {
+    /** Current values the client is using */
+    current: Record<string, unknown>;
+    /** Client version (optional) */
+    version?: string;
+    /** Client capabilities (optional) */
+    capabilities?: string[];
+  };
+}
+
+/**
  * Union of all C123 protocol messages
  */
 export type C123Message =
@@ -169,7 +196,9 @@ export type C123Message =
   | C123Error
   | C123XmlChange
   | C123ForceRefresh
-  | C123LogEntry;
+  | C123LogEntry
+  | C123ConfigPush
+  | C123ClientState;
 
 /**
  * Type guard for C123TimeOfDay
@@ -239,4 +268,18 @@ export function isForceRefresh(msg: C123Message): msg is C123ForceRefresh {
  */
 export function isLogEntry(msg: C123Message): msg is C123LogEntry {
   return msg.type === 'LogEntry';
+}
+
+/**
+ * Type guard for C123ConfigPush
+ */
+export function isConfigPush(msg: C123Message): msg is C123ConfigPush {
+  return msg.type === 'ConfigPush';
+}
+
+/**
+ * Type guard for C123ClientState
+ */
+export function isClientState(msg: C123Message): msg is C123ClientState {
+  return msg.type === 'ClientState';
 }

@@ -11,7 +11,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { AppSettings as AppSettingsType, DEFAULT_APP_SETTINGS, XmlSourceMode } from './types.js';
+import {
+  AppSettings as AppSettingsType,
+  DEFAULT_APP_SETTINGS,
+  XmlSourceMode,
+  ClientConfig,
+  CustomParamDefinition,
+} from './types.js';
 
 export class AppSettingsManager {
   private settings: AppSettingsType;
@@ -207,6 +213,145 @@ export class AppSettingsManager {
   clearEventNameOverride(): void {
     delete this.settings.eventNameOverride;
     this.save();
+  }
+
+  // =========================================================================
+  // Client Configuration Management
+  // =========================================================================
+
+  /**
+   * Get configuration for a specific client by IP address
+   */
+  getClientConfig(ip: string): ClientConfig | undefined {
+    return this.settings.clientConfigs?.[ip];
+  }
+
+  /**
+   * Set (or update) configuration for a client
+   * Performs partial merge - only provided fields are updated
+   */
+  setClientConfig(ip: string, config: Partial<ClientConfig>): ClientConfig {
+    if (!this.settings.clientConfigs) {
+      this.settings.clientConfigs = {};
+    }
+
+    const existing = this.settings.clientConfigs[ip] || {};
+    const merged: ClientConfig = {
+      ...existing,
+      ...config,
+    };
+
+    // Merge custom params separately to preserve existing custom keys
+    if (config.custom !== undefined) {
+      merged.custom = {
+        ...(existing.custom || {}),
+        ...config.custom,
+      };
+    }
+
+    this.settings.clientConfigs[ip] = merged;
+    this.save();
+    return merged;
+  }
+
+  /**
+   * Set the label for a client
+   */
+  setClientLabel(ip: string, label: string): void {
+    this.setClientConfig(ip, { label });
+  }
+
+  /**
+   * Update lastSeen timestamp for a client
+   */
+  updateClientLastSeen(ip: string): void {
+    if (!this.settings.clientConfigs) {
+      this.settings.clientConfigs = {};
+    }
+
+    const existing = this.settings.clientConfigs[ip] || {};
+    this.settings.clientConfigs[ip] = {
+      ...existing,
+      lastSeen: new Date().toISOString(),
+    };
+    this.save();
+  }
+
+  /**
+   * Delete configuration for a client
+   * Returns true if config was deleted, false if it didn't exist
+   */
+  deleteClientConfig(ip: string): boolean {
+    if (this.settings.clientConfigs && ip in this.settings.clientConfigs) {
+      delete this.settings.clientConfigs[ip];
+      this.save();
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Get all client configurations
+   */
+  getAllClientConfigs(): Record<string, ClientConfig> {
+    return this.settings.clientConfigs ? { ...this.settings.clientConfigs } : {};
+  }
+
+  /**
+   * Get custom parameter definitions
+   */
+  getCustomParamDefinitions(): CustomParamDefinition[] {
+    return [...(this.settings.customParamDefinitions || [])];
+  }
+
+  /**
+   * Set custom parameter definitions (replaces all)
+   */
+  setCustomParamDefinitions(definitions: CustomParamDefinition[]): void {
+    this.settings.customParamDefinitions = [...definitions];
+    this.save();
+  }
+
+  /**
+   * Add a custom parameter definition
+   * If a definition with the same key exists, it is replaced
+   */
+  addCustomParamDefinition(definition: CustomParamDefinition): void {
+    if (!this.settings.customParamDefinitions) {
+      this.settings.customParamDefinitions = [];
+    }
+
+    const existingIndex = this.settings.customParamDefinitions.findIndex(
+      (d) => d.key === definition.key,
+    );
+
+    if (existingIndex >= 0) {
+      this.settings.customParamDefinitions[existingIndex] = { ...definition };
+    } else {
+      this.settings.customParamDefinitions.push({ ...definition });
+    }
+    this.save();
+  }
+
+  /**
+   * Remove a custom parameter definition by key
+   * Returns true if definition was removed, false if not found
+   */
+  removeCustomParamDefinition(key: string): boolean {
+    if (!this.settings.customParamDefinitions) {
+      return false;
+    }
+
+    const initialLength = this.settings.customParamDefinitions.length;
+    this.settings.customParamDefinitions = this.settings.customParamDefinitions.filter(
+      (d) => d.key !== key,
+    );
+
+    if (this.settings.customParamDefinitions.length < initialLength) {
+      this.save();
+      return true;
+    }
+    return false;
   }
 
   /**

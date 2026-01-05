@@ -658,6 +658,226 @@ Opravy chování při výpadku/obnovení spojení s Canoe123.
 
 ---
 
+### Fáze 15: Remote Client Configuration
+
+Centrální správa parametrů klientů (scoreboardů) ze serveru. Admin může nastavit např. `displayRows`, `layout`, `customTitle` a další parametry, které se pushnou klientovi přes WebSocket.
+
+#### Principy a architektura
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                      Client Config Flow                              │
+│                                                                      │
+│   Admin UI                 Server                    Scoreboard      │
+│  ┌────────┐           ┌──────────────┐           ┌──────────────┐   │
+│  │ Edit   │──PUT───▶  │ ClientConfig │──WS push──▶│ Apply config │   │
+│  │ config │           │  Storage     │            │ (displayRows │   │
+│  └────────┘           └──────────────┘            │  layout, etc)│   │
+│                             │                     └──────────────┘   │
+│      ┌──────────────────────┼──────────────────────────┐             │
+│      │                      ▼                          │             │
+│      │                settings.json                    │             │
+│      │                clientConfigs{}                  │             │
+│      │                customParams[]                   │             │
+│      │                                                 │             │
+│      │   Identify by IP ◀──connect──  WS :27123/ws    │             │
+│      │   + pojmenování                                 │             │
+│      └─────────────────────────────────────────────────┘             │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Klíčové koncepty:**
+
+1. **Identifikace podle IP** - Klient se připojí jako dosud, server ho identifikuje podle IP adresy
+2. **Pojmenování v Admin UI** - Admin může klienta pojmenovat (persistentně podle IP)
+3. **Push přes existující WS** - Nové typy zpráv na stávajícím WebSocketu
+4. **Známé + custom parametry** - Definované parametry (layout, displayRows, customTitle) + možnost definovat vlastní
+5. **Kompaktní UI** - Klienti vedle sebe pro rychlý přehled a porovnání
+
+#### 15.1 Datový model a typy ✅
+**Vstup:** Současná ScoreboardConfig, AppSettings
+**Výstup:** Rozšířené typy pro client config
+
+**Známé parametry scoreboardu** (z canoe-scoreboard-v3):
+- `type`: `'vertical' | 'ledwall'` - layout mode (auto-detect pokud není)
+- `displayRows`: number (3-20) - počet řádků pro ledwall scaling (auto pokud není)
+- `customTitle`: string - vlastní nadpis scoreboardu
+
+**Prázdný vs. nastavený parametr:**
+- `undefined` = "není nastaveno, použij default/auto-detekci"
+- explicitní hodnota = "použij tuto hodnotu"
+
+**Sekvence při připojení:**
+1. Klient se připojí na WS
+2. Server **okamžitě** pošle `ConfigPush` s uloženými hodnotami pro danou IP
+3. Klient aplikuje hodnoty (přepíše své defaults)
+4. Klient může poslat `ClientState` pro info (co aktuálně používá)
+
+- [x] Definovat `ClientConfig` typ:
+  ```typescript
+  interface ClientConfig {
+    // Známé parametry scoreboardu (odpovídají URL params)
+    type?: 'vertical' | 'ledwall';  // layout mode
+    displayRows?: number;           // počet řádků (3-20)
+    customTitle?: string;           // vlastní nadpis
+
+    // Data filtering (existující v ScoreboardConfig)
+    raceFilter?: string[];
+    showOnCourse?: boolean;
+    showResults?: boolean;
+
+    // Custom parameters (key-value pro další/budoucí parametry)
+    custom?: Record<string, string | number | boolean>;
+
+    // Metadata (server-managed)
+    label?: string;                 // lidsky čitelný název (nastavuje admin)
+    lastSeen?: string;              // timestamp posledního připojení
+  }
+  ```
+- [x] Definovat `CustomParamDefinition` pro definici vlastních parametrů:
+  ```typescript
+  interface CustomParamDefinition {
+    key: string;                    // identifikátor parametru
+    label: string;                  // popisek pro UI
+    type: 'string' | 'number' | 'boolean';
+    defaultValue?: string | number | boolean;
+  }
+  ```
+- [x] Rozšířit `AppSettings` o:
+  - `clientConfigs: Record<string, ClientConfig>` (klíč = IP adresa)
+  - `customParamDefinitions: CustomParamDefinition[]`
+- [x] Definovat nové WS zprávy (na existujícím /ws):
+  - `ConfigPush` (server → client): `{ type: "ConfigPush", data: {...} }` - server pushne konfiguraci
+    - Posílají se **pouze nastavené parametry** (undefined se neposílá)
+  - `ClientState` (client → server): `{ type: "ClientState", data: {...} }` - klient reportuje aktuální stav (volitelné)
+- [x] Unit testy pro nové typy (25 nových testů pro ClientConfig, 2 pro protokolové typy)
+
+#### 15.2 Session rozšíření o IP identifikaci
+**Vstup:** Současný ScoreboardSession, UnifiedServer
+**Výstup:** Session s IP adresou a client config
+
+- [ ] Rozšířit `ScoreboardSession` o:
+  - `ipAddress: string` - IP adresa klienta
+  - `clientState: Record<string, unknown>` - aktuální stav klienta (co poslal)
+  - `getEffectiveConfig()` - sloučí server config + client defaults
+- [ ] Při připojení:
+  - Extrahovat IP z WebSocket request
+  - Načíst uloženou konfiguraci pro tuto IP (pokud existuje)
+  - Poslat `ConfigPush` s uloženou konfigurací
+- [ ] Handler pro `ClientState` zprávu:
+  - Uložit do session
+  - Aktualizovat `lastSeen` v uložené konfiguraci
+- [ ] Unit testy
+
+#### 15.3 Config storage a persistence
+**Vstup:** AppSettingsManager
+**Výstup:** Metody pro správu client configs
+
+- [ ] Přidat do `AppSettingsManager`:
+  - `getClientConfig(ip): ClientConfig | undefined`
+  - `setClientConfig(ip, config: Partial<ClientConfig>): ClientConfig`
+  - `setClientLabel(ip, label): void`
+  - `deleteClientConfig(ip): boolean`
+  - `getAllClientConfigs(): Record<string, ClientConfig>`
+  - `getCustomParamDefinitions(): CustomParamDefinition[]`
+  - `setCustomParamDefinitions(defs): void`
+  - `addCustomParamDefinition(def): void`
+- [ ] Automatické uložení při změně
+- [ ] Merge logika (partial update zachová ostatní hodnoty)
+- [ ] Unit testy
+
+#### 15.4 REST API pro client management
+**Vstup:** UnifiedServer routes
+**Výstup:** CRUD API pro client config
+
+- [ ] `GET /api/clients` - seznam klientů (online + known offline)
+  ```json
+  {
+    "clients": [
+      {
+        "ip": "192.168.1.50",
+        "label": "TV v hale",
+        "online": true,
+        "sessionId": "client-42",
+        "serverConfig": { "displayRows": 10, "layout": "tv" },
+        "clientState": { "currentView": "results" },
+        "lastSeen": "2025-01-05T10:30:00Z"
+      }
+    ]
+  }
+  ```
+- [ ] `PUT /api/clients/:ip/config` - nastavit konfiguraci (partial update)
+  - Automaticky pushne změny pokud je klient online
+- [ ] `PUT /api/clients/:ip/label` - pojmenovat klienta
+- [ ] `DELETE /api/clients/:ip` - smazat uloženou konfiguraci
+- [ ] `POST /api/clients/:ip/refresh` - force refresh jednoho klienta
+- [ ] `GET /api/config/custom-params` - definice custom parametrů
+- [ ] `PUT /api/config/custom-params` - nastavit definice custom parametrů
+- [ ] Unit testy
+
+#### 15.5 Push mechanismus
+**Vstup:** Config storage, WebSocket sessions
+**Výstup:** Real-time push změn klientům
+
+- [ ] Metoda `pushConfigToClient(ip)` v UnifiedServer
+- [ ] Při `PUT /api/clients/:ip/config`:
+  - Uložit do storage
+  - Najít session s danou IP
+  - Pokud online, poslat `ConfigPush` zprávu
+- [ ] Logování push eventů
+- [ ] Unit testy
+
+#### 15.6 Admin UI - Client Management panel
+**Vstup:** Existující dashboard HTML
+**Výstup:** Kompaktní přehled klientů
+
+**Wireframe krabičky klienta:**
+```
+┌─────────────────────────────────────┐
+│ 192.168.1.50        🟢 online  [⟳] │  ← IP, status, force refresh
+│ "TV v hale"                   [✎]  │  ← label (inline edit)
+├─────────────────────────────────────┤
+│ type: ledwall     displayRows: 8   │  ← klíčové parametry
+│ customTitle: -                     │
+└─────────────────────────────────────┘
+```
+
+- [ ] Přepracovat sekci "Connected Scoreboards" na "Clients":
+  - **Kompaktní grid layout** - klienti vedle sebe (cards)
+  - Každá karta obsahuje:
+    - IP adresa + online/offline status (🟢/🔴)
+    - Label (inline editovatelný)
+    - **[⟳] Force Refresh tlačítko** přímo v kartě
+    - Klíčové parametry: type, displayRows, customTitle
+- [ ] **Inline editace parametrů** - klik na hodnotu → editace přímo v kartě
+- [ ] **Expand/detail panel** (volitelně) - klik rozbalí:
+  - Všechny parametry včetně custom
+  - Client state (co klient reportuje)
+  - Delete config tlačítko
+- [ ] **Porovnávací tabulka** (alternativní pohled):
+  ```
+  | IP           | Label      | type     | rows | title   | [⟳] |
+  |--------------|------------|----------|------|---------|-----|
+  | 192.168.1.50 | TV v hale  | ledwall  | 8    | -       | [⟳] |
+  | 192.168.1.51 | Startovka  | vertical | -    | Finále  | [⟳] |
+  ```
+- [ ] Sekce pro definici custom parametrů (modal)
+
+#### 15.7 Dokumentace
+**Výstup:** Aktualizovaná dokumentace
+
+- [ ] `docs/CLIENT-CONFIG.md` - kompletní dokumentace:
+  - Jak klient implementuje ClientState zprávu
+  - Jak reagovat na ConfigPush
+  - Seznam známých parametrů
+  - Jak definovat custom parametry
+  - Příklady použití
+- [ ] Aktualizovat `docs/C123-PROTOCOL.md` - nové zprávy
+- [ ] Aktualizovat `docs/REST-API.md` - nové endpointy
+- [ ] Příklad implementace v scoreboardu
+
+---
+
 ## Reference
 
 - `../analysis/07-sitova-komunikace.md` - C123 protokol

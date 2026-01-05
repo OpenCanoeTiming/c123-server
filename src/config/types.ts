@@ -2,6 +2,78 @@
  * Configuration types for C123 Server
  */
 
+// ============================================================================
+// Client Configuration Types
+// ============================================================================
+
+/**
+ * Known scoreboard layout types
+ * - 'vertical': Standard vertical layout
+ * - 'ledwall': LED wall optimized layout with configurable row count
+ */
+export type ScoreboardLayoutType = 'vertical' | 'ledwall';
+
+/**
+ * Configuration for a client (scoreboard) pushed from server
+ *
+ * Parameters with undefined value mean "not set, use client default/auto-detection".
+ * Only explicitly set parameters are pushed to clients.
+ */
+export interface ClientConfig {
+  // === Known scoreboard parameters (correspond to URL params) ===
+
+  /** Layout mode */
+  type?: ScoreboardLayoutType;
+  /** Number of display rows (3-20), for ledwall scaling */
+  displayRows?: number;
+  /** Custom title override */
+  customTitle?: string;
+
+  // === Data filtering ===
+
+  /** Filter to specific races (race IDs) */
+  raceFilter?: string[];
+  /** Show OnCourse data */
+  showOnCourse?: boolean;
+  /** Show Results data */
+  showResults?: boolean;
+
+  // === Custom parameters (key-value for additional/future parameters) ===
+
+  /** Custom parameters defined by admin */
+  custom?: Record<string, string | number | boolean>;
+
+  // === Metadata (server-managed) ===
+
+  /** Human-readable label for this client (set by admin) */
+  label?: string;
+  /** Timestamp of last connection */
+  lastSeen?: string;
+}
+
+/**
+ * Supported types for custom parameters
+ */
+export type CustomParamType = 'string' | 'number' | 'boolean';
+
+/**
+ * Definition of a custom parameter that can be set for clients
+ */
+export interface CustomParamDefinition {
+  /** Unique identifier for this parameter */
+  key: string;
+  /** Display label for the admin UI */
+  label: string;
+  /** Parameter value type */
+  type: CustomParamType;
+  /** Default value (optional) */
+  defaultValue?: string | number | boolean;
+}
+
+// ============================================================================
+// XML Configuration Types
+// ============================================================================
+
 /**
  * XML source mode for selecting which XML file to use
  * - 'auto-main': Use main event file (CurrentEventFile from C123 config)
@@ -76,6 +148,13 @@ export interface AppSettings {
   eventNameOverride?: string;
   /** Timestamp of settings last update */
   lastUpdated?: string;
+
+  // === Client Configuration ===
+
+  /** Stored configurations for clients, keyed by IP address */
+  clientConfigs?: Record<string, ClientConfig>;
+  /** Definitions of custom parameters available for clients */
+  customParamDefinitions?: CustomParamDefinition[];
 }
 
 /**

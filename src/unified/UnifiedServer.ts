@@ -3,7 +3,7 @@ import { createServer, Server as HttpServer } from 'node:http';
 import { WebSocketServer as WsServer, WebSocket } from 'ws';
 import { EventEmitter } from 'node:events';
 import type { ScoreboardConfig } from '../admin/types.js';
-import type { C123Message, C123XmlChange, C123ForceRefresh, C123LogEntry, XmlSection } from '../protocol/types.js';
+import type { C123Message, C123XmlChange, C123ForceRefresh, C123LogEntry, XmlSection, LogLevel } from '../protocol/types.js';
 import { getLogBuffer, type LogEntry, type LogFilterOptions } from '../utils/LogBuffer.js';
 import { ScoreboardSession } from '../ws/ScoreboardSession.js';
 import { Logger } from '../utils/logger.js';
@@ -1107,7 +1107,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     // Level filter (minimum level)
     const minLevel = req.query.level as string;
     if (minLevel && ['debug', 'info', 'warn', 'error'].includes(minLevel)) {
-      options.minLevel = minLevel as LogFilterOptions['minLevel'];
+      options.minLevel = minLevel as LogLevel;
     }
 
     // Specific levels filter
@@ -1116,7 +1116,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       const validLevels = ['debug', 'info', 'warn', 'error'];
       const requestedLevels = levelsParam.split(',').filter((l) => validLevels.includes(l.trim()));
       if (requestedLevels.length > 0) {
-        options.levels = requestedLevels as LogFilterOptions['levels'];
+        options.levels = requestedLevels as LogLevel[];
       }
     }
 

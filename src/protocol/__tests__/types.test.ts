@@ -7,6 +7,8 @@ import {
   isSchedule,
   isConnected,
   isError,
+  isConfigPush,
+  isClientState,
   type C123Message,
   type C123TimeOfDay,
   type C123OnCourse,
@@ -15,6 +17,8 @@ import {
   type C123Schedule,
   type C123Connected,
   type C123Error,
+  type C123ConfigPush,
+  type C123ClientState,
 } from '../types.js';
 
 describe('C123 Protocol Types', () => {
@@ -167,6 +171,39 @@ describe('C123 Protocol Types', () => {
       expect(isError(msg)).toBe(true);
       expect(isConnected(msg)).toBe(false);
     });
+
+    it('isConfigPush correctly identifies ConfigPush messages', () => {
+      const msg: C123ConfigPush = {
+        type: 'ConfigPush',
+        timestamp,
+        data: {
+          type: 'ledwall',
+          displayRows: 10,
+          label: 'Main Display',
+        },
+      };
+      expect(isConfigPush(msg)).toBe(true);
+      expect(isClientState(msg)).toBe(false);
+      expect(isConnected(msg)).toBe(false);
+    });
+
+    it('isClientState correctly identifies ClientState messages', () => {
+      const msg: C123ClientState = {
+        type: 'ClientState',
+        timestamp,
+        data: {
+          current: {
+            type: 'vertical',
+            displayRows: 12,
+          },
+          version: '1.0.0',
+          capabilities: ['resultsView', 'startlistView'],
+        },
+      };
+      expect(isClientState(msg)).toBe(true);
+      expect(isConfigPush(msg)).toBe(false);
+      expect(isConnected(msg)).toBe(false);
+    });
   });
 
   describe('message structure', () => {
@@ -205,6 +242,16 @@ describe('C123 Protocol Types', () => {
           type: 'Error',
           timestamp,
           data: { code: 'TEST', message: 'Test error' },
+        },
+        {
+          type: 'ConfigPush',
+          timestamp,
+          data: { type: 'ledwall', displayRows: 8 },
+        },
+        {
+          type: 'ClientState',
+          timestamp,
+          data: { current: { view: 'results' } },
         },
       ];
 
