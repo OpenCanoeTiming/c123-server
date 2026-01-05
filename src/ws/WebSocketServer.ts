@@ -154,7 +154,7 @@ export class WebSocketServer extends EventEmitter<WebSocketServerEvents> {
    */
   private handleConnection(ws: WebSocket): void {
     const clientId = `client-${++this.clientIdCounter}`;
-    const session = new ScoreboardSession(clientId, ws);
+    const session = new ScoreboardSession(clientId, ws, 'unknown');
     this.sessions.set(clientId, session);
     Logger.info('WebSocket', `Client connected: ${clientId}`);
     this.emit('connection', clientId);

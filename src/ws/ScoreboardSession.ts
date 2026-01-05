@@ -10,11 +10,11 @@ export interface ClientReportedState {
   /** Current values the client is using */
   current: Record<string, unknown>;
   /** Client version (optional) */
-  version?: string;
+  version?: string | undefined;
   /** Client capabilities (optional) */
-  capabilities?: string[];
+  capabilities?: string[] | undefined;
   /** Timestamp of last state update */
-  lastUpdated?: string;
+  lastUpdated?: string | undefined;
 }
 
 /**
@@ -26,7 +26,7 @@ export interface SessionInfo {
   lastActivity: string;
   ipAddress: string;
   config: ScoreboardConfig;
-  clientState?: ClientReportedState;
+  clientState?: ClientReportedState | undefined;
 }
 
 /**
@@ -193,9 +193,15 @@ export class ScoreboardSession {
   /**
    * Update client state (from ClientState message)
    */
-  setClientState(state: Omit<ClientReportedState, 'lastUpdated'>): void {
+  setClientState(state: {
+    current: Record<string, unknown>;
+    version?: string | undefined;
+    capabilities?: string[] | undefined;
+  }): void {
     this.clientState = {
-      ...state,
+      current: state.current,
+      version: state.version,
+      capabilities: state.capabilities,
       lastUpdated: new Date().toISOString(),
     };
     this.lastActivity = new Date();

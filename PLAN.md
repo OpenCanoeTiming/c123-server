@@ -793,11 +793,11 @@ Centrální správa parametrů klientů (scoreboardů) ze serveru. Admin může 
 - [x] Merge logika (partial update zachová ostatní hodnoty)
 - [x] Unit testy (26 nových testů pro AppSettingsManager)
 
-#### 15.4 REST API pro client management
+#### 15.4 REST API pro client management ✅
 **Vstup:** UnifiedServer routes
 **Výstup:** CRUD API pro client config
 
-- [ ] `GET /api/clients` - seznam klientů (online + known offline)
+- [x] `GET /api/clients` - seznam klientů (online + known offline)
   ```json
   {
     "clients": [
@@ -806,21 +806,23 @@ Centrální správa parametrů klientů (scoreboardů) ze serveru. Admin může 
         "label": "TV v hale",
         "online": true,
         "sessionId": "client-42",
-        "serverConfig": { "displayRows": 10, "layout": "tv" },
-        "clientState": { "currentView": "results" },
+        "serverConfig": { "displayRows": 10, "type": "ledwall" },
+        "clientState": { "current": {} },
         "lastSeen": "2025-01-05T10:30:00Z"
       }
     ]
   }
   ```
-- [ ] `PUT /api/clients/:ip/config` - nastavit konfiguraci (partial update)
+- [x] `PUT /api/clients/:ip/config` - nastavit konfiguraci (partial update)
   - Automaticky pushne změny pokud je klient online
-- [ ] `PUT /api/clients/:ip/label` - pojmenovat klienta
-- [ ] `DELETE /api/clients/:ip` - smazat uloženou konfiguraci
-- [ ] `POST /api/clients/:ip/refresh` - force refresh jednoho klienta
-- [ ] `GET /api/config/custom-params` - definice custom parametrů
-- [ ] `PUT /api/config/custom-params` - nastavit definice custom parametrů
-- [ ] Unit testy
+  - Validace: type (vertical/ledwall), displayRows (3-20), raceFilter (array), showOnCourse/showResults (boolean)
+- [x] `PUT /api/clients/:ip/label` - pojmenovat klienta
+- [x] `DELETE /api/clients/:ip` - smazat uloženou konfiguraci
+- [x] `POST /api/clients/:ip/refresh` - force refresh jednoho klienta
+- [x] `GET /api/config/custom-params` - definice custom parametrů
+- [x] `PUT /api/config/custom-params` - nastavit definice custom parametrů
+  - Validace: key, label, type (string/number/boolean), defaultValue type match
+- [x] Unit testy (23 nových testů pro client management API)
 
 #### 15.5 Push mechanismus
 **Vstup:** Config storage, WebSocket sessions

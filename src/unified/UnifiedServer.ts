@@ -12,6 +12,7 @@ import type { Source } from '../sources/types.js';
 import type { XmlDataService } from '../service/XmlDataService.js';
 import type { Server as C123Server } from '../server.js';
 import { getAppSettings, WindowsConfigDetector } from '../config/index.js';
+import type { ClientConfig } from '../config/types.js';
 
 const DEFAULT_PORT = 27123;
 const VERSION = '2.0.0';
@@ -536,8 +537,13 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     this.app.use((_req: Request, res: Response, next: NextFunction) => {
       res.header('Access-Control-Allow-Origin', '*');
       res.header('Access-Control-Allow-Headers', 'Content-Type');
-      res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
       next();
+    });
+
+    // Handle OPTIONS preflight requests
+    this.app.options('*', (_req: Request, res: Response) => {
+      res.sendStatus(204);
     });
 
     // Discovery endpoint (for autodiscovery by scoreboards)
@@ -575,6 +581,17 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
     // Logs API route
     this.app.get('/api/logs', this.handleGetLogs.bind(this));
+
+    // Client management API routes
+    this.app.get('/api/clients', this.handleGetClients.bind(this));
+    this.app.put('/api/clients/:ip/config', this.handleSetClientConfig.bind(this));
+    this.app.put('/api/clients/:ip/label', this.handleSetClientLabel.bind(this));
+    this.app.delete('/api/clients/:ip', this.handleDeleteClient.bind(this));
+    this.app.post('/api/clients/:ip/refresh', this.handleRefreshClient.bind(this));
+
+    // Custom parameters API routes
+    this.app.get('/api/config/custom-params', this.handleGetCustomParams.bind(this));
+    this.app.put('/api/config/custom-params', this.handleSetCustomParams.bind(this));
 
     // Health check
     this.app.get('/health', (_req: Request, res: Response) => {
@@ -1258,6 +1275,341 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       limit,
       offset,
       bufferSize: buffer.getMaxSize(),
+    });
+  }
+
+  // ==========================================================================
+  // Client Management API Handlers
+  // ==========================================================================
+
+  /**
+   * Response type for GET /api/clients
+   */
+  private buildClientInfo(
+    ip: string,
+    storedConfig: ClientConfig | undefined,
+    onlineSessions: ScoreboardSession[],
+  ): object {
+    const isOnline = onlineSessions.length > 0;
+    const firstSession = onlineSessions[0];
+
+    return {
+      ip,
+      label: storedConfig?.label ?? null,
+      online: isOnline,
+      sessionId: firstSession?.id ?? null,
+      sessionCount: onlineSessions.length,
+      serverConfig: storedConfig
+        ? {
+            type: storedConfig.type,
+            displayRows: storedConfig.displayRows,
+            customTitle: storedConfig.customTitle,
+            raceFilter: storedConfig.raceFilter,
+            showOnCourse: storedConfig.showOnCourse,
+            showResults: storedConfig.showResults,
+            custom: storedConfig.custom,
+          }
+        : null,
+      clientState: firstSession?.getClientState() ?? null,
+      lastSeen: storedConfig?.lastSeen ?? null,
+    };
+  }
+
+  /**
+   * GET /api/clients - List all clients (online + known offline)
+   *
+   * Returns combined list of:
+   * - Currently connected clients (from sessions)
+   * - Previously connected clients with stored config
+   */
+  private handleGetClients(_req: Request, res: Response): void {
+    const settings = getAppSettings();
+    const storedConfigs = settings.getAllClientConfigs();
+
+    // Collect all known IPs (from sessions + stored configs)
+    const knownIps = new Set<string>();
+
+    // Add IPs from active sessions
+    for (const session of this.sessions.values()) {
+      knownIps.add(session.getIpAddress());
+    }
+
+    // Add IPs from stored configs
+    for (const ip of Object.keys(storedConfigs)) {
+      knownIps.add(ip);
+    }
+
+    // Build client list
+    const clients = Array.from(knownIps)
+      .map((ip) => {
+        const storedConfig = storedConfigs[ip];
+        const onlineSessions = this.getSessionsByIp(ip).filter((s) => s.isConnected());
+        return this.buildClientInfo(ip, storedConfig, onlineSessions);
+      })
+      // Sort: online first, then by IP
+      .sort((a, b) => {
+        const aOnline = (a as { online: boolean }).online;
+        const bOnline = (b as { online: boolean }).online;
+        if (aOnline !== bOnline) return bOnline ? 1 : -1;
+        return ((a as { ip: string }).ip).localeCompare((b as { ip: string }).ip);
+      });
+
+    res.json({ clients });
+  }
+
+  /**
+   * PUT /api/clients/:ip/config - Set client configuration
+   *
+   * Body: Partial<ClientConfig> - only provided fields are updated
+   * Automatically pushes changes to online clients.
+   */
+  private handleSetClientConfig(req: Request, res: Response): void {
+    const ip = req.params.ip;
+    const config = req.body as Partial<ClientConfig>;
+
+    // Validate IP parameter
+    if (!ip || ip === 'undefined') {
+      res.status(400).json({ error: 'IP address is required' });
+      return;
+    }
+
+    // Validate config fields if provided
+    if (config.type !== undefined && config.type !== 'vertical' && config.type !== 'ledwall') {
+      res.status(400).json({ error: 'type must be "vertical" or "ledwall"' });
+      return;
+    }
+
+    if (config.displayRows !== undefined) {
+      const rows = Number(config.displayRows);
+      if (isNaN(rows) || rows < 3 || rows > 20) {
+        res.status(400).json({ error: 'displayRows must be a number between 3 and 20' });
+        return;
+      }
+      config.displayRows = rows;
+    }
+
+    if (config.raceFilter !== undefined && !Array.isArray(config.raceFilter)) {
+      res.status(400).json({ error: 'raceFilter must be an array' });
+      return;
+    }
+
+    if (config.showOnCourse !== undefined && typeof config.showOnCourse !== 'boolean') {
+      res.status(400).json({ error: 'showOnCourse must be a boolean' });
+      return;
+    }
+
+    if (config.showResults !== undefined && typeof config.showResults !== 'boolean') {
+      res.status(400).json({ error: 'showResults must be a boolean' });
+      return;
+    }
+
+    // Remove metadata fields from config (server-managed)
+    const { label: _label, lastSeen: _lastSeen, ...configToSave } = config;
+
+    // Save configuration
+    const settings = getAppSettings();
+    const savedConfig = settings.setClientConfig(ip, configToSave);
+
+    // Push to online clients
+    const pushedCount = this.pushConfigToIp(ip);
+
+    Logger.info('Unified', `Updated config for client ${ip}, pushed to ${pushedCount} session(s)`);
+
+    res.json({
+      success: true,
+      ip,
+      config: savedConfig,
+      pushedToSessions: pushedCount,
+    });
+  }
+
+  /**
+   * PUT /api/clients/:ip/label - Set client label
+   *
+   * Body: { label: string }
+   */
+  private handleSetClientLabel(req: Request, res: Response): void {
+    const ip = req.params.ip;
+    const { label } = req.body;
+
+    // Validate IP parameter
+    if (!ip || ip === 'undefined') {
+      res.status(400).json({ error: 'IP address is required' });
+      return;
+    }
+
+    // Validate label
+    if (typeof label !== 'string') {
+      res.status(400).json({ error: 'label must be a string' });
+      return;
+    }
+
+    const trimmedLabel = label.trim();
+    if (trimmedLabel.length === 0) {
+      res.status(400).json({ error: 'label cannot be empty' });
+      return;
+    }
+
+    // Save label
+    const settings = getAppSettings();
+    settings.setClientLabel(ip, trimmedLabel);
+
+    Logger.info('Unified', `Set label for client ${ip}: "${trimmedLabel}"`);
+
+    res.json({
+      success: true,
+      ip,
+      label: trimmedLabel,
+    });
+  }
+
+  /**
+   * DELETE /api/clients/:ip - Delete stored client configuration
+   *
+   * Note: This only removes stored config, it doesn't disconnect the client.
+   */
+  private handleDeleteClient(req: Request, res: Response): void {
+    const ip = req.params.ip;
+
+    // Validate IP parameter
+    if (!ip || ip === 'undefined') {
+      res.status(400).json({ error: 'IP address is required' });
+      return;
+    }
+
+    const settings = getAppSettings();
+    const deleted = settings.deleteClientConfig(ip);
+
+    if (!deleted) {
+      res.status(404).json({ error: 'Client configuration not found' });
+      return;
+    }
+
+    Logger.info('Unified', `Deleted config for client ${ip}`);
+
+    res.json({
+      success: true,
+      ip,
+      message: 'Client configuration deleted',
+    });
+  }
+
+  /**
+   * POST /api/clients/:ip/refresh - Force refresh a specific client
+   *
+   * Body: { reason?: string }
+   */
+  private handleRefreshClient(req: Request, res: Response): void {
+    const ip = req.params.ip;
+    const { reason } = req.body;
+
+    // Validate IP parameter
+    if (!ip || ip === 'undefined') {
+      res.status(400).json({ error: 'IP address is required' });
+      return;
+    }
+
+    // Validate reason if provided
+    if (reason !== undefined && typeof reason !== 'string') {
+      res.status(400).json({ error: 'reason must be a string' });
+      return;
+    }
+
+    // Find sessions for this IP
+    const sessions = this.getSessionsByIp(ip).filter((s) => s.isConnected());
+
+    if (sessions.length === 0) {
+      res.status(404).json({ error: 'No online sessions found for this IP' });
+      return;
+    }
+
+    // Send ForceRefresh to all sessions with this IP
+    const message: C123ForceRefresh = {
+      type: 'ForceRefresh',
+      timestamp: new Date().toISOString(),
+      data: reason !== undefined ? { reason } : {},
+    };
+
+    const json = JSON.stringify(message);
+    for (const session of sessions) {
+      session.sendRaw(json);
+    }
+
+    Logger.info('Unified', `Sent ForceRefresh to ${sessions.length} session(s) for IP ${ip}`);
+
+    res.json({
+      success: true,
+      ip,
+      sessionsRefreshed: sessions.length,
+      reason: reason || null,
+    });
+  }
+
+  /**
+   * GET /api/config/custom-params - Get custom parameter definitions
+   */
+  private handleGetCustomParams(_req: Request, res: Response): void {
+    const settings = getAppSettings();
+    const definitions = settings.getCustomParamDefinitions();
+
+    res.json({ definitions });
+  }
+
+  /**
+   * PUT /api/config/custom-params - Set custom parameter definitions
+   *
+   * Body: { definitions: CustomParamDefinition[] }
+   */
+  private handleSetCustomParams(req: Request, res: Response): void {
+    const { definitions } = req.body;
+
+    // Validate definitions
+    if (!Array.isArray(definitions)) {
+      res.status(400).json({ error: 'definitions must be an array' });
+      return;
+    }
+
+    // Validate each definition
+    for (const def of definitions) {
+      if (typeof def.key !== 'string' || def.key.trim().length === 0) {
+        res.status(400).json({ error: 'Each definition must have a non-empty key' });
+        return;
+      }
+
+      if (typeof def.label !== 'string' || def.label.trim().length === 0) {
+        res.status(400).json({ error: 'Each definition must have a non-empty label' });
+        return;
+      }
+
+      if (!['string', 'number', 'boolean'].includes(def.type)) {
+        res.status(400).json({
+          error: `Invalid type "${def.type}" for key "${def.key}". Must be string, number, or boolean`,
+        });
+        return;
+      }
+
+      // Validate defaultValue type if provided
+      if (def.defaultValue !== undefined) {
+        const expectedType = def.type;
+        const actualType = typeof def.defaultValue;
+        if (actualType !== expectedType) {
+          res.status(400).json({
+            error: `Default value for "${def.key}" has wrong type. Expected ${expectedType}, got ${actualType}`,
+          });
+          return;
+        }
+      }
+    }
+
+    // Save definitions
+    const settings = getAppSettings();
+    settings.setCustomParamDefinitions(definitions);
+
+    Logger.info('Unified', `Updated custom param definitions (${definitions.length} definitions)`);
+
+    res.json({
+      success: true,
+      definitions: settings.getCustomParamDefinitions(),
     });
   }
 

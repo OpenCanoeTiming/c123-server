@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
 import { AppSettingsManager, resetAppSettings, getAppSettings } from '../AppSettings.js';
-import { ClientConfig, CustomParamDefinition } from '../types.js';
+import type { ClientConfig, CustomParamDefinition } from '../types.js';
 
 // Mock fs and os modules
 vi.mock('fs');

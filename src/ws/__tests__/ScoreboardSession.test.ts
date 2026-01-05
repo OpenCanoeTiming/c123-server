@@ -1,21 +1,32 @@
-import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { ScoreboardSession, type ClientReportedState, type SessionInfo } from '../ScoreboardSession.js';
+import { describe, test, expect, vi } from 'vitest';
+import { ScoreboardSession } from '../ScoreboardSession.js';
 import type { ClientConfig } from '../../config/types.js';
 
-// Mock WebSocket
-function createMockWebSocket(readyState = 1) {
+// Mock WebSocket with typed send
+interface MockWebSocket {
+  readyState: number;
+  OPEN: number;
+  send: ReturnType<typeof vi.fn>;
+}
+
+function createMockWebSocket(readyState = 1): MockWebSocket {
   return {
     readyState,
     OPEN: 1,
     send: vi.fn(),
-  } as unknown as import('ws').WebSocket;
+  };
+}
+
+// Cast mock to WebSocket for type compatibility
+function asWs(mock: MockWebSocket): import('ws').WebSocket {
+  return mock as unknown as import('ws').WebSocket;
 }
 
 describe('ScoreboardSession', () => {
   describe('constructor and basic properties', () => {
     test('should create session with required parameters', () => {
       const ws = createMockWebSocket();
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50');
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50');
 
       expect(session.id).toBe('client-1');
       expect(session.ipAddress).toBe('192.168.1.50');
@@ -29,14 +40,14 @@ describe('ScoreboardSession', () => {
         displayRows: 10,
         label: 'TV v hale',
       };
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50', undefined, serverConfig);
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50', undefined, serverConfig);
 
       expect(session.getServerConfig()).toEqual(serverConfig);
     });
 
     test('should create session with scoreboard config', () => {
       const ws = createMockWebSocket();
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50', {
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50', {
         showOnCourse: false,
         showResults: true,
       });
@@ -51,7 +62,7 @@ describe('ScoreboardSession', () => {
   describe('getInfo', () => {
     test('should return session info with IP address', () => {
       const ws = createMockWebSocket();
-      const session = new ScoreboardSession('client-1', ws, '10.0.0.5');
+      const session = new ScoreboardSession('client-1', asWs(ws), '10.0.0.5');
 
       const info = session.getInfo();
 
@@ -64,7 +75,7 @@ describe('ScoreboardSession', () => {
 
     test('should include client state when set', () => {
       const ws = createMockWebSocket();
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50');
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50');
 
       session.setClientState({
         current: { view: 'results' },
@@ -83,21 +94,21 @@ describe('ScoreboardSession', () => {
   describe('IP address', () => {
     test('getIpAddress should return IP', () => {
       const ws = createMockWebSocket();
-      const session = new ScoreboardSession('client-1', ws, '172.16.0.1');
+      const session = new ScoreboardSession('client-1', asWs(ws), '172.16.0.1');
 
       expect(session.getIpAddress()).toBe('172.16.0.1');
     });
 
     test('should handle IPv6 address', () => {
       const ws = createMockWebSocket();
-      const session = new ScoreboardSession('client-1', ws, '::1');
+      const session = new ScoreboardSession('client-1', asWs(ws), '::1');
 
       expect(session.getIpAddress()).toBe('::1');
     });
 
     test('should handle unknown IP', () => {
       const ws = createMockWebSocket();
-      const session = new ScoreboardSession('client-1', ws, 'unknown');
+      const session = new ScoreboardSession('client-1', asWs(ws), 'unknown');
 
       expect(session.getIpAddress()).toBe('unknown');
     });
@@ -106,14 +117,14 @@ describe('ScoreboardSession', () => {
   describe('client state', () => {
     test('should return undefined when no client state set', () => {
       const ws = createMockWebSocket();
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50');
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50');
 
       expect(session.getClientState()).toBeUndefined();
     });
 
     test('should store and return client state', () => {
       const ws = createMockWebSocket();
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50');
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50');
 
       session.setClientState({
         current: { mode: 'ledwall', rows: 8 },
@@ -130,7 +141,7 @@ describe('ScoreboardSession', () => {
 
     test('should update lastUpdated on each setClientState call', async () => {
       const ws = createMockWebSocket();
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50');
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50');
 
       session.setClientState({ current: { a: 1 } });
       const firstUpdate = session.getClientState()?.lastUpdated;
@@ -146,7 +157,7 @@ describe('ScoreboardSession', () => {
 
     test('should return copy of client state to prevent mutation', () => {
       const ws = createMockWebSocket();
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50');
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50');
 
       session.setClientState({ current: { x: 1 } });
       const state1 = session.getClientState();
@@ -160,7 +171,7 @@ describe('ScoreboardSession', () => {
   describe('server config', () => {
     test('should return undefined when no server config set', () => {
       const ws = createMockWebSocket();
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50');
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50');
 
       expect(session.getServerConfig()).toBeUndefined();
     });
@@ -171,14 +182,14 @@ describe('ScoreboardSession', () => {
         type: 'vertical',
         customTitle: 'Test Event',
       };
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50', undefined, config);
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50', undefined, config);
 
       expect(session.getServerConfig()).toEqual(config);
     });
 
     test('should update server config via setServerConfig', () => {
       const ws = createMockWebSocket();
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50');
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50');
 
       const newConfig: ClientConfig = {
         type: 'ledwall',
@@ -192,7 +203,7 @@ describe('ScoreboardSession', () => {
     test('should return copy of server config to prevent mutation', () => {
       const ws = createMockWebSocket();
       const config: ClientConfig = { type: 'ledwall' };
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50', undefined, config);
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50', undefined, config);
 
       const config1 = session.getServerConfig();
       const config2 = session.getServerConfig();
@@ -205,7 +216,7 @@ describe('ScoreboardSession', () => {
   describe('getEffectiveConfig', () => {
     test('should return empty object when no server config', () => {
       const ws = createMockWebSocket();
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50');
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50');
 
       expect(session.getEffectiveConfig()).toEqual({});
     });
@@ -216,7 +227,7 @@ describe('ScoreboardSession', () => {
         type: 'ledwall',
         displayRows: 10,
       };
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50', undefined, config);
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50', undefined, config);
 
       const effective = session.getEffectiveConfig();
 
@@ -238,7 +249,7 @@ describe('ScoreboardSession', () => {
         custom: { theme: 'dark' },
         label: 'Main Screen',
       };
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50', undefined, config);
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50', undefined, config);
 
       const effective = session.getEffectiveConfig();
 
@@ -257,7 +268,7 @@ describe('ScoreboardSession', () => {
       const config: ClientConfig = {
         raceFilter: ['race1', 'race2'],
       };
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50', undefined, config);
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50', undefined, config);
 
       const effective = session.getEffectiveConfig();
       expect(effective.raceFilter).toEqual(['race1', 'race2']);
@@ -269,7 +280,7 @@ describe('ScoreboardSession', () => {
     test('should not send if not connected', () => {
       const ws = createMockWebSocket(3); // CLOSED state
       const config: ClientConfig = { type: 'ledwall' };
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50', undefined, config);
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50', undefined, config);
 
       session.sendConfigPush();
 
@@ -278,7 +289,7 @@ describe('ScoreboardSession', () => {
 
     test('should not send if no config to push', () => {
       const ws = createMockWebSocket();
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50');
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50');
 
       session.sendConfigPush();
 
@@ -292,7 +303,7 @@ describe('ScoreboardSession', () => {
         displayRows: 10,
         label: 'TV Screen',
       };
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50', undefined, config);
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50', undefined, config);
 
       session.sendConfigPush();
 
@@ -313,7 +324,7 @@ describe('ScoreboardSession', () => {
         // type is undefined
         // customTitle is undefined
       };
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50', undefined, config);
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50', undefined, config);
 
       session.sendConfigPush();
 
@@ -328,14 +339,14 @@ describe('ScoreboardSession', () => {
   describe('filtering messages', () => {
     test('should filter OnCourse messages when showOnCourse is false', () => {
       const ws = createMockWebSocket();
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50', {
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50', {
         showOnCourse: false,
       });
 
       session.send({
         type: 'OnCourse',
         timestamp: new Date().toISOString(),
-        data: { runners: [] },
+        data: { total: 0, competitors: [] },
       });
 
       expect(ws.send).not.toHaveBeenCalled();
@@ -343,7 +354,7 @@ describe('ScoreboardSession', () => {
 
     test('should filter Results messages when showResults is false', () => {
       const ws = createMockWebSocket();
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50', {
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50', {
         showResults: false,
       });
 
@@ -353,7 +364,7 @@ describe('ScoreboardSession', () => {
         data: {
           raceId: 'K1M_ST_BR1',
           classId: 'K1M_ST',
-          current: 'Y',
+          isCurrent: true,
           mainTitle: 'K1m',
           subTitle: '1st Run',
           rows: [],
@@ -365,7 +376,7 @@ describe('ScoreboardSession', () => {
 
     test('should always send TimeOfDay regardless of filters', () => {
       const ws = createMockWebSocket();
-      const session = new ScoreboardSession('client-1', ws, '192.168.1.50', {
+      const session = new ScoreboardSession('client-1', asWs(ws), '192.168.1.50', {
         showOnCourse: false,
         showResults: false,
       });

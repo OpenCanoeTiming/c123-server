@@ -7,7 +7,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { AppSettingsManager, resetAppSettings } from '../AppSettings.js';
-import type { ClientConfig, CustomParamDefinition } from '../types.js';
+import type { CustomParamDefinition } from '../types.js';
 
 describe('ClientConfig', () => {
   let tempDir: string;
