@@ -7,6 +7,9 @@ import { UnifiedServer } from '../UnifiedServer.js';
 import { resetAppSettings, getAppSettings } from '../../config/index.js';
 import type { CustomParamDefinition } from '../../config/types.js';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type JsonResponse = Record<string, any>;
+
 const BASE_PORT = 27900;
 let portCounter = 0;
 
@@ -36,7 +39,7 @@ describe('Client Management API', () => {
       const response = await fetch(`${baseUrl}/api/clients`);
       expect(response.status).toBe(200);
 
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.clients).toEqual([]);
     });
 
@@ -51,7 +54,7 @@ describe('Client Management API', () => {
       const response = await fetch(`${baseUrl}/api/clients`);
       expect(response.status).toBe(200);
 
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.clients).toHaveLength(1);
       expect(data.clients[0].ip).toBe('192.168.1.50');
       expect(data.clients[0].label).toBe('TV v hale');
@@ -66,7 +69,7 @@ describe('Client Management API', () => {
       settings.setClientConfig('192.168.1.50', { label: 'Client B' });
 
       const response = await fetch(`${baseUrl}/api/clients`);
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
 
       expect(data.clients).toHaveLength(2);
       // Both offline, so sorted by IP
@@ -89,7 +92,7 @@ describe('Client Management API', () => {
 
       expect(response.status).toBe(200);
 
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.success).toBe(true);
       expect(data.ip).toBe('192.168.1.50');
       expect(data.config.type).toBe('ledwall');
@@ -112,7 +115,7 @@ describe('Client Management API', () => {
         body: JSON.stringify({ displayRows: 8 }),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.config.type).toBe('ledwall'); // Preserved
       expect(data.config.displayRows).toBe(8); // Updated
     });
@@ -125,7 +128,7 @@ describe('Client Management API', () => {
       });
 
       expect(response.status).toBe(400);
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.error).toContain('type');
     });
 
@@ -137,7 +140,7 @@ describe('Client Management API', () => {
       });
 
       expect(response.status).toBe(400);
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.error).toContain('displayRows');
     });
 
@@ -149,7 +152,7 @@ describe('Client Management API', () => {
       });
 
       expect(response.status).toBe(400);
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.error).toContain('raceFilter');
     });
 
@@ -165,7 +168,7 @@ describe('Client Management API', () => {
       });
 
       expect(response.status).toBe(200);
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.config.type).toBe('vertical');
       // Label is not set via config endpoint (use /label endpoint instead)
     });
@@ -181,7 +184,7 @@ describe('Client Management API', () => {
 
       expect(response.status).toBe(200);
 
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.success).toBe(true);
       expect(data.ip).toBe('192.168.1.50');
       expect(data.label).toBe('TV v hale');
@@ -200,7 +203,7 @@ describe('Client Management API', () => {
       });
 
       expect(response.status).toBe(400);
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.error).toContain('empty');
     });
 
@@ -212,7 +215,7 @@ describe('Client Management API', () => {
       });
 
       expect(response.status).toBe(400);
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.error).toContain('string');
     });
   });
@@ -230,7 +233,7 @@ describe('Client Management API', () => {
 
       expect(response.status).toBe(200);
 
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.success).toBe(true);
       expect(data.ip).toBe('192.168.1.50');
 
@@ -256,7 +259,7 @@ describe('Client Management API', () => {
       });
 
       expect(response.status).toBe(404);
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.error).toContain('No online sessions');
     });
   });
@@ -266,7 +269,7 @@ describe('Client Management API', () => {
       const response = await fetch(`${baseUrl}/api/config/custom-params`);
       expect(response.status).toBe(200);
 
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.definitions).toEqual([]);
     });
 
@@ -279,7 +282,7 @@ describe('Client Management API', () => {
       settings.setCustomParamDefinitions(defs);
 
       const response = await fetch(`${baseUrl}/api/config/custom-params`);
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
 
       expect(data.definitions).toHaveLength(2);
       expect(data.definitions[0].key).toBe('theme');
@@ -301,7 +304,7 @@ describe('Client Management API', () => {
 
       expect(response.status).toBe(200);
 
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.success).toBe(true);
       expect(data.definitions).toHaveLength(1);
       expect(data.definitions[0].key).toBe('fontSize');
@@ -317,7 +320,7 @@ describe('Client Management API', () => {
       });
 
       expect(response.status).toBe(400);
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.error).toContain('key');
     });
 
@@ -331,7 +334,7 @@ describe('Client Management API', () => {
       });
 
       expect(response.status).toBe(400);
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.error).toContain('type');
     });
 
@@ -347,7 +350,7 @@ describe('Client Management API', () => {
       });
 
       expect(response.status).toBe(400);
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.error).toContain('wrong type');
     });
 
@@ -359,7 +362,7 @@ describe('Client Management API', () => {
       });
 
       expect(response.status).toBe(400);
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.error).toContain('array');
     });
   });

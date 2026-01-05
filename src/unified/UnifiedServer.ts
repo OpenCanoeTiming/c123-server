@@ -1648,6 +1648,37 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     .error { color: #ff6b6b; }
     #lastUpdate { color: #666; font-size: 0.85em; margin-top: 20px; }
     .port-info { color: #00d4ff; font-size: 0.9em; margin-left: 10px; }
+
+    /* Clients grid */
+    .clients-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+    .client-card { background: #0f0f23; border-radius: 6px; padding: 12px; border: 1px solid #333; transition: border-color 0.2s; }
+    .client-card:hover { border-color: #00d4ff; }
+    .client-card.online { border-left: 3px solid #00ff88; }
+    .client-card.offline { border-left: 3px solid #666; }
+    .client-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .client-ip { font-family: monospace; color: #00d4ff; font-size: 0.95em; }
+    .client-status { display: flex; align-items: center; gap: 6px; }
+    .client-status-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .client-status-dot.online { background: #00ff88; }
+    .client-status-dot.offline { background: #666; }
+    .client-label { color: #eee; font-size: 0.9em; margin-bottom: 8px; cursor: pointer; }
+    .client-label:hover { color: #00d4ff; }
+    .client-label.empty { color: #666; font-style: italic; }
+    .client-params { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; font-size: 0.8em; }
+    .client-param { background: #1a1a2e; padding: 2px 6px; border-radius: 3px; color: #888; }
+    .client-param-value { color: #eee; }
+    .client-actions { display: flex; gap: 6px; }
+    .client-btn { background: #333; color: #eee; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 0.8em; }
+    .client-btn:hover { background: #444; }
+    .client-btn.refresh { background: #ff9800; color: #1a1a2e; }
+    .client-btn.refresh:hover { background: #ffa726; }
+
+    /* Modal */
+    .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .modal-content { background: #16213e; border-radius: 8px; width: 90%; max-width: 400px; max-height: 90vh; overflow-y: auto; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid #333; }
+    .modal-header h3 { margin: 0; color: #00d4ff; font-size: 1.1em; }
+    .modal-body { padding: 15px; }
   </style>
 </head>
 <body>
@@ -1737,18 +1768,66 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     <div id="xmlConfigError" class="error" style="margin-top: 10px; display: none;"></div>
   </div>
 
-  <h2>Connected Scoreboards</h2>
+  <h2>Clients</h2>
   <div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-      <span id="scoreboardStatus"></span>
-      <button class="btn" onclick="refreshClients()" style="background: #ff9800;">Refresh All Clients</button>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+      <span id="clientsStatus">Loading...</span>
+      <button class="btn" onclick="refreshAllClients()" style="background: #ff9800;">Refresh All Clients</button>
     </div>
-    <table id="scoreboardsTable">
-      <thead><tr><th>ID</th><th>Connected</th><th>Last Activity</th><th>Config</th></tr></thead>
-      <tbody></tbody>
-    </table>
-    <div id="noScoreboards" style="color: #666; padding: 10px;">No scoreboards connected</div>
-    <div id="refreshMessage" style="color: #00ff88; margin-top: 10px; display: none;"></div>
+
+    <!-- Clients grid -->
+    <div id="clientsGrid" class="clients-grid"></div>
+    <div id="noClients" style="color: #666; padding: 20px; text-align: center;">No clients connected or configured</div>
+    <div id="clientMessage" style="color: #00ff88; margin-top: 10px; display: none;"></div>
+  </div>
+
+  <!-- Client detail modal -->
+  <div id="clientModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Client: <span id="modalClientIp"></span></h3>
+        <button onclick="closeClientModal()" style="background: none; border: none; color: #888; font-size: 1.5em; cursor: pointer;">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom: 15px;">
+          <label style="display: block; margin-bottom: 5px; color: #888;">Label</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="modalLabel" placeholder="Client name" style="flex: 1; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #0f0f23; color: #eee;">
+            <button class="btn" onclick="saveClientLabel()">Save</button>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 15px;">
+          <label style="display: block; margin-bottom: 5px; color: #888;">Layout Type</label>
+          <select id="modalType" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #0f0f23; color: #eee;">
+            <option value="">(auto)</option>
+            <option value="vertical">Vertical</option>
+            <option value="ledwall">LED Wall</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom: 15px;">
+          <label style="display: block; margin-bottom: 5px; color: #888;">Display Rows (3-20)</label>
+          <input type="number" id="modalDisplayRows" min="3" max="20" placeholder="(auto)" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #0f0f23; color: #eee;">
+        </div>
+
+        <div style="margin-bottom: 15px;">
+          <label style="display: block; margin-bottom: 5px; color: #888;">Custom Title</label>
+          <input type="text" id="modalCustomTitle" placeholder="(none)" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #0f0f23; color: #eee;">
+        </div>
+
+        <div style="margin-bottom: 15px;">
+          <label style="display: block; margin-bottom: 5px; color: #888;">Client State (reported)</label>
+          <pre id="modalClientState" style="background: #0f0f23; padding: 8px; border-radius: 4px; font-size: 11px; overflow-x: auto; max-height: 100px;">-</pre>
+        </div>
+
+        <div style="display: flex; gap: 8px; justify-content: space-between;">
+          <button class="btn" onclick="saveClientConfig()" style="flex: 1;">Save Config</button>
+          <button class="btn" onclick="deleteClientConfig()" style="background: #ff4444;">Delete</button>
+        </div>
+      </div>
+      <div id="modalError" class="error" style="padding: 10px; display: none;"></div>
+    </div>
   </div>
 
   <h2>Server Logs</h2>
@@ -2255,14 +2334,262 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       };
     }
 
+    // ===========================================
+    // Client Management Functions
+    // ===========================================
+    let clientsData = [];
+    let currentModalIp = null;
+
+    async function loadClients() {
+      try {
+        const res = await fetch('/api/clients');
+        const data = await res.json();
+        clientsData = data.clients || [];
+        renderClients();
+      } catch (e) {
+        console.error('Failed to load clients:', e);
+      }
+    }
+
+    function renderClients() {
+      const grid = document.getElementById('clientsGrid');
+      const noClients = document.getElementById('noClients');
+      const status = document.getElementById('clientsStatus');
+
+      const onlineCount = clientsData.filter(c => c.online).length;
+      status.textContent = onlineCount + ' online, ' + clientsData.length + ' total';
+
+      if (clientsData.length === 0) {
+        grid.innerHTML = '';
+        noClients.style.display = 'block';
+        return;
+      }
+
+      noClients.style.display = 'none';
+      grid.innerHTML = clientsData.map(renderClientCard).join('');
+    }
+
+    function renderClientCard(client) {
+      const statusClass = client.online ? 'online' : 'offline';
+      const statusText = client.online ? 'online' : 'offline';
+      const label = client.label || '(unnamed)';
+      const labelClass = client.label ? '' : 'empty';
+
+      // Build params display
+      const params = [];
+      if (client.serverConfig) {
+        if (client.serverConfig.type) params.push({ key: 'type', value: client.serverConfig.type });
+        if (client.serverConfig.displayRows) params.push({ key: 'rows', value: client.serverConfig.displayRows });
+        if (client.serverConfig.customTitle) params.push({ key: 'title', value: truncate(client.serverConfig.customTitle, 15) });
+      }
+
+      const paramsHtml = params.length > 0
+        ? params.map(p => '<span class="client-param">' + p.key + ': <span class="client-param-value">' + escapeHtml(String(p.value)) + '</span></span>').join('')
+        : '<span class="client-param">default config</span>';
+
+      return '<div class="client-card ' + statusClass + '" data-ip="' + escapeHtml(client.ip) + '">' +
+        '<div class="client-header">' +
+        '<span class="client-ip">' + escapeHtml(client.ip) + '</span>' +
+        '<div class="client-status">' +
+        '<span class="client-status-dot ' + statusClass + '"></span>' +
+        '<span style="font-size: 0.8em; color: #888;">' + statusText + '</span>' +
+        '</div>' +
+        '</div>' +
+        '<div class="client-label ' + labelClass + '" onclick="openClientModal(\\'' + escapeHtml(client.ip) + '\\')">' + escapeHtml(label) + '</div>' +
+        '<div class="client-params">' + paramsHtml + '</div>' +
+        '<div class="client-actions">' +
+        '<button class="client-btn" onclick="openClientModal(\\'' + escapeHtml(client.ip) + '\\')">Edit</button>' +
+        (client.online ? '<button class="client-btn refresh" onclick="refreshClient(\\'' + escapeHtml(client.ip) + '\\')">Refresh</button>' : '') +
+        '</div>' +
+        '</div>';
+    }
+
+    function truncate(str, len) {
+      if (!str) return '';
+      return str.length > len ? str.substring(0, len) + '...' : str;
+    }
+
+    function openClientModal(ip) {
+      currentModalIp = ip;
+      const client = clientsData.find(c => c.ip === ip);
+
+      document.getElementById('modalClientIp').textContent = ip;
+      document.getElementById('modalLabel').value = client?.label || '';
+
+      // Config fields
+      const cfg = client?.serverConfig || {};
+      document.getElementById('modalType').value = cfg.type || '';
+      document.getElementById('modalDisplayRows').value = cfg.displayRows || '';
+      document.getElementById('modalCustomTitle').value = cfg.customTitle || '';
+
+      // Client state
+      const state = client?.clientState;
+      document.getElementById('modalClientState').textContent = state ? JSON.stringify(state, null, 2) : '-';
+
+      document.getElementById('modalError').style.display = 'none';
+      document.getElementById('clientModal').style.display = 'flex';
+    }
+
+    function closeClientModal() {
+      document.getElementById('clientModal').style.display = 'none';
+      currentModalIp = null;
+    }
+
+    async function saveClientLabel() {
+      if (!currentModalIp) return;
+      const label = document.getElementById('modalLabel').value.trim();
+
+      if (!label) {
+        showModalError('Please enter a label');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/clients/' + encodeURIComponent(currentModalIp) + '/label', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label })
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          showModalError(data.error);
+          return;
+        }
+
+        loadClients();
+        showClientMessage('Label saved for ' + currentModalIp);
+      } catch (e) {
+        showModalError('Failed: ' + e.message);
+      }
+    }
+
+    async function saveClientConfig() {
+      if (!currentModalIp) return;
+
+      const config = {};
+      const type = document.getElementById('modalType').value;
+      const rows = document.getElementById('modalDisplayRows').value;
+      const title = document.getElementById('modalCustomTitle').value.trim();
+
+      if (type) config.type = type;
+      if (rows) config.displayRows = parseInt(rows, 10);
+      if (title) config.customTitle = title;
+
+      try {
+        const res = await fetch('/api/clients/' + encodeURIComponent(currentModalIp) + '/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config)
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          showModalError(data.error);
+          return;
+        }
+
+        loadClients();
+        closeClientModal();
+        showClientMessage('Config saved and pushed to ' + data.pushedToSessions + ' session(s)');
+      } catch (e) {
+        showModalError('Failed: ' + e.message);
+      }
+    }
+
+    async function deleteClientConfig() {
+      if (!currentModalIp) return;
+
+      if (!confirm('Delete configuration for ' + currentModalIp + '?')) return;
+
+      try {
+        const res = await fetch('/api/clients/' + encodeURIComponent(currentModalIp), {
+          method: 'DELETE'
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          showModalError(data.error);
+          return;
+        }
+
+        loadClients();
+        closeClientModal();
+        showClientMessage('Config deleted for ' + currentModalIp);
+      } catch (e) {
+        showModalError('Failed: ' + e.message);
+      }
+    }
+
+    async function refreshClient(ip) {
+      try {
+        const res = await fetch('/api/clients/' + encodeURIComponent(ip) + '/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: 'Admin triggered refresh' })
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          showClientMessage('Error: ' + data.error, true);
+          return;
+        }
+
+        showClientMessage('Refresh sent to ' + ip);
+      } catch (e) {
+        showClientMessage('Failed: ' + e.message, true);
+      }
+    }
+
+    async function refreshAllClients() {
+      try {
+        const res = await fetch('/api/broadcast/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: 'Admin triggered refresh' })
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          showClientMessage('Error: ' + data.error, true);
+          return;
+        }
+
+        showClientMessage('Refresh sent to ' + data.clientsNotified + ' client(s)');
+      } catch (e) {
+        showClientMessage('Failed: ' + e.message, true);
+      }
+    }
+
+    function showModalError(msg) {
+      const el = document.getElementById('modalError');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    function showClientMessage(msg, isError) {
+      const el = document.getElementById('clientMessage');
+      el.textContent = msg;
+      el.style.color = isError ? '#ff6b6b' : '#00ff88';
+      el.style.display = 'block';
+      setTimeout(function() { el.style.display = 'none'; }, 3000);
+    }
+
+    // Close modal when clicking outside
+    document.getElementById('clientModal').addEventListener('click', function(e) {
+      if (e.target === this) closeClientModal();
+    });
+
     refresh();
     loadXmlConfig();
     loadEventName();
     loadInitialLogs();
+    loadClients();
     connectLogWebSocket();
     setInterval(refresh, 2000);
     setInterval(loadXmlConfig, 5000);
     setInterval(loadEventName, 5000);
+    setInterval(loadClients, 3000);
   </script>
 </body>
 </html>`;

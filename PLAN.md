@@ -837,7 +837,7 @@ Centrální správa parametrů klientů (scoreboardů) ze serveru. Admin může 
 - [x] Logování push eventů
 - [x] Unit testy (13 testů pro ConfigPush mechanismus)
 
-#### 15.6 Admin UI - Client Management panel
+#### 15.6 Admin UI - Client Management panel ✅
 **Vstup:** Existující dashboard HTML
 **Výstup:** Kompaktní přehled klientů
 
@@ -852,26 +852,20 @@ Centrální správa parametrů klientů (scoreboardů) ze serveru. Admin může 
 └─────────────────────────────────────┘
 ```
 
-- [ ] Přepracovat sekci "Connected Scoreboards" na "Clients":
+- [x] Přepracovat sekci "Connected Scoreboards" na "Clients":
   - **Kompaktní grid layout** - klienti vedle sebe (cards)
   - Každá karta obsahuje:
     - IP adresa + online/offline status (🟢/🔴)
-    - Label (inline editovatelný)
+    - Label (kliknutím otevře detail modal)
     - **[⟳] Force Refresh tlačítko** přímo v kartě
     - Klíčové parametry: type, displayRows, customTitle
-- [ ] **Inline editace parametrů** - klik na hodnotu → editace přímo v kartě
-- [ ] **Expand/detail panel** (volitelně) - klik rozbalí:
-  - Všechny parametry včetně custom
+- [x] **Detail modal** - klik na Edit nebo label otevře:
+  - Všechny parametry (type, displayRows, customTitle)
+  - Label editace
   - Client state (co klient reportuje)
-  - Delete config tlačítko
-- [ ] **Porovnávací tabulka** (alternativní pohled):
-  ```
-  | IP           | Label      | type     | rows | title   | [⟳] |
-  |--------------|------------|----------|------|---------|-----|
-  | 192.168.1.50 | TV v hale  | ledwall  | 8    | -       | [⟳] |
-  | 192.168.1.51 | Startovka  | vertical | -    | Finále  | [⟳] |
-  ```
-- [ ] Sekce pro definici custom parametrů (modal)
+  - Save/Delete tlačítka
+- [x] Automatické obnovování seznamu klientů (každé 3s)
+- [x] TypeScript chyby v test souborech opraveny (JsonResponse type)
 
 #### 15.7 Dokumentace
 **Výstup:** Aktualizovaná dokumentace

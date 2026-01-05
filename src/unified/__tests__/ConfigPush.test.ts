@@ -13,6 +13,9 @@ import { UnifiedServer } from '../UnifiedServer.js';
 import { resetAppSettings, getAppSettings } from '../../config/index.js';
 import type { C123ConfigPush } from '../../protocol/types.js';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type JsonResponse = Record<string, any>;
+
 const BASE_PORT = 28000;
 let portCounter = 0;
 
@@ -41,35 +44,6 @@ function createClientWithHandler(
 
     client.on('open', () => resolve(client));
     client.on('error', reject);
-  });
-}
-
-// Helper to collect all messages of a type
-async function collectMessages<T>(
-  client: WebSocket,
-  type: string,
-  duration = 100,
-): Promise<T[]> {
-  return new Promise((resolve) => {
-    const messages: T[] = [];
-
-    const handler = (data: Buffer) => {
-      try {
-        const msg = JSON.parse(data.toString());
-        if (msg.type === type) {
-          messages.push(msg as T);
-        }
-      } catch {
-        // Ignore parse errors
-      }
-    };
-
-    client.on('message', handler);
-
-    setTimeout(() => {
-      client.off('message', handler);
-      resolve(messages);
-    }, duration);
   });
 }
 
@@ -340,7 +314,7 @@ describe('ConfigPush Mechanism', () => {
 
       expect(response.status).toBe(200);
 
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.success).toBe(true);
       expect(data.pushedToSessions).toBe(1);
 
@@ -366,7 +340,7 @@ describe('ConfigPush Mechanism', () => {
 
       expect(response.status).toBe(200);
 
-      const data = await response.json();
+      const data = (await response.json()) as JsonResponse;
       expect(data.success).toBe(true);
       expect(data.pushedToSessions).toBe(0);
 
