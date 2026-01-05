@@ -446,6 +446,73 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
+   * Get clients data for API and WebSocket broadcast
+   * Returns sorted list of all known clients (online + offline)
+   */
+  private getClientsData(): object[] {
+    const settings = getAppSettings();
+    const storedConfigs = settings.getAllClientConfigs();
+
+    // Collect all known configKeys (from sessions + stored configs)
+    const knownConfigKeys = new Set<string>();
+
+    // Add configKeys from active sessions
+    for (const session of this.sessions.values()) {
+      knownConfigKeys.add(session.getConfigKey());
+    }
+
+    // Add configKeys from stored configs
+    for (const key of Object.keys(storedConfigs)) {
+      knownConfigKeys.add(key);
+    }
+
+    // Build client list
+    return Array.from(knownConfigKeys)
+      .map((configKey) => {
+        const storedConfig = storedConfigs[configKey];
+        const onlineSessions = this.getSessionsByConfigKey(configKey).filter((s) => s.isConnected());
+        return this.buildClientInfo(configKey, storedConfig, onlineSessions);
+      })
+      // Sort: online first, then by IP
+      .sort((a, b) => {
+        const aOnline = (a as { online: boolean }).online;
+        const bOnline = (b as { online: boolean }).online;
+        if (aOnline !== bOnline) return bOnline ? 1 : -1;
+        return ((a as { ip: string }).ip).localeCompare((b as { ip: string }).ip);
+      });
+  }
+
+  /**
+   * Broadcast clients update to all admin dashboard connections
+   * Used for real-time client list updates in admin dashboard
+   */
+  broadcastClientsUpdate(): void {
+    if (this.adminConnections.size === 0) {
+      return; // No admin connections, skip
+    }
+
+    const clients = this.getClientsData();
+    const message = {
+      type: 'ClientsUpdate',
+      timestamp: new Date().toISOString(),
+      data: { clients },
+    };
+
+    const json = JSON.stringify(message);
+
+    // Send only to admin dashboard connections
+    for (const ws of this.adminConnections) {
+      if (ws.readyState === ws.OPEN) {
+        ws.send(json);
+      } else {
+        this.adminConnections.delete(ws);
+      }
+    }
+
+    Logger.debug('Unified', `Broadcast ClientsUpdate to ${this.adminConnections.size} admin connection(s)`);
+  }
+
+  /**
    * Handle WebSocket connection
    *
    * @param ws - WebSocket instance
@@ -502,6 +569,9 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     Logger.info('Unified', `WebSocket client connected: ${sessionId} (${clientIdInfo})`);
     this.emit('connection', sessionId);
 
+    // Notify admin dashboard about new client
+    this.broadcastClientsUpdate();
+
     // Send ConfigPush if there's stored config for this client
     if (storedConfig) {
       session.sendConfigPush();
@@ -520,12 +590,16 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       this.sessions.delete(sessionId);
       Logger.info('Unified', `WebSocket client disconnected: ${sessionId}`);
       this.emit('disconnection', sessionId);
+      // Notify admin dashboard about client disconnect
+      this.broadcastClientsUpdate();
     });
 
     ws.on('error', (err) => {
       this.emit('error', err);
       this.sessions.delete(sessionId);
       this.emit('disconnection', sessionId);
+      // Notify admin dashboard about client disconnect
+      this.broadcastClientsUpdate();
     });
   }
 
@@ -1407,37 +1481,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    * - Previously connected clients with stored config
    */
   private handleGetClients(_req: Request, res: Response): void {
-    const settings = getAppSettings();
-    const storedConfigs = settings.getAllClientConfigs();
-
-    // Collect all known configKeys (from sessions + stored configs)
-    const knownConfigKeys = new Set<string>();
-
-    // Add configKeys from active sessions
-    for (const session of this.sessions.values()) {
-      knownConfigKeys.add(session.getConfigKey());
-    }
-
-    // Add configKeys from stored configs
-    for (const key of Object.keys(storedConfigs)) {
-      knownConfigKeys.add(key);
-    }
-
-    // Build client list
-    const clients = Array.from(knownConfigKeys)
-      .map((configKey) => {
-        const storedConfig = storedConfigs[configKey];
-        const onlineSessions = this.getSessionsByConfigKey(configKey).filter((s) => s.isConnected());
-        return this.buildClientInfo(configKey, storedConfig, onlineSessions);
-      })
-      // Sort: online first, then by IP
-      .sort((a, b) => {
-        const aOnline = (a as { online: boolean }).online;
-        const bOnline = (b as { online: boolean }).online;
-        if (aOnline !== bOnline) return bOnline ? 1 : -1;
-        return ((a as { ip: string }).ip).localeCompare((b as { ip: string }).ip);
-      });
-
+    const clients = this.getClientsData();
     res.json({ clients });
   }
 
@@ -2437,6 +2481,10 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
               timestamp: msg.timestamp,
               data: msg.data.data
             });
+          } else if (msg.type === 'ClientsUpdate') {
+            // Live update of clients list
+            clientsData = msg.data.clients || [];
+            renderClients();
           }
         } catch (e) {
           // Ignore parse errors
