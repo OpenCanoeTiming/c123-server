@@ -531,6 +531,15 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       this.adminConnections.add(ws);
       Logger.debug('Unified', 'Admin dashboard connected for log streaming');
 
+      // Send initial clients list immediately after connection
+      const clients = this.getClientsData();
+      const message = {
+        type: 'ClientsUpdate',
+        timestamp: new Date().toISOString(),
+        data: { clients },
+      };
+      ws.send(JSON.stringify(message));
+
       ws.on('close', () => {
         this.adminConnections.delete(ws);
         Logger.debug('Unified', 'Admin dashboard disconnected');
