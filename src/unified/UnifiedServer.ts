@@ -2681,7 +2681,8 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
       if (type) config.type = type;
       if (rows) config.displayRows = parseInt(rows, 10);
-      if (title) config.customTitle = title;
+      // Send customTitle: null to clear, or the value to set
+      config.customTitle = title || null;
 
       try {
         const res = await fetch('/api/clients/' + encodeURIComponent(currentModalIp) + '/config', {
