@@ -120,10 +120,10 @@ Před delší pauzou v projektu je třeba zkontrolovat a doplnit dokumentaci.
 - [x] Ověřit BR1/BR2 sekci (implementace odpovídá dokumentaci)
 - [x] Přidat troubleshooting (Connection, Data, Config issues + Debugging Tips)
 
-### Krok 4: Stav projektu README
-- [ ] Vytvořit/aktualizovat README.md s přehledem
-- [ ] Instalace a spuštění
-- [ ] Základní použití
+### Krok 4: Stav projektu README ✅
+- [x] Vytvořit/aktualizovat README.md s přehledem
+- [x] Instalace a spuštění
+- [x] Základní použití
 
 ### Krok 5: Konzistence
 - [ ] Cross-reference mezi dokumenty
