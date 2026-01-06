@@ -162,30 +162,30 @@ Centrální správa obrázků (logo, partneři, footer) s distribucí přes Conf
 
 ---
 
-### Blok A2: Admin UI - Asset helper
+### Blok A2: Admin UI - Asset helper ✅
 
-#### A2.1 Upload/input komponenta
-- [ ] Upload/paste obrázku → automatická konverze do base64
-- [ ] URL input → fetch a převod do base64 (pro offline použití)
-- [ ] Drag & drop podpora
+#### A2.1 Upload/input komponenta ✅
+- [x] Upload/paste obrázku → automatická konverze do base64
+- [x] URL input → fetch a převod do base64 (pro offline použití)
+- [x] Drag & drop podpora
 
-#### A2.2 Automatický resize
-- [ ] Canvas-based resize na přiměřené rozlišení:
+#### A2.2 Automatický resize ✅
+- [x] Canvas-based resize na přiměřené rozlišení:
   - Logo: max 200x80px
   - Partners: max 300x80px
   - Footer: max 1920x200px
-- [ ] Zachování aspect ratio
-- [ ] Output jako PNG nebo JPEG dle původního formátu
+- [x] Zachování aspect ratio
+- [x] Output jako PNG nebo JPEG dle původního formátu
 
-#### A2.3 Preview a validace
-- [ ] Preview před uložením
-- [ ] Validace velikosti (varování při >100KB base64)
-- [ ] Zobrazení aktuální velikosti v KB
+#### A2.3 Preview a validace ✅
+- [x] Preview před uložením
+- [x] Validace velikosti (varování při >100KB base64)
+- [x] Zobrazení aktuální velikosti v KB
 
-#### A2.4 UI integrace
-- [ ] Sekce "Default Assets" v admin dashboardu
-- [ ] Per-client asset overrides v client config panelu
-- [ ] Clear/reset tlačítko pro návrat k defaults
+#### A2.4 UI integrace ✅
+- [x] Sekce "Default Assets" v admin dashboardu
+- [ ] Per-client asset overrides v client config panelu (TODO - future)
+- [x] Clear/reset tlačítko pro návrat k defaults
 
 ---
 

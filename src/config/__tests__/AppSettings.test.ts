@@ -600,10 +600,8 @@ describe('AppSettingsManager', () => {
 
         manager.load();
 
-        // Set logoUrl to undefined to clear it
-        manager.setDefaultAssets({
-          logoUrl: undefined,
-        });
+        // Use clearDefaultAsset to clear it
+        manager.clearDefaultAsset('logoUrl');
 
         const result = manager.getDefaultAssets();
         expect(result?.logoUrl).toBeUndefined();
@@ -625,10 +623,8 @@ describe('AppSettingsManager', () => {
 
         manager.load();
 
-        // Clear the only asset
-        manager.setDefaultAssets({
-          logoUrl: undefined,
-        });
+        // Clear the only asset using clearDefaultAsset
+        manager.clearDefaultAsset('logoUrl');
 
         expect(manager.getDefaultAssets()).toBeUndefined();
       });

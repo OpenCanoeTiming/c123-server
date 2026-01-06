@@ -757,6 +757,11 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     this.app.get('/api/config/custom-params', this.handleGetCustomParams.bind(this));
     this.app.put('/api/config/custom-params', this.handleSetCustomParams.bind(this));
 
+    // Default assets API routes
+    this.app.get('/api/config/assets', this.handleGetAssets.bind(this));
+    this.app.put('/api/config/assets', this.handleSetAssets.bind(this));
+    this.app.delete('/api/config/assets/:key', this.handleDeleteAsset.bind(this));
+
     // Health check
     this.app.get('/health', (_req: Request, res: Response) => {
       res.json({ status: 'ok' });
@@ -1776,6 +1781,140 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     });
   }
 
+  // ==========================================================================
+  // Default Assets API Handlers
+  // ==========================================================================
+
+  /**
+   * GET /api/config/assets - Get default assets configuration
+   */
+  private handleGetAssets(_req: Request, res: Response): void {
+    const settings = getAppSettings();
+    const assets = settings.getDefaultAssets() || {};
+
+    res.json({
+      assets: {
+        logoUrl: assets.logoUrl ?? null,
+        partnerLogoUrl: assets.partnerLogoUrl ?? null,
+        footerImageUrl: assets.footerImageUrl ?? null,
+      },
+    });
+  }
+
+  /**
+   * PUT /api/config/assets - Set default assets (partial update)
+   *
+   * Body: { logoUrl?: string | null, partnerLogoUrl?: string | null, footerImageUrl?: string | null }
+   * Use null to clear a specific asset.
+   */
+  private handleSetAssets(req: Request, res: Response): void {
+    const { logoUrl, partnerLogoUrl, footerImageUrl } = req.body;
+
+    // Validate that values are strings, null, or undefined
+    const validateAssetValue = (
+      value: unknown,
+      name: string,
+    ): { valid: boolean; error?: string } => {
+      if (value === undefined || value === null) {
+        return { valid: true };
+      }
+      if (typeof value !== 'string') {
+        return { valid: false, error: `${name} must be a string or null` };
+      }
+      // Validate URL or data URI format
+      if (
+        value.length > 0 &&
+        !value.startsWith('http://') &&
+        !value.startsWith('https://') &&
+        !value.startsWith('data:image/')
+      ) {
+        return {
+          valid: false,
+          error: `${name} must be a URL (http/https) or data URI (data:image/...)`,
+        };
+      }
+      // Warn if base64 is too large (> 500KB)
+      if (value.startsWith('data:image/') && value.length > 500000) {
+        Logger.warn(
+          'Unified',
+          `${name} data URI is very large (${Math.round(value.length / 1024)}KB). Consider resizing.`,
+        );
+      }
+      return { valid: true };
+    };
+
+    // Validate each provided value
+    for (const [key, value] of Object.entries({
+      logoUrl,
+      partnerLogoUrl,
+      footerImageUrl,
+    })) {
+      const result = validateAssetValue(value, key);
+      if (!result.valid) {
+        res.status(400).json({ error: result.error });
+        return;
+      }
+    }
+
+    // Build update object (only include provided values)
+    const updates: Record<string, string | undefined> = {};
+    if (logoUrl !== undefined) updates.logoUrl = logoUrl ?? undefined;
+    if (partnerLogoUrl !== undefined) updates.partnerLogoUrl = partnerLogoUrl ?? undefined;
+    if (footerImageUrl !== undefined) updates.footerImageUrl = footerImageUrl ?? undefined;
+
+    // Save to settings
+    const settings = getAppSettings();
+    settings.setDefaultAssets(updates);
+
+    Logger.info('Unified', `Updated default assets: ${Object.keys(updates).join(', ')}`);
+
+    // Return updated assets
+    const assets = settings.getDefaultAssets() || {};
+    res.json({
+      success: true,
+      assets: {
+        logoUrl: assets.logoUrl ?? null,
+        partnerLogoUrl: assets.partnerLogoUrl ?? null,
+        footerImageUrl: assets.footerImageUrl ?? null,
+      },
+    });
+  }
+
+  /**
+   * DELETE /api/config/assets/:key - Clear a specific default asset
+   *
+   * :key must be one of: logoUrl, partnerLogoUrl, footerImageUrl
+   */
+  private handleDeleteAsset(req: Request, res: Response): void {
+    const { key } = req.params;
+
+    // Validate key
+    const validKeys = ['logoUrl', 'partnerLogoUrl', 'footerImageUrl'] as const;
+    if (!validKeys.includes(key as (typeof validKeys)[number])) {
+      res.status(400).json({
+        error: `Invalid asset key: ${key}. Must be one of: ${validKeys.join(', ')}`,
+      });
+      return;
+    }
+
+    // Clear the asset
+    const settings = getAppSettings();
+    settings.clearDefaultAsset(key as 'logoUrl' | 'partnerLogoUrl' | 'footerImageUrl');
+
+    Logger.info('Unified', `Cleared default asset: ${key}`);
+
+    // Return updated assets
+    const assets = settings.getDefaultAssets() || {};
+    res.json({
+      success: true,
+      assets: {
+        logoUrl: assets.logoUrl ?? null,
+        partnerLogoUrl: assets.partnerLogoUrl ?? null,
+        footerImageUrl: assets.footerImageUrl ?? null,
+      },
+    });
+  }
+
   /**
    * Generate inline dashboard HTML
    */
@@ -1842,6 +1981,44 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid #333; }
     .modal-header h3 { margin: 0; color: #00d4ff; font-size: 1.1em; }
     .modal-body { padding: 15px; }
+
+    /* Assets section */
+    .assets-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+    .asset-item { }
+    .asset-item label { display: block; margin-bottom: 8px; color: #ccc; font-weight: 500; }
+    .asset-drop-zone {
+      border: 2px dashed #444;
+      border-radius: 8px;
+      padding: 20px;
+      min-height: 100px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background-color 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+    .asset-drop-zone:hover { border-color: #00d4ff; background: rgba(0, 212, 255, 0.05); }
+    .asset-drop-zone.drag-over { border-color: #00ff88; background: rgba(0, 255, 136, 0.1); }
+    .asset-drop-zone-wide { grid-column: 1 / -1; min-height: 80px; }
+    .asset-preview { max-width: 100%; max-height: 80px; object-fit: contain; }
+    .asset-preview img { max-width: 100%; max-height: 80px; object-fit: contain; }
+    .asset-placeholder { color: #666; text-align: center; font-size: 0.9em; }
+    .asset-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .asset-url-input {
+      flex: 1;
+      min-width: 120px;
+      padding: 6px 8px;
+      border-radius: 4px;
+      border: 1px solid #333;
+      background: #0f0f23;
+      color: #eee;
+      font-size: 0.85em;
+    }
+    .asset-btn { padding: 6px 10px; font-size: 0.85em; }
+    .asset-info { margin-top: 6px; font-size: 0.8em; color: #666; }
+    .asset-info.warning { color: #ffaa00; }
   </style>
 </head>
 <body>
@@ -1978,6 +2155,73 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       </div>
       <div id="modalError" class="error" style="padding: 10px; display: none;"></div>
     </div>
+  </div>
+
+  <h2>Default Assets</h2>
+  <div class="card">
+    <p style="color: #888; margin-bottom: 15px; font-size: 0.9em;">
+      Configure default images for all scoreboards. Upload, paste, or drag & drop images.
+      Per-client overrides can be set in client configuration.
+    </p>
+
+    <div class="assets-grid">
+      <!-- Logo -->
+      <div class="asset-item">
+        <label>Logo <span style="color: #666; font-size: 0.85em;">(max 200x80px)</span></label>
+        <div class="asset-drop-zone" id="logoDropZone" data-key="logoUrl">
+          <div class="asset-preview" id="logoPreview"></div>
+          <div class="asset-placeholder" id="logoPlaceholder">
+            Drop image here or click to upload
+          </div>
+          <input type="file" id="logoInput" accept="image/*" style="display: none;">
+        </div>
+        <div class="asset-actions">
+          <input type="text" id="logoUrlInput" placeholder="Or enter URL..." class="asset-url-input">
+          <button class="btn asset-btn" onclick="setAssetFromUrl('logoUrl')">Load URL</button>
+          <button class="btn asset-btn" onclick="clearAsset('logoUrl')" style="background: #666;">Clear</button>
+        </div>
+        <div class="asset-info" id="logoInfo"></div>
+      </div>
+
+      <!-- Partner Logo -->
+      <div class="asset-item">
+        <label>Partner Logo <span style="color: #666; font-size: 0.85em;">(max 300x80px)</span></label>
+        <div class="asset-drop-zone" id="partnerLogoDropZone" data-key="partnerLogoUrl">
+          <div class="asset-preview" id="partnerLogoPreview"></div>
+          <div class="asset-placeholder" id="partnerLogoPlaceholder">
+            Drop image here or click to upload
+          </div>
+          <input type="file" id="partnerLogoInput" accept="image/*" style="display: none;">
+        </div>
+        <div class="asset-actions">
+          <input type="text" id="partnerLogoUrlInput" placeholder="Or enter URL..." class="asset-url-input">
+          <button class="btn asset-btn" onclick="setAssetFromUrl('partnerLogoUrl')">Load URL</button>
+          <button class="btn asset-btn" onclick="clearAsset('partnerLogoUrl')" style="background: #666;">Clear</button>
+        </div>
+        <div class="asset-info" id="partnerLogoInfo"></div>
+      </div>
+
+      <!-- Footer Image -->
+      <div class="asset-item">
+        <label>Footer Banner <span style="color: #666; font-size: 0.85em;">(max 1920x200px)</span></label>
+        <div class="asset-drop-zone asset-drop-zone-wide" id="footerImageDropZone" data-key="footerImageUrl">
+          <div class="asset-preview" id="footerImagePreview"></div>
+          <div class="asset-placeholder" id="footerImagePlaceholder">
+            Drop image here or click to upload
+          </div>
+          <input type="file" id="footerImageInput" accept="image/*" style="display: none;">
+        </div>
+        <div class="asset-actions">
+          <input type="text" id="footerImageUrlInput" placeholder="Or enter URL..." class="asset-url-input">
+          <button class="btn asset-btn" onclick="setAssetFromUrl('footerImageUrl')">Load URL</button>
+          <button class="btn asset-btn" onclick="clearAsset('footerImageUrl')" style="background: #666;">Clear</button>
+        </div>
+        <div class="asset-info" id="footerImageInfo"></div>
+      </div>
+    </div>
+
+    <div id="assetError" class="error" style="margin-top: 10px; display: none;"></div>
+    <div id="assetMessage" style="color: #00ff88; margin-top: 10px; display: none;"></div>
   </div>
 
   <h2>Server Logs</h2>
@@ -2739,11 +2983,330 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       if (e.target === this) closeClientModal();
     });
 
+    // ===========================================
+    // Asset Management Functions
+    // ===========================================
+
+    // Asset size limits for auto-resize
+    const ASSET_SIZE_LIMITS = {
+      logoUrl: { maxWidth: 200, maxHeight: 80 },
+      partnerLogoUrl: { maxWidth: 300, maxHeight: 80 },
+      footerImageUrl: { maxWidth: 1920, maxHeight: 200 }
+    };
+
+    // Initialize asset drop zones and file inputs
+    function initAssetHandlers() {
+      ['logo', 'partnerLogo', 'footerImage'].forEach(function(name) {
+        const key = name + 'Url';
+        const dropZone = document.getElementById(name + 'DropZone');
+        const fileInput = document.getElementById(name + 'Input');
+
+        if (!dropZone || !fileInput) return;
+
+        // Click to upload
+        dropZone.addEventListener('click', function() {
+          fileInput.click();
+        });
+
+        // File input change
+        fileInput.addEventListener('change', function(e) {
+          if (e.target.files && e.target.files[0]) {
+            processAssetFile(key, e.target.files[0]);
+          }
+        });
+
+        // Drag and drop
+        dropZone.addEventListener('dragover', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.add('drag-over');
+        });
+
+        dropZone.addEventListener('dragleave', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.remove('drag-over');
+        });
+
+        dropZone.addEventListener('drop', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.remove('drag-over');
+
+          if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            processAssetFile(key, e.dataTransfer.files[0]);
+          }
+        });
+
+        // Paste handler (global, but we track which zone was focused)
+        dropZone.addEventListener('focus', function() {
+          dropZone.dataset.focused = '1';
+        });
+        dropZone.addEventListener('blur', function() {
+          dropZone.dataset.focused = '';
+        });
+      });
+
+      // Global paste handler
+      document.addEventListener('paste', function(e) {
+        // Find focused drop zone
+        const focusedZone = document.querySelector('.asset-drop-zone[data-focused="1"]');
+        if (!focusedZone) return;
+
+        const key = focusedZone.dataset.key;
+        if (!key) return;
+
+        const items = e.clipboardData.items;
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf('image') !== -1) {
+            const file = items[i].getAsFile();
+            if (file) {
+              processAssetFile(key, file);
+              e.preventDefault();
+              break;
+            }
+          }
+        }
+      });
+    }
+
+    // Process uploaded/dropped/pasted file
+    function processAssetFile(key, file) {
+      if (!file.type.startsWith('image/')) {
+        showAssetError('Please select an image file');
+        return;
+      }
+
+      const limits = ASSET_SIZE_LIMITS[key];
+      if (!limits) return;
+
+      // Read and resize image
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          // Check if resize needed
+          let targetWidth = img.width;
+          let targetHeight = img.height;
+
+          if (img.width > limits.maxWidth || img.height > limits.maxHeight) {
+            const ratio = Math.min(limits.maxWidth / img.width, limits.maxHeight / img.height);
+            targetWidth = Math.round(img.width * ratio);
+            targetHeight = Math.round(img.height * ratio);
+          }
+
+          // Resize using canvas
+          const canvas = document.createElement('canvas');
+          canvas.width = targetWidth;
+          canvas.height = targetHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+          // Determine output format
+          const outputType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+          const quality = outputType === 'image/jpeg' ? 0.85 : undefined;
+          const dataUrl = canvas.toDataURL(outputType, quality);
+
+          // Save to server
+          saveAsset(key, dataUrl, targetWidth, targetHeight);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Save asset to server
+    async function saveAsset(key, dataUrl, width, height) {
+      try {
+        const body = {};
+        body[key] = dataUrl;
+
+        const res = await fetch('/api/config/assets', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          showAssetError(data.error);
+          return;
+        }
+
+        // Update UI
+        updateAssetPreview(key, dataUrl);
+        updateAssetInfo(key, dataUrl, width, height);
+        showAssetMessage(getAssetLabel(key) + ' saved (' + width + 'x' + height + ')');
+      } catch (e) {
+        showAssetError('Failed to save: ' + e.message);
+      }
+    }
+
+    // Load asset from URL
+    async function setAssetFromUrl(key) {
+      const inputId = key.replace('Url', '') + 'UrlInput';
+      const input = document.getElementById(inputId);
+      const url = input ? input.value.trim() : '';
+
+      if (!url) {
+        showAssetError('Please enter a URL');
+        return;
+      }
+
+      // Validate URL format
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        showAssetError('URL must start with http:// or https://');
+        return;
+      }
+
+      try {
+        // Fetch the image
+        showAssetMessage('Loading image from URL...');
+
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error('Failed to fetch image: ' + response.status);
+        }
+
+        const blob = await response.blob();
+        if (!blob.type.startsWith('image/')) {
+          throw new Error('URL does not point to an image');
+        }
+
+        // Process as file
+        const file = new File([blob], 'image', { type: blob.type });
+        processAssetFile(key, file);
+
+        // Clear input
+        if (input) input.value = '';
+      } catch (e) {
+        showAssetError('Failed to load URL: ' + e.message);
+      }
+    }
+
+    // Clear asset
+    async function clearAsset(key) {
+      try {
+        const res = await fetch('/api/config/assets/' + key, {
+          method: 'DELETE'
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          showAssetError(data.error);
+          return;
+        }
+
+        // Update UI
+        clearAssetPreview(key);
+        showAssetMessage(getAssetLabel(key) + ' cleared');
+      } catch (e) {
+        showAssetError('Failed to clear: ' + e.message);
+      }
+    }
+
+    // Load current assets from server
+    async function loadAssets() {
+      try {
+        const res = await fetch('/api/config/assets');
+        const data = await res.json();
+
+        if (data.assets) {
+          ['logoUrl', 'partnerLogoUrl', 'footerImageUrl'].forEach(function(key) {
+            const value = data.assets[key];
+            if (value) {
+              updateAssetPreview(key, value);
+              // Get dimensions for info
+              const img = new Image();
+              img.onload = function() {
+                updateAssetInfo(key, value, img.width, img.height);
+              };
+              img.src = value;
+            } else {
+              clearAssetPreview(key);
+            }
+          });
+        }
+      } catch (e) {
+        console.error('Failed to load assets:', e);
+      }
+    }
+
+    // Update preview for an asset
+    function updateAssetPreview(key, dataUrl) {
+      const name = key.replace('Url', '');
+      const preview = document.getElementById(name + 'Preview');
+      const placeholder = document.getElementById(name + 'Placeholder');
+
+      if (preview && placeholder) {
+        preview.innerHTML = '<img src="' + dataUrl + '" alt="' + getAssetLabel(key) + '">';
+        placeholder.style.display = 'none';
+      }
+    }
+
+    // Clear preview for an asset
+    function clearAssetPreview(key) {
+      const name = key.replace('Url', '');
+      const preview = document.getElementById(name + 'Preview');
+      const placeholder = document.getElementById(name + 'Placeholder');
+      const info = document.getElementById(name + 'Info');
+
+      if (preview) preview.innerHTML = '';
+      if (placeholder) placeholder.style.display = 'block';
+      if (info) info.textContent = '';
+    }
+
+    // Update info display for an asset
+    function updateAssetInfo(key, dataUrl, width, height) {
+      const name = key.replace('Url', '');
+      const info = document.getElementById(name + 'Info');
+
+      if (info) {
+        const sizeKB = Math.round(dataUrl.length / 1024);
+        info.textContent = width + 'x' + height + ' (' + sizeKB + ' KB)';
+        info.className = sizeKB > 100 ? 'asset-info warning' : 'asset-info';
+      }
+    }
+
+    // Get human-readable label for asset key
+    function getAssetLabel(key) {
+      const labels = {
+        logoUrl: 'Logo',
+        partnerLogoUrl: 'Partner logo',
+        footerImageUrl: 'Footer banner'
+      };
+      return labels[key] || key;
+    }
+
+    function showAssetError(msg) {
+      const el = document.getElementById('assetError');
+      const msgEl = document.getElementById('assetMessage');
+      if (msgEl) msgEl.style.display = 'none';
+      if (el) {
+        el.textContent = msg;
+        el.style.display = 'block';
+        setTimeout(function() { el.style.display = 'none'; }, 5000);
+      }
+    }
+
+    function showAssetMessage(msg) {
+      const el = document.getElementById('assetMessage');
+      const errEl = document.getElementById('assetError');
+      if (errEl) errEl.style.display = 'none';
+      if (el) {
+        el.textContent = msg;
+        el.style.display = 'block';
+        setTimeout(function() { el.style.display = 'none'; }, 3000);
+      }
+    }
+
     refresh();
     loadXmlConfig();
     loadEventName();
     loadInitialLogs();
     loadClients();
+    loadAssets();
+    initAssetHandlers();
     connectLogWebSocket();
     setInterval(refresh, 2000);
     setInterval(loadXmlConfig, 5000);

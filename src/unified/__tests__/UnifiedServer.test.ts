@@ -1143,4 +1143,123 @@ describe('UnifiedServer', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
   });
+
+  describe('Default Assets API', () => {
+    let server: UnifiedServer;
+    let port: number;
+
+    // Response type for assets API
+    interface AssetsResponse {
+      success?: boolean;
+      error?: string;
+      assets: {
+        logoUrl: string | null;
+        partnerLogoUrl: string | null;
+        footerImageUrl: string | null;
+      };
+    }
+
+    beforeEach(async () => {
+      server = new UnifiedServer({ port: 0 });
+      await server.start();
+      port = server.getPort();
+    });
+
+    afterEach(async () => {
+      await server.stop();
+    });
+
+    describe('GET /api/config/assets', () => {
+      it('should return assets structure', async () => {
+        const response = await fetch(`http://localhost:${port}/api/config/assets`);
+        const data = (await response.json()) as AssetsResponse;
+
+        expect(response.status).toBe(200);
+        expect(data.assets).toBeDefined();
+        expect('logoUrl' in data.assets).toBe(true);
+        expect('partnerLogoUrl' in data.assets).toBe(true);
+        expect('footerImageUrl' in data.assets).toBe(true);
+      });
+    });
+
+    describe('PUT /api/config/assets', () => {
+      it('should reject invalid URL format', async () => {
+        const response = await fetch(`http://localhost:${port}/api/config/assets`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            logoUrl: 'invalid-url',
+          }),
+        });
+        const data = (await response.json()) as AssetsResponse;
+
+        expect(response.status).toBe(400);
+        expect(data.error).toContain('must be a URL');
+      });
+
+      it('should reject non-string values', async () => {
+        const response = await fetch(`http://localhost:${port}/api/config/assets`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            logoUrl: 12345,
+          }),
+        });
+        const data = (await response.json()) as AssetsResponse;
+
+        expect(response.status).toBe(400);
+        expect(data.error).toContain('must be a string or null');
+      });
+
+      it('should accept valid URL', async () => {
+        const response = await fetch(`http://localhost:${port}/api/config/assets`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            logoUrl: 'https://example.com/logo.png',
+          }),
+        });
+        const data = (await response.json()) as AssetsResponse;
+
+        expect(response.status).toBe(200);
+        expect(data.success).toBe(true);
+      });
+
+      it('should accept valid data URI', async () => {
+        const response = await fetch(`http://localhost:${port}/api/config/assets`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            partnerLogoUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==',
+          }),
+        });
+        const data = (await response.json()) as AssetsResponse;
+
+        expect(response.status).toBe(200);
+        expect(data.success).toBe(true);
+      });
+    });
+
+    describe('DELETE /api/config/assets/:key', () => {
+      it('should reject invalid asset key', async () => {
+        const response = await fetch(`http://localhost:${port}/api/config/assets/invalidKey`, {
+          method: 'DELETE',
+        });
+        const data = (await response.json()) as AssetsResponse;
+
+        expect(response.status).toBe(400);
+        expect(data.error).toContain('Invalid asset key');
+      });
+
+      it('should accept valid asset key', async () => {
+        const response = await fetch(`http://localhost:${port}/api/config/assets/logoUrl`, {
+          method: 'DELETE',
+        });
+        const data = (await response.json()) as AssetsResponse;
+
+        expect(response.status).toBe(200);
+        expect(data.success).toBe(true);
+      });
+    });
+  });
 });
