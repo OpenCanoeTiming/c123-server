@@ -91,8 +91,37 @@ Sent by server when:
 | `showResults` | boolean | Show Results data |
 | `custom` | object | Custom parameters (key-value) |
 | `label` | string | Admin-assigned label |
+| `clientId` | string | Server-assigned client identifier (see below) |
 
 Only set parameters are included. Empty/undefined values are omitted.
+
+### Server-Assigned Client ID
+
+When `clientId` is included in ConfigPush, the client should adopt it:
+
+1. **Store the ID** in localStorage for future connections
+2. **Reconnect with the new ID** using `ws://server:27123/ws?clientId=<new-id>`
+
+This allows administrators to:
+- Name new clients from the dashboard
+- Reassign client identities
+- Move configurations between machines
+
+**Client implementation:**
+
+```typescript
+function handleConfigPush(data: ConfigPushData) {
+  // If server assigned a new clientId, adopt it
+  if (data.clientId && data.clientId !== currentClientId) {
+    localStorage.setItem('c123-clientId', data.clientId);
+
+    // Reconnect with new ID (optional: immediate or on next connection)
+    reconnectWithNewId(data.clientId);
+  }
+
+  // ... apply other config
+}
+```
 
 ### ClientState (Client → Server)
 

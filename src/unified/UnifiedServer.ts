@@ -1555,6 +1555,14 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       return;
     }
 
+    if (config.clientId !== undefined) {
+      if (typeof config.clientId !== 'string' || config.clientId.trim() === '') {
+        res.status(400).json({ error: 'clientId must be a non-empty string' });
+        return;
+      }
+      config.clientId = config.clientId.trim();
+    }
+
     // Remove metadata fields from config (server-managed)
     const { label: _label, lastSeen: _lastSeen, ...configToSave } = config;
 
@@ -1947,6 +1955,12 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         <div style="margin-bottom: 15px;">
           <label style="display: block; margin-bottom: 5px; color: #888;">Custom Title</label>
           <input type="text" id="modalCustomTitle" placeholder="(none)" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #0f0f23; color: #eee;">
+        </div>
+
+        <div style="margin-bottom: 15px;">
+          <label style="display: block; margin-bottom: 5px; color: #888;">Client ID (server-assigned)</label>
+          <input type="text" id="modalClientId" placeholder="(none - uses IP)" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #0f0f23; color: #eee;">
+          <div style="font-size: 0.8em; color: #666; margin-top: 4px;">When set, client will adopt this ID for future connections</div>
         </div>
 
         <div style="margin-bottom: 15px;">
@@ -2558,6 +2572,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       document.getElementById('modalType').value = cfg.type || '';
       document.getElementById('modalDisplayRows').value = cfg.displayRows || '';
       document.getElementById('modalCustomTitle').value = cfg.customTitle || '';
+      document.getElementById('modalClientId').value = cfg.clientId || '';
 
       // Client state
       const state = client?.clientState;
@@ -2608,11 +2623,14 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       const type = document.getElementById('modalType').value;
       const rows = document.getElementById('modalDisplayRows').value;
       const title = document.getElementById('modalCustomTitle').value.trim();
+      const clientId = document.getElementById('modalClientId').value.trim();
 
       if (type) config.type = type;
       if (rows) config.displayRows = parseInt(rows, 10);
       // Send customTitle: null to clear, or the value to set
       config.customTitle = title || null;
+      // Send clientId if set (allows server to assign/rename client identity)
+      if (clientId) config.clientId = clientId;
 
       try {
         const res = await fetch('/api/clients/' + encodeURIComponent(currentModalIp) + '/config', {

@@ -278,6 +278,9 @@ export class ScoreboardSession {
       if (this.serverConfig.label !== undefined) {
         result.label = this.serverConfig.label;
       }
+      if (this.serverConfig.clientId !== undefined) {
+        result.clientId = this.serverConfig.clientId;
+      }
     }
 
     return result;

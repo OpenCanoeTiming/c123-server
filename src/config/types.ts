@@ -49,6 +49,16 @@ export interface ClientConfig {
   label?: string;
   /** Timestamp of last connection */
   lastSeen?: string;
+
+  // === Identity (server-assigned) ===
+
+  /**
+   * Unique client identifier assigned by server.
+   * When pushed to client, the client should adopt this ID and use it
+   * for future connections (stored in localStorage).
+   * This allows server to rename/reassign client identities.
+   */
+  clientId?: string;
 }
 
 /**
