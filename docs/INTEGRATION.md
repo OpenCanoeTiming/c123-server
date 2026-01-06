@@ -22,7 +22,12 @@ const serverUrl = localStorage.getItem('c123-server-url');
 ### 2. Connect to WebSocket (real-time data)
 
 ```javascript
+// Basic connection
 const ws = new WebSocket(`ws://${serverUrl}/ws`);
+
+// With explicit clientId (recommended for multiple scoreboards)
+const clientId = localStorage.getItem('c123-clientId') || 'my-scoreboard';
+const ws = new WebSocket(`ws://${serverUrl}/ws?clientId=${clientId}`);
 
 ws.onopen = () => {
   console.log('Connected to C123 Server');
@@ -911,6 +916,69 @@ class ScoreboardClient {
 const client = new ScoreboardClient('192.168.1.50');
 client.connect();
 ```
+
+---
+
+## Troubleshooting
+
+### Connection Issues
+
+| Problem | Possible Cause | Solution |
+|---------|---------------|----------|
+| Cannot find server | Server not running or firewall blocking | Check server is running on port 27123, check firewall settings |
+| WebSocket disconnects immediately | Invalid URL or server error | Check WebSocket URL format: `ws://host:27123/ws` |
+| No data received | C123 not connected to server | Check `/api/status` - verify `c123Connected: true` |
+| XML data not available | XML file not configured | Check admin dashboard, verify XML file path |
+
+### Data Issues
+
+| Problem | Possible Cause | Solution |
+|---------|---------------|----------|
+| Missing results for some races | C123 rotates results, not all cached | Implement results caching per raceId |
+| BR2 penalties incorrect | Using Results.pen instead of proper source | Use OnCourse.pen or REST API merged results |
+| Finish not detected | Not tracking dtFinish changes | Implement FinishDetector pattern (see above) |
+| Old data showing | Client not handling XmlChange/ForceRefresh | Handle these message types to refresh data |
+
+### Configuration Issues
+
+| Problem | Possible Cause | Solution |
+|---------|---------------|----------|
+| Config not applied | Client not handling ConfigPush | Implement ConfigPush handler |
+| Multiple clients same config | All using IP-based identification | Use explicit `clientId` in WebSocket URL |
+| Config lost after restart | Server-side: settings.json issue | Check file permissions, disk space |
+
+### Debugging Tips
+
+1. **Check server status:**
+   ```bash
+   curl http://server:27123/api/status
+   ```
+
+2. **Verify XML availability:**
+   ```bash
+   curl http://server:27123/api/xml/status
+   ```
+
+3. **Monitor WebSocket messages:**
+   Open browser DevTools → Network → WS tab to see all messages
+
+4. **Check server logs:**
+   ```bash
+   curl "http://server:27123/api/logs?limit=50&level=warn"
+   ```
+
+5. **Test discovery endpoint:**
+   ```bash
+   curl http://server:27123/api/discover
+   ```
+
+### Common Mistakes
+
+1. **Hardcoding server IP** - Use discovery or allow URL parameter configuration
+2. **Not caching results** - Results rotate through categories, cache all received
+3. **Trusting BR2 Results.pen** - May contain BR1 penalty, use OnCourse or REST API
+4. **Ignoring XmlChange** - Miss data updates, implement refresh on this message
+5. **Not handling reconnection** - Network issues happen, implement exponential backoff
 
 ---
 

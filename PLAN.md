@@ -115,10 +115,10 @@ Před delší pauzou v projektu je třeba zkontrolovat a doplnit dokumentaci.
 - [x] Opravit OnCourse time/total formát (centisekundy jako string)
 - [x] Přidat tabulku Result Row Fields včetně BR1/BR2 polí
 
-### Krok 3: Revize INTEGRATION.md
-- [ ] Aktualizovat quick start
-- [ ] Ověřit BR1/BR2 sekci
-- [ ] Přidat troubleshooting
+### Krok 3: Revize INTEGRATION.md ✅
+- [x] Aktualizovat quick start (přidán clientId příklad)
+- [x] Ověřit BR1/BR2 sekci (implementace odpovídá dokumentaci)
+- [x] Přidat troubleshooting (Connection, Data, Config issues + Debugging Tips)
 
 ### Krok 4: Stav projektu README
 - [ ] Vytvořit/aktualizovat README.md s přehledem

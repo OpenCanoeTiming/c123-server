@@ -4,6 +4,27 @@ Záznamy o průběhu vývoje, co fungovalo, co ne, slepé uličky.
 
 ---
 
+## 2026-01-06 (odpoledne 3)
+
+### Provedeno
+
+**Revize INTEGRATION.md dokumentace (Krok 3)**
+- Quick Start: přidán příklad s clientId pro multiple scoreboards
+- BR1/BR2 sekce: ověřeno vs implementace (getMergedResults v XmlDataService) - odpovídá
+- Troubleshooting: nová kompletní sekce s tabulkami:
+  - Connection Issues
+  - Data Issues
+  - Configuration Issues
+  - Debugging Tips (5 curl příkazů)
+  - Common Mistakes (5 anti-patterns)
+- Build: OK
+
+### Co fungovalo
+- Přímé čtení implementace (XmlDataService.ts:438) pro ověření dokumentace
+- Systematický seznam endpointů pro kontrolu kompletnosti
+
+---
+
 ## 2026-01-06 (odpoledne 2)
 
 ### Provedeno
