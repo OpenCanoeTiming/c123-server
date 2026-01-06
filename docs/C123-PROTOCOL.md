@@ -138,8 +138,8 @@ Competitors currently on the course. This is the most frequent message type, upd
         "dtStart": "16:14:00.000",
         "dtFinish": null,
         "pen": 54,
-        "time": "81.15",
-        "total": "81.69",
+        "time": "8115",
+        "total": "8169",
         "ttbDiff": "+12.79",
         "ttbName": "J. KREJČÍ",
         "rank": 8,
@@ -182,8 +182,8 @@ Competitors currently on the course. This is the most frequent message type, upd
 | Attribute | Type | Description |
 |-----------|------|-------------|
 | `Pen` | number | Total penalty in seconds |
-| `Time` | number | Running time in centiseconds |
-| `Total` | number | Total time (time + penalties) in centiseconds |
+| `Time` | string | Running time in centiseconds as string (e.g., `"8115"` = 81.15s) |
+| `Total` | string | Total time (time + penalties) in centiseconds as string (e.g., `"8169"` = 81.69s) |
 | `TTBDiff` | string | Difference to leader (e.g., `"+12.79"`) |
 | `TTBName` | string | Leader's name |
 | `Rank` | number | Current rank |
@@ -270,6 +270,37 @@ Result table for a race. C123 rotates through different categories, sending resu
   }
 }
 ```
+
+#### Result Row Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `rank` | number | Position in results |
+| `bib` | string | Start number |
+| `name` | string | Full name |
+| `givenName` | string | Given/first name |
+| `familyName` | string | Family/last name |
+| `club` | string | Club name |
+| `nat` | string | Nationality code |
+| `startOrder` | number | Order of start |
+| `startTime` | string | Start time (e.g., `"10:06:45"`) |
+| `gates` | string | Gate penalties, space-separated (e.g., `"0 0 2 0 50"`) |
+| `pen` | number | Total penalty seconds |
+| `time` | string | Run time formatted (e.g., `"79.99"`) |
+| `total` | string | Total time formatted (e.g., `"81.99"`) |
+| `behind` | string | Time behind leader (e.g., `"+1.51"`) |
+| `status` | string | Optional: `"DNS"`, `"DNF"`, or `"DSQ"` for invalid results |
+
+**BR1/BR2 fields** (only in second run results):
+| Field | Type | Description |
+|-------|------|-------------|
+| `prevTime` | number | Previous run time in centiseconds |
+| `prevPen` | number | Previous run penalty seconds |
+| `prevTotal` | number | Previous run total in centiseconds |
+| `prevRank` | number | Previous run rank |
+| `totalTotal` | number | Best of both runs in centiseconds |
+| `totalRank` | number | Overall rank (best run) |
+| `betterRun` | number | Which run was better: `1` or `2` |
 
 #### Results Rotation
 
@@ -562,11 +593,42 @@ Sent when the XML file changes (on the main `/ws` endpoint):
   "type": "XmlChange",
   "timestamp": "2025-01-02T10:31:00.000Z",
   "data": {
-    "sections": ["Results", "StartList"],
-    "checksum": "abc123..."
+    "sections": ["Results", "Participants"],
+    "checksum": "abc123def456..."
   }
 }
 ```
+
+**Fields:**
+- `sections`: Array of changed sections. Possible values: `"Participants"`, `"Schedule"`, `"Results"`, `"Classes"`
+- `checksum`: MD5 hash of the entire XML file content
+
+### LogEntry
+
+Sent to admin clients for real-time log viewing (only on admin WebSocket connections):
+
+```json
+{
+  "type": "LogEntry",
+  "timestamp": "2025-01-02T10:31:15.000Z",
+  "data": {
+    "level": "info",
+    "component": "TcpSource",
+    "message": "Connected to C123 at 192.168.1.100:27333",
+    "data": { "host": "192.168.1.100", "port": 27333 }
+  }
+}
+```
+
+**Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `level` | string | Log level: `"debug"`, `"info"`, `"warn"`, `"error"` |
+| `component` | string | Source component/module name |
+| `message` | string | Human-readable log message |
+| `data` | object | Optional additional structured data |
+
+**Note:** This message type is primarily for the admin dashboard and not typically used by scoreboard clients.
 
 ### ForceRefresh
 

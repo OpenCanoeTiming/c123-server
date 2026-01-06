@@ -4,6 +4,24 @@ Záznamy o průběhu vývoje, co fungovalo, co ne, slepé uličky.
 
 ---
 
+## 2026-01-06 (odpoledne 2)
+
+### Provedeno
+
+**Revize C123-PROTOCOL.md dokumentace**
+- Porovnání typů WS zpráv vs kód (protocol/types.ts, parser-types.ts)
+- Nalezené a opravené problémy:
+  - Přidána chybějící dokumentace `LogEntry` zprávy
+  - Opraveno `XmlChange.sections` - dokumentace měla `StartList`, kód má `Participants`
+  - Opraveno `OnCourse` JSON příklad - `time/total` jsou raw centisekundy jako string ("8115"), ne formátované ("81.15")
+  - Přidána kompletní tabulka Result Row Fields včetně BR1/BR2 polí
+- Testy: 413 passed
+
+### Co fungovalo
+- Kontrola testů jako zdroj pravdy pro formáty dat
+
+---
+
 ## 2026-01-06 (odpoledne)
 
 ### Provedeno

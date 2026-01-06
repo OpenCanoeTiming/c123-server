@@ -106,10 +106,14 @@ Před delší pauzou v projektu je třeba zkontrolovat a doplnit dokumentaci.
 - [x] Doplnit chybějící endpointy (Configuration API, Event API, Logs API)
 - [x] Aktualizovat GET /api/clients o nová pole (configKey, hasExplicitId, sessionCount, ipAddress)
 
-### Krok 2: Kontrola C123-PROTOCOL.md
-- [ ] Ověřit typy WS zpráv vs kód
-- [ ] Zkontrolovat formáty dat
-- [ ] Doplnit příklady
+### Krok 2: Kontrola C123-PROTOCOL.md ✅
+- [x] Ověřit typy WS zpráv vs kód
+- [x] Zkontrolovat formáty dat
+- [x] Doplnit příklady
+- [x] Přidat dokumentaci LogEntry zprávy (chyběla)
+- [x] Opravit XmlChange sections (StartList → Participants)
+- [x] Opravit OnCourse time/total formát (centisekundy jako string)
+- [x] Přidat tabulku Result Row Fields včetně BR1/BR2 polí
 
 ### Krok 3: Revize INTEGRATION.md
 - [ ] Aktualizovat quick start
@@ -128,13 +132,6 @@ Před delší pauzou v projektu je třeba zkontrolovat a doplnit dokumentaci.
 
 ---
 
-## Future Work (nice-to-have)
-
-- [ ] **ConnectionStatus** - WS notifikace pro klienty o stavu C123 připojení
-- [ ] **Uptime display** - Admin UI zobrazení doby připojení
-- [ ] **Bulk operations** - Hromadné operace pro více klientů
-
----
 
 ## Reference
 
