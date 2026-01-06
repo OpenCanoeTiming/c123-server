@@ -184,7 +184,7 @@ Centrální správa obrázků (logo, partneři, footer) s distribucí přes Conf
 
 #### A2.4 UI integrace ✅
 - [x] Sekce "Default Assets" v admin dashboardu
-- [ ] Per-client asset overrides v client config panelu (TODO - future)
+- [x] Per-client asset overrides v client config panelu
 - [x] Clear/reset tlačítko pro návrat k defaults
 
 ---

@@ -250,6 +250,26 @@ export class AppSettingsManager {
       };
     }
 
+    // Merge assets separately to preserve existing asset keys
+    // This allows partial updates like { assets: { logoUrl: 'new' } }
+    // without losing partnerLogoUrl and footerImageUrl
+    if (config.assets !== undefined) {
+      merged.assets = {
+        ...(existing.assets || {}),
+        ...config.assets,
+      };
+      // Remove keys explicitly set to null (clear the override)
+      for (const key of Object.keys(merged.assets) as Array<keyof typeof merged.assets>) {
+        if (merged.assets[key] === null) {
+          delete merged.assets[key];
+        }
+      }
+      // Remove empty assets object
+      if (Object.keys(merged.assets).length === 0) {
+        delete merged.assets;
+      }
+    }
+
     this.settings.clientConfigs[ip] = merged;
     this.save();
     return merged;

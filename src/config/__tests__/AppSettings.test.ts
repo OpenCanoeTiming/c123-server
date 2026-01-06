@@ -145,6 +145,103 @@ describe('AppSettingsManager', () => {
           newKey: 'newKeyValue', // added
         });
       });
+
+      it('should merge assets separately', () => {
+        mockExistsSync.mockReturnValue(true);
+        mockReadFileSync.mockReturnValue(
+          JSON.stringify({
+            xmlSourceMode: 'auto-offline',
+            xmlAutoDetect: true,
+            xmlAutoDetectInterval: 30000,
+            clientConfigs: {
+              '192.168.1.100': {
+                type: 'ledwall',
+                assets: {
+                  logoUrl: 'data:image/png;base64,existingLogo',
+                  partnerLogoUrl: 'data:image/png;base64,existingPartner',
+                },
+              },
+            },
+          }),
+        );
+
+        manager.load();
+
+        const result = manager.setClientConfig('192.168.1.100', {
+          assets: {
+            logoUrl: 'data:image/png;base64,newLogo',
+            footerImageUrl: 'data:image/png;base64,newFooter',
+          },
+        });
+
+        expect(result.assets).toEqual({
+          logoUrl: 'data:image/png;base64,newLogo', // updated
+          partnerLogoUrl: 'data:image/png;base64,existingPartner', // preserved
+          footerImageUrl: 'data:image/png;base64,newFooter', // added
+        });
+        expect(result.type).toBe('ledwall'); // preserved
+      });
+
+      it('should remove asset when set to null', () => {
+        mockExistsSync.mockReturnValue(true);
+        mockReadFileSync.mockReturnValue(
+          JSON.stringify({
+            xmlSourceMode: 'auto-offline',
+            xmlAutoDetect: true,
+            xmlAutoDetectInterval: 30000,
+            clientConfigs: {
+              '192.168.1.100': {
+                type: 'ledwall',
+                assets: {
+                  logoUrl: 'data:image/png;base64,logo',
+                  partnerLogoUrl: 'data:image/png;base64,partner',
+                },
+              },
+            },
+          }),
+        );
+
+        manager.load();
+
+        const result = manager.setClientConfig('192.168.1.100', {
+          assets: {
+            logoUrl: null as unknown as string, // explicitly clear
+          },
+        });
+
+        expect(result.assets?.logoUrl).toBeUndefined(); // removed
+        expect(result.assets?.partnerLogoUrl).toBe('data:image/png;base64,partner'); // preserved
+      });
+
+      it('should remove assets object when all assets cleared', () => {
+        mockExistsSync.mockReturnValue(true);
+        mockReadFileSync.mockReturnValue(
+          JSON.stringify({
+            xmlSourceMode: 'auto-offline',
+            xmlAutoDetect: true,
+            xmlAutoDetectInterval: 30000,
+            clientConfigs: {
+              '192.168.1.100': {
+                type: 'ledwall',
+                assets: {
+                  logoUrl: 'data:image/png;base64,logo',
+                },
+              },
+            },
+          }),
+        );
+
+        manager.load();
+
+        const result = manager.setClientConfig('192.168.1.100', {
+          assets: {
+            logoUrl: null as unknown as string, // explicitly clear
+          },
+        });
+
+        expect(result.assets).toBeUndefined(); // removed entirely
+        expect(result.type).toBe('ledwall'); // preserved
+      });
     });
 
     describe('setClientLabel', () => {

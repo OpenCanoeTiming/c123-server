@@ -1977,7 +1977,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
     /* Modal */
     .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-    .modal-content { background: #16213e; border-radius: 8px; width: 90%; max-width: 400px; max-height: 90vh; overflow-y: auto; }
+    .modal-content { background: #16213e; border-radius: 8px; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid #333; }
     .modal-header h3 { margin: 0; color: #00d4ff; font-size: 1.1em; }
     .modal-body { padding: 15px; }
@@ -2019,6 +2019,35 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     .asset-btn { padding: 6px 10px; font-size: 0.85em; }
     .asset-info { margin-top: 6px; font-size: 0.8em; color: #666; }
     .asset-info.warning { color: #ffaa00; }
+
+    /* Modal asset overrides */
+    .modal-assets-section { margin-top: 15px; padding-top: 15px; border-top: 1px solid #333; }
+    .modal-assets-section h4 { color: #ccc; font-size: 0.95em; margin-bottom: 10px; }
+    .modal-asset-item { margin-bottom: 12px; }
+    .modal-asset-item label { display: block; margin-bottom: 6px; color: #888; font-size: 0.85em; }
+    .modal-asset-drop-zone {
+      border: 1px dashed #444;
+      border-radius: 6px;
+      padding: 10px;
+      min-height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background-color 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+    .modal-asset-drop-zone:hover { border-color: #00d4ff; background: rgba(0, 212, 255, 0.05); }
+    .modal-asset-drop-zone.drag-over { border-color: #00ff88; background: rgba(0, 255, 136, 0.1); }
+    .modal-asset-drop-zone.has-value { border-style: solid; border-color: #00ff88; }
+    .modal-asset-preview { max-width: 100%; max-height: 50px; object-fit: contain; }
+    .modal-asset-preview img { max-width: 100%; max-height: 50px; object-fit: contain; }
+    .modal-asset-placeholder { color: #666; text-align: center; font-size: 0.8em; }
+    .modal-asset-controls { display: flex; gap: 6px; margin-top: 6px; }
+    .modal-asset-controls button { padding: 3px 8px; font-size: 0.75em; }
+    .modal-asset-info { font-size: 0.75em; color: #666; margin-top: 4px; }
+    .modal-asset-info.warning { color: #ffaa00; }
   </style>
 </head>
 <body>
@@ -2146,6 +2175,56 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         <div style="margin-bottom: 15px;">
           <label style="display: block; margin-bottom: 5px; color: #888;">Client State (reported)</label>
           <pre id="modalClientState" style="background: #0f0f23; padding: 8px; border-radius: 4px; font-size: 11px; overflow-x: auto; max-height: 100px;">-</pre>
+        </div>
+
+        <!-- Asset Overrides Section -->
+        <div class="modal-assets-section">
+          <h4>Asset Overrides <span style="font-weight: normal; color: #666; font-size: 0.85em;">(override global defaults)</span></h4>
+
+          <!-- Logo Override -->
+          <div class="modal-asset-item">
+            <label>Logo</label>
+            <div class="modal-asset-drop-zone" id="modalLogoDropZone" data-key="logoUrl" tabindex="0">
+              <div class="modal-asset-preview" id="modalLogoPreview"></div>
+              <div class="modal-asset-placeholder" id="modalLogoPlaceholder">Drop, paste or click to upload</div>
+              <input type="file" id="modalLogoInput" accept="image/*" style="display: none;">
+            </div>
+            <div class="modal-asset-controls">
+              <button class="btn" onclick="clearModalAsset('logoUrl')" style="background: #666;">Clear</button>
+              <button class="btn" onclick="useDefaultAsset('logoUrl')" style="background: #444;">Use Default</button>
+            </div>
+            <div class="modal-asset-info" id="modalLogoInfo"></div>
+          </div>
+
+          <!-- Partner Logo Override -->
+          <div class="modal-asset-item">
+            <label>Partner Logo</label>
+            <div class="modal-asset-drop-zone" id="modalPartnerLogoDropZone" data-key="partnerLogoUrl" tabindex="0">
+              <div class="modal-asset-preview" id="modalPartnerLogoPreview"></div>
+              <div class="modal-asset-placeholder" id="modalPartnerLogoPlaceholder">Drop, paste or click to upload</div>
+              <input type="file" id="modalPartnerLogoInput" accept="image/*" style="display: none;">
+            </div>
+            <div class="modal-asset-controls">
+              <button class="btn" onclick="clearModalAsset('partnerLogoUrl')" style="background: #666;">Clear</button>
+              <button class="btn" onclick="useDefaultAsset('partnerLogoUrl')" style="background: #444;">Use Default</button>
+            </div>
+            <div class="modal-asset-info" id="modalPartnerLogoInfo"></div>
+          </div>
+
+          <!-- Footer Image Override -->
+          <div class="modal-asset-item">
+            <label>Footer Banner</label>
+            <div class="modal-asset-drop-zone" id="modalFooterImageDropZone" data-key="footerImageUrl" tabindex="0">
+              <div class="modal-asset-preview" id="modalFooterImagePreview"></div>
+              <div class="modal-asset-placeholder" id="modalFooterImagePlaceholder">Drop, paste or click to upload</div>
+              <input type="file" id="modalFooterImageInput" accept="image/*" style="display: none;">
+            </div>
+            <div class="modal-asset-controls">
+              <button class="btn" onclick="clearModalAsset('footerImageUrl')" style="background: #666;">Clear</button>
+              <button class="btn" onclick="useDefaultAsset('footerImageUrl')" style="background: #444;">Use Default</button>
+            </div>
+            <div class="modal-asset-info" id="modalFooterImageInfo"></div>
+          </div>
         </div>
 
         <div style="display: flex; gap: 8px; justify-content: space-between;">
@@ -2825,6 +2904,9 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       const state = client?.clientState;
       document.getElementById('modalClientState').textContent = state ? JSON.stringify(state, null, 2) : '-';
 
+      // Load assets into modal
+      loadModalAssets(cfg.assets);
+
       document.getElementById('modalError').style.display = 'none';
       document.getElementById('clientModal').style.display = 'flex';
     }
@@ -2878,6 +2960,24 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       config.customTitle = title || null;
       // Send clientId if set (allows server to assign/rename client identity)
       if (clientId) config.clientId = clientId;
+
+      // Include asset overrides if any have been modified
+      // modalAssets contains: { key: value } where value is:
+      // - string (data URL): explicit override
+      // - null: explicitly cleared (use global default)
+      // - undefined (key not present): no change
+      if (Object.keys(modalAssets).length > 0) {
+        config.assets = {};
+        ['logoUrl', 'partnerLogoUrl', 'footerImageUrl'].forEach(function(key) {
+          if (key in modalAssets) {
+            config.assets[key] = modalAssets[key]; // Can be string or null
+          }
+        });
+        // Only include assets object if it has any keys
+        if (Object.keys(config.assets).length === 0) {
+          delete config.assets;
+        }
+      }
 
       try {
         const res = await fetch('/api/clients/' + encodeURIComponent(currentModalIp) + '/config', {
@@ -2982,6 +3082,198 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     document.getElementById('clientModal').addEventListener('click', function(e) {
       if (e.target === this) closeClientModal();
     });
+
+    // ===========================================
+    // Modal Asset Override Functions
+    // ===========================================
+    let modalAssets = {}; // Temporary storage for modal asset values
+
+    function initModalAssetHandlers() {
+      ['Logo', 'PartnerLogo', 'FooterImage'].forEach(function(name) {
+        const key = name.charAt(0).toLowerCase() + name.slice(1) + 'Url';
+        const dropZone = document.getElementById('modal' + name + 'DropZone');
+        const fileInput = document.getElementById('modal' + name + 'Input');
+
+        if (!dropZone || !fileInput) return;
+
+        // Click to upload
+        dropZone.addEventListener('click', function(e) {
+          if (e.target.tagName !== 'BUTTON') {
+            fileInput.click();
+          }
+        });
+
+        // File input change
+        fileInput.addEventListener('change', function(e) {
+          if (e.target.files && e.target.files[0]) {
+            processModalAssetFile(key, e.target.files[0]);
+          }
+        });
+
+        // Drag and drop
+        dropZone.addEventListener('dragover', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.add('drag-over');
+        });
+
+        dropZone.addEventListener('dragleave', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.remove('drag-over');
+        });
+
+        dropZone.addEventListener('drop', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.remove('drag-over');
+
+          if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            processModalAssetFile(key, e.dataTransfer.files[0]);
+          }
+        });
+      });
+    }
+
+    function processModalAssetFile(key, file) {
+      if (!file.type.startsWith('image/')) {
+        showModalError('Please select an image file');
+        return;
+      }
+
+      const limits = ASSET_SIZE_LIMITS[key];
+      if (!limits) return;
+
+      // Read and resize image
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          // Check if resize needed
+          let targetWidth = img.width;
+          let targetHeight = img.height;
+
+          if (img.width > limits.maxWidth || img.height > limits.maxHeight) {
+            const ratio = Math.min(limits.maxWidth / img.width, limits.maxHeight / img.height);
+            targetWidth = Math.round(img.width * ratio);
+            targetHeight = Math.round(img.height * ratio);
+          }
+
+          // Resize using canvas
+          const canvas = document.createElement('canvas');
+          canvas.width = targetWidth;
+          canvas.height = targetHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+          // Determine output format
+          const outputType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+          const quality = outputType === 'image/jpeg' ? 0.85 : undefined;
+          const dataUrl = canvas.toDataURL(outputType, quality);
+
+          // Store and update UI
+          modalAssets[key] = dataUrl;
+          updateModalAssetPreview(key, dataUrl);
+          updateModalAssetInfo(key, dataUrl, targetWidth, targetHeight);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function updateModalAssetPreview(key, dataUrl) {
+      const name = key.replace('Url', '').replace(/^(.)/, function(m) { return m.toUpperCase(); });
+      const preview = document.getElementById('modal' + name + 'Preview');
+      const placeholder = document.getElementById('modal' + name + 'Placeholder');
+      const dropZone = document.getElementById('modal' + name + 'DropZone');
+
+      if (preview && placeholder) {
+        if (dataUrl) {
+          preview.innerHTML = '<img src="' + dataUrl + '" alt="' + name + '">';
+          placeholder.style.display = 'none';
+          if (dropZone) dropZone.classList.add('has-value');
+        } else {
+          preview.innerHTML = '';
+          placeholder.style.display = 'block';
+          if (dropZone) dropZone.classList.remove('has-value');
+        }
+      }
+    }
+
+    function updateModalAssetInfo(key, dataUrl, width, height) {
+      const name = key.replace('Url', '').replace(/^(.)/, function(m) { return m.toUpperCase(); });
+      const info = document.getElementById('modal' + name + 'Info');
+
+      if (info) {
+        if (dataUrl) {
+          const sizeKB = Math.round(dataUrl.length / 1024);
+          info.textContent = width + 'x' + height + ' (' + sizeKB + ' KB) - will be saved with config';
+          info.className = sizeKB > 100 ? 'modal-asset-info warning' : 'modal-asset-info';
+        } else {
+          info.textContent = '';
+          info.className = 'modal-asset-info';
+        }
+      }
+    }
+
+    function clearModalAsset(key) {
+      modalAssets[key] = null; // null means explicitly cleared (remove override)
+      updateModalAssetPreview(key, null);
+      const name = key.replace('Url', '').replace(/^(.)/, function(m) { return m.toUpperCase(); });
+      const info = document.getElementById('modal' + name + 'Info');
+      if (info) {
+        info.textContent = 'Cleared - will use global default';
+        info.className = 'modal-asset-info';
+      }
+    }
+
+    function useDefaultAsset(key) {
+      delete modalAssets[key]; // undefined means use default (no override)
+      updateModalAssetPreview(key, null);
+      const name = key.replace('Url', '').replace(/^(.)/, function(m) { return m.toUpperCase(); });
+      const info = document.getElementById('modal' + name + 'Info');
+      if (info) {
+        info.textContent = 'Using global default';
+        info.className = 'modal-asset-info';
+      }
+    }
+
+    function loadModalAssets(assets) {
+      modalAssets = {};
+      ['logoUrl', 'partnerLogoUrl', 'footerImageUrl'].forEach(function(key) {
+        if (assets && assets[key] !== undefined) {
+          modalAssets[key] = assets[key];
+          if (assets[key]) {
+            updateModalAssetPreview(key, assets[key]);
+            // Get dimensions
+            const img = new Image();
+            img.onload = function() {
+              updateModalAssetInfo(key, assets[key], img.width, img.height);
+            };
+            img.src = assets[key];
+          } else {
+            updateModalAssetPreview(key, null);
+            const name = key.replace('Url', '').replace(/^(.)/, function(m) { return m.toUpperCase(); });
+            const info = document.getElementById('modal' + name + 'Info');
+            if (info) {
+              info.textContent = 'Explicitly cleared';
+              info.className = 'modal-asset-info';
+            }
+          }
+        } else {
+          updateModalAssetPreview(key, null);
+          const name = key.replace('Url', '').replace(/^(.)/, function(m) { return m.toUpperCase(); });
+          const info = document.getElementById('modal' + name + 'Info');
+          if (info) {
+            info.textContent = 'Using global default';
+            info.className = 'modal-asset-info';
+          }
+        }
+      });
+    }
+
+    // Initialize modal asset handlers
+    initModalAssetHandlers();
 
     // ===========================================
     // Asset Management Functions
