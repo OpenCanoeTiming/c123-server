@@ -1016,6 +1016,7 @@ Update configuration for a client. If the client is online, changes are pushed i
 | `raceFilter` | string[] | array of strings | Race filter |
 | `showOnCourse` | boolean | true/false | Show OnCourse data |
 | `showResults` | boolean | true/false | Show Results data |
+| `scrollToFinished` | boolean | true/false | Scroll to finished competitor (default: true) |
 | `custom` | object | key-value pairs | Custom parameters |
 | `clientId` | string | non-empty string | Server-assigned client ID (client adopts it) |
 
@@ -1046,6 +1047,7 @@ Update configuration for a client. If the client is online, changes are pushed i
 |--------|----------|
 | 400 | `{ "error": "Invalid type. Must be 'vertical' or 'ledwall'." }` |
 | 400 | `{ "error": "displayRows must be between 3 and 20." }` |
+| 400 | `{ "error": "scrollToFinished must be a boolean" }` |
 
 ---
 

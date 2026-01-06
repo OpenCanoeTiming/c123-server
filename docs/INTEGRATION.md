@@ -672,6 +672,7 @@ interface ConfigPushData {
   raceFilter?: string[];
   showOnCourse?: boolean;
   showResults?: boolean;
+  scrollToFinished?: boolean;  // Whether to scroll to finished competitor (default: true)
   custom?: Record<string, string | number | boolean>;
   label?: string;
 }
@@ -689,6 +690,8 @@ function applyConfig(config: ConfigPushData) {
   if (config.type) setLayout(config.type);
   if (config.displayRows) setRowCount(config.displayRows);
   if (config.customTitle) setTitle(config.customTitle);
+  // scrollToFinished: default true, only apply if explicitly set to false
+  if (config.scrollToFinished === false) disableScrollToFinished();
 
   // Handle custom parameters
   if (config.custom) {

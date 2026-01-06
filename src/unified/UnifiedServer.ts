@@ -1566,6 +1566,11 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       return;
     }
 
+    if (config.scrollToFinished !== undefined && typeof config.scrollToFinished !== 'boolean') {
+      res.status(400).json({ error: 'scrollToFinished must be a boolean' });
+      return;
+    }
+
     if (config.clientId !== undefined) {
       if (typeof config.clientId !== 'string' || config.clientId.trim() === '') {
         res.status(400).json({ error: 'clientId must be a non-empty string' });
@@ -2174,6 +2179,14 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
           <label style="display: block; margin-bottom: 5px; color: #888;">Client ID (server-assigned)</label>
           <input type="text" id="modalClientId" placeholder="(none - uses IP)" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #0f0f23; color: #eee;">
           <div style="font-size: 0.8em; color: #666; margin-top: 4px;">When set, client will adopt this ID for future connections</div>
+        </div>
+
+        <div style="margin-bottom: 15px;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="checkbox" id="modalScrollToFinished" checked style="width: 16px; height: 16px;">
+            <span style="color: #888;">Scroll to Finished</span>
+          </label>
+          <div style="font-size: 0.8em; color: #666; margin-top: 4px; margin-left: 24px;">When enabled, scoreboard scrolls to show finished competitor. When disabled, only highlights.</div>
         </div>
 
         <div style="margin-bottom: 15px;">
@@ -2904,6 +2917,8 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       document.getElementById('modalDisplayRows').value = cfg.displayRows || '';
       document.getElementById('modalCustomTitle').value = cfg.customTitle || '';
       document.getElementById('modalClientId').value = cfg.clientId || '';
+      // scrollToFinished: default true if not set
+      document.getElementById('modalScrollToFinished').checked = cfg.scrollToFinished !== false;
 
       // Client state
       const state = client?.clientState;
@@ -2965,6 +2980,9 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       config.customTitle = title || null;
       // Send clientId if set (allows server to assign/rename client identity)
       if (clientId) config.clientId = clientId;
+      // scrollToFinished: only send if unchecked (false), otherwise don't send (uses default true)
+      const scrollToFinished = document.getElementById('modalScrollToFinished').checked;
+      if (!scrollToFinished) config.scrollToFinished = false;
 
       // Include asset overrides if any have been modified
       // modalAssets contains: { key: value } where value is:

@@ -246,6 +246,32 @@ Centrální správa obrázků (logo, partneři, footer) s distribucí přes Conf
 
 ---
 
+## Blok A4: Parametr scrollToFinished ✅
+
+**Přidáno:** 2026-01-06
+
+### Popis
+
+Přidán nový konfigurovatelný parametr `scrollToFinished` pro scoreboardy:
+- Typ: `boolean` (výchozí: `true`)
+- Účel: Ovládá, zda se scoreboard automaticky scrolluje na pozici závodníka po dojetí
+- Když je `false`, závodník je pouze zvýrazněn bez automatického scrollu
+
+### Implementace
+
+| Soubor | Změna |
+|--------|-------|
+| `src/config/types.ts` | Přidán `scrollToFinished?: boolean` do ClientConfig |
+| `src/unified/UnifiedServer.ts` | Validace boolean + checkbox v admin UI |
+| `src/ws/ScoreboardSession.ts` | Přidání do ConfigPush dat |
+| `docs/CLIENT-CONFIG.md` | Dokumentace parametru |
+
+### Použití
+
+V admin dashboard je nový checkbox "Scroll to Finished" v konfiguraci klienta.
+
+---
+
 ## Reference
 
 | Zdroj | Popis |

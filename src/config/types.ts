@@ -57,6 +57,11 @@ export interface ClientConfig {
   /** Show Results data */
   showResults?: boolean;
 
+  // === Scroll behavior ===
+
+  /** Whether to scroll to finished competitor (default: true). When false, only highlights without scrolling. */
+  scrollToFinished?: boolean;
+
   // === Custom parameters (key-value for additional/future parameters) ===
 
   /** Custom parameters defined by admin */

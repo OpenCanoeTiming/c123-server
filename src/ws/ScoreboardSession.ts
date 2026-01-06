@@ -285,6 +285,9 @@ export class ScoreboardSession {
       if (this.serverConfig.showResults != null) {
         result.showResults = this.serverConfig.showResults;
       }
+      if (this.serverConfig.scrollToFinished != null) {
+        result.scrollToFinished = this.serverConfig.scrollToFinished;
+      }
       if (this.serverConfig.custom != null) {
         result.custom = { ...this.serverConfig.custom };
       }

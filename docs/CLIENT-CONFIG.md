@@ -47,6 +47,7 @@ These parameters are recognized by the C123 Server and scoreboard implementation
 | `raceFilter` | string[] | race IDs | Only show these races |
 | `showOnCourse` | boolean | true/false | Show OnCourse data |
 | `showResults` | boolean | true/false | Show Results data |
+| `scrollToFinished` | boolean | true/false | Scroll to finished competitor (default: true) |
 | `assets` | object | AssetUrls | Logo and banner images (see below) |
 
 ### Asset Parameters
@@ -108,6 +109,7 @@ Sent by server when:
 | `raceFilter` | string[] | Race ID filter |
 | `showOnCourse` | boolean | Show OnCourse data |
 | `showResults` | boolean | Show Results data |
+| `scrollToFinished` | boolean | Scroll to finished competitor (default: true) |
 | `custom` | object | Custom parameters (key-value) |
 | `label` | string | Admin-assigned label |
 | `clientId` | string | Server-assigned client identifier (see below) |
@@ -190,6 +192,7 @@ interface ConfigPushData {
   raceFilter?: string[];
   showOnCourse?: boolean;
   showResults?: boolean;
+  scrollToFinished?: boolean;
   custom?: Record<string, string | number | boolean>;
   label?: string;
   assets?: AssetUrls;
@@ -478,7 +481,7 @@ Update configuration for a client. Automatically pushes changes if client is onl
 - `type`: Must be `'vertical'` or `'ledwall'`
 - `displayRows`: Must be 3-20
 - `raceFilter`: Must be an array of strings
-- `showOnCourse`, `showResults`: Must be boolean
+- `showOnCourse`, `showResults`, `scrollToFinished`: Must be boolean
 
 ### PUT /api/clients/:ip/label
 

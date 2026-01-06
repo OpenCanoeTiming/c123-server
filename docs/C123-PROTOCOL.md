@@ -687,6 +687,7 @@ Sent by server to push configuration to a client (scoreboard). This is sent:
 | `raceFilter` | string[] | Only show these race IDs |
 | `showOnCourse` | boolean | Show OnCourse data |
 | `showResults` | boolean | Show Results data |
+| `scrollToFinished` | boolean | Scroll to finished competitor (default: true) |
 | `custom` | object | Custom parameters (key-value) |
 | `label` | string | Admin-assigned label for this client |
 | `clientId` | string | Server-assigned client ID (client should adopt it) |
