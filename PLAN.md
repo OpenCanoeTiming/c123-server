@@ -1,10 +1,29 @@
-# Plán: C123 Server v2 - Lean Data Proxy
+# C123 Server - Plán a stav projektu
 
 ## Vize
 
-**C123 Server** = štíhlá mezivrstva předávající **autentická data z C123** s minimální transformací.
+**C123 Server** = štíhlá mezivrstva předávající **autentická data z C123** scoreboardům.
 
-Scoreboard pracuje přímo s nativními C123 daty (ne CLI formátem).
+- Scoreboard pracuje přímo s nativními C123 daty (ne CLI formátem)
+- Server nemodifikuje data, pouze je parsuje a předává
+- XML soubor slouží jako sekundární zdroj pro historická/doplňková data
+
+---
+
+## Stav projektu: FUNKČNÍ ✅
+
+Server je kompletně implementovaný a funkční. Všechny plánované fáze (7-15) dokončeny.
+
+### Co je hotovo
+
+| Oblast | Popis |
+|--------|-------|
+| **TCP/UDP** | Připojení k C123 na :27333, reconnect logika, UDP discovery |
+| **WebSocket** | Real-time stream pro scoreboardy na `/ws` |
+| **REST API** | XML data, konfigurace klientů, status |
+| **Admin UI** | Dashboard na `/`, správa klientů, log viewer |
+| **XML polling** | Auto/manual/URL režimy, file watcher |
+| **Client config** | Remote konfigurace scoreboardů přes ConfigPush |
 
 ---
 
@@ -12,7 +31,7 @@ Scoreboard pracuje přímo s nativními C123 daty (ne CLI formátem).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         C123 Server v2                              │
+│                         C123 Server                                 │
 │                                                                     │
 │   Sources                    Core                     Output        │
 │  ┌──────────────┐       ┌──────────────┐       ┌──────────────┐    │
@@ -26,32 +45,21 @@ Scoreboard pracuje přímo s nativními C123 daty (ne CLI formátem).
 │  ┌──────────────┐       │  XmlService  │──────▶│  /api  REST  │    │
 │  │ XmlSource    │──────▶│ (data + push)│       └──────────────┘    │
 │  │ (file/URL)   │       └──────────────┘                           │
-│  └──────────────┘                                                   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
----
-
-## Porty
+### Porty
 
 | Služba | Port | Poznámka |
 |--------|------|----------|
-| **C123 (upstream)** | 27333 | Canoe123 protokol (TCP + UDP), nelze měnit |
-| **C123 Server** | 27123 | Jeden port pro vše (HTTP + WS) |
-
-### Endpointy na portu 27123
-
-```
-http://server:27123/       → Admin dashboard (SPA)
-ws://server:27123/ws       → WebSocket pro scoreboardy
-http://server:27123/api/*  → REST API (status, config, XML data)
-```
+| **C123 (upstream)** | 27333 | Canoe123 protokol, nelze měnit |
+| **C123 Server** | 27123 | HTTP + WS + API |
 
 ---
 
-## C123 Protokol (shrnutí)
+## Klíčové koncepty
 
-### Typy zpráv
+### C123 Protokol
 
 | Zpráva | Frekvence | Popis |
 |--------|-----------|-------|
@@ -61,73 +69,69 @@ http://server:27123/api/*  → REST API (status, config, XML data)
 | **RaceConfig** | ~20s | Konfigurace kategorie |
 | **Schedule** | ~40s | Rozpis závodů |
 
-### Klíčové koncepty
+### BR1/BR2 (BetterRun)
 
-- **Current="Y"** - označuje aktuálně jedoucí kategorii v Results
-- **dtFinish** - prázdný → timestamp = závodník dojel
-- **BR = BetterRun** - nejlepší ze dvou jízd (CZ specifický formát)
+- CZ specifický formát pro dvě jízdy
+- **Server NEŘEŠÍ merge** - předává autentická data
+- **Scoreboard řeší merge** pomocí REST API `/api/xml/races/:raceId/results?merged=true`
+- Detaily: `docs/C123-PROTOCOL.md`, `docs/INTEGRATION.md`
 
----
+### Current="Y"
 
-## Formát WebSocket zpráv
-
-```json
-{
-  "type": "Results",
-  "timestamp": "2025-01-02T10:30:46.456Z",
-  "data": {
-    "RaceId": "K1M_ST_BR2_6",
-    "Current": "Y",
-    "rows": [{ "Participant": {...}, "Result": {...} }]
-  }
-}
-```
-
-Další typy: `TimeOfDay`, `OnCourse`, `RaceConfig`, `Schedule`, `XmlChange`, `ConfigPush`, `ForceRefresh`, `LogEntry`
+- Označuje aktuálně jedoucí kategorii v Results
+- Klíčové pro sledování flow závodu
 
 ---
 
-## Dokončené fáze ✅
+## Dokumentace
 
-| Fáze | Co obsahuje |
-|------|-------------|
-| **7** | Čistý C123 protokol, odstranění CLI emulace |
-| **8** | XML REST API (`/api/xml/*`), file watcher, XmlChange notifikace |
-| **9-10** | Dokumentace (`docs/*.md`) |
-| **11** | Konsolidace na jeden port 27123 (UnifiedServer) |
-| **12** | Autodiscovery (`/api/discover`, `docs/discovery-client.ts`) |
-| **13** | XML source selector (3 režimy), event name, force refresh, log viewer |
-| **14** | Connectivity opravy (UDP reset, TCP reconnect) |
-| **15** | Remote client config (`/api/clients/*`, ConfigPush, Admin UI) |
-
-Detaily viz `docs/` a `DEV-LOG.md`.
+| Soubor | Účel |
+|--------|------|
+| `docs/C123-PROTOCOL.md` | WebSocket protokol, typy zpráv |
+| `docs/REST-API.md` | REST endpointy |
+| `docs/INTEGRATION.md` | Návod pro integrátory |
+| `docs/CLIENT-CONFIG.md` | Remote konfigurace klientů |
+| `docs/SCOREBOARD-REQUIREMENTS.md` | Požadavky na scoreboard |
+| `docs/CLI-DIFFERENCES.md` | Rozdíly oproti CLI verzi |
 
 ---
 
-## Architektonická rozhodnutí
+## TODO: Revize dokumentace
 
-### BR1/BR2 Merge - řeší scoreboard, NE server ✅
+Před delší pauzou v projektu je třeba zkontrolovat a doplnit dokumentaci.
 
-Server **neimplementuje** BR1/BR2 merge logiku na TCP streamu. Princip:
+### Krok 1: Kontrola REST-API.md
+- [ ] Ověřit všechny endpointy vs skutečná implementace
+- [ ] Zkontrolovat response formáty
+- [ ] Doplnit chybějící endpointy
 
-- Server předává autentická data z C123 bez transformace
-- BR merge logiku řeší **scoreboard** (klient)
-- Scoreboard využívá REST API `GET /api/xml/races/:raceId/results` pro dotažení BR1 dat během BR2
-- REST API `?merged=true` vrací sloučené výsledky obou jízd z XML souboru
+### Krok 2: Kontrola C123-PROTOCOL.md
+- [ ] Ověřit typy WS zpráv vs kód
+- [ ] Zkontrolovat formáty dat
+- [ ] Doplnit příklady
 
-**Odstraněno:** `BR1BR2Merger` třída, která dříve modifikovala TCP stream výsledky.
+### Krok 3: Revize INTEGRATION.md
+- [ ] Aktualizovat quick start
+- [ ] Ověřit BR1/BR2 sekci
+- [ ] Přidat troubleshooting
 
-Viz `../canoe-scoreboard-v3/docs/SolvingBR1BR2.md` pro kompletní analýzu.
+### Krok 4: Stav projektu README
+- [ ] Vytvořit/aktualizovat README.md s přehledem
+- [ ] Instalace a spuštění
+- [ ] Základní použití
+
+### Krok 5: Konzistence
+- [ ] Cross-reference mezi dokumenty
+- [ ] Sjednotit terminologii
+- [ ] Odstranit zastaralé informace
 
 ---
 
-## Future Work
-
-### Nice-to-have vylepšení
+## Future Work (nice-to-have)
 
 - [ ] **ConnectionStatus** - WS notifikace pro klienty o stavu C123 připojení
-- [ ] **Uptime display** - Admin UI zobrazení doby od posledního připojení/odpojení
-- [ ] **Bulk operations** - Hromadné operace pro více klientů najednou
+- [ ] **Uptime display** - Admin UI zobrazení doby připojení
+- [ ] **Bulk operations** - Hromadné operace pro více klientů
 
 ---
 
