@@ -1,7 +1,7 @@
 import type { WebSocket } from 'ws';
 import type { ScoreboardConfig } from '../admin/types.js';
 import type { C123Message, C123ConfigPush } from '../protocol/types.js';
-import type { ClientConfig } from '../config/types.js';
+import type { ClientConfig, AssetUrls } from '../config/types.js';
 
 /**
  * Client state as reported by the client via ClientState message
@@ -57,6 +57,7 @@ export class ScoreboardSession {
   private ws: WebSocket;
   private clientState: ClientReportedState | undefined;
   private serverConfig: ClientConfig | undefined;
+  private defaultAssets: AssetUrls | undefined;
 
   constructor(
     id: string,
@@ -66,6 +67,8 @@ export class ScoreboardSession {
     serverConfig?: ClientConfig,
     /** Explicit clientId from URL query param (if provided) */
     explicitClientId?: string,
+    /** Default assets for all clients (merged with per-client overrides) */
+    defaultAssets?: AssetUrls,
   ) {
     this.id = id;
     this.ws = ws;
@@ -76,6 +79,7 @@ export class ScoreboardSession {
     this.connectedAt = new Date();
     this.lastActivity = new Date();
     this.serverConfig = serverConfig;
+    this.defaultAssets = defaultAssets;
     this.config = {
       showOnCourse: config?.showOnCourse ?? true,
       showResults: config?.showResults ?? true,
@@ -245,9 +249,17 @@ export class ScoreboardSession {
   }
 
   /**
+   * Update default assets (called when global defaults change)
+   */
+  setDefaultAssets(assets: AssetUrls | undefined): void {
+    this.defaultAssets = assets ? { ...assets } : undefined;
+  }
+
+  /**
    * Get effective configuration by merging server config with defaults.
    * Server config values override defaults when set.
    * Returns only the known scoreboard parameters from server config.
+   * Assets are merged: per-client overrides > global defaults.
    */
   getEffectiveConfig(): ClientConfig {
     const result: ClientConfig = {};
@@ -283,7 +295,35 @@ export class ScoreboardSession {
       }
     }
 
+    // Merge assets: per-client overrides > global defaults
+    const effectiveAssets = this.getEffectiveAssets();
+    if (effectiveAssets && Object.keys(effectiveAssets).length > 0) {
+      result.assets = effectiveAssets;
+    }
+
     return result;
+  }
+
+  /**
+   * Get effective assets by merging per-client overrides with global defaults.
+   * Per-client values override global defaults when set.
+   */
+  private getEffectiveAssets(): AssetUrls | undefined {
+    const defaults = this.defaultAssets || {};
+    const clientAssets = this.serverConfig?.assets || {};
+
+    // Merge: per-client overrides defaults
+    const merged: AssetUrls = {
+      ...defaults,
+      ...clientAssets,
+    };
+
+    // Return undefined if empty
+    if (Object.keys(merged).length === 0) {
+      return undefined;
+    }
+
+    return merged;
   }
 
   /**

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import { AppSettingsManager, resetAppSettings, getAppSettings } from '../AppSettings.js';
-import type { ClientConfig, CustomParamDefinition } from '../types.js';
+import type { ClientConfig, CustomParamDefinition, AssetUrls } from '../types.js';
 
 // Mock fs and os modules
 vi.mock('fs');
@@ -495,6 +495,394 @@ describe('AppSettingsManager', () => {
       const instance2 = getAppSettings();
       expect(instance2).not.toBe(instance1);
       // Note: The new instance will have fresh defaults
+    });
+  });
+
+  describe('Default Assets Management', () => {
+    describe('getDefaultAssets', () => {
+      it('should return undefined when no assets set', () => {
+        manager.load();
+        expect(manager.getDefaultAssets()).toBeUndefined();
+      });
+
+      it('should return stored assets', () => {
+        const assets: AssetUrls = {
+          logoUrl: 'https://example.com/logo.png',
+          partnerLogoUrl: 'data:image/png;base64,ABC123',
+        };
+
+        mockExistsSync.mockReturnValue(true);
+        mockReadFileSync.mockReturnValue(
+          JSON.stringify({
+            xmlSourceMode: 'auto-offline',
+            xmlAutoDetect: true,
+            xmlAutoDetectInterval: 30000,
+            defaultAssets: assets,
+          }),
+        );
+
+        manager.load();
+        const result = manager.getDefaultAssets();
+
+        expect(result).toEqual(assets);
+      });
+
+      it('should return a copy, not the original object', () => {
+        mockExistsSync.mockReturnValue(true);
+        mockReadFileSync.mockReturnValue(
+          JSON.stringify({
+            xmlSourceMode: 'auto-offline',
+            xmlAutoDetect: true,
+            xmlAutoDetectInterval: 30000,
+            defaultAssets: { logoUrl: 'https://example.com/logo.png' },
+          }),
+        );
+
+        manager.load();
+        const result1 = manager.getDefaultAssets();
+        const result2 = manager.getDefaultAssets();
+
+        expect(result1).not.toBe(result2);
+        expect(result1).toEqual(result2);
+      });
+    });
+
+    describe('setDefaultAssets', () => {
+      it('should set new assets', () => {
+        manager.load();
+
+        const result = manager.setDefaultAssets({
+          logoUrl: 'https://example.com/logo.png',
+        });
+
+        expect(result.logoUrl).toBe('https://example.com/logo.png');
+        expect(mockWriteFileSync).toHaveBeenCalled();
+      });
+
+      it('should merge with existing assets', () => {
+        mockExistsSync.mockReturnValue(true);
+        mockReadFileSync.mockReturnValue(
+          JSON.stringify({
+            xmlSourceMode: 'auto-offline',
+            xmlAutoDetect: true,
+            xmlAutoDetectInterval: 30000,
+            defaultAssets: {
+              logoUrl: 'https://example.com/logo.png',
+              partnerLogoUrl: 'https://example.com/partner.png',
+            },
+          }),
+        );
+
+        manager.load();
+
+        // Update only logoUrl
+        const result = manager.setDefaultAssets({
+          logoUrl: 'https://example.com/new-logo.png',
+        });
+
+        expect(result.logoUrl).toBe('https://example.com/new-logo.png'); // updated
+        expect(result.partnerLogoUrl).toBe('https://example.com/partner.png'); // preserved
+      });
+
+      it('should remove undefined/null values', () => {
+        mockExistsSync.mockReturnValue(true);
+        mockReadFileSync.mockReturnValue(
+          JSON.stringify({
+            xmlSourceMode: 'auto-offline',
+            xmlAutoDetect: true,
+            xmlAutoDetectInterval: 30000,
+            defaultAssets: {
+              logoUrl: 'https://example.com/logo.png',
+              partnerLogoUrl: 'https://example.com/partner.png',
+            },
+          }),
+        );
+
+        manager.load();
+
+        // Set logoUrl to undefined to clear it
+        manager.setDefaultAssets({
+          logoUrl: undefined,
+        });
+
+        const result = manager.getDefaultAssets();
+        expect(result?.logoUrl).toBeUndefined();
+        expect(result?.partnerLogoUrl).toBe('https://example.com/partner.png');
+      });
+
+      it('should remove defaultAssets object when all fields are cleared', () => {
+        mockExistsSync.mockReturnValue(true);
+        mockReadFileSync.mockReturnValue(
+          JSON.stringify({
+            xmlSourceMode: 'auto-offline',
+            xmlAutoDetect: true,
+            xmlAutoDetectInterval: 30000,
+            defaultAssets: {
+              logoUrl: 'https://example.com/logo.png',
+            },
+          }),
+        );
+
+        manager.load();
+
+        // Clear the only asset
+        manager.setDefaultAssets({
+          logoUrl: undefined,
+        });
+
+        expect(manager.getDefaultAssets()).toBeUndefined();
+      });
+    });
+
+    describe('clearDefaultAsset', () => {
+      it('should clear specific asset', () => {
+        mockExistsSync.mockReturnValue(true);
+        mockReadFileSync.mockReturnValue(
+          JSON.stringify({
+            xmlSourceMode: 'auto-offline',
+            xmlAutoDetect: true,
+            xmlAutoDetectInterval: 30000,
+            defaultAssets: {
+              logoUrl: 'https://example.com/logo.png',
+              partnerLogoUrl: 'https://example.com/partner.png',
+            },
+          }),
+        );
+
+        manager.load();
+        manager.clearDefaultAsset('logoUrl');
+
+        const result = manager.getDefaultAssets();
+        expect(result?.logoUrl).toBeUndefined();
+        expect(result?.partnerLogoUrl).toBe('https://example.com/partner.png');
+      });
+
+      it('should do nothing when no assets exist', () => {
+        manager.load();
+
+        // Should not throw
+        manager.clearDefaultAsset('logoUrl');
+
+        expect(manager.getDefaultAssets()).toBeUndefined();
+      });
+    });
+
+    describe('clearAllDefaultAssets', () => {
+      it('should clear all assets', () => {
+        mockExistsSync.mockReturnValue(true);
+        mockReadFileSync.mockReturnValue(
+          JSON.stringify({
+            xmlSourceMode: 'auto-offline',
+            xmlAutoDetect: true,
+            xmlAutoDetectInterval: 30000,
+            defaultAssets: {
+              logoUrl: 'https://example.com/logo.png',
+              partnerLogoUrl: 'https://example.com/partner.png',
+              footerImageUrl: 'https://example.com/footer.png',
+            },
+          }),
+        );
+
+        manager.load();
+        manager.clearAllDefaultAssets();
+
+        expect(manager.getDefaultAssets()).toBeUndefined();
+        expect(mockWriteFileSync).toHaveBeenCalled();
+      });
+    });
+
+    describe('getEffectiveAssetsForClient', () => {
+      it('should return default assets when no client override', () => {
+        mockExistsSync.mockReturnValue(true);
+        mockReadFileSync.mockReturnValue(
+          JSON.stringify({
+            xmlSourceMode: 'auto-offline',
+            xmlAutoDetect: true,
+            xmlAutoDetectInterval: 30000,
+            defaultAssets: {
+              logoUrl: 'https://example.com/default-logo.png',
+            },
+          }),
+        );
+
+        manager.load();
+        const result = manager.getEffectiveAssetsForClient('192.168.1.100');
+
+        expect(result.logoUrl).toBe('https://example.com/default-logo.png');
+      });
+
+      it('should return client override when set', () => {
+        mockExistsSync.mockReturnValue(true);
+        mockReadFileSync.mockReturnValue(
+          JSON.stringify({
+            xmlSourceMode: 'auto-offline',
+            xmlAutoDetect: true,
+            xmlAutoDetectInterval: 30000,
+            defaultAssets: {
+              logoUrl: 'https://example.com/default-logo.png',
+            },
+            clientConfigs: {
+              '192.168.1.100': {
+                assets: {
+                  logoUrl: 'https://example.com/client-logo.png',
+                },
+              },
+            },
+          }),
+        );
+
+        manager.load();
+        const result = manager.getEffectiveAssetsForClient('192.168.1.100');
+
+        expect(result.logoUrl).toBe('https://example.com/client-logo.png');
+      });
+
+      it('should merge client override with defaults', () => {
+        mockExistsSync.mockReturnValue(true);
+        mockReadFileSync.mockReturnValue(
+          JSON.stringify({
+            xmlSourceMode: 'auto-offline',
+            xmlAutoDetect: true,
+            xmlAutoDetectInterval: 30000,
+            defaultAssets: {
+              logoUrl: 'https://example.com/default-logo.png',
+              partnerLogoUrl: 'https://example.com/default-partner.png',
+            },
+            clientConfigs: {
+              '192.168.1.100': {
+                assets: {
+                  logoUrl: 'https://example.com/client-logo.png',
+                },
+              },
+            },
+          }),
+        );
+
+        manager.load();
+        const result = manager.getEffectiveAssetsForClient('192.168.1.100');
+
+        expect(result.logoUrl).toBe('https://example.com/client-logo.png'); // client override
+        expect(result.partnerLogoUrl).toBe('https://example.com/default-partner.png'); // default
+      });
+
+      it('should return empty object when no assets anywhere', () => {
+        manager.load();
+        const result = manager.getEffectiveAssetsForClient('192.168.1.100');
+
+        expect(result).toEqual({});
+      });
+    });
+
+    describe('setClientAssets', () => {
+      it('should set per-client assets', () => {
+        manager.load();
+
+        const result = manager.setClientAssets('192.168.1.100', {
+          logoUrl: 'https://example.com/client-logo.png',
+        });
+
+        expect(result.logoUrl).toBe('https://example.com/client-logo.png');
+
+        const config = manager.getClientConfig('192.168.1.100');
+        expect(config?.assets?.logoUrl).toBe('https://example.com/client-logo.png');
+      });
+
+      it('should merge with existing client assets', () => {
+        mockExistsSync.mockReturnValue(true);
+        mockReadFileSync.mockReturnValue(
+          JSON.stringify({
+            xmlSourceMode: 'auto-offline',
+            xmlAutoDetect: true,
+            xmlAutoDetectInterval: 30000,
+            clientConfigs: {
+              '192.168.1.100': {
+                type: 'ledwall',
+                assets: {
+                  logoUrl: 'https://example.com/old-logo.png',
+                },
+              },
+            },
+          }),
+        );
+
+        manager.load();
+
+        const result = manager.setClientAssets('192.168.1.100', {
+          partnerLogoUrl: 'https://example.com/partner.png',
+        });
+
+        expect(result.logoUrl).toBe('https://example.com/old-logo.png'); // preserved
+        expect(result.partnerLogoUrl).toBe('https://example.com/partner.png'); // added
+
+        // Verify other client config preserved
+        const config = manager.getClientConfig('192.168.1.100');
+        expect(config?.type).toBe('ledwall');
+      });
+    });
+
+    describe('clearClientAssets', () => {
+      it('should clear per-client assets', () => {
+        mockExistsSync.mockReturnValue(true);
+        mockReadFileSync.mockReturnValue(
+          JSON.stringify({
+            xmlSourceMode: 'auto-offline',
+            xmlAutoDetect: true,
+            xmlAutoDetectInterval: 30000,
+            clientConfigs: {
+              '192.168.1.100': {
+                type: 'ledwall',
+                assets: {
+                  logoUrl: 'https://example.com/logo.png',
+                },
+              },
+            },
+          }),
+        );
+
+        manager.load();
+        manager.clearClientAssets('192.168.1.100');
+
+        const config = manager.getClientConfig('192.168.1.100');
+        expect(config?.assets).toBeUndefined();
+        expect(config?.type).toBe('ledwall'); // preserved
+      });
+
+      it('should do nothing for non-existent client', () => {
+        manager.load();
+
+        // Should not throw
+        manager.clearClientAssets('192.168.1.100');
+
+        expect(manager.getClientConfig('192.168.1.100')).toBeUndefined();
+      });
+    });
+  });
+
+  describe('Persistence with Assets', () => {
+    it('should save defaultAssets to file', () => {
+      manager.load();
+      manager.setDefaultAssets({
+        logoUrl: 'https://example.com/logo.png',
+      });
+
+      expect(mockWriteFileSync).toHaveBeenCalled();
+
+      const savedData = JSON.parse(mockWriteFileSync.mock.calls[0][1]);
+      expect(savedData.defaultAssets.logoUrl).toBe('https://example.com/logo.png');
+    });
+
+    it('should save client assets to file', () => {
+      manager.load();
+      manager.setClientAssets('192.168.1.100', {
+        logoUrl: 'https://example.com/client-logo.png',
+      });
+
+      expect(mockWriteFileSync).toHaveBeenCalled();
+
+      const savedData = JSON.parse(mockWriteFileSync.mock.calls[0][1]);
+      expect(savedData.clientConfigs['192.168.1.100'].assets.logoUrl).toBe(
+        'https://example.com/client-logo.png',
+      );
     });
   });
 });

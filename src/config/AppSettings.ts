@@ -17,6 +17,7 @@ import {
   XmlSourceMode,
   ClientConfig,
   CustomParamDefinition,
+  AssetUrls,
 } from './types.js';
 
 export class AppSettingsManager {
@@ -352,6 +353,131 @@ export class AppSettingsManager {
       return true;
     }
     return false;
+  }
+
+  // =========================================================================
+  // Default Assets Management
+  // =========================================================================
+
+  /**
+   * Get default assets configuration
+   */
+  getDefaultAssets(): AssetUrls | undefined {
+    return this.settings.defaultAssets ? { ...this.settings.defaultAssets } : undefined;
+  }
+
+  /**
+   * Set default assets (partial update - only provided fields are updated)
+   */
+  setDefaultAssets(assets: Partial<AssetUrls>): AssetUrls {
+    const existing = this.settings.defaultAssets || {};
+    const merged: AssetUrls = {
+      ...existing,
+      ...assets,
+    };
+
+    // Remove undefined/null values
+    if (merged.logoUrl === undefined || merged.logoUrl === null) delete merged.logoUrl;
+    if (merged.partnerLogoUrl === undefined || merged.partnerLogoUrl === null)
+      delete merged.partnerLogoUrl;
+    if (merged.footerImageUrl === undefined || merged.footerImageUrl === null)
+      delete merged.footerImageUrl;
+
+    // If all fields are empty, remove the whole object
+    if (Object.keys(merged).length === 0) {
+      delete this.settings.defaultAssets;
+    } else {
+      this.settings.defaultAssets = merged;
+    }
+
+    this.save();
+    return this.settings.defaultAssets || {};
+  }
+
+  /**
+   * Clear a specific default asset
+   */
+  clearDefaultAsset(key: keyof AssetUrls): void {
+    if (this.settings.defaultAssets) {
+      delete this.settings.defaultAssets[key];
+
+      // Remove the whole object if empty
+      if (Object.keys(this.settings.defaultAssets).length === 0) {
+        delete this.settings.defaultAssets;
+      }
+
+      this.save();
+    }
+  }
+
+  /**
+   * Clear all default assets
+   */
+  clearAllDefaultAssets(): void {
+    delete this.settings.defaultAssets;
+    this.save();
+  }
+
+  /**
+   * Get effective assets for a client (per-client overrides merged with defaults)
+   * Returns merged result: per-client > global default
+   */
+  getEffectiveAssetsForClient(ip: string): AssetUrls {
+    const defaults = this.settings.defaultAssets || {};
+    const clientConfig = this.settings.clientConfigs?.[ip];
+    const clientAssets = clientConfig?.assets || {};
+
+    // Per-client overrides defaults
+    return {
+      ...defaults,
+      ...clientAssets,
+    };
+  }
+
+  /**
+   * Set per-client asset overrides
+   */
+  setClientAssets(ip: string, assets: Partial<AssetUrls>): AssetUrls {
+    if (!this.settings.clientConfigs) {
+      this.settings.clientConfigs = {};
+    }
+
+    const existing = this.settings.clientConfigs[ip] || {};
+    const existingAssets = existing.assets || {};
+
+    const mergedAssets: AssetUrls = {
+      ...existingAssets,
+      ...assets,
+    };
+
+    // Remove undefined/null values
+    if (mergedAssets.logoUrl === undefined || mergedAssets.logoUrl === null)
+      delete mergedAssets.logoUrl;
+    if (mergedAssets.partnerLogoUrl === undefined || mergedAssets.partnerLogoUrl === null)
+      delete mergedAssets.partnerLogoUrl;
+    if (mergedAssets.footerImageUrl === undefined || mergedAssets.footerImageUrl === null)
+      delete mergedAssets.footerImageUrl;
+
+    // Update client config
+    if (Object.keys(mergedAssets).length === 0) {
+      delete existing.assets;
+    } else {
+      existing.assets = mergedAssets;
+    }
+
+    this.settings.clientConfigs[ip] = existing;
+    this.save();
+    return mergedAssets;
+  }
+
+  /**
+   * Clear all per-client asset overrides for a client
+   */
+  clearClientAssets(ip: string): void {
+    if (this.settings.clientConfigs?.[ip]) {
+      delete this.settings.clientConfigs[ip].assets;
+      this.save();
+    }
   }
 
   /**

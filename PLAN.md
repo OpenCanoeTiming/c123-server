@@ -142,23 +142,23 @@ Před delší pauzou v projektu je třeba zkontrolovat a doplnit dokumentaci.
 
 Centrální správa obrázků (logo, partneři, footer) s distribucí přes ConfigPush.
 
-### Blok A1: Centrální assets konfigurace
+### Blok A1: Centrální assets konfigurace ✅
 
-#### A1.1 Server config
-- [ ] Přidat `defaultAssets` do server config
+#### A1.1 Server config ✅
+- [x] Přidat `defaultAssets` do server config
   - `logoUrl?: string` - hlavní logo
   - `partnerLogoUrl?: string` - logo partnerů
   - `footerImageUrl?: string` - sponzorský banner
-- [ ] Podpora formátů: URL (`http://...`) nebo data URI (`data:image/...`)
+- [x] Podpora formátů: URL (`http://...`) nebo data URI (`data:image/...`)
 
-#### A1.2 ConfigPush integrace
-- [ ] Automatické posílání assets v ConfigPush všem klientům při připojení
-- [ ] Per-client override v client config (přepíše default)
-- [ ] Merge logika: Per-client > Global default > Neposlat (scoreboard fallback)
+#### A1.2 ConfigPush integrace ✅
+- [x] Automatické posílání assets v ConfigPush všem klientům při připojení
+- [x] Per-client override v client config (přepíše default)
+- [x] Merge logika: Per-client > Global default > Neposlat (scoreboard fallback)
 
-#### A1.3 Persistentní ukládání
-- [ ] Uložit default assets do `settings.json`
-- [ ] Per-client assets v client configs
+#### A1.3 Persistentní ukládání ✅
+- [x] Uložit default assets do `settings.json`
+- [x] Per-client assets v client configs
 
 ---
 

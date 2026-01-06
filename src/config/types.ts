@@ -3,6 +3,25 @@
  */
 
 // ============================================================================
+// Asset Configuration Types
+// ============================================================================
+
+/**
+ * Asset URLs for scoreboard branding
+ * Values can be:
+ * - URL: http(s)://... (fetched from network)
+ * - Data URI: data:image/... (embedded base64)
+ */
+export interface AssetUrls {
+  /** Main event logo (max recommended: 200x80px) */
+  logoUrl?: string;
+  /** Partner/sponsor logo (max recommended: 300x80px) */
+  partnerLogoUrl?: string;
+  /** Footer banner image (max recommended: 1920x200px) */
+  footerImageUrl?: string;
+}
+
+// ============================================================================
 // Client Configuration Types
 // ============================================================================
 
@@ -59,6 +78,14 @@ export interface ClientConfig {
    * This allows server to rename/reassign client identities.
    */
   clientId?: string;
+
+  // === Assets (per-client overrides) ===
+
+  /**
+   * Per-client asset overrides.
+   * If set, these override the global default assets for this specific client.
+   */
+  assets?: AssetUrls;
 }
 
 /**
@@ -165,6 +192,14 @@ export interface AppSettings {
   clientConfigs?: Record<string, ClientConfig>;
   /** Definitions of custom parameters available for clients */
   customParamDefinitions?: CustomParamDefinition[];
+
+  // === Default Assets ===
+
+  /**
+   * Default asset URLs for all scoreboards.
+   * Individual clients can override these via per-client assets config.
+   */
+  defaultAssets?: AssetUrls;
 }
 
 /**

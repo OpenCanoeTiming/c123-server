@@ -562,8 +562,9 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     // Load stored config for this client (by configKey)
     const settings = getAppSettings();
     const storedConfig = settings.getClientConfig(configKey);
+    const defaultAssets = settings.getDefaultAssets();
 
-    // Create session with IP, stored config, and explicit clientId
+    // Create session with IP, stored config, explicit clientId, and default assets
     const session = new ScoreboardSession(
       sessionId,
       ws,
@@ -571,6 +572,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       undefined,
       storedConfig,
       explicitClientId,
+      defaultAssets,
     );
     this.sessions.set(sessionId, session);
 
