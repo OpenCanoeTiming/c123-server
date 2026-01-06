@@ -1564,7 +1564,8 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     }
 
     // Remove metadata fields from config (server-managed)
-    const { label: _label, lastSeen: _lastSeen, ...configToSave } = config;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { label, lastSeen, ...configToSave } = config;
 
     // Save configuration
     const settings = getAppSettings();

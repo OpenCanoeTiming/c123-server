@@ -101,21 +101,22 @@ GET /api/discover
 
 The endpoint has CORS enabled (`Access-Control-Allow-Origin: *`) to allow cross-origin discovery requests from browsers.
 
-### Reference Implementation
+### Discovery Functions
 
-A complete TypeScript implementation is available at [`discovery-client.ts`](./discovery-client.ts).
+A discovery module should implement these core functions:
 
-Copy the file into your scoreboard project and use it:
+| Function | Purpose |
+|----------|---------|
+| `discoverC123Server()` | Main discovery with caching |
+| `probeServer(url)` | Single server probe with timeout |
+| `isServerAlive(url)` | Quick availability check |
+| `getServerInfo(url)` | Get server details (version, event) |
+| `getWebSocketUrl(httpUrl)` | Convert HTTP URL to WebSocket URL |
+
+**Example usage:**
 
 ```typescript
-import {
-  discoverC123Server,
-  getWebSocketUrl,
-  isServerAlive,
-  getServerInfo,
-} from './discovery-client';
-
-// Basic usage
+// Basic discovery
 const serverUrl = await discoverC123Server();
 if (serverUrl) {
   const ws = new WebSocket(getWebSocketUrl(serverUrl));
@@ -131,17 +132,6 @@ const serverUrl = await discoverC123Server({
 const info = await getServerInfo('http://192.168.1.50:27123');
 console.log(info?.eventName); // "Czech Cup 2025"
 ```
-
-The implementation includes:
-
-- `discoverC123Server()` - Main discovery function with caching
-- `getLocalIPViaWebRTC()` - WebRTC-based local IP detection
-- `scanSubnet()` - Parallel subnet scanning with optimized order
-- `probeServer()` - Single server probe with timeout
-- `isServerAlive()` - Server availability check
-- `getServerInfo()` - Get server details (version, event name)
-- `normalizeServerUrl()` - URL normalization helper
-- `getWebSocketUrl()` - Convert HTTP URL to WebSocket URL
 
 ### Usage in Scoreboard
 

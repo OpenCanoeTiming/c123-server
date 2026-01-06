@@ -125,10 +125,16 @@ Před delší pauzou v projektu je třeba zkontrolovat a doplnit dokumentaci.
 - [x] Instalace a spuštění
 - [x] Základní použití
 
-### Krok 5: Konzistence
-- [ ] Cross-reference mezi dokumenty
-- [ ] Sjednotit terminologii
-- [ ] Odstranit zastaralé informace
+### Krok 5: Konzistence ✅
+- [x] Cross-reference mezi dokumenty
+- [x] Sjednotit terminologii
+- [x] Odstranit zastaralé informace
+
+**Změny provedené:**
+- README.md: Přidány chybějící odkazy na CLIENT-CONFIG.md a SCOREBOARD-REQUIREMENTS.md
+- SCOREBOARD-REQUIREMENTS.md: Opraveny špatné porty (8084 → 27123)
+- SCOREBOARD-REQUIREMENTS.md: Opraveny jednotky času (milliseconds → centiseconds)
+- INTEGRATION.md: Opraven odkaz na neexistující discovery-client.ts
 
 ---
 

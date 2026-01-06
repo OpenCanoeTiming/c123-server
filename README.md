@@ -268,11 +268,12 @@ npm run build
 
 ## Documentation
 
-- [C123-PROTOCOL.md](docs/C123-PROTOCOL.md) - C123 protocol reference
+- [C123-PROTOCOL.md](docs/C123-PROTOCOL.md) - C123 protocol reference (WebSocket messages)
 - [REST-API.md](docs/REST-API.md) - REST API documentation
 - [INTEGRATION.md](docs/INTEGRATION.md) - Scoreboard integration guide
-- [CLI-DIFFERENCES.md](docs/CLI-DIFFERENCES.md) - Migration from CLI format
+- [CLIENT-CONFIG.md](docs/CLIENT-CONFIG.md) - Remote client configuration
 - [SCOREBOARD-REQUIREMENTS.md](docs/SCOREBOARD-REQUIREMENTS.md) - What scoreboards must implement
+- [CLI-DIFFERENCES.md](docs/CLI-DIFFERENCES.md) - Migration from CLI format
 
 ## License
 

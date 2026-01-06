@@ -139,7 +139,7 @@ For these formats, C123 results are directly usable without merge logic.
 ```typescript
 async function getMergedResults(raceId: string): Promise<MergedResult[]> {
   const response = await fetch(
-    `http://${server}:8084/api/xml/races/${raceId}/results?merged=true`
+    `http://${server}:27123/api/xml/races/${raceId}/results?merged=true`
   );
   const { results } = await response.json();
   return results;
@@ -462,8 +462,8 @@ After reconnection, sync state from REST API:
 ```typescript
 async function syncFromRestApi(): Promise<void> {
   const [schedule, participants] = await Promise.all([
-    fetch(`http://${server}:8084/api/xml/schedule`).then(r => r.json()),
-    fetch(`http://${server}:8084/api/xml/participants`).then(r => r.json())
+    fetch(`http://${server}:27123/api/xml/schedule`).then(r => r.json()),
+    fetch(`http://${server}:27123/api/xml/participants`).then(r => r.json())
   ]);
 
   state.schedule = schedule.schedule;
@@ -479,14 +479,14 @@ async function syncFromRestApi(): Promise<void> {
 
 ### OnCourse Time
 
-Running time in OnCourse is in **milliseconds** (integer):
+Running time in OnCourse is in **centiseconds** (1/100th of a second):
 
 ```typescript
-// OnCourse time: "8115" = 8115ms = 8.115 seconds
-function formatRunningTime(timeMs: string): string {
-  const ms = parseInt(timeMs, 10);
-  const seconds = ms / 1000;
-  return seconds.toFixed(2); // "8.12"
+// OnCourse time: "8115" = 81.15 seconds
+function formatRunningTime(centiseconds: string): string {
+  const cs = parseInt(centiseconds, 10);
+  const seconds = cs / 100;
+  return seconds.toFixed(2); // "81.15"
 }
 ```
 
