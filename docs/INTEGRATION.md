@@ -406,6 +406,147 @@ t+4000ms   Competitor disappears from OnCourse
 
 ---
 
+## BR1/BR2 Merge Strategy
+
+When displaying two-run (Best Run) races, you need a strategy to show both run times with the correct penalties.
+
+### The Problem
+
+The TCP stream `Results` message for BR2 has misleading data:
+
+| Field | Expected | Actual |
+|-------|----------|--------|
+| `time` | BR2 time | BR2 time ✓ |
+| `pen` | BR2 penalty | **Penalty of BETTER run** (may be BR1!) |
+| `total` | BR2 total | **Best of both runs** |
+
+This means you **cannot trust `Results.pen`** for displaying the actual BR2 penalty when BR1 was better.
+
+### Data Sources and Their Reliability
+
+| Source | Data | Latency | Reliability for BR2 pen |
+|--------|------|---------|------------------------|
+| **OnCourse** | `pen` for on-course competitors | Real-time | ✅ **Correct** (during and briefly after run) |
+| **REST API** | `run1`, `run2` complete | ~1-2s delay | ✅ **Authoritative** |
+| **Results** | `pen`, `total` | Real-time | ⚠️ **May be from BR1!** |
+
+### Recommended Implementation
+
+```typescript
+// Priority for BR2 penalty:
+// 1. OnCourse penalties (real-time, most accurate)
+// 2. REST API cache (authoritative, slight delay)
+// 3. Results.pen (fallback - may be wrong!)
+
+const br2Pen = onCoursePen ?? cachedRestApiPen ?? result.pen;
+```
+
+### OnCourse Penalty Grace Period
+
+When a competitor finishes BR2:
+1. They stay in OnCourse for ~4 seconds with correct penalty
+2. Then they disappear from OnCourse
+3. REST API may not be updated yet (~1-2s delay)
+
+**Solution:** Cache OnCourse penalties with a grace period (10 seconds recommended):
+
+```typescript
+interface OnCoursePenaltyCache {
+  [bib: string]: {
+    pen: number;
+    lastSeen: number;  // timestamp
+  }
+}
+
+const GRACE_PERIOD_MS = 10_000;
+
+function getOnCoursePenalty(bib: string, cache: OnCoursePenaltyCache): number | null {
+  const entry = cache[bib];
+  if (!entry) return null;
+
+  // Use cached penalty if within grace period
+  if (Date.now() - entry.lastSeen < GRACE_PERIOD_MS) {
+    return entry.pen;
+  }
+
+  return null;
+}
+```
+
+### Complete Data Flow
+
+```
+BR2 Start ──────────────────────────────────────────────────► Time
+    │
+    ├─ OnCourse updates (pen accurate)
+    │
+    ├─ Competitor finishes
+    │   └─ dtFinish set, still in OnCourse (~4s)
+    │
+    ├─ Competitor leaves OnCourse
+    │   └─ Grace period: cached penalty still valid (10s)
+    │
+    ├─ Results message arrives
+    │   └─ ⚠️ pen may be from BR1!
+    │
+    └─ REST API updated
+        └─ ✅ Complete data: run1, run2, bestTotal
+```
+
+### REST API Usage for BR1/BR2
+
+```typescript
+// Fetch merged results for a class (works with either BR1 or BR2 raceId)
+async function getMergedResults(raceId: string) {
+  const response = await fetch(
+    `http://${server}:27123/api/xml/races/${raceId}/results?merged=true`
+  );
+  return response.json();
+}
+
+// Response format:
+{
+  "results": [
+    {
+      "bib": "1",
+      "run1": { "time": 7899, "pen": 2, "total": 8099, "rank": 1 },
+      "run2": { "time": 7756, "pen": 0, "total": 7756, "rank": 2 },
+      "bestTotal": 7756,
+      "bestRank": 1
+    }
+  ],
+  "merged": true,
+  "classId": "K1M_ST"
+}
+```
+
+### Handling Empty Objects
+
+REST API may return `run2: {}` instead of `undefined` for competitors who haven't done BR2 yet:
+
+```typescript
+// WRONG - empty object passes this check
+if (!row.run2) return undefined;
+
+// CORRECT
+if (!row.run2 || Object.keys(row.run2).length === 0) return undefined;
+```
+
+### Timing Constants (Recommended)
+
+```typescript
+const INITIAL_FETCH_DELAY_MS = 500;      // Delay before first REST fetch after BR2 start
+const DEBOUNCE_FETCH_MS = 1_000;          // Debounce REST fetch after Results
+const BR1_REFRESH_INTERVAL_MS = 30_000;   // Periodic refresh of REST data
+const ONCOURSE_PENALTY_GRACE_MS = 10_000; // Grace period for OnCourse penalties
+```
+
+### Reference Implementation
+
+See the V3 Scoreboard implementation at `../canoe-scoreboard-v3/docs/SolvingBR1BR2.md` for a complete analysis and working implementation.
+
+---
+
 ## REST API Usage
 
 ### Get Race Schedule

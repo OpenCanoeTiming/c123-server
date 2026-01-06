@@ -440,37 +440,81 @@ t+4000ms  Competitor disappears from OnCourse
 
 ## Two-Run (BR1/BR2) Handling
 
-Canoe slalom typically has two runs. The second run (BR2) results present some data limitations.
+Canoe slalom typically has two runs (Best Run format). The second run (BR2) results in the TCP stream have specific limitations that clients must handle.
 
-### Data Availability in BR2
+### Critical: TCP Stream Data Limitations
 
-| Scenario | 2nd Run Data | 1st Run Data |
-|----------|--------------|--------------|
-| 1st run better | `Time` + `Gates` | Can calculate from `Total` |
-| 2nd run better | `Time` + `Gates` = `Total` | **NOT AVAILABLE** |
+**IMPORTANT:** The TCP stream `Results` message for BR2 has non-obvious field meanings:
 
-### BR2 Result Fields
+| Field | What You Might Expect | What It Actually Contains |
+|-------|----------------------|---------------------------|
+| `Time` | BR2 time | BR2 time ✓ |
+| `Pen` | BR2 penalty | **Penalty of BETTER run** (could be BR1!) |
+| `Total` | BR2 total | **Best of both runs** (not BR2 total!) |
 
-When viewing BR2 results, additional fields are present:
+This means when BR1 was better than BR2:
+- `Pen` contains BR1 penalty, not BR2 penalty
+- `Total` shows BR1 total, making it impossible to calculate BR2 total from stream data alone
 
-```json
-{
-  "prevTime": 8156,        // 1st run time (centiseconds)
-  "prevPen": 4,            // 1st run penalty
-  "prevTotal": 8196,       // 1st run total
-  "prevRank": 3,           // 1st run rank
-  "totalTotal": 8156,      // Best of both runs
-  "totalRank": 2,          // Overall rank
-  "betterRun": 1           // Which run was better (1 or 2)
-}
+### Example: BR2 Results in TCP Stream
+
+```xml
+<!-- Bib 1: BR1 was better (78.99) than BR2 (81.99) -->
+<Result Type="T" Time="79.99" Pen="2" Total="78.99" Rank="1"/>
+<!--           ↑ BR2 time    ↑ BR1 pen!  ↑ BR1 total (best)! -->
 ```
 
-### Recommendation
+**Verified on live data (2026-01-05):**
 
-For complete BR1/BR2 data:
-1. Cache BR1 Results when they arrive
-2. Merge with BR2 Results for complete view
-3. Or use the XML file API which has complete data
+| Bib | Time (BR2) | Pen in Results | BR2 calculated | Total in Results | Conclusion |
+|-----|------------|----------------|----------------|------------------|------------|
+| 1   | 79.99      | 2              | 81.99          | **78.99**        | BR1 was better (pen is from BR1) |
+| 5   | 87.30      | 2              | 89.30          | **84.33**        | BR1 was better (pen is from BR1) |
+| 9   | 51.20      | 6              | 57.20          | 57.20            | BR2 was better (pen is from BR2) |
+
+### Data Availability Summary
+
+| Scenario | BR2 Time | BR2 Penalty | BR1 Data |
+|----------|----------|-------------|----------|
+| BR1 was better | ✓ Available | ❌ **NOT in Results.pen** | Can infer total from `Total` |
+| BR2 was better | ✓ Available | ✓ In `Pen` | ❌ **NOT AVAILABLE** |
+
+### Where to Get Complete BR1/BR2 Data
+
+1. **OnCourse message** (during BR2):
+   - Contains correct BR2 `pen` for competitors currently on course
+   - Updates in real-time as gates are passed
+
+2. **XML File (REST API)** - **Recommended:**
+   - `GET /api/xml/races/:raceId/results?merged=true`
+   - Contains complete data for both runs: `run1`, `run2`, `bestTotal`, `bestRank`
+   - Updated with ~1-2 second delay after finish
+
+3. **BR2 Results in XML:**
+```xml
+<Results>
+  <RaceId>K1M_ST_BR2_6</RaceId>
+  <Time>79990</Time>           <!-- BR2 time (centiseconds) -->
+  <Pen>6</Pen>                 <!-- BR2 penalty -->
+  <Total>85990</Total>         <!-- BR2 total -->
+
+  <PrevTime>76990</PrevTime>   <!-- BR1 time -->
+  <PrevPen>2</PrevPen>         <!-- BR1 penalty -->
+  <PrevTotal>78990</PrevTotal> <!-- BR1 total -->
+
+  <TotalTotal>78990</TotalTotal>   <!-- Best of both -->
+  <BetterRunNr>1</BetterRunNr>     <!-- 1=BR1 better, 2=BR2 better -->
+</Results>
+```
+
+### Recommended Client Strategy
+
+See [INTEGRATION.md](INTEGRATION.md#br1br2-merge-strategy) for complete implementation guidance.
+
+**Quick summary:**
+1. Use **OnCourse** `pen` as primary source during BR2 (real-time, accurate)
+2. Fetch **REST API** merged results for complete data (authoritative, slight delay)
+3. Never trust `Results.pen` for BR2 display - it may contain BR1 penalty
 
 ---
 

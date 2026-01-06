@@ -507,6 +507,26 @@ Get results for a specific race.
 }
 ```
 
+**Important Notes for Merged Results:**
+
+1. **Empty objects for missing runs:** If a competitor hasn't completed a run yet, the field will be an empty object `{}`, not `undefined`:
+   ```json
+   {
+     "bib": "5",
+     "run1": { "time": 8156, "pen": 4, "total": 8196, "rank": 3 },
+     "run2": {},  // Not undefined!
+     "bestTotal": 8196,
+     "bestRank": 3
+   }
+   ```
+   Check for empty objects: `Object.keys(row.run2).length === 0`
+
+2. **Why use merged results?** The WebSocket `Results` message for BR2 contains misleading data - `pen` may be from BR1 (the better run), and `total` is always the best of both runs. The merged REST API provides accurate, complete data for both runs.
+
+3. **Timing:** XML file updates ~1-2 seconds after finish. For real-time BR2 penalty, use the `pen` field from `OnCourse` message.
+
+See [INTEGRATION.md](INTEGRATION.md#br1br2-merge-strategy) for complete client implementation guidance.
+
 ---
 
 ### GET /api/xml/races/:id/results/:run
