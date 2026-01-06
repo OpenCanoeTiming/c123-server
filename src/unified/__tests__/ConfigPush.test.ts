@@ -16,13 +16,6 @@ import type { C123ConfigPush } from '../../protocol/types.js';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type JsonResponse = Record<string, any>;
 
-const BASE_PORT = 28000;
-let portCounter = 0;
-
-function getNextPort(): number {
-  return BASE_PORT + portCounter++;
-}
-
 // Helper: Create WebSocket with message handler already attached
 // This ensures we don't miss messages sent immediately on connection
 function createClientWithHandler(
@@ -53,9 +46,9 @@ describe('ConfigPush Mechanism', () => {
 
   beforeEach(async () => {
     resetAppSettings();
-    port = getNextPort();
-    server = new UnifiedServer({ port });
+    server = new UnifiedServer({ port: 0 });
     await server.start();
+    port = server.getPort();
   });
 
   afterEach(async () => {
