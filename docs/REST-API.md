@@ -675,7 +675,8 @@ Update configuration for a client. If the client is online, changes are pushed i
 {
   "type": "ledwall",
   "displayRows": 10,
-  "customTitle": "Finish Line"
+  "customTitle": "Finish Line",
+  "clientId": "finish-display"
 }
 ```
 
@@ -688,6 +689,7 @@ Update configuration for a client. If the client is online, changes are pushed i
 | `showOnCourse` | boolean | true/false | Show OnCourse data |
 | `showResults` | boolean | true/false | Show Results data |
 | `custom` | object | key-value pairs | Custom parameters |
+| `clientId` | string | non-empty string | Server-assigned client ID (client adopts it) |
 
 **Response:**
 

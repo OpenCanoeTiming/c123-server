@@ -606,7 +606,8 @@ Sent by server to push configuration to a client (scoreboard). This is sent:
     "type": "ledwall",
     "displayRows": 8,
     "customTitle": "Finish Line Display",
-    "label": "TV in Hall A"
+    "label": "TV in Hall A",
+    "clientId": "finish-display"
   }
 }
 ```
@@ -622,13 +623,15 @@ Sent by server to push configuration to a client (scoreboard). This is sent:
 | `showResults` | boolean | Show Results data |
 | `custom` | object | Custom parameters (key-value) |
 | `label` | string | Admin-assigned label for this client |
+| `clientId` | string | Server-assigned client ID (client should adopt it) |
 
 **Note:** Only explicitly set parameters are included. Undefined values are omitted, allowing clients to use their own defaults.
 
 **Client behavior:** When receiving this message, clients should:
 1. Merge pushed values with current configuration
 2. Apply layout/display changes immediately
-3. Optionally report current state back via `ClientState`
+3. If `clientId` is set, store it and use for future connections
+4. Optionally report current state back via `ClientState`
 
 ### ClientState
 
