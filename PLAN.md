@@ -138,6 +138,56 @@ Před delší pauzou v projektu je třeba zkontrolovat a doplnit dokumentaci.
 
 ---
 
+## TODO: Asset management
+
+Centrální správa obrázků (logo, partneři, footer) s distribucí přes ConfigPush.
+
+### Blok A1: Centrální assets konfigurace
+
+#### A1.1 Server config
+- [ ] Přidat `defaultAssets` do server config
+  - `logoUrl?: string` - hlavní logo
+  - `partnerLogoUrl?: string` - logo partnerů
+  - `footerImageUrl?: string` - sponzorský banner
+- [ ] Podpora formátů: URL (`http://...`) nebo data URI (`data:image/...`)
+
+#### A1.2 ConfigPush integrace
+- [ ] Automatické posílání assets v ConfigPush všem klientům při připojení
+- [ ] Per-client override v client config (přepíše default)
+- [ ] Merge logika: Per-client > Global default > Neposlat (scoreboard fallback)
+
+#### A1.3 Persistentní ukládání
+- [ ] Uložit default assets do `settings.json`
+- [ ] Per-client assets v client configs
+
+---
+
+### Blok A2: Admin UI - Asset helper
+
+#### A2.1 Upload/input komponenta
+- [ ] Upload/paste obrázku → automatická konverze do base64
+- [ ] URL input → fetch a převod do base64 (pro offline použití)
+- [ ] Drag & drop podpora
+
+#### A2.2 Automatický resize
+- [ ] Canvas-based resize na přiměřené rozlišení:
+  - Logo: max 200x80px
+  - Partners: max 300x80px
+  - Footer: max 1920x200px
+- [ ] Zachování aspect ratio
+- [ ] Output jako PNG nebo JPEG dle původního formátu
+
+#### A2.3 Preview a validace
+- [ ] Preview před uložením
+- [ ] Validace velikosti (varování při >100KB base64)
+- [ ] Zobrazení aktuální velikosti v KB
+
+#### A2.4 UI integrace
+- [ ] Sekce "Default Assets" v admin dashboardu
+- [ ] Per-client asset overrides v client config panelu
+- [ ] Clear/reset tlačítko pro návrat k defaults
+
+---
 
 ## Reference
 
