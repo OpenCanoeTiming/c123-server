@@ -18,6 +18,7 @@ The C123 Server provides the following APIs:
 | **Broadcast API** | `/api/broadcast` | Broadcast messages to all clients |
 | **Client Management API** | `/api/clients` | Manage scoreboard client configurations |
 | **Custom Parameters API** | `/api/config/custom-params` | Define custom client parameters |
+| **Assets API** | `/api/config/assets` | Default asset images (logos, banners) |
 | **Logs API** | `/api/logs` | Log entries retrieval |
 
 **Base URL:** `http://<server>:27123`
@@ -1194,6 +1195,156 @@ Set custom parameter definitions.
 |--------|----------|
 | 400 | `{ "error": "Each definition must have a non-empty key." }` |
 | 400 | `{ "error": "Invalid type 'invalid'. Must be string, number, or boolean." }` |
+
+---
+
+## Assets API
+
+Manage default asset images (logos, banners) for all scoreboards. Individual clients can override these via per-client configuration.
+
+### Asset Types
+
+| Key | Description | Recommended Size |
+|-----|-------------|------------------|
+| `logoUrl` | Main event logo | max 200×80 px |
+| `partnerLogoUrl` | Partner/sponsor logo | max 300×80 px |
+| `footerImageUrl` | Footer banner image | max 1920×200 px |
+
+### Asset Value Formats
+
+Assets can be specified as:
+
+- **URL**: `https://example.com/logo.png` - fetched from network
+- **Data URI**: `data:image/png;base64,iVBORw0KGgo...` - embedded base64
+
+The Admin UI automatically resizes uploaded images to recommended dimensions and converts them to data URIs for offline use.
+
+---
+
+### GET /api/config/assets
+
+Get current default assets configuration.
+
+**Response:**
+
+```json
+{
+  "assets": {
+    "logoUrl": "data:image/png;base64,iVBORw0KGgo...",
+    "partnerLogoUrl": null,
+    "footerImageUrl": "https://example.com/banner.jpg"
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `assets.logoUrl` | string \| null | Main logo (null if not set) |
+| `assets.partnerLogoUrl` | string \| null | Partner logo (null if not set) |
+| `assets.footerImageUrl` | string \| null | Footer banner (null if not set) |
+
+---
+
+### PUT /api/config/assets
+
+Set default assets. Supports partial updates - only provided fields are modified.
+
+**Request:**
+
+```json
+{
+  "logoUrl": "data:image/png;base64,iVBORw0KGgo...",
+  "partnerLogoUrl": "https://example.com/partner.png"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `logoUrl` | string \| null | Set logo (null to clear) |
+| `partnerLogoUrl` | string \| null | Set partner logo (null to clear) |
+| `footerImageUrl` | string \| null | Set footer banner (null to clear) |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "assets": {
+    "logoUrl": "data:image/png;base64,iVBORw0KGgo...",
+    "partnerLogoUrl": "https://example.com/partner.png",
+    "footerImageUrl": null
+  }
+}
+```
+
+**Validation:**
+
+- Values must be strings (URL or data URI) or null
+- URLs must start with `http://` or `https://`
+- Data URIs must start with `data:image/`
+- Warning logged if data URI exceeds 500KB
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| 400 | `{ "error": "logoUrl must be a string or null" }` |
+| 400 | `{ "error": "logoUrl must be a URL (http/https) or data URI (data:image/...)" }` |
+
+---
+
+### DELETE /api/config/assets/:key
+
+Clear a specific default asset.
+
+**Parameters:**
+
+| Name | Description |
+|------|-------------|
+| `key` | Asset key: `logoUrl`, `partnerLogoUrl`, or `footerImageUrl` |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "assets": {
+    "logoUrl": null,
+    "partnerLogoUrl": "https://example.com/partner.png",
+    "footerImageUrl": null
+  }
+}
+```
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| 400 | `{ "error": "Invalid asset key: invalid. Must be one of: logoUrl, partnerLogoUrl, footerImageUrl" }` |
+
+---
+
+### Per-Client Asset Overrides
+
+Individual clients can have asset overrides that take precedence over defaults. Set via client configuration:
+
+**PUT /api/clients/:ip/config**
+
+```json
+{
+  "assets": {
+    "logoUrl": "data:image/png;base64,..."
+  }
+}
+```
+
+**Merge Priority:**
+
+1. Per-client asset (if set)
+2. Global default asset (if set)
+3. Scoreboard fallback (client-side default)
+
+See [CLIENT-CONFIG.md](CLIENT-CONFIG.md) for full client configuration documentation.
 
 ---
 

@@ -669,7 +669,11 @@ Sent by server to push configuration to a client (scoreboard). This is sent:
     "displayRows": 8,
     "customTitle": "Finish Line Display",
     "label": "TV in Hall A",
-    "clientId": "finish-display"
+    "clientId": "finish-display",
+    "assets": {
+      "logoUrl": "data:image/png;base64,iVBORw0KGgo...",
+      "footerImageUrl": "https://example.com/banner.jpg"
+    }
   }
 }
 ```
@@ -686,6 +690,16 @@ Sent by server to push configuration to a client (scoreboard). This is sent:
 | `custom` | object | Custom parameters (key-value) |
 | `label` | string | Admin-assigned label for this client |
 | `clientId` | string | Server-assigned client ID (client should adopt it) |
+| `assets` | object | Asset images (see below) |
+
+**Assets object:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `logoUrl` | string | Main event logo (URL or data URI) |
+| `partnerLogoUrl` | string | Partner/sponsor logo (URL or data URI) |
+| `footerImageUrl` | string | Footer banner image (URL or data URI) |
+
+Assets are merged from global defaults and per-client overrides. Only set assets are included.
 
 **Note:** Only explicitly set parameters are included. Undefined values are omitted, allowing clients to use their own defaults.
 

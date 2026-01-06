@@ -47,6 +47,21 @@ These parameters are recognized by the C123 Server and scoreboard implementation
 | `raceFilter` | string[] | race IDs | Only show these races |
 | `showOnCourse` | boolean | true/false | Show OnCourse data |
 | `showResults` | boolean | true/false | Show Results data |
+| `assets` | object | AssetUrls | Logo and banner images (see below) |
+
+### Asset Parameters
+
+The `assets` field contains image URLs for branding:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `logoUrl` | string | Main event logo (max 200×80 px recommended) |
+| `partnerLogoUrl` | string | Partner/sponsor logo (max 300×80 px) |
+| `footerImageUrl` | string | Footer banner image (max 1920×200 px) |
+
+Values can be URLs (`https://...`) or data URIs (`data:image/png;base64,...`).
+
+**Merge Priority:** Per-client assets override global defaults. If neither is set, scoreboard uses its own fallback.
 
 ### Parameter Behavior
 
@@ -75,7 +90,11 @@ Sent by server when:
     "type": "ledwall",
     "displayRows": 8,
     "customTitle": "Finish Line Display",
-    "label": "TV in Hall A"
+    "label": "TV in Hall A",
+    "assets": {
+      "logoUrl": "data:image/png;base64,iVBORw0KGgo...",
+      "footerImageUrl": "https://example.com/banner.jpg"
+    }
   }
 }
 ```
@@ -92,6 +111,7 @@ Sent by server when:
 | `custom` | object | Custom parameters (key-value) |
 | `label` | string | Admin-assigned label |
 | `clientId` | string | Server-assigned client identifier (see below) |
+| `assets` | object | Asset images (logoUrl, partnerLogoUrl, footerImageUrl) |
 
 Only set parameters are included. Empty/undefined values are omitted.
 
@@ -157,6 +177,12 @@ Optional message for client to report its current state:
 ### Handling ConfigPush
 
 ```typescript
+interface AssetUrls {
+  logoUrl?: string;
+  partnerLogoUrl?: string;
+  footerImageUrl?: string;
+}
+
 interface ConfigPushData {
   type?: 'vertical' | 'ledwall';
   displayRows?: number;
@@ -166,6 +192,7 @@ interface ConfigPushData {
   showResults?: boolean;
   custom?: Record<string, string | number | boolean>;
   label?: string;
+  assets?: AssetUrls;
 }
 
 class ScoreboardClient {
@@ -310,6 +337,19 @@ class ConfigAwareScoreboard {
       document.title = this.config.customTitle;
     }
 
+    // Apply assets (logos, banners)
+    if (this.config.assets) {
+      if (this.config.assets.logoUrl) {
+        this.setLogo(this.config.assets.logoUrl);
+      }
+      if (this.config.assets.partnerLogoUrl) {
+        this.setPartnerLogo(this.config.assets.partnerLogoUrl);
+      }
+      if (this.config.assets.footerImageUrl) {
+        this.setFooterBanner(this.config.assets.footerImageUrl);
+      }
+    }
+
     // Report state back
     this.reportState();
   }
@@ -358,6 +398,9 @@ class ConfigAwareScoreboard {
   private setVerticalMode() { /* ... */ }
   private handleRaceData(message: unknown) { /* ... */ }
   private refresh() { /* ... */ }
+  private setLogo(url: string) { /* ... */ }
+  private setPartnerLogo(url: string) { /* ... */ }
+  private setFooterBanner(url: string) { /* ... */ }
 }
 ```
 

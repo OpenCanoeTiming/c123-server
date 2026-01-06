@@ -695,7 +695,9 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    * Setup Express routes
    */
   private setupRoutes(): void {
-    this.app.use(express.json());
+    // Increase JSON body limit for asset uploads (base64 encoded images)
+    // Base64 encoding adds ~33% overhead, so 50mb allows ~37mb original files
+    this.app.use(express.json({ limit: '50mb' }));
 
     // CORS headers
     this.app.use((_req: Request, res: Response, next: NextFunction) => {
@@ -1485,6 +1487,8 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
             showOnCourse: storedConfig.showOnCourse,
             showResults: storedConfig.showResults,
             custom: storedConfig.custom,
+            clientId: storedConfig.clientId,
+            assets: storedConfig.assets,
           }
         : null,
       clientState: firstSession?.getClientState() ?? null,
@@ -2885,6 +2889,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     function openClientModal(configKey) {
       currentModalIp = configKey;
       const client = clientsData.find(c => (c.configKey || c.ip) === configKey);
+      console.log('openClientModal', configKey, 'client:', client, 'serverConfig:', client?.serverConfig);
 
       // Show configKey and IP info
       const idInfo = client?.hasExplicitId

@@ -189,6 +189,63 @@ Centrální správa obrázků (logo, partneři, footer) s distribucí přes Conf
 
 ---
 
+### Review Fáze A (6.1.2026)
+
+**Celkové hodnocení: ✅ Implementace kompletní, ✅ Dokumentace kompletní**
+
+#### Co je implementováno a funguje
+
+| Oblast | Stav | Poznámka |
+|--------|------|----------|
+| **A1.1 Server config** | ✅ | `AssetUrls` typ v `src/config/types.ts`, podpora URL i data URI |
+| **A1.2 ConfigPush integrace** | ✅ | Merge logika per-client > global v `ScoreboardSession.getEffectiveAssets()` |
+| **A1.3 Persistentní ukládání** | ✅ | Kompletní API v `AppSettingsManager` (get/set/clear default i per-client) |
+| **A2.1 Upload/input** | ✅ | Drag&drop, paste, file input, URL fetch |
+| **A2.2 Auto resize** | ✅ | Canvas-based resize (200x80, 300x80, 1920x200) |
+| **A2.3 Preview/validace** | ✅ | Preview s rozměry, warning při >500KB |
+| **A2.4 UI integrace** | ✅ | Default Assets sekce + per-client overrides v modalu |
+
+#### REST API endpointy (implementovány, ale nezdokumentovány)
+
+| Endpoint | Metoda | Účel |
+|----------|--------|------|
+| `/api/config/assets` | GET | Získání default assets |
+| `/api/config/assets` | PUT | Nastavení (partial update) |
+| `/api/config/assets/:key` | DELETE | Smazání konkrétního assetu |
+
+#### Testy
+
+- ✅ Všech 443 testů prošlo
+- ✅ Assets API testy v `UnifiedServer.test.ts`
+
+#### Zjištěné nedostatky v dokumentaci (opraveno ✅)
+
+| Dokument | Chybělo | Stav |
+|----------|---------|------|
+| `docs/REST-API.md` | Celá sekce "Assets API" s endpointy | ✅ Doplněno |
+| `docs/CLIENT-CONFIG.md` | Zmínka o `assets` poli v ConfigPush | ✅ Doplněno |
+| `docs/C123-PROTOCOL.md` | Dokumentace `assets` v ConfigPush zprávě | ✅ Doplněno |
+
+### Doplnění dokumentace ✅
+
+#### Krok A3.1: Doplnit REST-API.md ✅
+
+- [x] Přidat sekci "Assets API" s endpointy GET/PUT/DELETE
+- [x] Dokumentovat formát AssetUrls (logoUrl, partnerLogoUrl, footerImageUrl)
+- [x] Příklady požadavků a odpovědí
+
+#### Krok A3.2: Doplnit CLIENT-CONFIG.md ✅
+
+- [x] Přidat `assets` pole do ConfigPush dokumentace
+- [x] Příklad ConfigPush s assets
+- [x] Vysvětlit merge logiku (per-client > global > fallback)
+
+#### Krok A3.3: Doplnit C123-PROTOCOL.md ✅
+
+- [x] Přidat `assets` do ConfigPush message dokumentace
+
+---
+
 ## Reference
 
 | Zdroj | Popis |

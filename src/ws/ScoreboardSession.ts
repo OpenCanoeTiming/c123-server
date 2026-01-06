@@ -266,31 +266,32 @@ export class ScoreboardSession {
 
     if (this.serverConfig) {
       // Copy only defined values from server config
-      if (this.serverConfig.type !== undefined) {
+      // Note: null means "cleared/use default", so we skip both undefined and null
+      if (this.serverConfig.type != null) {
         result.type = this.serverConfig.type;
       }
-      if (this.serverConfig.displayRows !== undefined) {
+      if (this.serverConfig.displayRows != null) {
         result.displayRows = this.serverConfig.displayRows;
       }
-      if (this.serverConfig.customTitle !== undefined) {
+      if (this.serverConfig.customTitle != null) {
         result.customTitle = this.serverConfig.customTitle;
       }
-      if (this.serverConfig.raceFilter !== undefined) {
+      if (this.serverConfig.raceFilter != null) {
         result.raceFilter = [...this.serverConfig.raceFilter];
       }
-      if (this.serverConfig.showOnCourse !== undefined) {
+      if (this.serverConfig.showOnCourse != null) {
         result.showOnCourse = this.serverConfig.showOnCourse;
       }
-      if (this.serverConfig.showResults !== undefined) {
+      if (this.serverConfig.showResults != null) {
         result.showResults = this.serverConfig.showResults;
       }
-      if (this.serverConfig.custom !== undefined) {
+      if (this.serverConfig.custom != null) {
         result.custom = { ...this.serverConfig.custom };
       }
-      if (this.serverConfig.label !== undefined) {
+      if (this.serverConfig.label != null) {
         result.label = this.serverConfig.label;
       }
-      if (this.serverConfig.clientId !== undefined) {
+      if (this.serverConfig.clientId != null) {
         result.clientId = this.serverConfig.clientId;
       }
     }
