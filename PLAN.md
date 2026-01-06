@@ -100,10 +100,11 @@ Server je kompletně implementovaný a funkční. Všechny plánované fáze (7-
 
 Před delší pauzou v projektu je třeba zkontrolovat a doplnit dokumentaci.
 
-### Krok 1: Kontrola REST-API.md
-- [ ] Ověřit všechny endpointy vs skutečná implementace
-- [ ] Zkontrolovat response formáty
-- [ ] Doplnit chybějící endpointy
+### Krok 1: Kontrola REST-API.md ✅
+- [x] Ověřit všechny endpointy vs skutečná implementace
+- [x] Zkontrolovat response formáty
+- [x] Doplnit chybějící endpointy (Configuration API, Event API, Logs API)
+- [x] Aktualizovat GET /api/clients o nová pole (configKey, hasExplicitId, sessionCount, ipAddress)
 
 ### Krok 2: Kontrola C123-PROTOCOL.md
 - [ ] Ověřit typy WS zpráv vs kód

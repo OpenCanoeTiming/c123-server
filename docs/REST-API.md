@@ -13,9 +13,12 @@ The C123 Server provides the following APIs:
 | **Discovery API** | `/api/discover` | Server identification for auto-discovery |
 | **Server API** | `/api` | Server status, sources, scoreboards |
 | **XML Data API** | `/api/xml` | Race data from XML file (schedule, results, participants) |
+| **Configuration API** | `/api/config` | Server configuration (XML source, event name) |
+| **Event API** | `/api/event` | Event name management |
 | **Broadcast API** | `/api/broadcast` | Broadcast messages to all clients |
 | **Client Management API** | `/api/clients` | Manage scoreboard client configurations |
 | **Custom Parameters API** | `/api/config/custom-params` | Define custom client parameters |
+| **Logs API** | `/api/logs` | Log entries retrieval |
 
 **Base URL:** `http://<server>:27123`
 
@@ -612,6 +615,322 @@ Force all connected WebSocket clients to refresh their data. Sends a `ForceRefre
 
 ---
 
+## Configuration API
+
+Endpoints for managing server configuration, primarily XML source settings.
+
+### GET /api/config
+
+Get complete server configuration including XML settings and custom parameters.
+
+**Response:**
+
+```json
+{
+  "settings": {
+    "xmlAutoDetect": true,
+    "xmlSourceMode": "auto-offline",
+    "xmlManualPath": null,
+    "eventNameOverride": null,
+    "clientConfigs": {},
+    "customParamDefinitions": []
+  },
+  "xml": {
+    "path": "C:\\Canoe123\\xboard_offline.xml",
+    "source": "autodetect",
+    "autoDetectEnabled": true,
+    "mode": "auto-offline"
+  },
+  "isWindows": true,
+  "settingsPath": "C:\\Users\\User\\AppData\\Roaming\\c123-server\\settings.json"
+}
+```
+
+---
+
+### GET /api/config/xml
+
+Get XML source configuration.
+
+**Response:**
+
+```json
+{
+  "path": "C:\\Canoe123\\xboard_offline.xml",
+  "source": "autodetect",
+  "autoDetectEnabled": true,
+  "mode": "auto-offline",
+  "availablePaths": {
+    "main": {
+      "path": "C:\\Canoe123\\xboard.xml",
+      "exists": true
+    },
+    "offline": {
+      "path": "C:\\Canoe123\\xboard_offline.xml",
+      "exists": true
+    }
+  },
+  "isWindows": true
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `path` | string | Currently active XML path |
+| `source` | string | `"autodetect"`, `"manual"`, or `null` |
+| `autoDetectEnabled` | boolean | Whether autodetection is enabled |
+| `mode` | string | Current mode: `"auto-main"`, `"auto-offline"`, or `"manual"` |
+| `availablePaths` | object | Windows-detected paths (main and offline) |
+| `isWindows` | boolean | Whether server runs on Windows |
+
+---
+
+### POST /api/config/xml
+
+Set XML source configuration. Supports setting manual path or changing mode.
+
+**Request options:**
+
+1. Set manual path (switches to manual mode):
+```json
+{
+  "path": "C:\\MyRace\\data.xml"
+}
+```
+
+2. Switch to auto mode (Windows only):
+```json
+{
+  "mode": "auto-main"
+}
+```
+
+3. Switch to manual mode with path:
+```json
+{
+  "mode": "manual",
+  "path": "C:\\MyRace\\data.xml"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `path` | string | XML file path (required for manual mode) |
+| `mode` | string | `"auto-main"`, `"auto-offline"`, or `"manual"` |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "path": "C:\\MyRace\\data.xml",
+  "source": "manual",
+  "autoDetectEnabled": false,
+  "mode": "manual",
+  "availablePaths": {
+    "main": { "path": "...", "exists": true },
+    "offline": { "path": "...", "exists": true }
+  }
+}
+```
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| 400 | `{ "error": "path is required for manual mode" }` |
+| 400 | `{ "error": "Auto modes are only available on Windows" }` |
+
+---
+
+### POST /api/config/xml/autodetect
+
+Toggle XML autodetection (legacy endpoint, prefer POST /api/config/xml with mode).
+
+**Request:**
+
+```json
+{
+  "enabled": true
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "autoDetectEnabled": true,
+  "mode": "auto-offline",
+  "path": "C:\\Canoe123\\xboard_offline.xml",
+  "source": "autodetect"
+}
+```
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| 400 | `{ "error": "enabled must be a boolean" }` |
+| 400 | `{ "error": "Autodetection is only available on Windows" }` |
+
+---
+
+### GET /api/config/xml/detect
+
+Manually trigger Windows XML path detection (for testing/debugging).
+
+**Response (Windows):**
+
+```json
+{
+  "detected": {
+    "mainXmlPath": "C:\\Canoe123\\xboard.xml",
+    "offlineXmlPath": "C:\\Canoe123\\xboard_offline.xml"
+  },
+  "isWindows": true
+}
+```
+
+**Response (Non-Windows):**
+
+```json
+{
+  "error": "Autodetection is only available on Windows",
+  "isWindows": false
+}
+```
+
+---
+
+## Event API
+
+Manage event name displayed to clients.
+
+### GET /api/event
+
+Get current event name and its source.
+
+**Response:**
+
+```json
+{
+  "name": "Czech Cup 2025",
+  "source": "xml"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Event name or `null` |
+| `source` | string | `"manual"` (override), `"xml"` (from MainTitle), or `null` |
+
+---
+
+### POST /api/event
+
+Set or clear event name override.
+
+**Request (set override):**
+
+```json
+{
+  "name": "My Custom Event Name"
+}
+```
+
+**Request (clear override):**
+
+```json
+{
+  "name": null
+}
+```
+
+or
+
+```json
+{}
+```
+
+**Response (set):**
+
+```json
+{
+  "success": true,
+  "name": "My Custom Event Name",
+  "source": "manual"
+}
+```
+
+**Response (clear):**
+
+```json
+{
+  "success": true,
+  "name": null,
+  "source": null,
+  "message": "Event name override cleared, will use XML MainTitle if available"
+}
+```
+
+---
+
+## Logs API
+
+Access server log entries for debugging and monitoring.
+
+### GET /api/logs
+
+Get log entries from the server's log buffer.
+
+**Query Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `limit` | number | 100 | Maximum entries to return (max: 500) |
+| `offset` | number | 0 | Number of entries to skip |
+| `level` | string | - | Minimum log level: `debug`, `info`, `warn`, `error` |
+| `levels` | string | - | Comma-separated specific levels to include |
+| `search` | string | - | Case-insensitive search in component or message |
+| `order` | string | `desc` | `asc` (oldest first) or `desc` (newest first) |
+
+**Example:**
+
+```
+GET /api/logs?limit=50&level=warn&search=XML
+```
+
+**Response:**
+
+```json
+{
+  "entries": [
+    {
+      "timestamp": "2025-01-02T10:30:00.000Z",
+      "level": "info",
+      "component": "XmlSource",
+      "message": "File changed, reloading",
+      "data": { "path": "..." }
+    }
+  ],
+  "total": 1500,
+  "limit": 50,
+  "offset": 0,
+  "bufferSize": 2000
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `entries` | array | Log entries matching filters |
+| `total` | number | Total entries in buffer |
+| `limit` | number | Applied limit |
+| `offset` | number | Applied offset |
+| `bufferSize` | number | Maximum buffer capacity |
+
+---
+
 ## Client Management API
 
 These endpoints allow managing connected scoreboard clients and their configurations.
@@ -627,9 +946,13 @@ Get list of all clients (online and known offline).
   "clients": [
     {
       "ip": "192.168.1.50",
+      "configKey": "192.168.1.50",
+      "hasExplicitId": false,
       "label": "TV in Hall A",
       "online": true,
       "sessionId": "client-42",
+      "sessionCount": 1,
+      "ipAddress": "192.168.1.50",
       "serverConfig": {
         "type": "ledwall",
         "displayRows": 8
@@ -649,10 +972,14 @@ Get list of all clients (online and known offline).
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `ip` | string | Client IP address |
+| `ip` | string | Client config key (IP or clientId) - for backwards compatibility |
+| `configKey` | string | Client identifier used for config lookup (IP or explicit clientId) |
+| `hasExplicitId` | boolean | True if client provided explicit clientId (not IP-based) |
 | `label` | string | Admin-assigned label |
 | `online` | boolean | Whether client is currently connected |
 | `sessionId` | string | WebSocket session ID (if online) |
+| `sessionCount` | number | Number of active sessions for this configKey |
+| `ipAddress` | string | Actual IP address of connected client (if online) |
 | `serverConfig` | object | Configuration stored on server |
 | `clientState` | object | Last reported state from client |
 | `lastSeen` | string | ISO timestamp of last connection |

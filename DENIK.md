@@ -4,7 +4,27 @@ Záznamy o průběhu vývoje, co fungovalo, co ne, slepé uličky.
 
 ---
 
-## 2026-01-06
+## 2026-01-06 (odpoledne)
+
+### Provedeno
+
+**Revize REST-API.md dokumentace**
+- Porovnání dokumentace vs skutečná implementace v UnifiedServer.ts
+- Doplněny chybějící sekce:
+  - Configuration API (`/api/config`, `/api/config/xml`, `/api/config/xml/autodetect`, `/api/config/xml/detect`)
+  - Event API (`/api/event` GET/POST)
+  - Logs API (`/api/logs`)
+- Aktualizována sekce GET `/api/clients` o nová pole:
+  - `configKey`, `hasExplicitId`, `sessionCount`, `ipAddress`
+- Testy: 413 passed
+
+### Co fungovalo
+- Systematický přístup: grep routes → porovnat s docs → doplnit
+- Vitest s `--run` flag pro non-interactive mode
+
+---
+
+## 2026-01-06 (ráno)
 
 ### Provedeno
 
