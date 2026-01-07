@@ -777,6 +777,66 @@ From analysis of production recordings:
 
 ---
 
+## Network Architecture
+
+The full network architecture of C123 and related components:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Canoe123 (C123)                              │
+│                       192.168.68.xxx                                │
+└───────┬──────────────────────┬──────────────────────┬───────────────┘
+        │                      │                      │
+        ▼                      ▼                      ▼
+   TCP:27333             UDP Broadcast          UDP Broadcast
+   XML stream            → :27333               → :10600
+   (on demand)           XML data               Base64/Encrypted
+        │                      │                      │
+        │                      │                      │
+        ▼                      │                      ▼
+   C123 Server                 │               Mobile app
+   transforms to:              │               (penalty entry)
+        │                      │
+        ▼                      │
+   WS:3001 JSON                │
+        │                      ▼
+        ▼                 Alternative access
+   Scoreboard             for direct clients
+   (canoe-scoreboard-v3)
+```
+
+### Port Summary
+
+**Canoe123.exe:**
+| Protocol | Port | Purpose |
+|----------|------|---------|
+| TCP | 27333 | XML server (primary) |
+| UDP | 27333 | XML broadcast |
+| UDP | 10600 | Mobile app communication |
+
+**C123 Server:**
+| Protocol | Port | Purpose |
+|----------|------|---------|
+| HTTP | 3001 | REST API |
+| WS | 3001 | WebSocket (main) |
+| WS | 3001/admin | WebSocket (admin) |
+
+---
+
+## UDP:10600 - Mobile Application
+
+Communication channel for the mobile penalty entry application.
+
+**Characteristics:**
+- Protocol: UDP broadcast
+- Target: 255.255.255.255:10600
+- Format: Base64 encoded (likely encrypted)
+- Frequency: ~3 messages/second
+
+**Note:** This channel is used exclusively by the official C123 mobile app for entering gate penalties. Documentation may be added in the future if needed.
+
+---
+
 ## See Also
 
 - [REST-API.md](REST-API.md) - REST API for XML file data
