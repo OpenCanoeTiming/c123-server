@@ -21,6 +21,19 @@ export interface AssetUrls {
   footerImageUrl?: string;
 }
 
+/**
+ * Asset URLs for ConfigPush messages
+ * Extends AssetUrls to support null values for explicit reset.
+ * - string: Set to this URL
+ * - null: Reset to default (client should clear localStorage)
+ * - undefined: No change (client keeps current value)
+ */
+export interface AssetUrlsForPush {
+  logoUrl?: string | null;
+  partnerLogoUrl?: string | null;
+  footerImageUrl?: string | null;
+}
+
 // ============================================================================
 // Client Configuration Types
 // ============================================================================

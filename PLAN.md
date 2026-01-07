@@ -105,7 +105,7 @@ Označuje aktuálně jedoucí kategorii v Results - klíčové pro sledování f
 
 ## Plánované úpravy: Assets
 
-### A1: Reset logo do default ⬜
+### A1: Reset logo do default ✅
 
 **Problém:** Když admin vymaže logo na serveru, scoreboard ho má stále v localStorage. Server pošle ConfigPush bez daného assetu (undefined), ale scoreboard nerozlišuje:
 - `undefined` = nezměněno (ponechat localStorage)

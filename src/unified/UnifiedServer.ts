@@ -446,6 +446,74 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
+   * Broadcast default assets change to all connected clients
+   * @param clearedKeys - Asset keys that were cleared (will be sent as null)
+   */
+  broadcastDefaultAssetsChange(clearedKeys?: Array<'logoUrl' | 'partnerLogoUrl' | 'footerImageUrl'>): number {
+    const settings = getAppSettings();
+    const defaultAssets = settings.getDefaultAssets();
+
+    let sentCount = 0;
+
+    for (const [clientId, session] of this.sessions) {
+      if (!session.isConnected()) {
+        // Clean up dead connections
+        this.sessions.delete(clientId);
+        this.emit('disconnection', clientId);
+        continue;
+      }
+
+      // Update session's default assets reference
+      session.setDefaultAssets(defaultAssets);
+
+      // Build assets object with null for cleared keys
+      const assetsForPush: Record<string, string | null> = {};
+
+      // Add current values
+      if (defaultAssets) {
+        if (defaultAssets.logoUrl) assetsForPush.logoUrl = defaultAssets.logoUrl;
+        if (defaultAssets.partnerLogoUrl) assetsForPush.partnerLogoUrl = defaultAssets.partnerLogoUrl;
+        if (defaultAssets.footerImageUrl) assetsForPush.footerImageUrl = defaultAssets.footerImageUrl;
+      }
+
+      // Add null for cleared keys
+      if (clearedKeys) {
+        for (const key of clearedKeys) {
+          assetsForPush[key] = null;
+        }
+      }
+
+      // Only send if there's something to push
+      if (Object.keys(assetsForPush).length === 0) {
+        continue;
+      }
+
+      // Get effective config (without assets - we'll add our own)
+      const config = session.getEffectiveConfig();
+      // Override assets with our explicit nulls
+      const configWithAssets = {
+        ...config,
+        assets: assetsForPush,
+      };
+
+      const message = {
+        type: 'ConfigPush' as const,
+        timestamp: new Date().toISOString(),
+        data: configWithAssets,
+      };
+
+      session.sendRaw(JSON.stringify(message));
+      sentCount++;
+    }
+
+    Logger.info(
+      'Unified',
+      `Broadcast assets change to ${sentCount} clients${clearedKeys ? ` (cleared: ${clearedKeys.join(', ')})` : ''}`,
+    );
+    return sentCount;
+  }
+
+  /**
    * Get clients data for API and WebSocket broadcast
    * Returns sorted list of all known clients (online + offline)
    */
@@ -1866,16 +1934,32 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     }
 
     // Build update object (only include provided values)
+    // Track which keys are being cleared (set to null)
     const updates: Record<string, string | undefined> = {};
-    if (logoUrl !== undefined) updates.logoUrl = logoUrl ?? undefined;
-    if (partnerLogoUrl !== undefined) updates.partnerLogoUrl = partnerLogoUrl ?? undefined;
-    if (footerImageUrl !== undefined) updates.footerImageUrl = footerImageUrl ?? undefined;
+    const clearedKeys: Array<'logoUrl' | 'partnerLogoUrl' | 'footerImageUrl'> = [];
+
+    if (logoUrl !== undefined) {
+      updates.logoUrl = logoUrl ?? undefined;
+      if (logoUrl === null) clearedKeys.push('logoUrl');
+    }
+    if (partnerLogoUrl !== undefined) {
+      updates.partnerLogoUrl = partnerLogoUrl ?? undefined;
+      if (partnerLogoUrl === null) clearedKeys.push('partnerLogoUrl');
+    }
+    if (footerImageUrl !== undefined) {
+      updates.footerImageUrl = footerImageUrl ?? undefined;
+      if (footerImageUrl === null) clearedKeys.push('footerImageUrl');
+    }
 
     // Save to settings
     const settings = getAppSettings();
     settings.setDefaultAssets(updates);
 
     Logger.info('Unified', `Updated default assets: ${Object.keys(updates).join(', ')}`);
+
+    // Broadcast to all connected clients
+    // Pass clearedKeys so clients know to reset those to default
+    this.broadcastDefaultAssetsChange(clearedKeys.length > 0 ? clearedKeys : undefined);
 
     // Return updated assets
     const assets = settings.getDefaultAssets() || {};
@@ -1908,9 +1992,13 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
     // Clear the asset
     const settings = getAppSettings();
-    settings.clearDefaultAsset(key as 'logoUrl' | 'partnerLogoUrl' | 'footerImageUrl');
+    const assetKey = key as 'logoUrl' | 'partnerLogoUrl' | 'footerImageUrl';
+    settings.clearDefaultAsset(assetKey);
 
     Logger.info('Unified', `Cleared default asset: ${key}`);
+
+    // Broadcast to all connected clients with null for cleared asset
+    this.broadcastDefaultAssetsChange([assetKey]);
 
     // Return updated assets
     const assets = settings.getDefaultAssets() || {};
