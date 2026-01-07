@@ -103,6 +103,64 @@ Označuje aktuálně jedoucí kategorii v Results - klíčové pro sledování f
 
 ---
 
+## Plánované úpravy: Assets
+
+### A1: Reset logo do default ⬜
+
+**Problém:** Když admin vymaže logo na serveru, scoreboard ho má stále v localStorage. Server pošle ConfigPush bez daného assetu (undefined), ale scoreboard nerozlišuje:
+- `undefined` = nezměněno (ponechat localStorage)
+- `undefined` = smazáno (vymazat z localStorage, použít default)
+
+**Řešení:** Explicitní signalizace resetu pomocí `null`:
+
+1. **C123 Server** (`src/unified/UnifiedServer.ts`):
+   - Při DELETE /api/config/assets/:key nastavit hodnotu na `null` (ne undefined)
+   - ConfigPush pak pošle `{ logoUrl: null }` místo `{ }` bez klíče
+
+2. **C123 Server** (`src/protocol/types.ts`):
+   - Upravit typy v AssetUrls: `logoUrl?: string | null`
+
+3. **Scoreboard-V3** (`src/providers/C123ServerProvider.ts`):
+   - V handleConfigPush() rozlišovat:
+     - `undefined` = nezměněno
+     - `null` = vymazat z localStorage
+     - `string` = nastavit novou hodnotu
+
+4. **Scoreboard-V3** (`src/utils/assetStorage.ts`):
+   - Přidat funkci `clearAsset(key)` pro mazání jednotlivých assetů
+
+**Soubory k úpravě:**
+- `c123-server/src/config/types.ts` - typy AssetUrls
+- `c123-server/src/config/AppSettings.ts` - clearDefaultAsset vrací null
+- `c123-server/src/unified/UnifiedServer.ts` - DELETE endpoint logika
+- `c123-server/src/ws/ScoreboardSession.ts` - sendConfigPush() zahrnuje null hodnoty
+- `canoe-scoreboard-v3/src/types/c123server.ts` - ConfigPush typy
+- `canoe-scoreboard-v3/src/providers/C123ServerProvider.ts` - handleConfigPush
+- `canoe-scoreboard-v3/src/utils/assetStorage.ts` - partial clear
+
+---
+
+### A2: Podpora SVG logo přes base64 ⬜
+
+**Stav:** Částečně podporováno - validace přijímá `data:image/*` včetně SVG.
+
+**Potřeba ověřit:**
+1. Validace regex `^data:image\/` akceptuje `data:image/svg+xml;base64,...`
+2. Admin UI umí uploadnout SVG a převést na base64
+3. Scoreboard správně renderuje SVG z data URI
+
+**Kroky:**
+1. Ověřit validaci v `c123-server/src/unified/UnifiedServer.ts` - ✅ funguje
+2. Admin UI (`src/admin/dashboard.html`) - zkontrolovat upload handler
+3. Přidat explicitní test pro SVG formát
+4. Dokumentovat v `docs/REST-API.md` podporované formáty
+
+**Soubory k úpravě:**
+- `c123-server/src/admin/dashboard.html` - upload handler (pokud nefunguje)
+- `c123-server/docs/REST-API.md` - dokumentace formátů
+
+---
+
 ## Reference
 
 | Zdroj | Popis |
