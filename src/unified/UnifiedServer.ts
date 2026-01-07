@@ -473,19 +473,27 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       session.setDefaultAssets(defaultAssets);
 
       // Build assets object with null for cleared keys
+      // But respect per-client overrides (they have priority over defaults)
       const assetsForPush: Record<string, string | null> = {};
+      const clientAssets = session.getServerConfig()?.assets || {};
 
-      // Add current values
-      if (defaultAssets) {
-        if (defaultAssets.logoUrl) assetsForPush.logoUrl = defaultAssets.logoUrl;
-        if (defaultAssets.partnerLogoUrl) assetsForPush.partnerLogoUrl = defaultAssets.partnerLogoUrl;
-        if (defaultAssets.footerImageUrl) assetsForPush.footerImageUrl = defaultAssets.footerImageUrl;
-      }
+      // Add current values (merged: per-client > default)
+      const logoValue = clientAssets.logoUrl || defaultAssets?.logoUrl;
+      const partnerValue = clientAssets.partnerLogoUrl || defaultAssets?.partnerLogoUrl;
+      const footerValue = clientAssets.footerImageUrl || defaultAssets?.footerImageUrl;
 
-      // Add null for cleared keys
+      if (logoValue) assetsForPush.logoUrl = logoValue;
+      if (partnerValue) assetsForPush.partnerLogoUrl = partnerValue;
+      if (footerValue) assetsForPush.footerImageUrl = footerValue;
+
+      // Add null for cleared keys ONLY if client doesn't have per-client override
       if (clearedKeys) {
         for (const key of clearedKeys) {
-          assetsForPush[key] = null;
+          if (!clientAssets[key]) {
+            // No per-client override, so send null to clear localStorage
+            assetsForPush[key] = null;
+          }
+          // If client has per-client override, don't send null - keep their value
         }
       }
 
