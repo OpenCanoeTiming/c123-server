@@ -14,6 +14,16 @@
 
 Server je kompletně implementovaný a funkční.
 
+### Údržba dokumentace
+
+| Krok | Status | Popis |
+|------|--------|-------|
+| D1 | ✅ | Aktualizovat odkazy na analysis/ po její reorganizaci |
+| D2 | ✅ | Sjednotit C123 protokol dokumentaci s analysis/ |
+| D3 | ⬜ | Přidat příklady XML do docs/ nebo odkázat na analysis/captures/ |
+
+**D1-D2 dokončeno:** `docs/C123-PROTOCOL.md` nyní odkazuje na `analysis/c123-protocol.md` pro nativní protokol.
+
 | Oblast | Popis |
 |--------|-------|
 | **TCP/UDP** | Připojení k C123 na :27333, reconnect logika, UDP discovery |
