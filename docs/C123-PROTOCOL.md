@@ -354,7 +354,7 @@ See [INTEGRATION.md](INTEGRATION.md#br1br2-merge-strategy) for details.
 ## See Also
 
 - [REST-API.md](REST-API.md) - REST endpoints
+- [XML-FORMAT.md](XML-FORMAT.md) - XML file format with examples
 - [CLIENT-CONFIG.md](CLIENT-CONFIG.md) - Remote client configuration
 - [INTEGRATION.md](INTEGRATION.md) - Scoreboard integration guide
-- `analysis/c123-protocol.md` - Native C123 TCP/UDP protocol
-- `analysis/c123-xml-format.md` - XML file format
+- `analysis/c123-protocol.md` - Native C123 TCP/UDP protocol (detailed)

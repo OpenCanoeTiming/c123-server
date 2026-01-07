@@ -20,9 +20,9 @@ Server je kompletně implementovaný a funkční.
 |------|--------|-------|
 | D1 | ✅ | Aktualizovat odkazy na analysis/ po její reorganizaci |
 | D2 | ✅ | Sjednotit C123 protokol dokumentaci s analysis/ |
-| D3 | ⬜ | Přidat příklady XML do docs/ nebo odkázat na analysis/captures/ |
+| D3 | ✅ | Přidat příklady XML do docs/ nebo odkázat na analysis/captures/ |
 
-**D1-D2 dokončeno:** `docs/C123-PROTOCOL.md` nyní odkazuje na `analysis/c123-protocol.md` pro nativní protokol.
+**D1-D3 dokončeno:** Dokumentace odkazuje na `analysis/` pro detaily; `docs/XML-FORMAT.md` obsahuje příklady XML struktury.
 
 | Oblast | Popis |
 |--------|-------|
