@@ -314,8 +314,14 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    * Push configuration to a client by config key (clientId or IP)
    * Updates server config and sends ConfigPush to all connected sessions with that configKey
    * Returns number of sessions that received the push
+   *
+   * @param configKey - Client identifier (explicit clientId or IP address)
+   * @param clearedAssetKeys - Asset keys that were explicitly cleared (will be sent as null)
    */
-  pushConfigToConfigKey(configKey: string): number {
+  pushConfigToConfigKey(
+    configKey: string,
+    clearedAssetKeys?: Array<'logoUrl' | 'partnerLogoUrl' | 'footerImageUrl'>,
+  ): number {
     const sessions = this.getSessionsByConfigKey(configKey);
     const settings = getAppSettings();
     const config = settings.getClientConfig(configKey);
@@ -328,7 +334,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     for (const session of sessions) {
       if (session.isConnected()) {
         session.setServerConfig(config);
-        session.sendConfigPush();
+        session.sendConfigPush(clearedAssetKeys);
         count++;
       }
     }
@@ -1651,12 +1657,26 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { label, lastSeen, ...configToSave } = config;
 
+    // Track which asset keys are being cleared (set to null)
+    const clearedAssetKeys: Array<'logoUrl' | 'partnerLogoUrl' | 'footerImageUrl'> = [];
+    if (configToSave.assets) {
+      const assetKeys = ['logoUrl', 'partnerLogoUrl', 'footerImageUrl'] as const;
+      for (const key of assetKeys) {
+        if ((configToSave.assets as Record<string, unknown>)[key] === null) {
+          clearedAssetKeys.push(key);
+        }
+      }
+    }
+
     // Save configuration
     const settings = getAppSettings();
     const savedConfig = settings.setClientConfig(ip, configToSave);
 
-    // Push to online clients
-    const pushedCount = this.pushConfigToIp(ip);
+    // Push to online clients (with cleared asset keys so they get null values)
+    const pushedCount = this.pushConfigToConfigKey(
+      ip,
+      clearedAssetKeys.length > 0 ? clearedAssetKeys : undefined,
+    );
 
     Logger.info('Unified', `Updated config for client ${ip}, pushed to ${pushedCount} session(s)`);
 

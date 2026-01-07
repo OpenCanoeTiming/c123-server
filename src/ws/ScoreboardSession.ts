@@ -333,13 +333,28 @@ export class ScoreboardSession {
   /**
    * Send ConfigPush message to this client
    * Sends only defined parameters (undefined = client uses its default)
+   *
+   * @param clearedAssetKeys - Asset keys that were explicitly cleared (will be sent as null)
    */
-  sendConfigPush(): void {
+  sendConfigPush(clearedAssetKeys?: Array<'logoUrl' | 'partnerLogoUrl' | 'footerImageUrl'>): void {
     if (!this.isConnected()) {
       return;
     }
 
     const config = this.getEffectiveConfig();
+
+    // Add null values for explicitly cleared asset keys
+    if (clearedAssetKeys && clearedAssetKeys.length > 0) {
+      const assetsWithNulls: Record<string, string | null> = { ...(config.assets || {}) };
+      for (const key of clearedAssetKeys) {
+        // Only send null if there's no effective value (i.e., no default)
+        if (!assetsWithNulls[key]) {
+          assetsWithNulls[key] = null;
+        }
+      }
+      // Type assertion needed because we're adding null values
+      (config as { assets?: Record<string, string | null> }).assets = assetsWithNulls;
+    }
 
     // Only send if there's something to push
     if (Object.keys(config).length === 0) {
