@@ -1238,6 +1238,24 @@ describe('UnifiedServer', () => {
         expect(response.status).toBe(200);
         expect(data.success).toBe(true);
       });
+
+      it('should accept SVG data URI', async () => {
+        // Base64 encoded simple SVG: <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect fill="red" width="100" height="100"/></svg>
+        const svgBase64 =
+          'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIj48cmVjdCBmaWxsPSJyZWQiIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIi8+PC9zdmc+';
+        const response = await fetch(`http://localhost:${port}/api/config/assets`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            logoUrl: `data:image/svg+xml;base64,${svgBase64}`,
+          }),
+        });
+        const data = (await response.json()) as AssetsResponse;
+
+        expect(response.status).toBe(200);
+        expect(data.success).toBe(true);
+        expect(data.assets?.logoUrl).toContain('data:image/svg+xml');
+      });
     });
 
     describe('DELETE /api/config/assets/:key', () => {

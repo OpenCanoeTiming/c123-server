@@ -3283,7 +3283,21 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       const limits = ASSET_SIZE_LIMITS[key];
       if (!limits) return;
 
-      // Read and resize image
+      // SVG files: keep as-is (vector format, no resize needed)
+      if (file.type === 'image/svg+xml') {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const dataUrl = e.target.result;
+          // Store and update UI (SVG dimensions are not meaningful, use placeholder)
+          modalAssets[key] = dataUrl;
+          updateModalAssetPreview(key, dataUrl);
+          updateModalAssetInfo(key, dataUrl, 'SVG', 'vector');
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      // Read and resize raster image
       const reader = new FileReader();
       reader.onload = function(e) {
         const img = new Image();
@@ -3305,7 +3319,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
 
-          // Determine output format
+          // Determine output format (preserve PNG transparency, convert others to JPEG)
           const outputType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
           const quality = outputType === 'image/jpeg' ? 0.85 : undefined;
           const dataUrl = canvas.toDataURL(outputType, quality);
@@ -3511,7 +3525,19 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       const limits = ASSET_SIZE_LIMITS[key];
       if (!limits) return;
 
-      // Read and resize image
+      // SVG files: keep as-is (vector format, no resize needed)
+      if (file.type === 'image/svg+xml') {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const dataUrl = e.target.result;
+          // Save to server (SVG dimensions are not meaningful)
+          saveAsset(key, dataUrl, 'SVG', 'vector');
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      // Read and resize raster image
       const reader = new FileReader();
       reader.onload = function(e) {
         const img = new Image();
@@ -3533,7 +3559,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
 
-          // Determine output format
+          // Determine output format (preserve PNG transparency, convert others to JPEG)
           const outputType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
           const quality = outputType === 'image/jpeg' ? 0.85 : undefined;
           const dataUrl = canvas.toDataURL(outputType, quality);

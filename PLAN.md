@@ -140,24 +140,20 @@ Označuje aktuálně jedoucí kategorii v Results - klíčové pro sledování f
 
 ---
 
-### A2: Podpora SVG logo přes base64 ⬜
+### A2: Podpora SVG logo přes base64 ✅
 
-**Stav:** Částečně podporováno - validace přijímá `data:image/*` včetně SVG.
+**Stav:** Kompletně implementováno.
 
-**Potřeba ověřit:**
-1. Validace regex `^data:image\/` akceptuje `data:image/svg+xml;base64,...`
-2. Admin UI umí uploadnout SVG a převést na base64
-3. Scoreboard správně renderuje SVG z data URI
+**Co bylo uděláno:**
+1. ✅ Validace REST API akceptuje `data:image/svg+xml;base64,...`
+2. ✅ Admin UI upload handler upraven - SVG soubory jsou zachovány jako vektorový formát (bez rasterizace přes canvas)
+3. ✅ Přidán test pro SVG formát v `UnifiedServer.test.ts`
+4. ✅ Dokumentace podporovaných formátů v `docs/REST-API.md`
 
-**Kroky:**
-1. Ověřit validaci v `c123-server/src/unified/UnifiedServer.ts` - ✅ funguje
-2. Admin UI (`src/admin/dashboard.html`) - zkontrolovat upload handler
-3. Přidat explicitní test pro SVG formát
-4. Dokumentovat v `docs/REST-API.md` podporované formáty
-
-**Soubory k úpravě:**
-- `c123-server/src/admin/dashboard.html` - upload handler (pokud nefunguje)
-- `c123-server/docs/REST-API.md` - dokumentace formátů
+**Upravené soubory:**
+- `c123-server/src/unified/UnifiedServer.ts` - `processModalAssetFile()` a `processAssetFile()` nyní zachovávají SVG
+- `c123-server/src/unified/__tests__/UnifiedServer.test.ts` - nový test "should accept SVG data URI"
+- `c123-server/docs/REST-API.md` - tabulka podporovaných formátů
 
 ---
 

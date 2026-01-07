@@ -1219,7 +1219,20 @@ Assets can be specified as:
 - **URL**: `https://example.com/logo.png` - fetched from network
 - **Data URI**: `data:image/png;base64,iVBORw0KGgo...` - embedded base64
 
-The Admin UI automatically resizes uploaded images to recommended dimensions and converts them to data URIs for offline use.
+**Supported image formats:**
+
+| Format | MIME Type | Notes |
+|--------|-----------|-------|
+| PNG | `image/png` | Preserves transparency |
+| JPEG | `image/jpeg` | Best for photos |
+| SVG | `image/svg+xml` | Vector format, not resized |
+| GIF | `image/gif` | Converted to JPEG on upload |
+| WebP | `image/webp` | Converted to JPEG on upload |
+
+**Admin UI behavior:**
+- Raster images (PNG, JPEG, GIF, WebP) are automatically resized to recommended dimensions
+- SVG files are preserved as-is (vector format, no resize needed)
+- All uploads are converted to data URIs for offline use
 
 ---
 
