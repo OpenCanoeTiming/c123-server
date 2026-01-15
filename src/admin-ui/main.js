@@ -162,6 +162,7 @@ function withLoading(button, asyncFn) {
 // ===========================================
 
 let currentTab = 'sources';
+const validTabs = ['sources', 'xml', 'clients', 'assets', 'logs'];
 
 function switchTab(tabId) {
   // Update tab buttons
@@ -169,11 +170,14 @@ function switchTab(tabId) {
     const isActive = tab.dataset.tab === tabId;
     tab.classList.toggle('active', isActive);
     tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    tab.setAttribute('tabindex', isActive ? '0' : '-1');
   });
 
   // Update tab panels
   document.querySelectorAll('.tab-panel').forEach(function(panel) {
-    panel.classList.toggle('active', panel.id === 'panel-' + tabId);
+    const isActive = panel.id === 'panel-' + tabId;
+    panel.classList.toggle('active', isActive);
+    panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
   });
 
   currentTab = tabId;
@@ -184,10 +188,50 @@ function switchTab(tabId) {
 
 function initTabFromHash() {
   const hash = window.location.hash.replace('#', '');
-  const validTabs = ['sources', 'xml', 'clients', 'assets', 'logs'];
   if (hash && validTabs.includes(hash)) {
     switchTab(hash);
   }
+}
+
+/**
+ * Keyboard navigation for tabs (Arrow keys, Home, End)
+ */
+function initTabKeyboardNavigation() {
+  const tablist = document.querySelector('[role="tablist"]');
+  if (!tablist) return;
+
+  tablist.addEventListener('keydown', function(e) {
+    const tabs = Array.from(tablist.querySelectorAll('[role="tab"]'));
+    const currentIndex = validTabs.indexOf(currentTab);
+
+    let newIndex = -1;
+
+    switch (e.key) {
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        e.preventDefault();
+        newIndex = currentIndex > 0 ? currentIndex - 1 : tabs.length - 1;
+        break;
+      case 'ArrowRight':
+      case 'ArrowDown':
+        e.preventDefault();
+        newIndex = currentIndex < tabs.length - 1 ? currentIndex + 1 : 0;
+        break;
+      case 'Home':
+        e.preventDefault();
+        newIndex = 0;
+        break;
+      case 'End':
+        e.preventDefault();
+        newIndex = tabs.length - 1;
+        break;
+    }
+
+    if (newIndex !== -1) {
+      switchTab(validTabs[newIndex]);
+      tabs[newIndex].focus();
+    }
+  });
 }
 
 // ===========================================
@@ -1048,6 +1092,14 @@ function initModalAssetHandlers() {
       }
     });
 
+    // Keyboard activation (Enter or Space)
+    dropZone.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        fileInput.click();
+      }
+    });
+
     // File input change
     fileInput.addEventListener('change', function(e) {
       if (e.target.files && e.target.files[0]) {
@@ -1307,6 +1359,14 @@ function initAssetHandlers() {
     // Click to upload
     dropZone.addEventListener('click', function() {
       fileInput.click();
+    });
+
+    // Keyboard activation (Enter or Space)
+    dropZone.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        fileInput.click();
+      }
     });
 
     // File input change
@@ -1612,6 +1672,9 @@ function init() {
 
   // Listen for hash changes
   window.addEventListener('hashchange', initTabFromHash);
+
+  // Initialize keyboard navigation for tabs
+  initTabKeyboardNavigation();
 
   // Initialize handlers
   initXmlModeHandlers();

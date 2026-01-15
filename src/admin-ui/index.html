@@ -7,87 +7,91 @@
   <link rel="stylesheet" href="/admin-ui/styles.css">
 </head>
 <body>
+  <!-- Skip link for keyboard navigation -->
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
   <!-- Header with global status -->
-  <header class="header">
+  <header class="header" role="banner">
     <span class="header-title">C123-SERVER</span>
-    <div class="header-status">
-      <span class="header-status-item" id="headerPort">:27123</span>
+    <div class="header-status" role="status" aria-label="Connection status">
+      <span class="header-status-item" id="headerPort" aria-label="Server port">:27123</span>
       <span class="header-status-item">
-        <span class="status" id="headerTcpStatus"></span>
+        <span class="status" id="headerTcpStatus" role="img" aria-label="TCP status"></span>
         <span>TCP</span>
       </span>
       <span class="header-status-item">
-        <span class="status" id="headerUdpStatus"></span>
+        <span class="status" id="headerUdpStatus" role="img" aria-label="UDP status"></span>
         <span>UDP</span>
       </span>
       <span class="header-status-item">
-        <span class="status" id="headerXmlStatus"></span>
+        <span class="status" id="headerXmlStatus" role="img" aria-label="XML status"></span>
         <span>XML</span>
       </span>
-      <span class="header-live" id="headerLive" style="display: none;">
-        <span class="status connected"></span>
+      <span class="header-live" id="headerLive" style="display: none;" role="status" aria-live="polite">
+        <span class="status connected" role="img" aria-label="Live indicator"></span>
         <span>LIVE</span>
       </span>
     </div>
   </header>
 
-  <main class="main-content">
+  <main class="main-content" id="main-content">
 
   <!-- Event Info Bar (prominent position) -->
-  <div class="event-bar">
+  <section class="event-bar" aria-labelledby="currentRace">
     <div class="event-bar-main">
-      <div class="event-race" id="currentRace">-</div>
+      <h1 class="event-race" id="currentRace">-</h1>
       <div class="event-name">
         Event: <span class="event-name-value" id="eventName">-</span>
         <span id="eventSource" style="color: var(--text-muted);"></span>
       </div>
     </div>
-    <div class="event-bar-form">
-      <input type="text" id="eventNameInput" placeholder="Event name override">
+    <div class="event-bar-form" role="group" aria-label="Event name settings">
+      <label for="eventNameInput" class="visually-hidden">Event name override</label>
+      <input type="text" id="eventNameInput" placeholder="Event name override" aria-describedby="eventError">
       <button class="btn" onclick="setEventName()">Set</button>
       <button class="btn btn-secondary" onclick="clearEventName()">Clear</button>
     </div>
-    <div id="eventError" class="error" style="display: none;"></div>
-  </div>
+    <div id="eventError" class="error" role="alert" style="display: none;"></div>
+  </section>
 
   <!-- Compact Status Bar -->
-  <div class="status-bar" id="statusBar">
+  <div class="status-bar" id="statusBar" role="status" aria-label="Data sources status">
     <!-- Dynamically populated -->
   </div>
 
   <!-- Tab Navigation -->
-  <div class="tabs" role="tablist">
-    <button class="tab active" role="tab" aria-selected="true" data-tab="sources" onclick="switchTab('sources')">Sources</button>
-    <button class="tab" role="tab" aria-selected="false" data-tab="xml" onclick="switchTab('xml')">XML</button>
-    <button class="tab" role="tab" aria-selected="false" data-tab="clients" onclick="switchTab('clients')">Clients</button>
-    <button class="tab" role="tab" aria-selected="false" data-tab="assets" onclick="switchTab('assets')">Assets</button>
-    <button class="tab" role="tab" aria-selected="false" data-tab="logs" onclick="switchTab('logs')">Logs</button>
-  </div>
+  <nav class="tabs" role="tablist" aria-label="Admin sections">
+    <button class="tab active" role="tab" aria-selected="true" aria-controls="panel-sources" id="tab-sources" data-tab="sources" onclick="switchTab('sources')">Sources</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="panel-xml" id="tab-xml" data-tab="xml" onclick="switchTab('xml')">XML</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="panel-clients" id="tab-clients" data-tab="clients" onclick="switchTab('clients')">Clients</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="panel-assets" id="tab-assets" data-tab="assets" onclick="switchTab('assets')">Assets</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="panel-logs" id="tab-logs" data-tab="logs" onclick="switchTab('logs')">Logs</button>
+  </nav>
 
   <!-- Tab Panels -->
 
   <!-- Sources Panel -->
-  <div class="tab-panel active" id="panel-sources" role="tabpanel">
+  <section class="tab-panel active" id="panel-sources" role="tabpanel" aria-labelledby="tab-sources">
     <div class="card">
-      <table id="sourcesTable">
-        <thead><tr><th>Name</th><th>Type</th><th>Status</th><th>Details</th></tr></thead>
+      <table id="sourcesTable" aria-label="Data sources">
+        <thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Details</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
-  </div>
+  </section>
 
   <!-- XML Configuration Panel -->
-  <div class="tab-panel" id="panel-xml" role="tabpanel">
+  <section class="tab-panel" id="panel-xml" role="tabpanel" aria-labelledby="tab-xml">
     <div class="card" id="xmlConfigCard">
       <div style="margin-bottom: 10px;">
-        <strong>Current path:</strong> <span id="xmlPath">-</span>
+        <strong id="xmlPathLabel">Current path:</strong> <span id="xmlPath" aria-labelledby="xmlPathLabel">-</span>
         <span id="xmlSource" style="margin-left: 10px; color: var(--text-secondary);"></span>
       </div>
 
       <!-- Mode selector (Windows only) -->
-      <div id="modeSelector" style="display: none; margin-bottom: 15px;">
-        <strong style="display: block; margin-bottom: 8px;">Source mode:</strong>
-        <div style="display: flex; flex-direction: column; gap: 8px;">
+      <fieldset id="modeSelector" style="display: none; margin-bottom: 15px; border: none; padding: 0;">
+        <legend style="display: block; margin-bottom: 8px; font-weight: bold;">Source mode:</legend>
+        <div style="display: flex; flex-direction: column; gap: 8px;" role="radiogroup" aria-label="XML source mode">
           <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
             <input type="radio" name="xmlMode" value="auto-offline" style="margin-top: 3px;">
             <div>
@@ -107,36 +111,37 @@
             <div>Manual path</div>
           </label>
         </div>
-      </div>
+      </fieldset>
 
       <!-- Manual path input -->
-      <div id="manualPathSection" class="config-form">
-        <input type="text" id="xmlPathInput" placeholder="XML file path" style="flex: 1; min-width: 200px; padding: 6px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary);">
+      <div id="manualPathSection" class="config-form" role="group" aria-label="Manual XML path">
+        <label for="xmlPathInput" class="visually-hidden">XML file path</label>
+        <input type="text" id="xmlPathInput" placeholder="XML file path" aria-describedby="xmlConfigError" style="flex: 1; min-width: 200px; padding: 6px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary);">
         <button class="btn" onclick="setXmlPath()">Set Path</button>
       </div>
-      <div id="xmlConfigError" class="error" style="margin-top: 10px; display: none;"></div>
+      <div id="xmlConfigError" class="error" role="alert" style="margin-top: 10px; display: none;"></div>
     </div>
-  </div>
+  </section>
 
   <!-- Clients Panel -->
-  <div class="tab-panel" id="panel-clients" role="tabpanel">
+  <section class="tab-panel" id="panel-clients" role="tabpanel" aria-labelledby="tab-clients">
     <div class="card">
       <!-- Clients header with stats and actions -->
       <div class="clients-header">
         <div class="clients-header-left">
-          <div class="clients-count">
+          <div class="clients-count" role="status" aria-label="Client statistics">
             <div class="clients-count-item online">
-              <span class="count" id="clientsOnlineCount">0</span>
+              <span class="count" id="clientsOnlineCount" aria-label="Online clients">0</span>
               <span>online</span>
             </div>
             <div class="clients-count-item total">
-              <span class="count" id="clientsTotalCount">0</span>
+              <span class="count" id="clientsTotalCount" aria-label="Total clients">0</span>
               <span>total</span>
             </div>
           </div>
         </div>
-        <button class="btn" onclick="refreshAllClients()" style="background: var(--warning); color: var(--bg-body);">
-          <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="margin-right: 4px;">
+        <button class="btn" onclick="refreshAllClients()" aria-label="Refresh all connected clients" style="background: var(--warning); color: var(--bg-body);">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="margin-right: 4px;" aria-hidden="true">
             <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
           </svg>
           Refresh All
@@ -144,52 +149,52 @@
       </div>
 
       <!-- Clients grid -->
-      <div id="clientsGrid" class="clients-grid"></div>
+      <div id="clientsGrid" class="clients-grid" role="list" aria-label="Connected clients"></div>
 
       <!-- Empty state -->
-      <div id="noClients" class="clients-empty" style="display: none;">
-        <svg class="clients-empty-icon" viewBox="0 0 20 20" fill="currentColor">
+      <div id="noClients" class="clients-empty" style="display: none;" role="status">
+        <svg class="clients-empty-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
           <path fill-rule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clip-rule="evenodd"/>
         </svg>
         <div class="clients-empty-text">No clients connected</div>
         <div class="clients-empty-hint">Clients will appear here when they connect to the server</div>
       </div>
     </div>
-  </div>
+  </section>
 
   <!-- Client detail modal (E2: Enhanced design) -->
-  <div id="clientModal" class="modal" style="display: none;">
+  <div id="clientModal" class="modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="modalClientTitle">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>
-          <svg class="modal-header-icon" viewBox="0 0 20 20" fill="currentColor">
+        <h3 id="modalClientTitle">
+          <svg class="modal-header-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
             <path fill-rule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clip-rule="evenodd"/>
           </svg>
           <span id="modalClientIp"></span>
         </h3>
-        <button class="modal-close" onclick="closeClientModal()" aria-label="Close">&times;</button>
+        <button class="modal-close" onclick="closeClientModal()" aria-label="Close modal">&times;</button>
       </div>
 
       <div class="modal-body">
         <!-- Basic Info Section -->
-        <div class="modal-section">
-          <div class="modal-section-title">Basic Info</div>
+        <fieldset class="modal-section">
+          <legend class="modal-section-title">Basic Info</legend>
 
           <div class="modal-field">
-            <label class="modal-field-label">Label</label>
+            <label class="modal-field-label" for="modalLabel">Label</label>
             <div class="modal-field-row">
               <input type="text" id="modalLabel" class="modal-input" placeholder="e.g. Finish Line Display">
               <button class="btn" onclick="saveClientLabel()">Save</button>
             </div>
           </div>
-        </div>
+        </fieldset>
 
         <!-- Display Settings Section -->
-        <div class="modal-section">
-          <div class="modal-section-title">Display Settings</div>
+        <fieldset class="modal-section">
+          <legend class="modal-section-title">Display Settings</legend>
 
           <div class="modal-field">
-            <label class="modal-field-label">Layout Type</label>
+            <label class="modal-field-label" for="modalType">Layout Type</label>
             <select id="modalType" class="modal-select">
               <option value="">(auto - detect from screen)</option>
               <option value="vertical">Vertical (standard monitors)</option>
@@ -198,89 +203,89 @@
           </div>
 
           <div class="modal-field">
-            <label class="modal-field-label">Display Rows</label>
-            <input type="number" id="modalDisplayRows" class="modal-input" min="3" max="20" placeholder="(auto - based on screen height)">
-            <div class="modal-field-hint">Number of result rows to show (3-20)</div>
+            <label class="modal-field-label" for="modalDisplayRows">Display Rows</label>
+            <input type="number" id="modalDisplayRows" class="modal-input" min="3" max="20" placeholder="(auto - based on screen height)" aria-describedby="displayRowsHint">
+            <div class="modal-field-hint" id="displayRowsHint">Number of result rows to show (3-20)</div>
           </div>
 
           <div class="modal-field">
-            <label class="modal-field-label">Custom Title</label>
+            <label class="modal-field-label" for="modalCustomTitle">Custom Title</label>
             <input type="text" id="modalCustomTitle" class="modal-input" placeholder="(none - uses event name)">
           </div>
 
           <div class="modal-field">
             <label class="modal-checkbox">
-              <input type="checkbox" id="modalScrollToFinished" checked>
+              <input type="checkbox" id="modalScrollToFinished" checked aria-describedby="scrollToFinishedHint">
               <div class="modal-checkbox-content">
                 <div class="modal-checkbox-label">Scroll to Finished</div>
-                <div class="modal-checkbox-hint">When enabled, scoreboard scrolls to show finished competitor. When disabled, only highlights.</div>
+                <div class="modal-checkbox-hint" id="scrollToFinishedHint">When enabled, scoreboard scrolls to show finished competitor. When disabled, only highlights.</div>
               </div>
             </label>
           </div>
-        </div>
+        </fieldset>
 
         <!-- Identity Section -->
-        <div class="modal-section">
-          <div class="modal-section-title">Identity</div>
+        <fieldset class="modal-section">
+          <legend class="modal-section-title">Identity</legend>
 
           <div class="modal-field">
-            <label class="modal-field-label">Client ID</label>
-            <input type="text" id="modalClientId" class="modal-input" placeholder="(none - uses IP address)">
-            <div class="modal-field-hint">Assign a persistent ID. Client will use this ID for future connections instead of IP.</div>
+            <label class="modal-field-label" for="modalClientId">Client ID</label>
+            <input type="text" id="modalClientId" class="modal-input" placeholder="(none - uses IP address)" aria-describedby="clientIdHint">
+            <div class="modal-field-hint" id="clientIdHint">Assign a persistent ID. Client will use this ID for future connections instead of IP.</div>
           </div>
 
           <div class="modal-field">
-            <label class="modal-field-label">Client State (reported)</label>
-            <pre id="modalClientState" class="modal-client-state">-</pre>
+            <label class="modal-field-label" id="clientStateLabel">Client State (reported)</label>
+            <pre id="modalClientState" class="modal-client-state" aria-labelledby="clientStateLabel" role="region">-</pre>
           </div>
-        </div>
+        </fieldset>
 
         <!-- Asset Overrides Section -->
-        <div class="modal-section">
-          <div class="modal-section-title">Asset Overrides</div>
+        <fieldset class="modal-section">
+          <legend class="modal-section-title">Asset Overrides</legend>
 
           <div class="modal-asset-item">
-            <label>Logo</label>
-            <div class="modal-asset-drop-zone" id="modalLogoDropZone" data-key="logoUrl" tabindex="0">
-              <div class="modal-asset-preview" id="modalLogoPreview"></div>
+            <label id="modalLogoLabel">Logo</label>
+            <div class="modal-asset-drop-zone" id="modalLogoDropZone" data-key="logoUrl" tabindex="0" role="button" aria-labelledby="modalLogoLabel" aria-describedby="modalLogoInfo">
+              <div class="modal-asset-preview" id="modalLogoPreview" aria-live="polite"></div>
               <div class="modal-asset-placeholder" id="modalLogoPlaceholder">Drop, paste or click to upload</div>
-              <input type="file" id="modalLogoInput" accept="image/*" style="display: none;">
+              <input type="file" id="modalLogoInput" accept="image/*" style="display: none;" aria-label="Upload logo image">
             </div>
             <div class="modal-asset-controls">
               <button class="btn btn-secondary" onclick="clearModalAsset('logoUrl')">Clear</button>
               <button class="btn btn-secondary" onclick="useDefaultAsset('logoUrl')">Use Default</button>
             </div>
-            <div class="modal-asset-info" id="modalLogoInfo"></div>
+            <div class="modal-asset-info" id="modalLogoInfo" aria-live="polite"></div>
           </div>
 
           <div class="modal-asset-item">
-            <label>Partner Logo</label>
-            <div class="modal-asset-drop-zone" id="modalPartnerLogoDropZone" data-key="partnerLogoUrl" tabindex="0">
-              <div class="modal-asset-preview" id="modalPartnerLogoPreview"></div>
+            <label id="modalPartnerLogoLabel">Partner Logo</label>
+            <div class="modal-asset-drop-zone" id="modalPartnerLogoDropZone" data-key="partnerLogoUrl" tabindex="0" role="button" aria-labelledby="modalPartnerLogoLabel" aria-describedby="modalPartnerLogoInfo">
+              <div class="modal-asset-preview" id="modalPartnerLogoPreview" aria-live="polite"></div>
               <div class="modal-asset-placeholder" id="modalPartnerLogoPlaceholder">Drop, paste or click to upload</div>
-              <input type="file" id="modalPartnerLogoInput" accept="image/*" style="display: none;">
+              <input type="file" id="modalPartnerLogoInput" accept="image/*" style="display: none;" aria-label="Upload partner logo image">
             </div>
             <div class="modal-asset-controls">
               <button class="btn btn-secondary" onclick="clearModalAsset('partnerLogoUrl')">Clear</button>
               <button class="btn btn-secondary" onclick="useDefaultAsset('partnerLogoUrl')">Use Default</button>
             </div>
-            <div class="modal-asset-info" id="modalPartnerLogoInfo"></div>
+            <div class="modal-asset-info" id="modalPartnerLogoInfo" aria-live="polite"></div>
           </div>
 
           <div class="modal-asset-item">
-            <label>Footer Banner</label>
-            <div class="modal-asset-drop-zone" id="modalFooterImageDropZone" data-key="footerImageUrl" tabindex="0">
-              <div class="modal-asset-preview" id="modalFooterImagePreview"></div>
+            <label id="modalFooterImageLabel">Footer Banner</label>
+            <div class="modal-asset-drop-zone" id="modalFooterImageDropZone" data-key="footerImageUrl" tabindex="0" role="button" aria-labelledby="modalFooterImageLabel" aria-describedby="modalFooterImageInfo">
+              <div class="modal-asset-preview" id="modalFooterImagePreview" aria-live="polite"></div>
               <div class="modal-asset-placeholder" id="modalFooterImagePlaceholder">Drop, paste or click to upload</div>
-              <input type="file" id="modalFooterImageInput" accept="image/*" style="display: none;">
+              <input type="file" id="modalFooterImageInput" accept="image/*" style="display: none;" aria-label="Upload footer banner image">
             </div>
             <div class="modal-asset-controls">
               <button class="btn btn-secondary" onclick="clearModalAsset('footerImageUrl')">Clear</button>
               <button class="btn btn-secondary" onclick="useDefaultAsset('footerImageUrl')">Use Default</button>
             </div>
-            <div class="modal-asset-info" id="modalFooterImageInfo"></div>
+            <div class="modal-asset-info" id="modalFooterImageInfo" aria-live="polite"></div>
           </div>
-        </div>
+        </fieldset>
       </div>
 
       <div class="modal-actions">
@@ -288,117 +293,121 @@
         <button class="btn btn-danger" onclick="deleteClientConfig()">Delete</button>
       </div>
 
-      <div id="modalError" class="error" style="padding: 10px 20px; display: none;"></div>
+      <div id="modalError" class="error" role="alert" style="padding: 10px 20px; display: none;"></div>
     </div>
   </div>
 
   <!-- Assets Panel (E3: Enhanced drag-and-drop UX) -->
-  <div class="tab-panel" id="panel-assets" role="tabpanel">
+  <section class="tab-panel" id="panel-assets" role="tabpanel" aria-labelledby="tab-assets">
     <div class="card">
       <p class="assets-intro">
         Configure default images for all scoreboards. Drag & drop, paste from clipboard, or click to upload.
         Per-client overrides can be set in the client configuration modal.
       </p>
 
-      <div class="assets-grid">
+      <div class="assets-grid" role="list" aria-label="Asset configuration">
         <!-- Logo -->
-        <div class="asset-item">
+        <div class="asset-item" role="listitem">
           <div class="asset-item-header">
-            <div class="asset-item-label">
-              <svg viewBox="0 0 20 20" fill="currentColor">
+            <div class="asset-item-label" id="logoLabel">
+              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                 <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/>
               </svg>
               Logo
             </div>
             <span class="asset-item-size">max 200×80</span>
           </div>
-          <div class="asset-drop-zone" id="logoDropZone" data-key="logoUrl" tabindex="0">
-            <div class="asset-preview" id="logoPreview"></div>
+          <div class="asset-drop-zone" id="logoDropZone" data-key="logoUrl" tabindex="0" role="button" aria-labelledby="logoLabel" aria-describedby="logoInfo">
+            <div class="asset-preview" id="logoPreview" aria-live="polite"></div>
             <div class="asset-placeholder" id="logoPlaceholder">
-              <svg class="asset-placeholder-icon" viewBox="0 0 20 20" fill="currentColor">
+              <svg class="asset-placeholder-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                 <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
               </svg>
               <span class="asset-placeholder-text">Drop image or click to upload</span>
               <span class="asset-placeholder-hint">PNG, JPG, SVG supported</span>
             </div>
-            <input type="file" id="logoInput" accept="image/*" style="display: none;">
+            <input type="file" id="logoInput" accept="image/*" style="display: none;" aria-label="Upload logo image">
           </div>
           <div class="asset-actions">
+            <label for="logoUrlInput" class="visually-hidden">Logo URL</label>
             <input type="text" id="logoUrlInput" placeholder="Or paste URL..." class="asset-url-input">
             <button class="btn asset-btn" onclick="setAssetFromUrl('logoUrl')">Load</button>
             <button class="btn asset-btn btn-secondary" onclick="clearAsset('logoUrl')">Clear</button>
           </div>
-          <div class="asset-info" id="logoInfo"></div>
+          <div class="asset-info" id="logoInfo" aria-live="polite"></div>
         </div>
 
         <!-- Partner Logo -->
-        <div class="asset-item">
+        <div class="asset-item" role="listitem">
           <div class="asset-item-header">
-            <div class="asset-item-label">
-              <svg viewBox="0 0 20 20" fill="currentColor">
+            <div class="asset-item-label" id="partnerLogoLabel">
+              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                 <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
               </svg>
               Partner Logo
             </div>
             <span class="asset-item-size">max 300×80</span>
           </div>
-          <div class="asset-drop-zone" id="partnerLogoDropZone" data-key="partnerLogoUrl" tabindex="0">
-            <div class="asset-preview" id="partnerLogoPreview"></div>
+          <div class="asset-drop-zone" id="partnerLogoDropZone" data-key="partnerLogoUrl" tabindex="0" role="button" aria-labelledby="partnerLogoLabel" aria-describedby="partnerLogoInfo">
+            <div class="asset-preview" id="partnerLogoPreview" aria-live="polite"></div>
             <div class="asset-placeholder" id="partnerLogoPlaceholder">
-              <svg class="asset-placeholder-icon" viewBox="0 0 20 20" fill="currentColor">
+              <svg class="asset-placeholder-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                 <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
               </svg>
               <span class="asset-placeholder-text">Drop image or click to upload</span>
               <span class="asset-placeholder-hint">PNG, JPG, SVG supported</span>
             </div>
-            <input type="file" id="partnerLogoInput" accept="image/*" style="display: none;">
+            <input type="file" id="partnerLogoInput" accept="image/*" style="display: none;" aria-label="Upload partner logo image">
           </div>
           <div class="asset-actions">
+            <label for="partnerLogoUrlInput" class="visually-hidden">Partner logo URL</label>
             <input type="text" id="partnerLogoUrlInput" placeholder="Or paste URL..." class="asset-url-input">
             <button class="btn asset-btn" onclick="setAssetFromUrl('partnerLogoUrl')">Load</button>
             <button class="btn asset-btn btn-secondary" onclick="clearAsset('partnerLogoUrl')">Clear</button>
           </div>
-          <div class="asset-info" id="partnerLogoInfo"></div>
+          <div class="asset-info" id="partnerLogoInfo" aria-live="polite"></div>
         </div>
 
         <!-- Footer Image -->
-        <div class="asset-item" style="grid-column: 1 / -1;">
+        <div class="asset-item" style="grid-column: 1 / -1;" role="listitem">
           <div class="asset-item-header">
-            <div class="asset-item-label">
-              <svg viewBox="0 0 20 20" fill="currentColor">
+            <div class="asset-item-label" id="footerImageLabel">
+              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                 <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
               </svg>
               Footer Banner
             </div>
             <span class="asset-item-size">max 1920×200</span>
           </div>
-          <div class="asset-drop-zone" id="footerImageDropZone" data-key="footerImageUrl" tabindex="0">
-            <div class="asset-preview" id="footerImagePreview"></div>
+          <div class="asset-drop-zone" id="footerImageDropZone" data-key="footerImageUrl" tabindex="0" role="button" aria-labelledby="footerImageLabel" aria-describedby="footerImageInfo">
+            <div class="asset-preview" id="footerImagePreview" aria-live="polite"></div>
             <div class="asset-placeholder" id="footerImagePlaceholder">
-              <svg class="asset-placeholder-icon" viewBox="0 0 20 20" fill="currentColor">
+              <svg class="asset-placeholder-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                 <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
               </svg>
               <span class="asset-placeholder-text">Drop image or click to upload</span>
               <span class="asset-placeholder-hint">Wide format recommended (e.g. 1920×100)</span>
             </div>
-            <input type="file" id="footerImageInput" accept="image/*" style="display: none;">
+            <input type="file" id="footerImageInput" accept="image/*" style="display: none;" aria-label="Upload footer banner image">
           </div>
           <div class="asset-actions">
+            <label for="footerImageUrlInput" class="visually-hidden">Footer banner URL</label>
             <input type="text" id="footerImageUrlInput" placeholder="Or paste URL..." class="asset-url-input">
             <button class="btn asset-btn" onclick="setAssetFromUrl('footerImageUrl')">Load</button>
             <button class="btn asset-btn btn-secondary" onclick="clearAsset('footerImageUrl')">Clear</button>
           </div>
-          <div class="asset-info" id="footerImageInfo"></div>
+          <div class="asset-info" id="footerImageInfo" aria-live="polite"></div>
         </div>
       </div>
     </div>
-  </div>
+  </section>
 
   <!-- Logs Panel -->
-  <div class="tab-panel" id="panel-logs" role="tabpanel">
+  <section class="tab-panel" id="panel-logs" role="tabpanel" aria-labelledby="tab-logs">
     <div class="card">
-      <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; align-items: center;">
-        <div style="display: flex; gap: 5px; align-items: center;">
+      <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; align-items: center;" role="group" aria-label="Log filters">
+        <fieldset style="display: flex; gap: 5px; align-items: center; border: none; padding: 0; margin: 0;">
+          <legend class="visually-hidden">Log levels</legend>
           <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
             <input type="checkbox" id="logLevelDebug" onchange="filterLogs()"> <span style="color: var(--text-secondary);">debug</span>
           </label>
@@ -411,24 +420,25 @@
           <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
             <input type="checkbox" id="logLevelError" checked onchange="filterLogs()"> <span style="color: var(--error);">error</span>
           </label>
-        </div>
-        <input type="text" id="logSearch" placeholder="Search logs..." onkeyup="filterLogs()" style="flex: 1; min-width: 150px; padding: 4px 8px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary);">
+        </fieldset>
+        <label for="logSearch" class="visually-hidden">Search logs</label>
+        <input type="text" id="logSearch" placeholder="Search logs..." onkeyup="filterLogs()" aria-label="Search logs" style="flex: 1; min-width: 150px; padding: 4px 8px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary);">
         <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
           <input type="checkbox" id="logAutoScroll" checked> Auto-scroll
         </label>
-        <button class="btn btn-secondary" onclick="clearLogDisplay()" style="padding: 4px 8px;">Clear</button>
+        <button class="btn btn-secondary" onclick="clearLogDisplay()" style="padding: 4px 8px;" aria-label="Clear log display">Clear</button>
       </div>
-      <div id="logContainer" style="max-height: 400px; overflow-y: auto; font-family: var(--font-mono); font-size: 12px; background: var(--bg-input); border-radius: var(--radius-md); padding: 8px;">
-        <div id="logEntries"></div>
-        <div id="noLogs" style="color: var(--text-muted); padding: 10px; text-align: center;">No log entries</div>
+      <div id="logContainer" role="log" aria-live="polite" aria-label="Log entries" style="max-height: 400px; overflow-y: auto; font-family: var(--font-mono); font-size: 12px; background: var(--bg-input); border-radius: var(--radius-md); padding: 8px;">
+        <div id="logEntries" aria-atomic="false"></div>
+        <div id="noLogs" style="color: var(--text-muted); padding: 10px; text-align: center;" role="status">No log entries</div>
       </div>
       <div style="margin-top: 5px; color: var(--text-muted); font-size: var(--text-xs);">
-        <span id="logStats">0 entries</span>
+        <span id="logStats" role="status" aria-live="polite">0 entries</span>
       </div>
     </div>
-  </div>
+  </section>
 
-  <div id="lastUpdate"></div>
+  <div id="lastUpdate" role="status" aria-live="polite"></div>
 
   </main>
 
