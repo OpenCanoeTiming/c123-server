@@ -4,6 +4,160 @@
  */
 
 // ===========================================
+// Toast Notifications (D3)
+// ===========================================
+
+const toastIcons = {
+  success: '<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>',
+  error: '<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>',
+  warning: '<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>',
+  info: '<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>'
+};
+
+let toastContainer = null;
+
+function initToastContainer() {
+  if (toastContainer) return;
+  toastContainer = document.createElement('div');
+  toastContainer.className = 'toast-container';
+  toastContainer.setAttribute('role', 'region');
+  toastContainer.setAttribute('aria-live', 'polite');
+  toastContainer.setAttribute('aria-label', 'Notifications');
+  document.body.appendChild(toastContainer);
+}
+
+function showToast(message, type, duration) {
+  if (type === undefined) type = 'info';
+  if (duration === undefined) duration = 4000;
+
+  initToastContainer();
+
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-' + type;
+  toast.setAttribute('role', 'alert');
+
+  toast.innerHTML =
+    '<span class="toast-icon">' + (toastIcons[type] || toastIcons.info) + '</span>' +
+    '<span class="toast-message">' + escapeHtml(message) + '</span>' +
+    '<button class="toast-close" aria-label="Close notification">' +
+      '<svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">' +
+        '<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>' +
+      '</svg>' +
+    '</button>';
+
+  const closeBtn = toast.querySelector('.toast-close');
+  closeBtn.addEventListener('click', function() {
+    removeToast(toast);
+  });
+
+  toastContainer.appendChild(toast);
+
+  // Auto remove after duration
+  if (duration > 0) {
+    setTimeout(function() {
+      removeToast(toast);
+    }, duration);
+  }
+
+  return toast;
+}
+
+function removeToast(toast) {
+  if (!toast || !toast.parentNode) return;
+
+  toast.classList.add('toast-exit');
+  setTimeout(function() {
+    if (toast.parentNode) {
+      toast.parentNode.removeChild(toast);
+    }
+  }, 200);
+}
+
+// ===========================================
+// Focus Trap for Modal (D1)
+// ===========================================
+
+let focusTrapElement = null;
+let lastFocusedElement = null;
+
+function trapFocus(element) {
+  lastFocusedElement = document.activeElement;
+  focusTrapElement = element;
+
+  // Make modal content focusable
+  element.setAttribute('tabindex', '-1');
+  element.focus();
+
+  document.addEventListener('keydown', handleFocusTrap);
+}
+
+function releaseFocus() {
+  document.removeEventListener('keydown', handleFocusTrap);
+
+  if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') {
+    lastFocusedElement.focus();
+  }
+
+  focusTrapElement = null;
+  lastFocusedElement = null;
+}
+
+function handleFocusTrap(e) {
+  if (!focusTrapElement) return;
+  if (e.key !== 'Tab') return;
+
+  const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  const focusableElements = focusTrapElement.querySelectorAll(focusableSelectors);
+  const focusable = Array.prototype.filter.call(focusableElements, function(el) {
+    return el.offsetParent !== null; // visible elements only
+  });
+
+  if (focusable.length === 0) return;
+
+  const firstFocusable = focusable[0];
+  const lastFocusable = focusable[focusable.length - 1];
+
+  if (e.shiftKey) {
+    // Shift+Tab
+    if (document.activeElement === firstFocusable || document.activeElement === focusTrapElement) {
+      e.preventDefault();
+      lastFocusable.focus();
+    }
+  } else {
+    // Tab
+    if (document.activeElement === lastFocusable) {
+      e.preventDefault();
+      firstFocusable.focus();
+    }
+  }
+}
+
+// ===========================================
+// Loading State Helpers (D2)
+// ===========================================
+
+function setButtonLoading(button, loading) {
+  if (loading) {
+    button.classList.add('loading');
+    button.disabled = true;
+  } else {
+    button.classList.remove('loading');
+    button.disabled = false;
+  }
+}
+
+function withLoading(button, asyncFn) {
+  return async function() {
+    setButtonLoading(button, true);
+    try {
+      await asyncFn.apply(this, arguments);
+    } finally {
+      setButtonLoading(button, false);
+    }
+  };
+}
+
+// ===========================================
 // Tab Navigation
 // ===========================================
 
@@ -663,11 +817,20 @@ function openClientModal(configKey) {
 
   document.getElementById('modalError').style.display = 'none';
   document.getElementById('clientModal').style.display = 'flex';
+
+  // Enable focus trap
+  const modalContent = document.querySelector('#clientModal .modal-content');
+  if (modalContent) {
+    trapFocus(modalContent);
+  }
 }
 
 function closeClientModal() {
   document.getElementById('clientModal').style.display = 'none';
   currentModalIp = null;
+
+  // Release focus trap
+  releaseFocus();
 }
 
 async function saveClientLabel() {
@@ -820,14 +983,13 @@ function showModalError(msg) {
   const el = document.getElementById('modalError');
   el.textContent = msg;
   el.style.display = 'block';
+  // Also show toast for better visibility
+  showToast(msg, 'error');
 }
 
 function showClientMessage(msg, isError) {
-  const el = document.getElementById('clientMessage');
-  el.textContent = msg;
-  el.style.color = isError ? '#ff6b6b' : '#00ff88';
-  el.style.display = 'block';
-  setTimeout(function() { el.style.display = 'none'; }, 3000);
+  // Use toast notifications instead of inline message
+  showToast(msg, isError ? 'error' : 'success');
 }
 
 // ===========================================
@@ -1312,25 +1474,13 @@ function getAssetLabel(key) {
 }
 
 function showAssetError(msg) {
-  const el = document.getElementById('assetError');
-  const msgEl = document.getElementById('assetMessage');
-  if (msgEl) msgEl.style.display = 'none';
-  if (el) {
-    el.textContent = msg;
-    el.style.display = 'block';
-    setTimeout(function() { el.style.display = 'none'; }, 5000);
-  }
+  // Use toast notifications
+  showToast(msg, 'error');
 }
 
 function showAssetMessage(msg) {
-  const el = document.getElementById('assetMessage');
-  const errEl = document.getElementById('assetError');
-  if (errEl) errEl.style.display = 'none';
-  if (el) {
-    el.textContent = msg;
-    el.style.display = 'block';
-    setTimeout(function() { el.style.display = 'none'; }, 3000);
-  }
+  // Use toast notifications
+  showToast(msg, 'success');
 }
 
 // ===========================================

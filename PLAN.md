@@ -482,11 +482,20 @@ Klíčový identifikační prvek - na první pohled jasné, která app běží.
 - Větší touch targets na mobilu (min 44px)
 - Keyboard navigation - Escape zavírá modal
 
-#### Blok D: Komponenty a UX (1 session)
-- [ ] D1: Nový modal s backdrop blur a focus trap
-- [ ] D2: Loading states pro async operace
-- [ ] D3: Toast notifications pro feedback
-- [ ] D4: Vylepšené form controls
+#### Blok D: Komponenty a UX (1 session) ✅ DONE
+- [x] D1: Nový modal s backdrop blur a focus trap
+- [x] D2: Loading states pro async operace
+- [x] D3: Toast notifications pro feedback
+- [x] D4: Vylepšené form controls
+
+**Poznámky k bloku D:**
+- Toast notifications s animacemi (slide-in/out), ikonami a auto-dismiss
+- Focus trap pro modal - Tab/Shift+Tab cykluje v modalu, Escape zavírá
+- Loading states pro buttony (.btn.loading) se spinnerem
+- Skeleton loading placeholders pro async content
+- Vylepšené form controls: form-group, form-label, select, checkbox, radio, switch/toggle, textarea
+- Input validace (error/success states) a input groups s addony
+- Všechny notifikace (client, asset) nyní používají toast systém
 
 #### Blok E: Clients a Assets redesign (1 session)
 - [ ] E1: Client cards s lepší hierarchií
