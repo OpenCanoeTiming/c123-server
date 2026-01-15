@@ -244,11 +244,13 @@ function renderStatusBar(sources) {
 
   const html = sources.map(function(s) {
     const statusCls = statusClass(s.status);
-    const details = s.host ? s.host + ':' + s.port : (s.path ? truncate(s.path, 30) : '-');
-    return '<div class="status-bar-item">' +
+    // For XML source, show full path; for TCP/UDP show host:port
+    const details = s.host ? s.host + ':' + s.port : (s.path || '-');
+    const isXml = s.type === 'xml';
+    return '<div class="status-bar-item' + (isXml ? ' status-bar-item-wide' : '') + '">' +
       '<span class="status ' + statusCls + '"></span>' +
       '<span class="status-bar-label">' + s.name + '</span>' +
-      '<span class="status-bar-value">' + escapeHtml(details) + '</span>' +
+      '<span class="status-bar-value' + (isXml ? ' status-bar-value-path' : '') + '" title="' + escapeHtml(details) + '">' + escapeHtml(details) + '</span>' +
       '</div>';
   }).join('');
 
