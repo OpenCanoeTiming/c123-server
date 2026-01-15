@@ -441,12 +441,18 @@ Klíčový identifikační prvek - na první pohled jasné, která app běží.
 
 ### Implementační plán
 
-#### Blok A: Příprava a extrakce (1 session)
-- [ ] A1: Vytvořit `src/admin-ui/` adresář
-- [ ] A2: Extrahovat CSS do `styles.css` (CSS custom properties)
-- [ ] A3: Extrahovat JS do `main.js` (ES modules)
-- [ ] A4: Vytvořit `index.html` template
-- [ ] A5: Upravit UnifiedServer pro servírování souborů
+#### Blok A: Příprava a extrakce (1 session) ✅ DONE
+- [x] A1: Vytvořit `src/admin-ui/` adresář
+- [x] A2: Extrahovat CSS do `styles.css`
+- [x] A3: Extrahovat JS do `main.js`
+- [x] A4: Vytvořit `index.html` template
+- [x] A5: Upravit UnifiedServer pro servírování souborů
+
+**Poznámky k bloku A:**
+- CSS/JS/HTML jsou nyní v `src/admin-ui/` (kopírováno do `dist/` při buildu)
+- UnifiedServer.ts zredukován z ~3800 na ~2000 řádků
+- Testy aktualizovány pro novou architekturu
+- Build script: `tsc && cp -r src/admin-ui dist/`
 
 #### Blok B: Design system základ (1 session)
 - [ ] B1: Implementovat CSS custom properties (barvy, spacing)
