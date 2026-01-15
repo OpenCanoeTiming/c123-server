@@ -178,102 +178,98 @@
       </div>
 
       <div class="modal-body">
-        <!-- Basic Info & Identity (combined row) -->
-        <fieldset class="modal-section">
-          <legend class="modal-section-title">Basic Info</legend>
-          <div class="modal-fields-row">
-            <div class="modal-field">
-              <label class="modal-field-label" for="modalLabel">Label</label>
-              <input type="text" id="modalLabel" class="modal-input" placeholder="e.g. Finish Line Display">
-            </div>
-            <div class="modal-field">
-              <label class="modal-field-label" for="modalClientId">Client ID</label>
-              <input type="text" id="modalClientId" class="modal-input" placeholder="(auto - uses IP)">
-            </div>
-          </div>
-        </fieldset>
+        <div class="modal-two-col">
+          <!-- Left column: Settings -->
+          <div class="modal-col">
+            <fieldset class="modal-section">
+              <legend class="modal-section-title">Basic Info</legend>
+              <div class="modal-field">
+                <label class="modal-field-label" for="modalLabel">Label</label>
+                <input type="text" id="modalLabel" class="modal-input" placeholder="e.g. Finish Line Display">
+              </div>
+              <div class="modal-field">
+                <label class="modal-field-label" for="modalClientId">Client ID</label>
+                <input type="text" id="modalClientId" class="modal-input" placeholder="(auto - uses IP address)">
+              </div>
+            </fieldset>
 
-        <!-- Display Settings (compact two-column) -->
-        <fieldset class="modal-section">
-          <legend class="modal-section-title">Display Settings</legend>
-          <div class="modal-fields-row">
-            <div class="modal-field">
-              <label class="modal-field-label" for="modalType">Layout</label>
-              <select id="modalType" class="modal-select">
-                <option value="">(auto)</option>
-                <option value="vertical">Vertical</option>
-                <option value="ledwall">LED Wall</option>
-              </select>
-            </div>
-            <div class="modal-field">
-              <label class="modal-field-label" for="modalDisplayRows">Rows</label>
-              <input type="number" id="modalDisplayRows" class="modal-input" min="3" max="20" placeholder="(auto)">
-            </div>
-          </div>
-          <div class="modal-fields-row" style="margin-top: var(--space-2);">
-            <div class="modal-field">
-              <label class="modal-field-label" for="modalCustomTitle">Custom Title</label>
-              <input type="text" id="modalCustomTitle" class="modal-input" placeholder="(uses event name)">
-            </div>
-            <div class="modal-field" style="display: flex; align-items: flex-end;">
-              <label class="modal-checkbox" style="width: 100%; margin: 0;">
-                <input type="checkbox" id="modalScrollToFinished" checked>
-                <div class="modal-checkbox-content">
-                  <div class="modal-checkbox-label">Scroll to finished</div>
+            <fieldset class="modal-section">
+              <legend class="modal-section-title">Display</legend>
+              <div class="modal-field">
+                <label class="modal-field-label" for="modalType">Layout Type</label>
+                <select id="modalType" class="modal-select">
+                  <option value="">(auto - detect from screen)</option>
+                  <option value="vertical">Vertical</option>
+                  <option value="ledwall">LED Wall</option>
+                </select>
+              </div>
+              <div class="modal-inline-fields">
+                <div class="modal-field">
+                  <label class="modal-field-label" for="modalDisplayRows">Rows</label>
+                  <input type="number" id="modalDisplayRows" class="modal-input" min="3" max="20" placeholder="auto">
                 </div>
-              </label>
-            </div>
-          </div>
-        </fieldset>
+                <div class="modal-field">
+                  <label class="modal-field-label" for="modalCustomTitle">Custom Title</label>
+                  <input type="text" id="modalCustomTitle" class="modal-input" placeholder="(event name)">
+                </div>
+              </div>
+              <div class="modal-field">
+                <label class="modal-checkbox">
+                  <input type="checkbox" id="modalScrollToFinished" checked>
+                  <span class="modal-checkbox-label">Scroll to finished competitor</span>
+                </label>
+              </div>
+            </fieldset>
 
-        <!-- Asset Overrides (compact grid) -->
-        <fieldset class="modal-section">
-          <legend class="modal-section-title">Asset Overrides</legend>
-          <div class="modal-assets-grid">
-            <div class="modal-asset-item-compact">
-              <label id="modalLogoLabel">Logo</label>
-              <div class="modal-asset-drop-zone" id="modalLogoDropZone" data-key="logoUrl" tabindex="0" role="button" aria-labelledby="modalLogoLabel">
-                <div class="modal-asset-preview" id="modalLogoPreview"></div>
-                <div class="modal-asset-placeholder" id="modalLogoPlaceholder">Drop/click</div>
-                <input type="file" id="modalLogoInput" accept="image/*" style="display: none;">
-              </div>
-              <div class="modal-asset-controls">
-                <button class="btn btn-secondary btn-xs" onclick="clearModalAsset('logoUrl')">Clear</button>
-                <button class="btn btn-secondary btn-xs" onclick="useDefaultAsset('logoUrl')">Default</button>
-              </div>
-            </div>
-            <div class="modal-asset-item-compact">
-              <label id="modalPartnerLogoLabel">Partner</label>
-              <div class="modal-asset-drop-zone" id="modalPartnerLogoDropZone" data-key="partnerLogoUrl" tabindex="0" role="button" aria-labelledby="modalPartnerLogoLabel">
-                <div class="modal-asset-preview" id="modalPartnerLogoPreview"></div>
-                <div class="modal-asset-placeholder" id="modalPartnerLogoPlaceholder">Drop/click</div>
-                <input type="file" id="modalPartnerLogoInput" accept="image/*" style="display: none;">
-              </div>
-              <div class="modal-asset-controls">
-                <button class="btn btn-secondary btn-xs" onclick="clearModalAsset('partnerLogoUrl')">Clear</button>
-                <button class="btn btn-secondary btn-xs" onclick="useDefaultAsset('partnerLogoUrl')">Default</button>
-              </div>
-            </div>
-            <div class="modal-asset-item-compact">
-              <label id="modalFooterImageLabel">Footer</label>
-              <div class="modal-asset-drop-zone" id="modalFooterImageDropZone" data-key="footerImageUrl" tabindex="0" role="button" aria-labelledby="modalFooterImageLabel">
-                <div class="modal-asset-preview" id="modalFooterImagePreview"></div>
-                <div class="modal-asset-placeholder" id="modalFooterImagePlaceholder">Drop/click</div>
-                <input type="file" id="modalFooterImageInput" accept="image/*" style="display: none;">
-              </div>
-              <div class="modal-asset-controls">
-                <button class="btn btn-secondary btn-xs" onclick="clearModalAsset('footerImageUrl')">Clear</button>
-                <button class="btn btn-secondary btn-xs" onclick="useDefaultAsset('footerImageUrl')">Default</button>
-              </div>
-            </div>
+            <fieldset class="modal-section">
+              <legend class="modal-section-title">Client State</legend>
+              <pre id="modalClientState" class="modal-client-state">-</pre>
+            </fieldset>
           </div>
-        </fieldset>
 
-        <!-- Client State (collapsible or minimal) -->
-        <fieldset class="modal-section">
-          <legend class="modal-section-title">Client State</legend>
-          <pre id="modalClientState" class="modal-client-state">-</pre>
-        </fieldset>
+          <!-- Right column: Assets -->
+          <div class="modal-col">
+            <fieldset class="modal-section">
+              <legend class="modal-section-title">Asset Overrides</legend>
+              <div class="modal-asset-item">
+                <label id="modalLogoLabel">Logo</label>
+                <div class="modal-asset-drop-zone" id="modalLogoDropZone" data-key="logoUrl" tabindex="0" role="button">
+                  <div class="modal-asset-preview" id="modalLogoPreview"></div>
+                  <div class="modal-asset-placeholder" id="modalLogoPlaceholder">Drop, paste or click</div>
+                  <input type="file" id="modalLogoInput" accept="image/*" style="display: none;">
+                </div>
+                <div class="modal-asset-controls">
+                  <button class="btn btn-secondary" onclick="clearModalAsset('logoUrl')">Clear</button>
+                  <button class="btn btn-secondary" onclick="useDefaultAsset('logoUrl')">Use Default</button>
+                </div>
+              </div>
+              <div class="modal-asset-item">
+                <label id="modalPartnerLogoLabel">Partner Logo</label>
+                <div class="modal-asset-drop-zone" id="modalPartnerLogoDropZone" data-key="partnerLogoUrl" tabindex="0" role="button">
+                  <div class="modal-asset-preview" id="modalPartnerLogoPreview"></div>
+                  <div class="modal-asset-placeholder" id="modalPartnerLogoPlaceholder">Drop, paste or click</div>
+                  <input type="file" id="modalPartnerLogoInput" accept="image/*" style="display: none;">
+                </div>
+                <div class="modal-asset-controls">
+                  <button class="btn btn-secondary" onclick="clearModalAsset('partnerLogoUrl')">Clear</button>
+                  <button class="btn btn-secondary" onclick="useDefaultAsset('partnerLogoUrl')">Use Default</button>
+                </div>
+              </div>
+              <div class="modal-asset-item">
+                <label id="modalFooterImageLabel">Footer Banner</label>
+                <div class="modal-asset-drop-zone" id="modalFooterImageDropZone" data-key="footerImageUrl" tabindex="0" role="button">
+                  <div class="modal-asset-preview" id="modalFooterImagePreview"></div>
+                  <div class="modal-asset-placeholder" id="modalFooterImagePlaceholder">Drop, paste or click</div>
+                  <input type="file" id="modalFooterImageInput" accept="image/*" style="display: none;">
+                </div>
+                <div class="modal-asset-controls">
+                  <button class="btn btn-secondary" onclick="clearModalAsset('footerImageUrl')">Clear</button>
+                  <button class="btn btn-secondary" onclick="useDefaultAsset('footerImageUrl')">Use Default</button>
+                </div>
+              </div>
+            </fieldset>
+          </div>
+        </div>
       </div>
 
       <div class="modal-actions">

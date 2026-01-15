@@ -847,7 +847,7 @@ input[type="radio"]:focus-visible {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   width: 100%;
-  max-width: 640px;
+  max-width: 900px;
   max-height: calc(100vh - 2 * var(--space-4));
   display: flex;
   flex-direction: column;
@@ -965,11 +965,24 @@ fieldset.modal-section > legend {
   flex: 1;
 }
 
-/* Two-column layout for modal fields */
-.modal-fields-row {
+/* Two-column layout for modal body */
+.modal-two-col {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-2) var(--space-3);
+  gap: var(--space-4);
+}
+
+.modal-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Inline fields within a section */
+.modal-inline-fields {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: var(--space-2);
 }
 
 /* Modal input styling */
@@ -1023,18 +1036,10 @@ fieldset.modal-section > legend {
 /* Modal checkbox */
 .modal-checkbox {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-2);
   cursor: pointer;
-  padding: var(--space-2);
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  transition: all 0.15s ease;
-}
-
-.modal-checkbox:hover {
-  border-color: var(--border-focus);
+  font-size: var(--text-sm);
 }
 
 .modal-checkbox input {
@@ -1044,6 +1049,10 @@ fieldset.modal-section > legend {
   accent-color: var(--accent);
   cursor: pointer;
   flex-shrink: 0;
+}
+
+.modal-checkbox .modal-checkbox-label {
+  color: var(--text-primary);
 }
 
 .modal-checkbox-content {
