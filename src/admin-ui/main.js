@@ -161,8 +161,8 @@ function withLoading(button, asyncFn) {
 // Tab Navigation
 // ===========================================
 
-let currentTab = 'sources';
-const validTabs = ['sources', 'xml', 'clients', 'assets', 'logs'];
+let currentTab = 'logs';
+const validTabs = ['logs', 'sources', 'xml', 'assets'];
 
 function switchTab(tabId) {
   // Update tab buttons
@@ -521,6 +521,8 @@ function initXmlModeHandlers() {
 // Event Name Functions
 // ===========================================
 
+let eventNameEditMode = false;
+
 async function loadEventName() {
   try {
     const res = await fetch('/api/event');
@@ -546,7 +548,20 @@ async function loadEventName() {
   }
 }
 
-async function setEventName() {
+function toggleEventNameEdit() {
+  eventNameEditMode = !eventNameEditMode;
+  const form = document.getElementById('eventNameForm');
+  const input = document.getElementById('eventNameInput');
+
+  if (eventNameEditMode) {
+    form.style.display = 'flex';
+    input.focus();
+  } else {
+    form.style.display = 'none';
+  }
+}
+
+async function saveEventName() {
   const name = document.getElementById('eventNameInput').value.trim();
   if (!name) {
     showEventError('Please enter an event name');
@@ -569,9 +584,21 @@ async function setEventName() {
     document.getElementById('eventName').textContent = data.name || '(not set)';
     document.getElementById('eventSource').textContent = data.source ? '(' + data.source + ')' : '';
     document.getElementById('eventError').style.display = 'none';
+
+    // Hide form after successful save
+    eventNameEditMode = false;
+    document.getElementById('eventNameForm').style.display = 'none';
+    showToast('Event name saved', 'success');
   } catch (e) {
     showEventError('Failed to set event name: ' + e.message);
   }
+}
+
+function cancelEventNameEdit() {
+  eventNameEditMode = false;
+  document.getElementById('eventNameForm').style.display = 'none';
+  document.getElementById('eventError').style.display = 'none';
+  loadEventName(); // Reset input to current value
 }
 
 async function clearEventName() {

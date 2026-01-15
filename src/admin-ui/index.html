@@ -43,13 +43,18 @@
       <div class="event-name">
         Event: <span class="event-name-value" id="eventName">-</span>
         <span id="eventSource" style="color: var(--text-muted);"></span>
+        <button class="btn-edit" id="eventEditBtn" onclick="toggleEventNameEdit()" aria-label="Edit event name" title="Edit event name">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+          </svg>
+        </button>
       </div>
     </div>
-    <div class="event-bar-form" role="group" aria-label="Event name settings">
+    <div class="event-bar-form" id="eventNameForm" role="group" aria-label="Event name settings" style="display: none;">
       <label for="eventNameInput" class="visually-hidden">Event name override</label>
       <input type="text" id="eventNameInput" placeholder="Event name override" aria-describedby="eventError">
-      <button class="btn" onclick="setEventName()">Set</button>
-      <button class="btn btn-secondary" onclick="clearEventName()">Clear</button>
+      <button class="btn" onclick="saveEventName()">Save</button>
+      <button class="btn btn-secondary" onclick="cancelEventNameEdit()">Cancel</button>
     </div>
     <div id="eventError" class="error" role="alert" style="display: none;"></div>
   </section>
@@ -59,19 +64,55 @@
     <!-- Dynamically populated -->
   </div>
 
+  <!-- Clients Section (always visible, above tabs) -->
+  <section class="clients-section" aria-labelledby="clientsSectionTitle">
+    <div class="clients-section-header">
+      <h2 class="clients-section-title" id="clientsSectionTitle">Clients</h2>
+      <div class="clients-header-right">
+        <div class="clients-count" role="status" aria-label="Client statistics">
+          <div class="clients-count-item online">
+            <span class="count" id="clientsOnlineCount" aria-label="Online clients">0</span>
+            <span>online</span>
+          </div>
+          <div class="clients-count-item total">
+            <span class="count" id="clientsTotalCount" aria-label="Total clients">0</span>
+            <span>total</span>
+          </div>
+        </div>
+        <button class="btn" onclick="refreshAllClients()" aria-label="Refresh all connected clients" style="background: var(--warning); color: var(--bg-body);">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="margin-right: 4px;" aria-hidden="true">
+            <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
+          </svg>
+          Refresh All
+        </button>
+      </div>
+    </div>
+
+    <!-- Clients grid -->
+    <div id="clientsGrid" class="clients-grid" role="list" aria-label="Connected clients"></div>
+
+    <!-- Empty state -->
+    <div id="noClients" class="clients-empty" style="display: none;" role="status">
+      <svg class="clients-empty-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clip-rule="evenodd"/>
+      </svg>
+      <div class="clients-empty-text">No clients connected</div>
+      <div class="clients-empty-hint">Clients will appear here when they connect to the server</div>
+    </div>
+  </section>
+
   <!-- Tab Navigation -->
   <nav class="tabs" role="tablist" aria-label="Admin sections">
-    <button class="tab active" role="tab" aria-selected="true" aria-controls="panel-sources" id="tab-sources" data-tab="sources" onclick="switchTab('sources')">Sources</button>
+    <button class="tab active" role="tab" aria-selected="true" aria-controls="panel-logs" id="tab-logs" data-tab="logs" onclick="switchTab('logs')">Logs</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="panel-sources" id="tab-sources" data-tab="sources" onclick="switchTab('sources')">Sources</button>
     <button class="tab" role="tab" aria-selected="false" aria-controls="panel-xml" id="tab-xml" data-tab="xml" onclick="switchTab('xml')">XML</button>
-    <button class="tab" role="tab" aria-selected="false" aria-controls="panel-clients" id="tab-clients" data-tab="clients" onclick="switchTab('clients')">Clients</button>
     <button class="tab" role="tab" aria-selected="false" aria-controls="panel-assets" id="tab-assets" data-tab="assets" onclick="switchTab('assets')">Assets</button>
-    <button class="tab" role="tab" aria-selected="false" aria-controls="panel-logs" id="tab-logs" data-tab="logs" onclick="switchTab('logs')">Logs</button>
   </nav>
 
   <!-- Tab Panels -->
 
   <!-- Sources Panel -->
-  <section class="tab-panel active" id="panel-sources" role="tabpanel" aria-labelledby="tab-sources">
+  <section class="tab-panel" id="panel-sources" role="tabpanel" aria-labelledby="tab-sources">
     <div class="card">
       <table id="sourcesTable" aria-label="Data sources">
         <thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Details</th></tr></thead>
@@ -120,45 +161,6 @@
         <button class="btn" onclick="setXmlPath()">Set Path</button>
       </div>
       <div id="xmlConfigError" class="error" role="alert" style="margin-top: 10px; display: none;"></div>
-    </div>
-  </section>
-
-  <!-- Clients Panel -->
-  <section class="tab-panel" id="panel-clients" role="tabpanel" aria-labelledby="tab-clients">
-    <div class="card">
-      <!-- Clients header with stats and actions -->
-      <div class="clients-header">
-        <div class="clients-header-left">
-          <div class="clients-count" role="status" aria-label="Client statistics">
-            <div class="clients-count-item online">
-              <span class="count" id="clientsOnlineCount" aria-label="Online clients">0</span>
-              <span>online</span>
-            </div>
-            <div class="clients-count-item total">
-              <span class="count" id="clientsTotalCount" aria-label="Total clients">0</span>
-              <span>total</span>
-            </div>
-          </div>
-        </div>
-        <button class="btn" onclick="refreshAllClients()" aria-label="Refresh all connected clients" style="background: var(--warning); color: var(--bg-body);">
-          <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="margin-right: 4px;" aria-hidden="true">
-            <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
-          </svg>
-          Refresh All
-        </button>
-      </div>
-
-      <!-- Clients grid -->
-      <div id="clientsGrid" class="clients-grid" role="list" aria-label="Connected clients"></div>
-
-      <!-- Empty state -->
-      <div id="noClients" class="clients-empty" style="display: none;" role="status">
-        <svg class="clients-empty-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-          <path fill-rule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clip-rule="evenodd"/>
-        </svg>
-        <div class="clients-empty-text">No clients connected</div>
-        <div class="clients-empty-hint">Clients will appear here when they connect to the server</div>
-      </div>
     </div>
   </section>
 
@@ -403,7 +405,7 @@
   </section>
 
   <!-- Logs Panel -->
-  <section class="tab-panel" id="panel-logs" role="tabpanel" aria-labelledby="tab-logs">
+  <section class="tab-panel active" id="panel-logs" role="tabpanel" aria-labelledby="tab-logs">
     <div class="card">
       <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; align-items: center;" role="group" aria-label="Log filters">
         <fieldset style="display: flex; gap: 5px; align-items: center; border: none; padding: 0; margin: 0;">
