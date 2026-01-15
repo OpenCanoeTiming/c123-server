@@ -232,7 +232,9 @@ describe('UnifiedServer', () => {
         const html = await response.text();
         expect(html).toContain('<!DOCTYPE html>');
         expect(html).toContain('C123 Server Dashboard');
-        expect(html).toContain('/api/status');
+        // External JS/CSS files instead of inline
+        expect(html).toContain('/admin-ui/main.js');
+        expect(html).toContain('/admin-ui/styles.css');
       });
 
       it('should include key dashboard elements', async () => {
@@ -244,6 +246,18 @@ describe('UnifiedServer', () => {
         expect(html).toContain('XML Configuration');
         expect(html).toContain('Clients');
         expect(html).toContain('Server Logs');
+      });
+
+      it('should serve static CSS', async () => {
+        const response = await fetch(`http://localhost:${port}/admin-ui/styles.css`);
+        expect(response.ok).toBe(true);
+        expect(response.headers.get('content-type')).toContain('text/css');
+      });
+
+      it('should serve static JS', async () => {
+        const response = await fetch(`http://localhost:${port}/admin-ui/main.js`);
+        expect(response.ok).toBe(true);
+        expect(response.headers.get('content-type')).toContain('javascript');
       });
     });
   });
