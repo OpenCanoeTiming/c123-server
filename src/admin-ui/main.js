@@ -905,6 +905,13 @@ function openClientModal(configKey) {
     ? configKey + ' (from ' + (client?.ipAddress || 'unknown IP') + ')'
     : configKey;
   document.getElementById('modalClientIp').textContent = idInfo;
+
+  // Set status badge
+  const statusBadge = document.getElementById('modalClientStatus');
+  const isOnline = client?.online;
+  statusBadge.className = 'client-status-badge ' + (isOnline ? 'online' : 'offline');
+  statusBadge.innerHTML = '<span class="client-status-dot ' + (isOnline ? 'online' : 'offline') + '"></span>' + (isOnline ? 'Online' : 'Offline');
+
   document.getElementById('modalLabel').value = client?.label || '';
 
   // Config fields
