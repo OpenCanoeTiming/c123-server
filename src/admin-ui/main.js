@@ -725,10 +725,14 @@ async function loadClients() {
 function renderClients() {
   const grid = document.getElementById('clientsGrid');
   const noClients = document.getElementById('noClients');
-  const status = document.getElementById('clientsStatus');
+  const onlineCountEl = document.getElementById('clientsOnlineCount');
+  const totalCountEl = document.getElementById('clientsTotalCount');
 
   const onlineCount = clientsData.filter(c => c.online).length;
-  status.textContent = onlineCount + ' online, ' + clientsData.length + ' total';
+
+  // Update count displays
+  if (onlineCountEl) onlineCountEl.textContent = onlineCount;
+  if (totalCountEl) totalCountEl.textContent = clientsData.length;
 
   // Skip grid update if user has text selected (to preserve copy ability)
   if (hasTextSelection()) {
@@ -747,44 +751,75 @@ function renderClients() {
 
 function renderClientCard(client) {
   const statusClass = client.online ? 'online' : 'offline';
-  const statusText = client.online ? 'online' : 'offline';
+  const statusText = client.online ? 'Online' : 'Offline';
   const label = client.label || '(unnamed)';
   const labelClass = client.label ? '' : 'empty';
-
-  // Build params display
-  const params = [];
-  if (client.serverConfig) {
-    if (client.serverConfig.type) params.push({ key: 'type', value: client.serverConfig.type });
-    if (client.serverConfig.displayRows) params.push({ key: 'rows', value: client.serverConfig.displayRows });
-    if (client.serverConfig.customTitle) params.push({ key: 'title', value: truncate(client.serverConfig.customTitle, 15) });
-  }
-
-  const paramsHtml = params.length > 0
-    ? params.map(p => '<span class="client-param">' + p.key + ': <span class="client-param-value">' + escapeHtml(String(p.value)) + '</span></span>').join('')
-    : '<span class="client-param">default config</span>';
 
   // Show configKey (clientId or IP) and actual IP if different
   const configKey = client.configKey || client.ip;
   const idTypeLabel = client.hasExplicitId ? 'ID' : 'IP';
-  const ipInfo = client.hasExplicitId && client.ipAddress
-    ? '<span style="font-size: 0.8em; color: #666; margin-left: 5px;">(' + escapeHtml(client.ipAddress) + ')</span>'
+  const ipHint = client.hasExplicitId && client.ipAddress
+    ? '<div class="client-ip-hint">from ' + escapeHtml(client.ipAddress) + '</div>'
     : '';
+
+  // Build config display
+  const cfg = client.serverConfig || {};
+  var configHtml = '';
+
+  if (cfg.type || cfg.displayRows || cfg.customTitle) {
+    configHtml = '<div class="client-config">';
+    if (cfg.type) {
+      configHtml += '<div class="client-config-row">' +
+        '<svg class="client-config-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/></svg>' +
+        '<span class="client-config-label">Layout</span>' +
+        '<span class="client-config-value">' + escapeHtml(cfg.type) + '</span>' +
+        '</div>';
+    }
+    if (cfg.displayRows) {
+      configHtml += '<div class="client-config-row">' +
+        '<svg class="client-config-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>' +
+        '<span class="client-config-label">Rows</span>' +
+        '<span class="client-config-value">' + cfg.displayRows + '</span>' +
+        '</div>';
+    }
+    if (cfg.customTitle) {
+      configHtml += '<div class="client-config-row">' +
+        '<svg class="client-config-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 110 2h-3a1 1 0 01-1-1v-2a1 1 0 00-1-1H9a1 1 0 00-1 1v2a1 1 0 01-1 1H4a1 1 0 110-2V4zm3 1h2v2H7V5zm2 4H7v2h2V9zm2-4h2v2h-2V5zm2 4h-2v2h2V9z" clip-rule="evenodd"/></svg>' +
+        '<span class="client-config-label">Title</span>' +
+        '<span class="client-config-value">' + escapeHtml(truncate(cfg.customTitle, 20)) + '</span>' +
+        '</div>';
+    }
+    configHtml += '</div>';
+  } else {
+    configHtml = '<div class="client-params"><span class="client-param">Default configuration</span></div>';
+  }
+
+  // Action buttons with icons
+  const editIcon = '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg>';
+  const refreshIcon = '<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>';
 
   return '<div class="client-card ' + statusClass + '" data-ip="' + escapeHtml(configKey) + '">' +
     '<div class="client-header">' +
-    '<span class="client-ip" title="' + idTypeLabel + ': ' + escapeHtml(configKey) + '">' + escapeHtml(configKey) + '</span>' + ipInfo +
-    '<div class="client-status">' +
-    '<span class="client-status-dot ' + statusClass + '"></span>' +
-    '<span style="font-size: 0.8em; color: #888;">' + statusText + '</span>' +
+      '<div class="client-identity">' +
+        '<span class="client-ip" title="' + idTypeLabel + ': ' + escapeHtml(configKey) + '">' + escapeHtml(configKey) + '</span>' +
+        ipHint +
+      '</div>' +
+      '<div class="client-status">' +
+        '<span class="client-status-badge ' + statusClass + '">' +
+          '<span class="client-status-dot ' + statusClass + '"></span>' +
+          statusText +
+        '</span>' +
+      '</div>' +
     '</div>' +
+    '<div class="client-body">' +
+      '<div class="client-label ' + labelClass + '" onclick="openClientModal(\'' + escapeHtml(configKey) + '\')">' + escapeHtml(label) + '</div>' +
+      configHtml +
+      '<div class="client-actions">' +
+        '<button class="client-btn primary" onclick="openClientModal(\'' + escapeHtml(configKey) + '\')">' + editIcon + ' Edit</button>' +
+        (client.online ? '<button class="client-btn refresh" onclick="refreshClient(\'' + escapeHtml(configKey) + '\')">' + refreshIcon + ' Refresh</button>' : '') +
+      '</div>' +
     '</div>' +
-    '<div class="client-label ' + labelClass + '" onclick="openClientModal(\'' + escapeHtml(configKey) + '\')">' + escapeHtml(label) + '</div>' +
-    '<div class="client-params">' + paramsHtml + '</div>' +
-    '<div class="client-actions">' +
-    '<button class="client-btn" onclick="openClientModal(\'' + escapeHtml(configKey) + '\')">Edit</button>' +
-    (client.online ? '<button class="client-btn refresh" onclick="refreshClient(\'' + escapeHtml(configKey) + '\')">Refresh</button>' : '') +
-    '</div>' +
-    '</div>';
+  '</div>';
 }
 
 function openClientModal(configKey) {
@@ -1191,6 +1226,67 @@ function loadModalAssets(assets) {
 }
 
 // ===========================================
+// Asset Lightbox (E4)
+// ===========================================
+
+let currentLightbox = null;
+
+function openLightbox(imageSrc, title, width, height) {
+  if (currentLightbox) {
+    closeLightbox();
+  }
+
+  const lightbox = document.createElement('div');
+  lightbox.className = 'lightbox';
+  lightbox.setAttribute('role', 'dialog');
+  lightbox.setAttribute('aria-label', 'Image preview');
+
+  const sizeInfo = width && height ? width + ' × ' + height : '';
+  const sizeKB = imageSrc ? Math.round(imageSrc.length / 1024) : 0;
+
+  lightbox.innerHTML =
+    '<div class="lightbox-content" onclick="event.stopPropagation()">' +
+      '<img class="lightbox-image" src="' + imageSrc + '" alt="' + escapeHtml(title || 'Preview') + '">' +
+      '<div class="lightbox-info">' +
+        (title ? '<span>' + escapeHtml(title) + '</span>' : '') +
+        (sizeInfo ? '<span>' + sizeInfo + '</span>' : '') +
+        (sizeKB ? '<span>' + sizeKB + ' KB</span>' : '') +
+      '</div>' +
+    '</div>' +
+    '<button class="lightbox-close" onclick="closeLightbox()" aria-label="Close">' +
+      '<svg viewBox="0 0 20 20" fill="currentColor">' +
+        '<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>' +
+      '</svg>' +
+    '</button>';
+
+  lightbox.addEventListener('click', function(e) {
+    if (e.target === lightbox) {
+      closeLightbox();
+    }
+  });
+
+  document.body.appendChild(lightbox);
+  currentLightbox = lightbox;
+
+  // Trap focus and handle escape
+  document.addEventListener('keydown', handleLightboxKeydown);
+}
+
+function closeLightbox() {
+  if (currentLightbox) {
+    currentLightbox.remove();
+    currentLightbox = null;
+    document.removeEventListener('keydown', handleLightboxKeydown);
+  }
+}
+
+function handleLightboxKeydown(e) {
+  if (e.key === 'Escape') {
+    closeLightbox();
+  }
+}
+
+// ===========================================
 // Default Asset Management Functions
 // ===========================================
 
@@ -1435,10 +1531,31 @@ function updateAssetPreview(key, dataUrl) {
   const name = key.replace('Url', '');
   const preview = document.getElementById(name + 'Preview');
   const placeholder = document.getElementById(name + 'Placeholder');
+  const dropZone = document.getElementById(name + 'DropZone');
+  const label = getAssetLabel(key);
 
   if (preview && placeholder) {
-    preview.innerHTML = '<img src="' + dataUrl + '" alt="' + getAssetLabel(key) + '">';
+    const img = document.createElement('img');
+    img.src = dataUrl;
+    img.alt = label;
+    img.style.cursor = 'zoom-in';
+    img.title = 'Click to preview';
+
+    // Store dimensions for lightbox
+    img.onload = function() {
+      img.dataset.width = img.naturalWidth;
+      img.dataset.height = img.naturalHeight;
+    };
+
+    img.onclick = function(e) {
+      e.stopPropagation();
+      openLightbox(dataUrl, label, img.dataset.width, img.dataset.height);
+    };
+
+    preview.innerHTML = '';
+    preview.appendChild(img);
     placeholder.style.display = 'none';
+    if (dropZone) dropZone.classList.add('has-image');
   }
 }
 
@@ -1447,10 +1564,12 @@ function clearAssetPreview(key) {
   const preview = document.getElementById(name + 'Preview');
   const placeholder = document.getElementById(name + 'Placeholder');
   const info = document.getElementById(name + 'Info');
+  const dropZone = document.getElementById(name + 'DropZone');
 
   if (preview) preview.innerHTML = '';
-  if (placeholder) placeholder.style.display = 'block';
+  if (placeholder) placeholder.style.display = 'flex';
   if (info) info.textContent = '';
+  if (dropZone) dropZone.classList.remove('has-image');
 }
 
 function updateAssetInfo(key, dataUrl, width, height) {

@@ -121,77 +121,124 @@
   <!-- Clients Panel -->
   <div class="tab-panel" id="panel-clients" role="tabpanel">
     <div class="card">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-        <span id="clientsStatus">Loading...</span>
-        <button class="btn" onclick="refreshAllClients()" style="background: var(--warning);">Refresh All Clients</button>
+      <!-- Clients header with stats and actions -->
+      <div class="clients-header">
+        <div class="clients-header-left">
+          <div class="clients-count">
+            <div class="clients-count-item online">
+              <span class="count" id="clientsOnlineCount">0</span>
+              <span>online</span>
+            </div>
+            <div class="clients-count-item total">
+              <span class="count" id="clientsTotalCount">0</span>
+              <span>total</span>
+            </div>
+          </div>
+        </div>
+        <button class="btn" onclick="refreshAllClients()" style="background: var(--warning); color: var(--bg-body);">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="margin-right: 4px;">
+            <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
+          </svg>
+          Refresh All
+        </button>
       </div>
 
       <!-- Clients grid -->
       <div id="clientsGrid" class="clients-grid"></div>
-      <div id="noClients" style="color: var(--text-muted); padding: 20px; text-align: center;">No clients connected or configured</div>
-      <div id="clientMessage" style="color: var(--success); margin-top: 10px; display: none;"></div>
+
+      <!-- Empty state -->
+      <div id="noClients" class="clients-empty" style="display: none;">
+        <svg class="clients-empty-icon" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clip-rule="evenodd"/>
+        </svg>
+        <div class="clients-empty-text">No clients connected</div>
+        <div class="clients-empty-hint">Clients will appear here when they connect to the server</div>
+      </div>
     </div>
   </div>
 
-  <!-- Client detail modal -->
+  <!-- Client detail modal (E2: Enhanced design) -->
   <div id="clientModal" class="modal" style="display: none;">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>Client: <span id="modalClientIp"></span></h3>
-        <button onclick="closeClientModal()" style="background: none; border: none; color: var(--text-secondary); font-size: 1.5em; cursor: pointer;">&times;</button>
+        <h3>
+          <svg class="modal-header-icon" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clip-rule="evenodd"/>
+          </svg>
+          <span id="modalClientIp"></span>
+        </h3>
+        <button class="modal-close" onclick="closeClientModal()" aria-label="Close">&times;</button>
       </div>
+
       <div class="modal-body">
-        <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; color: var(--text-secondary);">Label</label>
-          <div style="display: flex; gap: 8px;">
-            <input type="text" id="modalLabel" placeholder="Client name" style="flex: 1; padding: 6px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary);">
-            <button class="btn" onclick="saveClientLabel()">Save</button>
+        <!-- Basic Info Section -->
+        <div class="modal-section">
+          <div class="modal-section-title">Basic Info</div>
+
+          <div class="modal-field">
+            <label class="modal-field-label">Label</label>
+            <div class="modal-field-row">
+              <input type="text" id="modalLabel" class="modal-input" placeholder="e.g. Finish Line Display">
+              <button class="btn" onclick="saveClientLabel()">Save</button>
+            </div>
           </div>
         </div>
 
-        <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; color: var(--text-secondary);">Layout Type</label>
-          <select id="modalType" style="width: 100%; padding: 6px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary);">
-            <option value="">(auto)</option>
-            <option value="vertical">Vertical</option>
-            <option value="ledwall">LED Wall</option>
-          </select>
+        <!-- Display Settings Section -->
+        <div class="modal-section">
+          <div class="modal-section-title">Display Settings</div>
+
+          <div class="modal-field">
+            <label class="modal-field-label">Layout Type</label>
+            <select id="modalType" class="modal-select">
+              <option value="">(auto - detect from screen)</option>
+              <option value="vertical">Vertical (standard monitors)</option>
+              <option value="ledwall">LED Wall (wide format)</option>
+            </select>
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-field-label">Display Rows</label>
+            <input type="number" id="modalDisplayRows" class="modal-input" min="3" max="20" placeholder="(auto - based on screen height)">
+            <div class="modal-field-hint">Number of result rows to show (3-20)</div>
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-field-label">Custom Title</label>
+            <input type="text" id="modalCustomTitle" class="modal-input" placeholder="(none - uses event name)">
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-checkbox">
+              <input type="checkbox" id="modalScrollToFinished" checked>
+              <div class="modal-checkbox-content">
+                <div class="modal-checkbox-label">Scroll to Finished</div>
+                <div class="modal-checkbox-hint">When enabled, scoreboard scrolls to show finished competitor. When disabled, only highlights.</div>
+              </div>
+            </label>
+          </div>
         </div>
 
-        <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; color: var(--text-secondary);">Display Rows (3-20)</label>
-          <input type="number" id="modalDisplayRows" min="3" max="20" placeholder="(auto)" style="width: 100%; padding: 6px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary);">
-        </div>
+        <!-- Identity Section -->
+        <div class="modal-section">
+          <div class="modal-section-title">Identity</div>
 
-        <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; color: var(--text-secondary);">Custom Title</label>
-          <input type="text" id="modalCustomTitle" placeholder="(none)" style="width: 100%; padding: 6px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary);">
-        </div>
+          <div class="modal-field">
+            <label class="modal-field-label">Client ID</label>
+            <input type="text" id="modalClientId" class="modal-input" placeholder="(none - uses IP address)">
+            <div class="modal-field-hint">Assign a persistent ID. Client will use this ID for future connections instead of IP.</div>
+          </div>
 
-        <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; color: var(--text-secondary);">Client ID (server-assigned)</label>
-          <input type="text" id="modalClientId" placeholder="(none - uses IP)" style="width: 100%; padding: 6px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary);">
-          <div style="font-size: 0.8em; color: var(--text-muted); margin-top: 4px;">When set, client will adopt this ID for future connections</div>
-        </div>
-
-        <div style="margin-bottom: 15px;">
-          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-            <input type="checkbox" id="modalScrollToFinished" checked style="width: 16px; height: 16px;">
-            <span style="color: var(--text-secondary);">Scroll to Finished</span>
-          </label>
-          <div style="font-size: 0.8em; color: var(--text-muted); margin-top: 4px; margin-left: 24px;">When enabled, scoreboard scrolls to show finished competitor. When disabled, only highlights.</div>
-        </div>
-
-        <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; color: var(--text-secondary);">Client State (reported)</label>
-          <pre id="modalClientState" style="background: var(--bg-input); padding: 8px; border-radius: var(--radius-md); font-size: 11px; overflow-x: auto; max-height: 100px;">-</pre>
+          <div class="modal-field">
+            <label class="modal-field-label">Client State (reported)</label>
+            <pre id="modalClientState" class="modal-client-state">-</pre>
+          </div>
         </div>
 
         <!-- Asset Overrides Section -->
-        <div class="modal-assets-section">
-          <h4>Asset Overrides <span style="font-weight: normal; color: var(--text-muted); font-size: 0.85em;">(override global defaults)</span></h4>
+        <div class="modal-section">
+          <div class="modal-section-title">Asset Overrides</div>
 
-          <!-- Logo Override -->
           <div class="modal-asset-item">
             <label>Logo</label>
             <div class="modal-asset-drop-zone" id="modalLogoDropZone" data-key="logoUrl" tabindex="0">
@@ -200,13 +247,12 @@
               <input type="file" id="modalLogoInput" accept="image/*" style="display: none;">
             </div>
             <div class="modal-asset-controls">
-              <button class="btn" onclick="clearModalAsset('logoUrl')" style="background: var(--text-muted);">Clear</button>
+              <button class="btn btn-secondary" onclick="clearModalAsset('logoUrl')">Clear</button>
               <button class="btn btn-secondary" onclick="useDefaultAsset('logoUrl')">Use Default</button>
             </div>
             <div class="modal-asset-info" id="modalLogoInfo"></div>
           </div>
 
-          <!-- Partner Logo Override -->
           <div class="modal-asset-item">
             <label>Partner Logo</label>
             <div class="modal-asset-drop-zone" id="modalPartnerLogoDropZone" data-key="partnerLogoUrl" tabindex="0">
@@ -215,13 +261,12 @@
               <input type="file" id="modalPartnerLogoInput" accept="image/*" style="display: none;">
             </div>
             <div class="modal-asset-controls">
-              <button class="btn" onclick="clearModalAsset('partnerLogoUrl')" style="background: var(--text-muted);">Clear</button>
+              <button class="btn btn-secondary" onclick="clearModalAsset('partnerLogoUrl')">Clear</button>
               <button class="btn btn-secondary" onclick="useDefaultAsset('partnerLogoUrl')">Use Default</button>
             </div>
             <div class="modal-asset-info" id="modalPartnerLogoInfo"></div>
           </div>
 
-          <!-- Footer Image Override -->
           <div class="modal-asset-item">
             <label>Footer Banner</label>
             <div class="modal-asset-drop-zone" id="modalFooterImageDropZone" data-key="footerImageUrl" tabindex="0">
@@ -230,44 +275,57 @@
               <input type="file" id="modalFooterImageInput" accept="image/*" style="display: none;">
             </div>
             <div class="modal-asset-controls">
-              <button class="btn" onclick="clearModalAsset('footerImageUrl')" style="background: var(--text-muted);">Clear</button>
+              <button class="btn btn-secondary" onclick="clearModalAsset('footerImageUrl')">Clear</button>
               <button class="btn btn-secondary" onclick="useDefaultAsset('footerImageUrl')">Use Default</button>
             </div>
             <div class="modal-asset-info" id="modalFooterImageInfo"></div>
           </div>
         </div>
-
-        <div style="display: flex; gap: 8px; justify-content: space-between;">
-          <button class="btn" onclick="saveClientConfig()" style="flex: 1;">Save Config</button>
-          <button class="btn btn-danger" onclick="deleteClientConfig()">Delete</button>
-        </div>
       </div>
-      <div id="modalError" class="error" style="padding: 10px; display: none;"></div>
+
+      <div class="modal-actions">
+        <button class="btn" onclick="saveClientConfig()">Save Configuration</button>
+        <button class="btn btn-danger" onclick="deleteClientConfig()">Delete</button>
+      </div>
+
+      <div id="modalError" class="error" style="padding: 10px 20px; display: none;"></div>
     </div>
   </div>
 
-  <!-- Assets Panel -->
+  <!-- Assets Panel (E3: Enhanced drag-and-drop UX) -->
   <div class="tab-panel" id="panel-assets" role="tabpanel">
     <div class="card">
-      <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: var(--text-sm);">
-        Configure default images for all scoreboards. Upload, paste, or drag & drop images.
-        Per-client overrides can be set in client configuration.
+      <p class="assets-intro">
+        Configure default images for all scoreboards. Drag & drop, paste from clipboard, or click to upload.
+        Per-client overrides can be set in the client configuration modal.
       </p>
 
       <div class="assets-grid">
         <!-- Logo -->
         <div class="asset-item">
-          <label>Logo <span style="color: var(--text-muted); font-size: 0.85em;">(max 200x80px)</span></label>
+          <div class="asset-item-header">
+            <div class="asset-item-label">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/>
+              </svg>
+              Logo
+            </div>
+            <span class="asset-item-size">max 200×80</span>
+          </div>
           <div class="asset-drop-zone" id="logoDropZone" data-key="logoUrl" tabindex="0">
             <div class="asset-preview" id="logoPreview"></div>
             <div class="asset-placeholder" id="logoPlaceholder">
-              Drop image here or click to upload
+              <svg class="asset-placeholder-icon" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+              </svg>
+              <span class="asset-placeholder-text">Drop image or click to upload</span>
+              <span class="asset-placeholder-hint">PNG, JPG, SVG supported</span>
             </div>
             <input type="file" id="logoInput" accept="image/*" style="display: none;">
           </div>
           <div class="asset-actions">
-            <input type="text" id="logoUrlInput" placeholder="Or enter URL..." class="asset-url-input">
-            <button class="btn asset-btn" onclick="setAssetFromUrl('logoUrl')">Load URL</button>
+            <input type="text" id="logoUrlInput" placeholder="Or paste URL..." class="asset-url-input">
+            <button class="btn asset-btn" onclick="setAssetFromUrl('logoUrl')">Load</button>
             <button class="btn asset-btn btn-secondary" onclick="clearAsset('logoUrl')">Clear</button>
           </div>
           <div class="asset-info" id="logoInfo"></div>
@@ -275,43 +333,64 @@
 
         <!-- Partner Logo -->
         <div class="asset-item">
-          <label>Partner Logo <span style="color: var(--text-muted); font-size: 0.85em;">(max 300x80px)</span></label>
+          <div class="asset-item-header">
+            <div class="asset-item-label">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
+              </svg>
+              Partner Logo
+            </div>
+            <span class="asset-item-size">max 300×80</span>
+          </div>
           <div class="asset-drop-zone" id="partnerLogoDropZone" data-key="partnerLogoUrl" tabindex="0">
             <div class="asset-preview" id="partnerLogoPreview"></div>
             <div class="asset-placeholder" id="partnerLogoPlaceholder">
-              Drop image here or click to upload
+              <svg class="asset-placeholder-icon" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+              </svg>
+              <span class="asset-placeholder-text">Drop image or click to upload</span>
+              <span class="asset-placeholder-hint">PNG, JPG, SVG supported</span>
             </div>
             <input type="file" id="partnerLogoInput" accept="image/*" style="display: none;">
           </div>
           <div class="asset-actions">
-            <input type="text" id="partnerLogoUrlInput" placeholder="Or enter URL..." class="asset-url-input">
-            <button class="btn asset-btn" onclick="setAssetFromUrl('partnerLogoUrl')">Load URL</button>
+            <input type="text" id="partnerLogoUrlInput" placeholder="Or paste URL..." class="asset-url-input">
+            <button class="btn asset-btn" onclick="setAssetFromUrl('partnerLogoUrl')">Load</button>
             <button class="btn asset-btn btn-secondary" onclick="clearAsset('partnerLogoUrl')">Clear</button>
           </div>
           <div class="asset-info" id="partnerLogoInfo"></div>
         </div>
 
         <!-- Footer Image -->
-        <div class="asset-item">
-          <label>Footer Banner <span style="color: var(--text-muted); font-size: 0.85em;">(max 1920x200px)</span></label>
-          <div class="asset-drop-zone asset-drop-zone-wide" id="footerImageDropZone" data-key="footerImageUrl" tabindex="0">
+        <div class="asset-item" style="grid-column: 1 / -1;">
+          <div class="asset-item-header">
+            <div class="asset-item-label">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
+              </svg>
+              Footer Banner
+            </div>
+            <span class="asset-item-size">max 1920×200</span>
+          </div>
+          <div class="asset-drop-zone" id="footerImageDropZone" data-key="footerImageUrl" tabindex="0">
             <div class="asset-preview" id="footerImagePreview"></div>
             <div class="asset-placeholder" id="footerImagePlaceholder">
-              Drop image here or click to upload
+              <svg class="asset-placeholder-icon" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+              </svg>
+              <span class="asset-placeholder-text">Drop image or click to upload</span>
+              <span class="asset-placeholder-hint">Wide format recommended (e.g. 1920×100)</span>
             </div>
             <input type="file" id="footerImageInput" accept="image/*" style="display: none;">
           </div>
           <div class="asset-actions">
-            <input type="text" id="footerImageUrlInput" placeholder="Or enter URL..." class="asset-url-input">
-            <button class="btn asset-btn" onclick="setAssetFromUrl('footerImageUrl')">Load URL</button>
+            <input type="text" id="footerImageUrlInput" placeholder="Or paste URL..." class="asset-url-input">
+            <button class="btn asset-btn" onclick="setAssetFromUrl('footerImageUrl')">Load</button>
             <button class="btn asset-btn btn-secondary" onclick="clearAsset('footerImageUrl')">Clear</button>
           </div>
           <div class="asset-info" id="footerImageInfo"></div>
         </div>
       </div>
-
-      <div id="assetError" class="error" style="margin-top: 10px; display: none;"></div>
-      <div id="assetMessage" style="color: var(--success); margin-top: 10px; display: none;"></div>
     </div>
   </div>
 

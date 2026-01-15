@@ -497,11 +497,18 @@ Klíčový identifikační prvek - na první pohled jasné, která app běží.
 - Input validace (error/success states) a input groups s addony
 - Všechny notifikace (client, asset) nyní používají toast systém
 
-#### Blok E: Clients a Assets redesign (1 session)
-- [ ] E1: Client cards s lepší hierarchií
-- [ ] E2: Client edit modal vylepšení
-- [ ] E3: Assets grid s lepším drag-and-drop UX
-- [ ] E4: Asset preview lightbox
+#### Blok E: Clients a Assets redesign (1 session) ✅ DONE
+- [x] E1: Client cards s lepší hierarchií
+- [x] E2: Client edit modal vylepšení
+- [x] E3: Assets grid s lepším drag-and-drop UX
+- [x] E4: Asset preview lightbox
+
+**Poznámky k bloku E:**
+- Client cards redesign: lepší vizuální hierarchie, status badge, config icons, hover efekty
+- Client modal: rozděleno do sekcí (Basic Info, Display Settings, Identity, Asset Overrides)
+- Nové modal CSS třídy pro konzistentní styling (modal-section, modal-field, modal-input atd.)
+- Assets panel: vylepšené drop zóny s animovaným drag-over state, icons, has-image state
+- Lightbox pro zobrazení assetů v plné velikosti (klik na náhled), ESC pro zavření
 
 #### Blok F: Accessibility a polish (1 session)
 - [ ] F1: ARIA labels a roles
