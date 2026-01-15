@@ -467,11 +467,20 @@ Klíčový identifikační prvek - na první pohled jasné, která app běží.
 - Badge komponenta pro status labely
 - Všechny barvy, spacing, typography jako CSS custom properties
 
-#### Blok C: Tab navigation a layout (1 session)
-- [ ] C1: Implementovat tab systém (vanilla JS)
-- [ ] C2: Redesign Sources jako kompaktní status bar
-- [ ] C3: Event info sekce nahoře
-- [ ] C4: Responzivní mobile-first layout
+#### Blok C: Tab navigation a layout (1 session) ✅ DONE
+- [x] C1: Implementovat tab systém (vanilla JS)
+- [x] C2: Redesign Sources jako kompaktní status bar
+- [x] C3: Event info sekce nahoře
+- [x] C4: Responzivní mobile-first layout
+
+**Poznámky k bloku C:**
+- Tab navigace s 5 sekcemi (Sources, XML, Clients, Assets, Logs)
+- Stav tabu persistován v URL hash (#sources, #xml, atd.)
+- Event info bar prominentně nahoře s názvem závodu a eventu
+- Kompaktní status bar pro rychlý přehled všech zdrojů
+- Mobile-first responsive layout (breakpoints 768px a 480px)
+- Větší touch targets na mobilu (min 44px)
+- Keyboard navigation - Escape zavírá modal
 
 #### Blok D: Komponenty a UX (1 session)
 - [ ] D1: Nový modal s backdrop blur a focus trap

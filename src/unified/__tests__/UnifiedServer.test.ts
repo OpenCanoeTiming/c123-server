@@ -243,9 +243,9 @@ describe('UnifiedServer', () => {
 
         expect(html).toContain('Event');
         expect(html).toContain('Sources');
-        expect(html).toContain('XML Configuration');
+        expect(html).toContain('XML');
         expect(html).toContain('Clients');
-        expect(html).toContain('Server Logs');
+        expect(html).toContain('Logs');
       });
 
       it('should serve static CSS', async () => {

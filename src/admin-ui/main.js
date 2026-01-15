@@ -4,6 +4,60 @@
  */
 
 // ===========================================
+// Tab Navigation
+// ===========================================
+
+let currentTab = 'sources';
+
+function switchTab(tabId) {
+  // Update tab buttons
+  document.querySelectorAll('.tab').forEach(function(tab) {
+    const isActive = tab.dataset.tab === tabId;
+    tab.classList.toggle('active', isActive);
+    tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+  });
+
+  // Update tab panels
+  document.querySelectorAll('.tab-panel').forEach(function(panel) {
+    panel.classList.toggle('active', panel.id === 'panel-' + tabId);
+  });
+
+  currentTab = tabId;
+
+  // Store in URL hash for persistence
+  window.location.hash = tabId;
+}
+
+function initTabFromHash() {
+  const hash = window.location.hash.replace('#', '');
+  const validTabs = ['sources', 'xml', 'clients', 'assets', 'logs'];
+  if (hash && validTabs.includes(hash)) {
+    switchTab(hash);
+  }
+}
+
+// ===========================================
+// Compact Status Bar
+// ===========================================
+
+function renderStatusBar(sources) {
+  const statusBar = document.getElementById('statusBar');
+  if (!statusBar) return;
+
+  const html = sources.map(function(s) {
+    const statusCls = statusClass(s.status);
+    const details = s.host ? s.host + ':' + s.port : (s.path ? truncate(s.path, 30) : '-');
+    return '<div class="status-bar-item">' +
+      '<span class="status ' + statusCls + '"></span>' +
+      '<span class="status-bar-label">' + s.name + '</span>' +
+      '<span class="status-bar-value">' + escapeHtml(details) + '</span>' +
+      '</div>';
+  }).join('');
+
+  statusBar.innerHTML = html;
+}
+
+// ===========================================
 // Utility Functions
 // ===========================================
 
@@ -57,18 +111,23 @@ async function refresh() {
     // Update header status indicators
     updateHeaderStatus(data.sources);
 
+    // Update compact status bar
+    renderStatusBar(data.sources);
+
     // Skip table updates if user has text selected (to preserve copy ability)
     if (!hasTextSelection()) {
-      // Sources
+      // Sources table (in Sources tab)
       const sourcesBody = document.querySelector('#sourcesTable tbody');
-      sourcesBody.innerHTML = data.sources.map(s =>
-        '<tr>' +
-        '<td>' + s.name + '</td>' +
-        '<td>' + s.type.toUpperCase() + '</td>' +
-        '<td><span class="status ' + statusClass(s.status) + '"></span>' + s.status + '</td>' +
-        '<td>' + (s.host ? s.host + ':' + s.port : (s.path || '-')) + '</td>' +
-        '</tr>'
-      ).join('');
+      if (sourcesBody) {
+        sourcesBody.innerHTML = data.sources.map(s =>
+          '<tr>' +
+          '<td>' + escapeHtml(s.name) + '</td>' +
+          '<td>' + s.type.toUpperCase() + '</td>' +
+          '<td><span class="status ' + statusClass(s.status) + '"></span>' + s.status + '</td>' +
+          '<td>' + escapeHtml(s.host ? s.host + ':' + s.port : (s.path || '-')) + '</td>' +
+          '</tr>'
+        ).join('');
+      }
     }
 
     document.getElementById('lastUpdate').textContent = 'Last update: ' + new Date().toLocaleTimeString();
@@ -1279,6 +1338,12 @@ function showAssetMessage(msg) {
 // ===========================================
 
 function init() {
+  // Initialize tab from URL hash
+  initTabFromHash();
+
+  // Listen for hash changes
+  window.addEventListener('hashchange', initTabFromHash);
+
   // Initialize handlers
   initXmlModeHandlers();
   initModalAssetHandlers();
@@ -1287,6 +1352,13 @@ function init() {
   // Close modal when clicking outside
   document.getElementById('clientModal').addEventListener('click', function(e) {
     if (e.target === this) closeClientModal();
+  });
+
+  // Keyboard navigation for modal
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('clientModal').style.display !== 'none') {
+      closeClientModal();
+    }
   });
 
   // Initial data load

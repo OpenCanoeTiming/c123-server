@@ -33,82 +33,104 @@
 
   <main class="main-content">
 
-  <h2>Event</h2>
-  <div class="card">
-    <div style="margin-bottom: 10px;">
-      <strong>Current race:</strong> <span id="currentRace">-</span>
-    </div>
-    <div style="margin-bottom: 10px;">
-      <strong>Event name:</strong> <span id="eventName">-</span>
-      <span id="eventSource" style="margin-left: 10px; color: #888;"></span>
-    </div>
-    <div class="config-form">
-      <input type="text" id="eventNameInput" placeholder="Event name override" style="flex: 1; min-width: 200px; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #0f0f23; color: #eee;">
-      <button class="btn" onclick="setEventName()">Set</button>
-      <button class="btn" onclick="clearEventName()" style="background: #666;">Clear</button>
-    </div>
-    <div id="eventError" class="error" style="margin-top: 10px; display: none;"></div>
-  </div>
-
-  <h2>Sources</h2>
-  <div class="card">
-    <table id="sourcesTable">
-      <thead><tr><th>Name</th><th>Type</th><th>Status</th><th>Details</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </div>
-
-  <h2>XML Configuration</h2>
-  <div class="card" id="xmlConfigCard">
-    <div style="margin-bottom: 10px;">
-      <strong>Current path:</strong> <span id="xmlPath">-</span>
-      <span id="xmlSource" style="margin-left: 10px; color: #888;"></span>
-    </div>
-
-    <!-- Mode selector (Windows only) -->
-    <div id="modeSelector" style="display: none; margin-bottom: 15px;">
-      <strong style="display: block; margin-bottom: 8px;">Source mode:</strong>
-      <div style="display: flex; flex-direction: column; gap: 8px;">
-        <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
-          <input type="radio" name="xmlMode" value="auto-offline" style="margin-top: 3px;">
-          <div>
-            <div>Auto - offline copy (recommended)</div>
-            <div id="offlinePath" style="font-size: 0.85em; color: #888;"></div>
-          </div>
-        </label>
-        <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
-          <input type="radio" name="xmlMode" value="auto-main" style="margin-top: 3px;">
-          <div>
-            <div>Auto - main event file</div>
-            <div id="mainPath" style="font-size: 0.85em; color: #888;"></div>
-          </div>
-        </label>
-        <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
-          <input type="radio" name="xmlMode" value="manual" style="margin-top: 3px;">
-          <div>Manual path</div>
-        </label>
+  <!-- Event Info Bar (prominent position) -->
+  <div class="event-bar">
+    <div class="event-bar-main">
+      <div class="event-race" id="currentRace">-</div>
+      <div class="event-name">
+        Event: <span class="event-name-value" id="eventName">-</span>
+        <span id="eventSource" style="color: var(--text-muted);"></span>
       </div>
     </div>
-
-    <!-- Manual path input -->
-    <div id="manualPathSection" class="config-form">
-      <input type="text" id="xmlPathInput" placeholder="XML file path" style="flex: 1; min-width: 200px; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #0f0f23; color: #eee;">
-      <button class="btn" onclick="setXmlPath()">Set Path</button>
+    <div class="event-bar-form">
+      <input type="text" id="eventNameInput" placeholder="Event name override">
+      <button class="btn" onclick="setEventName()">Set</button>
+      <button class="btn btn-secondary" onclick="clearEventName()">Clear</button>
     </div>
-    <div id="xmlConfigError" class="error" style="margin-top: 10px; display: none;"></div>
+    <div id="eventError" class="error" style="display: none;"></div>
   </div>
 
-  <h2>Clients</h2>
-  <div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-      <span id="clientsStatus">Loading...</span>
-      <button class="btn" onclick="refreshAllClients()" style="background: #ff9800;">Refresh All Clients</button>
-    </div>
+  <!-- Compact Status Bar -->
+  <div class="status-bar" id="statusBar">
+    <!-- Dynamically populated -->
+  </div>
 
-    <!-- Clients grid -->
-    <div id="clientsGrid" class="clients-grid"></div>
-    <div id="noClients" style="color: #666; padding: 20px; text-align: center;">No clients connected or configured</div>
-    <div id="clientMessage" style="color: #00ff88; margin-top: 10px; display: none;"></div>
+  <!-- Tab Navigation -->
+  <div class="tabs" role="tablist">
+    <button class="tab active" role="tab" aria-selected="true" data-tab="sources" onclick="switchTab('sources')">Sources</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="xml" onclick="switchTab('xml')">XML</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="clients" onclick="switchTab('clients')">Clients</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="assets" onclick="switchTab('assets')">Assets</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="logs" onclick="switchTab('logs')">Logs</button>
+  </div>
+
+  <!-- Tab Panels -->
+
+  <!-- Sources Panel -->
+  <div class="tab-panel active" id="panel-sources" role="tabpanel">
+    <div class="card">
+      <table id="sourcesTable">
+        <thead><tr><th>Name</th><th>Type</th><th>Status</th><th>Details</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- XML Configuration Panel -->
+  <div class="tab-panel" id="panel-xml" role="tabpanel">
+    <div class="card" id="xmlConfigCard">
+      <div style="margin-bottom: 10px;">
+        <strong>Current path:</strong> <span id="xmlPath">-</span>
+        <span id="xmlSource" style="margin-left: 10px; color: var(--text-secondary);"></span>
+      </div>
+
+      <!-- Mode selector (Windows only) -->
+      <div id="modeSelector" style="display: none; margin-bottom: 15px;">
+        <strong style="display: block; margin-bottom: 8px;">Source mode:</strong>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
+            <input type="radio" name="xmlMode" value="auto-offline" style="margin-top: 3px;">
+            <div>
+              <div>Auto - offline copy (recommended)</div>
+              <div id="offlinePath" style="font-size: 0.85em; color: var(--text-secondary);"></div>
+            </div>
+          </label>
+          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
+            <input type="radio" name="xmlMode" value="auto-main" style="margin-top: 3px;">
+            <div>
+              <div>Auto - main event file</div>
+              <div id="mainPath" style="font-size: 0.85em; color: var(--text-secondary);"></div>
+            </div>
+          </label>
+          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
+            <input type="radio" name="xmlMode" value="manual" style="margin-top: 3px;">
+            <div>Manual path</div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Manual path input -->
+      <div id="manualPathSection" class="config-form">
+        <input type="text" id="xmlPathInput" placeholder="XML file path" style="flex: 1; min-width: 200px; padding: 6px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary);">
+        <button class="btn" onclick="setXmlPath()">Set Path</button>
+      </div>
+      <div id="xmlConfigError" class="error" style="margin-top: 10px; display: none;"></div>
+    </div>
+  </div>
+
+  <!-- Clients Panel -->
+  <div class="tab-panel" id="panel-clients" role="tabpanel">
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <span id="clientsStatus">Loading...</span>
+        <button class="btn" onclick="refreshAllClients()" style="background: var(--warning);">Refresh All Clients</button>
+      </div>
+
+      <!-- Clients grid -->
+      <div id="clientsGrid" class="clients-grid"></div>
+      <div id="noClients" style="color: var(--text-muted); padding: 20px; text-align: center;">No clients connected or configured</div>
+      <div id="clientMessage" style="color: var(--success); margin-top: 10px; display: none;"></div>
+    </div>
   </div>
 
   <!-- Client detail modal -->
@@ -116,20 +138,20 @@
     <div class="modal-content">
       <div class="modal-header">
         <h3>Client: <span id="modalClientIp"></span></h3>
-        <button onclick="closeClientModal()" style="background: none; border: none; color: #888; font-size: 1.5em; cursor: pointer;">&times;</button>
+        <button onclick="closeClientModal()" style="background: none; border: none; color: var(--text-secondary); font-size: 1.5em; cursor: pointer;">&times;</button>
       </div>
       <div class="modal-body">
         <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; color: #888;">Label</label>
+          <label style="display: block; margin-bottom: 5px; color: var(--text-secondary);">Label</label>
           <div style="display: flex; gap: 8px;">
-            <input type="text" id="modalLabel" placeholder="Client name" style="flex: 1; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #0f0f23; color: #eee;">
+            <input type="text" id="modalLabel" placeholder="Client name" style="flex: 1; padding: 6px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary);">
             <button class="btn" onclick="saveClientLabel()">Save</button>
           </div>
         </div>
 
         <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; color: #888;">Layout Type</label>
-          <select id="modalType" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #0f0f23; color: #eee;">
+          <label style="display: block; margin-bottom: 5px; color: var(--text-secondary);">Layout Type</label>
+          <select id="modalType" style="width: 100%; padding: 6px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary);">
             <option value="">(auto)</option>
             <option value="vertical">Vertical</option>
             <option value="ledwall">LED Wall</option>
@@ -137,37 +159,37 @@
         </div>
 
         <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; color: #888;">Display Rows (3-20)</label>
-          <input type="number" id="modalDisplayRows" min="3" max="20" placeholder="(auto)" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #0f0f23; color: #eee;">
+          <label style="display: block; margin-bottom: 5px; color: var(--text-secondary);">Display Rows (3-20)</label>
+          <input type="number" id="modalDisplayRows" min="3" max="20" placeholder="(auto)" style="width: 100%; padding: 6px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary);">
         </div>
 
         <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; color: #888;">Custom Title</label>
-          <input type="text" id="modalCustomTitle" placeholder="(none)" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #0f0f23; color: #eee;">
+          <label style="display: block; margin-bottom: 5px; color: var(--text-secondary);">Custom Title</label>
+          <input type="text" id="modalCustomTitle" placeholder="(none)" style="width: 100%; padding: 6px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary);">
         </div>
 
         <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; color: #888;">Client ID (server-assigned)</label>
-          <input type="text" id="modalClientId" placeholder="(none - uses IP)" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #0f0f23; color: #eee;">
-          <div style="font-size: 0.8em; color: #666; margin-top: 4px;">When set, client will adopt this ID for future connections</div>
+          <label style="display: block; margin-bottom: 5px; color: var(--text-secondary);">Client ID (server-assigned)</label>
+          <input type="text" id="modalClientId" placeholder="(none - uses IP)" style="width: 100%; padding: 6px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary);">
+          <div style="font-size: 0.8em; color: var(--text-muted); margin-top: 4px;">When set, client will adopt this ID for future connections</div>
         </div>
 
         <div style="margin-bottom: 15px;">
           <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
             <input type="checkbox" id="modalScrollToFinished" checked style="width: 16px; height: 16px;">
-            <span style="color: #888;">Scroll to Finished</span>
+            <span style="color: var(--text-secondary);">Scroll to Finished</span>
           </label>
-          <div style="font-size: 0.8em; color: #666; margin-top: 4px; margin-left: 24px;">When enabled, scoreboard scrolls to show finished competitor. When disabled, only highlights.</div>
+          <div style="font-size: 0.8em; color: var(--text-muted); margin-top: 4px; margin-left: 24px;">When enabled, scoreboard scrolls to show finished competitor. When disabled, only highlights.</div>
         </div>
 
         <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; color: #888;">Client State (reported)</label>
-          <pre id="modalClientState" style="background: #0f0f23; padding: 8px; border-radius: 4px; font-size: 11px; overflow-x: auto; max-height: 100px;">-</pre>
+          <label style="display: block; margin-bottom: 5px; color: var(--text-secondary);">Client State (reported)</label>
+          <pre id="modalClientState" style="background: var(--bg-input); padding: 8px; border-radius: var(--radius-md); font-size: 11px; overflow-x: auto; max-height: 100px;">-</pre>
         </div>
 
         <!-- Asset Overrides Section -->
         <div class="modal-assets-section">
-          <h4>Asset Overrides <span style="font-weight: normal; color: #666; font-size: 0.85em;">(override global defaults)</span></h4>
+          <h4>Asset Overrides <span style="font-weight: normal; color: var(--text-muted); font-size: 0.85em;">(override global defaults)</span></h4>
 
           <!-- Logo Override -->
           <div class="modal-asset-item">
@@ -178,8 +200,8 @@
               <input type="file" id="modalLogoInput" accept="image/*" style="display: none;">
             </div>
             <div class="modal-asset-controls">
-              <button class="btn" onclick="clearModalAsset('logoUrl')" style="background: #666;">Clear</button>
-              <button class="btn" onclick="useDefaultAsset('logoUrl')" style="background: #444;">Use Default</button>
+              <button class="btn" onclick="clearModalAsset('logoUrl')" style="background: var(--text-muted);">Clear</button>
+              <button class="btn btn-secondary" onclick="useDefaultAsset('logoUrl')">Use Default</button>
             </div>
             <div class="modal-asset-info" id="modalLogoInfo"></div>
           </div>
@@ -193,8 +215,8 @@
               <input type="file" id="modalPartnerLogoInput" accept="image/*" style="display: none;">
             </div>
             <div class="modal-asset-controls">
-              <button class="btn" onclick="clearModalAsset('partnerLogoUrl')" style="background: #666;">Clear</button>
-              <button class="btn" onclick="useDefaultAsset('partnerLogoUrl')" style="background: #444;">Use Default</button>
+              <button class="btn" onclick="clearModalAsset('partnerLogoUrl')" style="background: var(--text-muted);">Clear</button>
+              <button class="btn btn-secondary" onclick="useDefaultAsset('partnerLogoUrl')">Use Default</button>
             </div>
             <div class="modal-asset-info" id="modalPartnerLogoInfo"></div>
           </div>
@@ -208,8 +230,8 @@
               <input type="file" id="modalFooterImageInput" accept="image/*" style="display: none;">
             </div>
             <div class="modal-asset-controls">
-              <button class="btn" onclick="clearModalAsset('footerImageUrl')" style="background: #666;">Clear</button>
-              <button class="btn" onclick="useDefaultAsset('footerImageUrl')" style="background: #444;">Use Default</button>
+              <button class="btn" onclick="clearModalAsset('footerImageUrl')" style="background: var(--text-muted);">Clear</button>
+              <button class="btn btn-secondary" onclick="useDefaultAsset('footerImageUrl')">Use Default</button>
             </div>
             <div class="modal-asset-info" id="modalFooterImageInfo"></div>
           </div>
@@ -217,109 +239,113 @@
 
         <div style="display: flex; gap: 8px; justify-content: space-between;">
           <button class="btn" onclick="saveClientConfig()" style="flex: 1;">Save Config</button>
-          <button class="btn" onclick="deleteClientConfig()" style="background: #ff4444;">Delete</button>
+          <button class="btn btn-danger" onclick="deleteClientConfig()">Delete</button>
         </div>
       </div>
       <div id="modalError" class="error" style="padding: 10px; display: none;"></div>
     </div>
   </div>
 
-  <h2>Default Assets</h2>
-  <div class="card">
-    <p style="color: #888; margin-bottom: 15px; font-size: 0.9em;">
-      Configure default images for all scoreboards. Upload, paste, or drag & drop images.
-      Per-client overrides can be set in client configuration.
-    </p>
+  <!-- Assets Panel -->
+  <div class="tab-panel" id="panel-assets" role="tabpanel">
+    <div class="card">
+      <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: var(--text-sm);">
+        Configure default images for all scoreboards. Upload, paste, or drag & drop images.
+        Per-client overrides can be set in client configuration.
+      </p>
 
-    <div class="assets-grid">
-      <!-- Logo -->
-      <div class="asset-item">
-        <label>Logo <span style="color: #666; font-size: 0.85em;">(max 200x80px)</span></label>
-        <div class="asset-drop-zone" id="logoDropZone" data-key="logoUrl" tabindex="0">
-          <div class="asset-preview" id="logoPreview"></div>
-          <div class="asset-placeholder" id="logoPlaceholder">
-            Drop image here or click to upload
+      <div class="assets-grid">
+        <!-- Logo -->
+        <div class="asset-item">
+          <label>Logo <span style="color: var(--text-muted); font-size: 0.85em;">(max 200x80px)</span></label>
+          <div class="asset-drop-zone" id="logoDropZone" data-key="logoUrl" tabindex="0">
+            <div class="asset-preview" id="logoPreview"></div>
+            <div class="asset-placeholder" id="logoPlaceholder">
+              Drop image here or click to upload
+            </div>
+            <input type="file" id="logoInput" accept="image/*" style="display: none;">
           </div>
-          <input type="file" id="logoInput" accept="image/*" style="display: none;">
+          <div class="asset-actions">
+            <input type="text" id="logoUrlInput" placeholder="Or enter URL..." class="asset-url-input">
+            <button class="btn asset-btn" onclick="setAssetFromUrl('logoUrl')">Load URL</button>
+            <button class="btn asset-btn btn-secondary" onclick="clearAsset('logoUrl')">Clear</button>
+          </div>
+          <div class="asset-info" id="logoInfo"></div>
         </div>
-        <div class="asset-actions">
-          <input type="text" id="logoUrlInput" placeholder="Or enter URL..." class="asset-url-input">
-          <button class="btn asset-btn" onclick="setAssetFromUrl('logoUrl')">Load URL</button>
-          <button class="btn asset-btn" onclick="clearAsset('logoUrl')" style="background: #666;">Clear</button>
+
+        <!-- Partner Logo -->
+        <div class="asset-item">
+          <label>Partner Logo <span style="color: var(--text-muted); font-size: 0.85em;">(max 300x80px)</span></label>
+          <div class="asset-drop-zone" id="partnerLogoDropZone" data-key="partnerLogoUrl" tabindex="0">
+            <div class="asset-preview" id="partnerLogoPreview"></div>
+            <div class="asset-placeholder" id="partnerLogoPlaceholder">
+              Drop image here or click to upload
+            </div>
+            <input type="file" id="partnerLogoInput" accept="image/*" style="display: none;">
+          </div>
+          <div class="asset-actions">
+            <input type="text" id="partnerLogoUrlInput" placeholder="Or enter URL..." class="asset-url-input">
+            <button class="btn asset-btn" onclick="setAssetFromUrl('partnerLogoUrl')">Load URL</button>
+            <button class="btn asset-btn btn-secondary" onclick="clearAsset('partnerLogoUrl')">Clear</button>
+          </div>
+          <div class="asset-info" id="partnerLogoInfo"></div>
         </div>
-        <div class="asset-info" id="logoInfo"></div>
+
+        <!-- Footer Image -->
+        <div class="asset-item">
+          <label>Footer Banner <span style="color: var(--text-muted); font-size: 0.85em;">(max 1920x200px)</span></label>
+          <div class="asset-drop-zone asset-drop-zone-wide" id="footerImageDropZone" data-key="footerImageUrl" tabindex="0">
+            <div class="asset-preview" id="footerImagePreview"></div>
+            <div class="asset-placeholder" id="footerImagePlaceholder">
+              Drop image here or click to upload
+            </div>
+            <input type="file" id="footerImageInput" accept="image/*" style="display: none;">
+          </div>
+          <div class="asset-actions">
+            <input type="text" id="footerImageUrlInput" placeholder="Or enter URL..." class="asset-url-input">
+            <button class="btn asset-btn" onclick="setAssetFromUrl('footerImageUrl')">Load URL</button>
+            <button class="btn asset-btn btn-secondary" onclick="clearAsset('footerImageUrl')">Clear</button>
+          </div>
+          <div class="asset-info" id="footerImageInfo"></div>
+        </div>
       </div>
 
-      <!-- Partner Logo -->
-      <div class="asset-item">
-        <label>Partner Logo <span style="color: #666; font-size: 0.85em;">(max 300x80px)</span></label>
-        <div class="asset-drop-zone" id="partnerLogoDropZone" data-key="partnerLogoUrl" tabindex="0">
-          <div class="asset-preview" id="partnerLogoPreview"></div>
-          <div class="asset-placeholder" id="partnerLogoPlaceholder">
-            Drop image here or click to upload
-          </div>
-          <input type="file" id="partnerLogoInput" accept="image/*" style="display: none;">
-        </div>
-        <div class="asset-actions">
-          <input type="text" id="partnerLogoUrlInput" placeholder="Or enter URL..." class="asset-url-input">
-          <button class="btn asset-btn" onclick="setAssetFromUrl('partnerLogoUrl')">Load URL</button>
-          <button class="btn asset-btn" onclick="clearAsset('partnerLogoUrl')" style="background: #666;">Clear</button>
-        </div>
-        <div class="asset-info" id="partnerLogoInfo"></div>
-      </div>
-
-      <!-- Footer Image -->
-      <div class="asset-item">
-        <label>Footer Banner <span style="color: #666; font-size: 0.85em;">(max 1920x200px)</span></label>
-        <div class="asset-drop-zone asset-drop-zone-wide" id="footerImageDropZone" data-key="footerImageUrl" tabindex="0">
-          <div class="asset-preview" id="footerImagePreview"></div>
-          <div class="asset-placeholder" id="footerImagePlaceholder">
-            Drop image here or click to upload
-          </div>
-          <input type="file" id="footerImageInput" accept="image/*" style="display: none;">
-        </div>
-        <div class="asset-actions">
-          <input type="text" id="footerImageUrlInput" placeholder="Or enter URL..." class="asset-url-input">
-          <button class="btn asset-btn" onclick="setAssetFromUrl('footerImageUrl')">Load URL</button>
-          <button class="btn asset-btn" onclick="clearAsset('footerImageUrl')" style="background: #666;">Clear</button>
-        </div>
-        <div class="asset-info" id="footerImageInfo"></div>
-      </div>
+      <div id="assetError" class="error" style="margin-top: 10px; display: none;"></div>
+      <div id="assetMessage" style="color: var(--success); margin-top: 10px; display: none;"></div>
     </div>
-
-    <div id="assetError" class="error" style="margin-top: 10px; display: none;"></div>
-    <div id="assetMessage" style="color: #00ff88; margin-top: 10px; display: none;"></div>
   </div>
 
-  <h2>Server Logs</h2>
-  <div class="card">
-    <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; align-items: center;">
-      <div style="display: flex; gap: 5px; align-items: center;">
+  <!-- Logs Panel -->
+  <div class="tab-panel" id="panel-logs" role="tabpanel">
+    <div class="card">
+      <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; align-items: center;">
+        <div style="display: flex; gap: 5px; align-items: center;">
+          <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
+            <input type="checkbox" id="logLevelDebug" onchange="filterLogs()"> <span style="color: var(--text-secondary);">debug</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
+            <input type="checkbox" id="logLevelInfo" checked onchange="filterLogs()"> <span style="color: var(--success);">info</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
+            <input type="checkbox" id="logLevelWarn" checked onchange="filterLogs()"> <span style="color: var(--warning);">warn</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
+            <input type="checkbox" id="logLevelError" checked onchange="filterLogs()"> <span style="color: var(--error);">error</span>
+          </label>
+        </div>
+        <input type="text" id="logSearch" placeholder="Search logs..." onkeyup="filterLogs()" style="flex: 1; min-width: 150px; padding: 4px 8px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary);">
         <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
-          <input type="checkbox" id="logLevelDebug" onchange="filterLogs()"> <span style="color: #888;">debug</span>
+          <input type="checkbox" id="logAutoScroll" checked> Auto-scroll
         </label>
-        <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
-          <input type="checkbox" id="logLevelInfo" checked onchange="filterLogs()"> <span style="color: #00ff88;">info</span>
-        </label>
-        <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
-          <input type="checkbox" id="logLevelWarn" checked onchange="filterLogs()"> <span style="color: #ffaa00;">warn</span>
-        </label>
-        <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
-          <input type="checkbox" id="logLevelError" checked onchange="filterLogs()"> <span style="color: #ff6b6b;">error</span>
-        </label>
+        <button class="btn btn-secondary" onclick="clearLogDisplay()" style="padding: 4px 8px;">Clear</button>
       </div>
-      <input type="text" id="logSearch" placeholder="Search logs..." onkeyup="filterLogs()" style="flex: 1; min-width: 150px; padding: 4px 8px; border-radius: 4px; border: 1px solid #333; background: #0f0f23; color: #eee;">
-      <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
-        <input type="checkbox" id="logAutoScroll" checked> Auto-scroll
-      </label>
-      <button class="btn" onclick="clearLogDisplay()" style="background: #666; padding: 4px 8px;">Clear</button>
-    </div>
-    <div id="logContainer" style="max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; background: #0f0f23; border-radius: 4px; padding: 8px;">
-      <div id="logEntries"></div>
-      <div id="noLogs" style="color: #666; padding: 10px; text-align: center;">No log entries</div>
-    </div>
-    <div style="margin-top: 5px; color: #666; font-size: 0.8em;">
-      <span id="logStats">0 entries</span>
+      <div id="logContainer" style="max-height: 400px; overflow-y: auto; font-family: var(--font-mono); font-size: 12px; background: var(--bg-input); border-radius: var(--radius-md); padding: 8px;">
+        <div id="logEntries"></div>
+        <div id="noLogs" style="color: var(--text-muted); padding: 10px; text-align: center;">No log entries</div>
+      </div>
+      <div style="margin-top: 5px; color: var(--text-muted); font-size: var(--text-xs);">
+        <span id="logStats">0 entries</span>
+      </div>
     </div>
   </div>
 
