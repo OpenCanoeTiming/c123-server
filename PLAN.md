@@ -124,119 +124,320 @@ Označuje aktuálně jedoucí kategorii v Results - klíčové pro sledování f
 
 ### Návrh nového designu
 
+#### Design Philosophy: "Dark Performance"
+
+Inspirace BMW M-line: čistý, funkční design s výraznými kontrastními akcenty.
+Žádný vizuální bloat - každý prvek má účel. Různé aplikace sdílejí stejný
+základ, ale mají unikátní identitu (header, akcentní barva).
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ████  C123-SERVER                          :27123  ● LIVE  │  ← Výrazný header
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   Čistý, tmavý obsah bez zbytečných dekorací               │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
 #### 1. Design System
 
-**Barevná paleta (rozšířená):**
+**Barevná paleta "Anthracite":**
 ```
-Background:
-  --bg-primary:    #0f0f1a     (tmavší pro lepší kontrast)
-  --bg-card:       #1a1a2e     (karty)
-  --bg-elevated:   #252545     (modaly, hover)
+Base (shared across apps):
+  --bg-body:       #0a0a0a     (čistá černá)
+  --bg-surface:    #141414     (karty, panely)
+  --bg-elevated:   #1f1f1f     (hover, modaly)
+  --bg-input:      #0d0d0d     (input fields)
+
+  --border:        #2a2a2a     (subtilní hranice)
+  --border-focus:  #404040     (focus state)
 
 Text:
-  --text-primary:  #f0f0f5     (hlavní obsah)
-  --text-secondary:#9090a0     (pomocný text)
-  --text-muted:    #606070     (disabled)
+  --text-primary:  #ffffff     (hlavní obsah)
+  --text-secondary:#888888     (pomocný text)
+  --text-muted:    #555555     (disabled, placeholders)
 
-Accent:
-  --accent:        #00d4ff     (primární akce)
-  --accent-hover:  #00a8cc     (hover)
-  --accent-subtle: rgba(0,212,255,0.1)
+Semantic (shared):
+  --success:       #00d26a     (connected, ok)
+  --warning:       #ff9500     (connecting, attention)
+  --error:         #ff3b30     (disconnected, error)
+```
 
-Semantic:
-  --success:       #00ff88     (connected, ok)
-  --warning:       #ffb800     (connecting, attention)
-  --error:         #ff4757     (disconnected, error)
-  --info:          #5c7cfa     (informační)
+**App-specific accent (C123-SERVER = Electric Blue):**
+```
+  --accent:        #0088ff     (primární akce, links)
+  --accent-hover:  #0066cc     (hover state)
+  --accent-subtle: rgba(0,136,255,0.12)
+  --accent-glow:   rgba(0,136,255,0.4)   (pro header stripe)
+```
+
+**Alternativní akcenty pro budoucí apps:**
+```
+  Scoreboard Admin:  #ff3366  (Racing Red)
+  Timing System:     #00cc88  (Timing Green)
+  Results Portal:    #aa66ff  (Purple)
 ```
 
 **Typography:**
 ```
---font-sans:  'Inter', system-ui, sans-serif
---font-mono:  'JetBrains Mono', 'Fira Code', monospace
+--font-sans:  'Inter', -apple-system, system-ui, sans-serif
+--font-mono:  'JetBrains Mono', 'SF Mono', monospace
 
---text-xs:    0.75rem   (labels, tags)
---text-sm:    0.875rem  (secondary content)
---text-base:  1rem      (body)
---text-lg:    1.125rem  (section headers)
---text-xl:    1.5rem    (page title)
+--text-xs:    0.75rem   12px  (tags, badges)
+--text-sm:    0.8125rem 13px  (secondary, table cells)
+--text-base:  0.875rem  14px  (body - kompaktní admin UI)
+--text-lg:    1rem      16px  (section headers)
+--text-xl:    1.125rem  18px  (card titles)
+--text-2xl:   1.5rem    24px  (header app name)
+
+--font-weight-normal: 400
+--font-weight-medium: 500
+--font-weight-bold:   600
 ```
 
 **Spacing & Sizing:**
 ```
---space-1: 0.25rem    --radius-sm: 4px
---space-2: 0.5rem     --radius-md: 8px
---space-3: 0.75rem    --radius-lg: 12px
---space-4: 1rem
---space-6: 1.5rem
---space-8: 2rem
+--space-1:  4px     --radius-sm: 4px
+--space-2:  8px     --radius-md: 6px
+--space-3: 12px     --radius-lg: 8px
+--space-4: 16px
+--space-5: 20px
+--space-6: 24px
+--space-8: 32px
+
+--header-height: 48px
+--sidebar-width: 240px  (if needed later)
 ```
 
-#### 2. Komponenty
+#### 2. Header Component
 
-**Card (základní kontejner):**
-- Subtilní border (#252545)
-- Jemný box-shadow pro hloubku
-- Větší padding (space-6)
-- Header s ikonou + title + optional actions
+Klíčový identifikační prvek - na první pohled jasné, která app běží.
 
-**StatusBadge:**
-- Pulzující animace pro "connecting"
-- Tooltip s detaily
-- Lepší accessibility (role="status")
+```
+┌─────────────────────────────────────────────────────────────┐
+│▌ C123-SERVER                              :27123   ● LIVE  │
+└─────────────────────────────────────────────────────────────┘
+ ↑
+ Accent stripe (4px, glow effect)
+```
+
+```css
+.header {
+  height: 48px;
+  background: #141414;
+  border-bottom: 1px solid #2a2a2a;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+}
+
+.header::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--accent);
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.header-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+
+.header-status {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+```
+
+#### 3. Komponenty
+
+**Card:**
+```css
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  /* Žádné shadows - flat design */
+}
+
+.card-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 500;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+```
+
+**Status Indicator:**
+```css
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.status-dot.connecting {
+  background: var(--warning);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.status-dot.error {
+  background: var(--error);
+}
+```
 
 **Button variants:**
-- Primary (accent) - hlavní akce
-- Secondary (ghost) - sekundární
-- Danger (error) - destruktivní
-- Icon-only s tooltip
+```css
+.btn {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
 
-**Form controls:**
-- Větší touch targets (min 44px)
-- Clear focus rings
-- Inline validation messages
-- Loading states
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover {
+  background: var(--accent-hover);
+}
 
-**Modal (vylepšený):**
-- Backdrop blur
-- Focus trap
-- Escape to close
-- Animace open/close
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+}
+.btn-secondary:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-focus);
+}
 
-#### 3. Layout improvements
+.btn-danger {
+  background: transparent;
+  border: 1px solid var(--error);
+  color: var(--error);
+}
+.btn-danger:hover {
+  background: rgba(255,59,48,0.12);
+}
+```
+
+**Form inputs:**
+```css
+.input {
+  height: 36px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.input:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+```
+
+**Table (pro Sources, Logs):**
+```css
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.table td {
+  padding: 10px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+
+.table tr:hover {
+  background: var(--bg-elevated);
+}
+```
+
+**Modal:**
+```css
+.modal-backdrop {
+  background: rgba(0,0,0,0.8);
+  backdrop-filter: blur(4px);
+}
+
+.modal {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  max-width: 480px;
+  width: 90%;
+}
+
+.modal-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+```
+
+#### 4. Layout
 
 ```
-┌────────────────────────────────────────────────────────────┐
-│  ┌─ Header ─────────────────────────────────────────────┐  │
-│  │ 🎿 C123 Server              Port: 27123   ● Online  │  │
+┌─────────────────────────────────────────────────────────────┐
+│▌ C123-SERVER                              :27123   ● LIVE  │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─ EVENT ──────────────────────────────────────────────┐  │
+│  │  K1 Muži - 1. kolo                        Race #42   │  │
+│  │  [Custom name____________]  [Set] [Clear]            │  │
 │  └──────────────────────────────────────────────────────┘  │
-│                                                            │
-│  ┌─ Event Info (prominent) ─────────────────────────────┐  │
-│  │  🏁 K1 Muži - 1. kolo           Race #42             │  │
-│  │  Custom name: [_______________]  [Set] [Clear]       │  │
+│                                                             │
+│  TCP ● Connected    UDP ● Listening    XML ● Loaded         │
+│                                                             │
+│  ┌─ SOURCES ─┬─ XML ─┬─ CLIENTS ─┬─ ASSETS ─┬─ LOGS ───┐   │
+│  │                                                      │   │
+│  │   Tab content                                        │   │
+│  │                                                      │   │
 │  └──────────────────────────────────────────────────────┘  │
-│                                                            │
-│  ┌─ Status Bar (compact) ───────────────────────────────┐  │
-│  │  TCP ●  |  UDP ●  |  XML ●  |  Clients: 3 online     │  │
-│  └──────────────────────────────────────────────────────┘  │
-│                                                            │
-│  ┌─ Tabs ───────────────────────────────────────────────┐  │
-│  │  [Sources] [XML Config] [Clients] [Assets] [Logs]    │  │
-│  └──────────────────────────────────────────────────────┘  │
-│                                                            │
-│  ┌─ Tab Content ────────────────────────────────────────┐  │
-│  │                                                       │  │
-│  │   (obsah podle vybraného tabu)                       │  │
-│  │                                                       │  │
-│  └──────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────┘
 ```
 
 **Klíčové změny:**
-- Header s globálním statusem (vždy viditelný)
-- Event info prominentně nahoře (nejdůležitější info)
-- Kompaktní status bar místo velké tabulky
-- Tab navigation pro sekce (méně scrollování)
+- Header s accent stripe vlevo - okamžitá identifikace aplikace
+- Event info prominentně pod headerem
+- Inline status bar (TCP/UDP/XML) - kompaktní přehled
+- Tab navigation pro sekce - méně scrollování, rychlá navigace
 
 ### Implementační plán
 
