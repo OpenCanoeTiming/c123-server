@@ -231,7 +231,7 @@ describe('UnifiedServer', () => {
 
         const html = await response.text();
         expect(html).toContain('<!DOCTYPE html>');
-        expect(html).toContain('C123 Server Dashboard');
+        expect(html).toContain('C123 Server - Admin Dashboard');
         // External JS/CSS files instead of inline
         expect(html).toContain('/admin-ui/main.js');
         expect(html).toContain('/admin-ui/styles.css');

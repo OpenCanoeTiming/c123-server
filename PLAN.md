@@ -454,11 +454,18 @@ Klíčový identifikační prvek - na první pohled jasné, která app běží.
 - Testy aktualizovány pro novou architekturu
 - Build script: `tsc && cp -r src/admin-ui dist/`
 
-#### Blok B: Design system základ (1 session)
-- [ ] B1: Implementovat CSS custom properties (barvy, spacing)
-- [ ] B2: Přidat Inter + JetBrains Mono fonty (self-hosted)
-- [ ] B3: Vytvořit základní komponenty (Card, Button, Badge)
-- [ ] B4: Implementovat nový header s global status
+#### Blok B: Design system základ (1 session) ✅ DONE
+- [x] B1: Implementovat CSS custom properties (barvy, spacing)
+- [x] B2: Přidat Inter + JetBrains Mono fonty (self-hosted)
+- [x] B3: Vytvořit základní komponenty (Card, Button, Badge)
+- [x] B4: Implementovat nový header s global status
+
+**Poznámky k bloku B:**
+- CSS design system s "Dark Performance" themem (Anthracite)
+- Self-hosted Inter a JetBrains Mono fonty v `/admin-ui/fonts/`
+- Nový header s accent stripe a real-time status indikátory (TCP/UDP/XML/LIVE)
+- Badge komponenta pro status labely
+- Všechny barvy, spacing, typography jako CSS custom properties
 
 #### Blok C: Tab navigation a layout (1 session)
 - [ ] C1: Implementovat tab systém (vanilla JS)

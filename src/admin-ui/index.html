@@ -7,7 +7,31 @@
   <link rel="stylesheet" href="/admin-ui/styles.css">
 </head>
 <body>
-  <h1>C123 Server Dashboard <span class="port-info" id="portInfo">:27123</span></h1>
+  <!-- Header with global status -->
+  <header class="header">
+    <span class="header-title">C123-SERVER</span>
+    <div class="header-status">
+      <span class="header-status-item" id="headerPort">:27123</span>
+      <span class="header-status-item">
+        <span class="status" id="headerTcpStatus"></span>
+        <span>TCP</span>
+      </span>
+      <span class="header-status-item">
+        <span class="status" id="headerUdpStatus"></span>
+        <span>UDP</span>
+      </span>
+      <span class="header-status-item">
+        <span class="status" id="headerXmlStatus"></span>
+        <span>XML</span>
+      </span>
+      <span class="header-live" id="headerLive" style="display: none;">
+        <span class="status connected"></span>
+        <span>LIVE</span>
+      </span>
+    </div>
+  </header>
+
+  <main class="main-content">
 
   <h2>Event</h2>
   <div class="card">
@@ -300,6 +324,8 @@
   </div>
 
   <div id="lastUpdate"></div>
+
+  </main>
 
   <script src="/admin-ui/main.js"></script>
 </body>

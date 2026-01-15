@@ -54,6 +54,9 @@ async function refresh() {
       : 'No active race';
     document.getElementById('currentRace').textContent = currentRace;
 
+    // Update header status indicators
+    updateHeaderStatus(data.sources);
+
     // Skip table updates if user has text selected (to preserve copy ability)
     if (!hasTextSelection()) {
       // Sources
@@ -71,6 +74,41 @@ async function refresh() {
     document.getElementById('lastUpdate').textContent = 'Last update: ' + new Date().toLocaleTimeString();
   } catch (e) {
     document.getElementById('lastUpdate').innerHTML = '<span class="error">Error: ' + e.message + '</span>';
+  }
+}
+
+/**
+ * Update header status indicators based on source statuses
+ */
+function updateHeaderStatus(sources) {
+  const tcpEl = document.getElementById('headerTcpStatus');
+  const udpEl = document.getElementById('headerUdpStatus');
+  const xmlEl = document.getElementById('headerXmlStatus');
+  const liveEl = document.getElementById('headerLive');
+
+  // Find source statuses
+  const tcp = sources.find(s => s.type === 'tcp');
+  const udp = sources.find(s => s.type === 'udp');
+  const xml = sources.find(s => s.type === 'file' || s.type === 'xml');
+
+  // Update TCP status
+  if (tcpEl && tcp) {
+    tcpEl.className = 'status ' + statusClass(tcp.status);
+  }
+
+  // Update UDP status
+  if (udpEl && udp) {
+    udpEl.className = 'status ' + statusClass(udp.status);
+  }
+
+  // Update XML status
+  if (xmlEl && xml) {
+    xmlEl.className = 'status ' + statusClass(xml.status);
+  }
+
+  // Show LIVE indicator if TCP is connected
+  if (liveEl) {
+    liveEl.style.display = (tcp && tcp.status === 'connected') ? 'flex' : 'none';
   }
 }
 
