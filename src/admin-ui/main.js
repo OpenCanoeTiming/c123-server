@@ -923,10 +923,6 @@ function openClientModal(configKey) {
   // scrollToFinished: default true if not set
   document.getElementById('modalScrollToFinished').checked = cfg.scrollToFinished !== false;
 
-  // Client state
-  const state = client?.clientState;
-  document.getElementById('modalClientState').textContent = state ? JSON.stringify(state, null, 2) : '-';
-
   // Load assets into modal
   loadModalAssets(cfg.assets);
 
