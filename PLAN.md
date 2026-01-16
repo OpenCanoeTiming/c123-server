@@ -647,13 +647,21 @@ Server aktuálně pouze čte data z C123 (jednosměrná komunikace). Pro podporu
 
 ### Implementační plán
 
-#### Blok G: TCP Write support (1 session)
+#### Blok G: TCP Write support (1 session) ✅ DONE
 
-- [ ] G1: Rozšířit `TcpSource` o metodu `write(xml: string)`
-- [ ] G2: Vytvořit `ScoringService` pro formátování XML zpráv
-- [ ] G3: Přidat REST endpoint `POST /api/c123/scoring`
-- [ ] G4: Přidat validaci vstupu (bib, gate 1-24, value 0|2|50)
-- [ ] G5: Přidat error handling a timeout
+- [x] G1: Rozšířit `TcpSource` o metodu `write(xml: string)`
+- [x] G2: Vytvořit `ScoringService` pro formátování XML zpráv
+- [x] G3: Přidat REST endpoint `POST /api/c123/scoring`
+- [x] G4: Přidat validaci vstupu (bib, gate 1-24, value 0|2|50)
+- [x] G5: Přidat error handling a timeout
+
+**Poznámky k bloku G:**
+- `TcpSource` rozšířen o `write()` metodu a `isWritable` getter
+- Nový `WritableSource` interface v `sources/types.ts`
+- `ScoringService` v `service/ScoringService.ts` s metodami pro Scoring, RemoveFromCourse a Timing
+- `Server` má nové metody `sendScoring()`, `sendRemoveFromCourse()`, `sendTiming()`
+- REST endpoint `POST /api/c123/scoring` s plnou validací
+- Error handling: 503 pokud není TCP připojeno, 400 pro neplatný vstup, 500 pro chyby zápisu
 
 #### Blok H: RemoveFromCourse a Timing (1 session)
 

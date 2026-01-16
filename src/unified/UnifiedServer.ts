@@ -853,6 +853,9 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     this.app.put('/api/config/assets', this.handleSetAssets.bind(this));
     this.app.delete('/api/config/assets/:key', this.handleDeleteAsset.bind(this));
 
+    // C123 Write API (Scoring)
+    this.app.post('/api/c123/scoring', this.handleC123Scoring.bind(this));
+
     // Health check
     this.app.get('/health', (_req: Request, res: Response) => {
       res.json({ status: 'ok' });
@@ -2048,5 +2051,91 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         footerImageUrl: assets.footerImageUrl ?? null,
       },
     });
+  }
+
+  // ==========================================================================
+  // C123 Write API Handlers (Scoring)
+  // ==========================================================================
+
+  /**
+   * POST /api/c123/scoring - Send penalty scoring command to C123
+   *
+   * Body: { bib: string, gate: number, value: 0 | 2 | 50 }
+   *
+   * Value meanings:
+   * - 0: Clean pass (no penalty)
+   * - 2: Touch (+2 seconds)
+   * - 50: Missed/not taken (+50 seconds)
+   */
+  private async handleC123Scoring(req: Request, res: Response): Promise<void> {
+    if (!this.c123Server) {
+      res.status(503).json({ error: 'Server not available' });
+      return;
+    }
+
+    if (!this.c123Server.isScoringAvailable()) {
+      res.status(503).json({
+        error: 'Not connected to C123',
+        detail: 'TCP connection to C123 is not established',
+      });
+      return;
+    }
+
+    const { bib, gate, value } = req.body;
+
+    // Validate required fields
+    if (bib === undefined || bib === null || bib === '') {
+      res.status(400).json({ error: 'bib is required' });
+      return;
+    }
+
+    if (gate === undefined || gate === null) {
+      res.status(400).json({ error: 'gate is required' });
+      return;
+    }
+
+    if (value === undefined || value === null) {
+      res.status(400).json({ error: 'value is required' });
+      return;
+    }
+
+    // Validate gate range
+    const gateNum = Number(gate);
+    if (isNaN(gateNum) || gateNum < 1 || gateNum > 24) {
+      res.status(400).json({
+        error: 'gate must be a number between 1 and 24',
+      });
+      return;
+    }
+
+    // Validate penalty value
+    const valueNum = Number(value);
+    if (![0, 2, 50].includes(valueNum)) {
+      res.status(400).json({
+        error: 'value must be 0, 2, or 50',
+        detail: '0 = clean, 2 = touch (+2s), 50 = missed (+50s)',
+      });
+      return;
+    }
+
+    try {
+      await this.c123Server.sendScoring({
+        bib: String(bib),
+        gate: gateNum,
+        value: valueNum as 0 | 2 | 50,
+      });
+
+      res.json({
+        success: true,
+        bib: String(bib),
+        gate: gateNum,
+        value: valueNum,
+      });
+    } catch (err) {
+      Logger.error('Unified', 'Scoring error', err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
   }
 }

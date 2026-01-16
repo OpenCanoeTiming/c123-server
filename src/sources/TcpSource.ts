@@ -152,4 +152,46 @@ export class TcpSource extends EventEmitter<SourceEvents> implements Source {
       this.reconnectTimer = null;
     }
   }
+
+  /**
+   * Check if the TCP connection is currently writable.
+   */
+  get isWritable(): boolean {
+    return this.socket !== null && this._status === 'connected' && this.socket.writable;
+  }
+
+  /**
+   * Write an XML message to C123.
+   * The message will be automatically terminated with pipe delimiter.
+   *
+   * @param xml - XML message to send (without trailing pipe)
+   * @returns Promise that resolves when data is written, rejects on error
+   * @throws Error if not connected or write fails
+   */
+  write(xml: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket || this._status !== 'connected') {
+        reject(new Error('Not connected to C123'));
+        return;
+      }
+
+      if (!this.socket.writable) {
+        reject(new Error('Socket is not writable'));
+        return;
+      }
+
+      // C123 protocol uses pipe delimiter between messages
+      const message = xml.endsWith('|') ? xml : xml + '|';
+
+      this.socket.write(message, 'utf8', (err) => {
+        if (err) {
+          Logger.error('TcpSource', 'Write error', err);
+          reject(err);
+        } else {
+          Logger.debug('TcpSource', `Sent: ${xml.substring(0, 100)}${xml.length > 100 ? '...' : ''}`);
+          resolve();
+        }
+      });
+    });
+  }
 }

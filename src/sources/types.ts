@@ -30,6 +30,16 @@ export interface Source extends EventEmitter<SourceEvents> {
 }
 
 /**
+ * Interface for sources that support writing back to C123
+ */
+export interface WritableSource extends Source {
+  /** Check if the source is currently writable */
+  readonly isWritable: boolean;
+  /** Write an XML message to C123 */
+  write(xml: string): Promise<void>;
+}
+
+/**
  * Configuration for TcpSource
  */
 export interface TcpSourceConfig {

@@ -8,6 +8,7 @@ import { XmlFileSource } from './sources/XmlFileSource.js';
 import { EventState } from './state/EventState.js';
 import { UnifiedServer } from './unified/UnifiedServer.js';
 import { XmlDataService } from './service/XmlDataService.js';
+import { ScoringService, type ScoringRequest, type RemoveFromCourseRequest, type TimingRequest } from './service/index.js';
 import { XmlChangeNotifier } from './xml/XmlChangeNotifier.js';
 import { Logger } from './utils/logger.js';
 import {
@@ -282,6 +283,59 @@ export class Server extends EventEmitter<ServerEvents> {
 
     const detector = new WindowsConfigDetector();
     return detector.getAvailablePaths();
+  }
+
+  // ==========================================================================
+  // Scoring API - Write commands to C123
+  // ==========================================================================
+
+  /**
+   * Check if writing to C123 is available
+   */
+  isScoringAvailable(): boolean {
+    return this.tcpSource?.isWritable ?? false;
+  }
+
+  /**
+   * Send a scoring (penalty) command to C123
+   *
+   * @throws Error if TCP is not connected or validation fails
+   */
+  async sendScoring(request: ScoringRequest): Promise<void> {
+    if (!this.tcpSource) {
+      throw new Error('TCP source not initialized');
+    }
+
+    const scoringService = new ScoringService(this.tcpSource);
+    await scoringService.sendScoring(request);
+  }
+
+  /**
+   * Send a RemoveFromCourse command to C123
+   *
+   * @throws Error if TCP is not connected or validation fails
+   */
+  async sendRemoveFromCourse(request: RemoveFromCourseRequest): Promise<void> {
+    if (!this.tcpSource) {
+      throw new Error('TCP source not initialized');
+    }
+
+    const scoringService = new ScoringService(this.tcpSource);
+    await scoringService.sendRemoveFromCourse(request);
+  }
+
+  /**
+   * Send a manual timing impulse command to C123
+   *
+   * @throws Error if TCP is not connected or validation fails
+   */
+  async sendTiming(request: TimingRequest): Promise<void> {
+    if (!this.tcpSource) {
+      throw new Error('TCP source not initialized');
+    }
+
+    const scoringService = new ScoringService(this.tcpSource);
+    await scoringService.sendTiming(request);
   }
 
   /**
