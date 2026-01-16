@@ -184,6 +184,25 @@ export interface C123ClientState extends C123MessageBase {
 }
 
 /**
+ * Scoring event notification (server-generated)
+ * Sent when a scoring command is successfully sent to C123
+ */
+export interface C123ScoringEvent extends C123MessageBase {
+  type: 'ScoringEvent';
+  data: {
+    /** Type of scoring event */
+    eventType: 'penalty' | 'remove' | 'timing';
+    /** Competitor bib number */
+    bib: string;
+    /** Event-specific details */
+    details:
+      | { gate: number; value: 0 | 2 | 50 }  // for penalty
+      | { reason: 'DNS' | 'DNF' | 'CAP'; position: number }  // for remove
+      | { channelPosition: 'Start' | 'Finish' | 'Split1' | 'Split2' };  // for timing
+  };
+}
+
+/**
  * Union of all C123 protocol messages
  */
 export type C123Message =
@@ -198,7 +217,8 @@ export type C123Message =
   | C123ForceRefresh
   | C123LogEntry
   | C123ConfigPush
-  | C123ClientState;
+  | C123ClientState
+  | C123ScoringEvent;
 
 /**
  * Type guard for C123TimeOfDay
@@ -282,4 +302,11 @@ export function isConfigPush(msg: C123Message): msg is C123ConfigPush {
  */
 export function isClientState(msg: C123Message): msg is C123ClientState {
   return msg.type === 'ClientState';
+}
+
+/**
+ * Type guard for C123ScoringEvent
+ */
+export function isScoringEvent(msg: C123Message): msg is C123ScoringEvent {
+  return msg.type === 'ScoringEvent';
 }

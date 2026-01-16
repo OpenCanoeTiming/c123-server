@@ -663,12 +663,19 @@ Server aktuálně pouze čte data z C123 (jednosměrná komunikace). Pro podporu
 - REST endpoint `POST /api/c123/scoring` s plnou validací
 - Error handling: 503 pokud není TCP připojeno, 400 pro neplatný vstup, 500 pro chyby zápisu
 
-#### Blok H: RemoveFromCourse a Timing (1 session)
+#### Blok H: RemoveFromCourse a Timing (1 session) ✅ DONE
 
-- [ ] H1: Přidat endpoint `POST /api/c123/remove-from-course`
-- [ ] H2: Přidat endpoint `POST /api/c123/timing`
-- [ ] H3: WebSocket notifikace o úspěšném odeslání
-- [ ] H4: Dokumentace v `docs/REST-API.md`
+- [x] H1: Přidat endpoint `POST /api/c123/remove-from-course`
+- [x] H2: Přidat endpoint `POST /api/c123/timing`
+- [x] H3: WebSocket notifikace o úspěšném odeslání
+- [x] H4: Dokumentace v `docs/REST-API.md`
+
+**Poznámky k bloku H:**
+- REST endpointy `POST /api/c123/remove-from-course` a `POST /api/c123/timing` s plnou validací
+- Nový typ `C123ScoringEvent` v `protocol/types.ts` pro WebSocket notifikace
+- `broadcastScoringEvent()` v UnifiedServer posílá notifikace admin klientům
+- Všechny tři endpointy (scoring, remove-from-course, timing) nyní broadcastují `ScoringEvent`
+- Dokumentace rozšířena o sekci "C123 Write API" s popisem všech tří endpointů
 
 ### Architektura
 

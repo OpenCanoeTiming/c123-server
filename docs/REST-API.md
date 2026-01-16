@@ -20,6 +20,7 @@ The C123 Server provides the following APIs:
 | **Custom Parameters API** | `/api/config/custom-params` | Define custom client parameters |
 | **Assets API** | `/api/config/assets` | Default asset images (logos, banners) |
 | **Logs API** | `/api/logs` | Log entries retrieval |
+| **C123 Write API** | `/api/c123` | Send commands to C123 (scoring, timing) |
 
 **Base URL:** `http://<server>:27123`
 
@@ -1360,6 +1361,189 @@ Individual clients can have asset overrides that take precedence over defaults. 
 3. Scoreboard fallback (client-side default)
 
 See [CLIENT-CONFIG.md](CLIENT-CONFIG.md) for full client configuration documentation.
+
+---
+
+## C123 Write API
+
+These endpoints allow sending commands to the C123 timing system. Commands are sent via TCP to C123 and require an active TCP connection.
+
+**Prerequisites:**
+- TCP connection to C123 must be established
+- Returns `503 Service Unavailable` if TCP is not connected
+
+---
+
+### POST /api/c123/scoring
+
+Send a penalty scoring command to C123.
+
+**Request:**
+
+```json
+{
+  "bib": "10",
+  "gate": 5,
+  "value": 2
+}
+```
+
+| Field | Type | Required | Validation | Description |
+|-------|------|----------|------------|-------------|
+| `bib` | string | Yes | Non-empty | Competitor start number |
+| `gate` | number | Yes | 1-24 | Gate number |
+| `value` | number | Yes | 0, 2, or 50 | Penalty value |
+
+**Penalty Values:**
+
+| Value | Meaning |
+|-------|---------|
+| `0` | Clean pass (no penalty) |
+| `2` | Touch (+2 seconds) |
+| `50` | Missed/not taken (+50 seconds) |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "bib": "10",
+  "gate": 5,
+  "value": 2
+}
+```
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| 400 | `{ "error": "bib is required" }` |
+| 400 | `{ "error": "gate must be a number between 1 and 24" }` |
+| 400 | `{ "error": "value must be 0, 2, or 50" }` |
+| 503 | `{ "error": "Not connected to C123", "detail": "TCP connection to C123 is not established" }` |
+
+---
+
+### POST /api/c123/remove-from-course
+
+Remove a competitor from the course (DNS, DNF, CAP).
+
+**Request:**
+
+```json
+{
+  "bib": "10",
+  "reason": "DNS",
+  "position": 1
+}
+```
+
+| Field | Type | Required | Validation | Description |
+|-------|------|----------|------------|-------------|
+| `bib` | string | Yes | Non-empty | Competitor start number |
+| `reason` | string | Yes | DNS, DNF, CAP | Reason for removal |
+| `position` | number | No | > 0 | Position (default: 1) |
+
+**Reason Values:**
+
+| Reason | Meaning |
+|--------|---------|
+| `DNS` | Did Not Start |
+| `DNF` | Did Not Finish |
+| `CAP` | Capsized |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "bib": "10",
+  "reason": "DNS",
+  "position": 1
+}
+```
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| 400 | `{ "error": "bib is required" }` |
+| 400 | `{ "error": "reason must be DNS, DNF, or CAP" }` |
+| 400 | `{ "error": "position must be a positive number" }` |
+| 503 | `{ "error": "Not connected to C123" }` |
+
+---
+
+### POST /api/c123/timing
+
+Send a manual timing impulse to C123.
+
+**Request:**
+
+```json
+{
+  "bib": "10",
+  "channelPosition": "Start"
+}
+```
+
+| Field | Type | Required | Validation | Description |
+|-------|------|----------|------------|-------------|
+| `bib` | string | Yes | Non-empty | Competitor start number |
+| `channelPosition` | string | Yes | Start, Finish, Split1, Split2 | Timing position |
+
+**Channel Positions:**
+
+| Position | Description |
+|----------|-------------|
+| `Start` | Start impulse |
+| `Finish` | Finish impulse |
+| `Split1` | First split time |
+| `Split2` | Second split time |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "bib": "10",
+  "channelPosition": "Start"
+}
+```
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| 400 | `{ "error": "bib is required" }` |
+| 400 | `{ "error": "channelPosition must be Start, Finish, Split1, or Split2" }` |
+| 503 | `{ "error": "Not connected to C123" }` |
+
+---
+
+### WebSocket Notifications
+
+When a C123 command is successfully sent, a `ScoringEvent` message is broadcast to all admin WebSocket connections.
+
+**Message format:**
+
+```json
+{
+  "type": "ScoringEvent",
+  "timestamp": "2025-01-16T12:30:00.000Z",
+  "data": {
+    "eventType": "penalty",
+    "bib": "10",
+    "details": { "gate": 5, "value": 2 }
+  }
+}
+```
+
+| eventType | details |
+|-----------|---------|
+| `penalty` | `{ gate: number, value: 0 \| 2 \| 50 }` |
+| `remove` | `{ reason: "DNS" \| "DNF" \| "CAP", position: number }` |
+| `timing` | `{ channelPosition: "Start" \| "Finish" \| "Split1" \| "Split2" }` |
 
 ---
 

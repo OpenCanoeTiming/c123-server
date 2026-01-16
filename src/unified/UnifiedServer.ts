@@ -5,7 +5,7 @@ import { EventEmitter } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import type { ScoreboardConfig } from '../admin/types.js';
-import type { C123Message, C123XmlChange, C123ForceRefresh, C123LogEntry, C123Connected, XmlSection, LogLevel, C123ClientState } from '../protocol/types.js';
+import type { C123Message, C123XmlChange, C123ForceRefresh, C123LogEntry, C123Connected, C123ScoringEvent, XmlSection, LogLevel, C123ClientState } from '../protocol/types.js';
 import { getLogBuffer, type LogEntry, type LogFilterOptions } from '../utils/LogBuffer.js';
 import { ScoreboardSession } from '../ws/ScoreboardSession.js';
 import { Logger } from '../utils/logger.js';
@@ -459,6 +459,31 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
+   * Broadcast a scoring event to all admin dashboard connections
+   * Used for real-time notification when scoring commands are sent
+   */
+  broadcastScoringEvent(event: C123ScoringEvent['data']): void {
+    const message: C123ScoringEvent = {
+      type: 'ScoringEvent',
+      timestamp: new Date().toISOString(),
+      data: event,
+    };
+
+    const json = JSON.stringify(message);
+
+    // Send to admin dashboard connections (for monitoring)
+    for (const ws of this.adminConnections) {
+      if (ws.readyState === ws.OPEN) {
+        ws.send(json);
+      } else {
+        this.adminConnections.delete(ws);
+      }
+    }
+
+    Logger.debug('Unified', `Broadcast ScoringEvent: ${event.eventType} bib=${event.bib}`);
+  }
+
+  /**
    * Broadcast default assets change to all connected clients
    * @param clearedKeys - Asset keys that were cleared (will be sent as null)
    */
@@ -853,8 +878,10 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     this.app.put('/api/config/assets', this.handleSetAssets.bind(this));
     this.app.delete('/api/config/assets/:key', this.handleDeleteAsset.bind(this));
 
-    // C123 Write API (Scoring)
+    // C123 Write API (Scoring, RemoveFromCourse, Timing)
     this.app.post('/api/c123/scoring', this.handleC123Scoring.bind(this));
+    this.app.post('/api/c123/remove-from-course', this.handleC123RemoveFromCourse.bind(this));
+    this.app.post('/api/c123/timing', this.handleC123Timing.bind(this));
 
     // Health check
     this.app.get('/health', (_req: Request, res: Response) => {
@@ -2125,6 +2152,13 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         value: valueNum as 0 | 2 | 50,
       });
 
+      // Broadcast scoring event to admin connections
+      this.broadcastScoringEvent({
+        eventType: 'penalty',
+        bib: String(bib),
+        details: { gate: gateNum, value: valueNum as 0 | 2 | 50 },
+      });
+
       res.json({
         success: true,
         bib: String(bib),
@@ -2133,6 +2167,170 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       });
     } catch (err) {
       Logger.error('Unified', 'Scoring error', err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * POST /api/c123/remove-from-course - Remove competitor from course
+   *
+   * Body: { bib: string, reason: 'DNS' | 'DNF' | 'CAP', position?: number }
+   *
+   * Reason meanings:
+   * - DNS: Did Not Start
+   * - DNF: Did Not Finish
+   * - CAP: Capsized
+   */
+  private async handleC123RemoveFromCourse(req: Request, res: Response): Promise<void> {
+    if (!this.c123Server) {
+      res.status(503).json({ error: 'Server not available' });
+      return;
+    }
+
+    if (!this.c123Server.isScoringAvailable()) {
+      res.status(503).json({
+        error: 'Not connected to C123',
+        detail: 'TCP connection to C123 is not established',
+      });
+      return;
+    }
+
+    const { bib, reason, position } = req.body;
+
+    // Validate required fields
+    if (bib === undefined || bib === null || bib === '') {
+      res.status(400).json({ error: 'bib is required' });
+      return;
+    }
+
+    if (reason === undefined || reason === null || reason === '') {
+      res.status(400).json({ error: 'reason is required' });
+      return;
+    }
+
+    // Validate reason
+    const validReasons = ['DNS', 'DNF', 'CAP'] as const;
+    const reasonUpper = String(reason).toUpperCase();
+    if (!validReasons.includes(reasonUpper as (typeof validReasons)[number])) {
+      res.status(400).json({
+        error: 'reason must be DNS, DNF, or CAP',
+        detail: 'DNS = Did Not Start, DNF = Did Not Finish, CAP = Capsized',
+      });
+      return;
+    }
+
+    // Validate optional position
+    let positionNum: number | undefined;
+    if (position !== undefined && position !== null) {
+      positionNum = Number(position);
+      if (isNaN(positionNum) || positionNum < 1) {
+        res.status(400).json({
+          error: 'position must be a positive number',
+        });
+        return;
+      }
+    }
+
+    try {
+      const request: { bib: string; reason: 'DNS' | 'DNF' | 'CAP'; position?: number } = {
+        bib: String(bib),
+        reason: reasonUpper as 'DNS' | 'DNF' | 'CAP',
+      };
+      if (positionNum !== undefined) {
+        request.position = positionNum;
+      }
+      await this.c123Server.sendRemoveFromCourse(request);
+
+      const finalPosition = positionNum ?? 1;
+
+      // Broadcast scoring event to admin connections
+      this.broadcastScoringEvent({
+        eventType: 'remove',
+        bib: String(bib),
+        details: { reason: reasonUpper as 'DNS' | 'DNF' | 'CAP', position: finalPosition },
+      });
+
+      res.json({
+        success: true,
+        bib: String(bib),
+        reason: reasonUpper,
+        position: finalPosition,
+      });
+    } catch (err) {
+      Logger.error('Unified', 'RemoveFromCourse error', err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * POST /api/c123/timing - Send manual timing impulse to C123
+   *
+   * Body: { bib: string, channelPosition: 'Start' | 'Finish' | 'Split1' | 'Split2' }
+   */
+  private async handleC123Timing(req: Request, res: Response): Promise<void> {
+    if (!this.c123Server) {
+      res.status(503).json({ error: 'Server not available' });
+      return;
+    }
+
+    if (!this.c123Server.isScoringAvailable()) {
+      res.status(503).json({
+        error: 'Not connected to C123',
+        detail: 'TCP connection to C123 is not established',
+      });
+      return;
+    }
+
+    const { bib, channelPosition } = req.body;
+
+    // Validate required fields
+    if (bib === undefined || bib === null || bib === '') {
+      res.status(400).json({ error: 'bib is required' });
+      return;
+    }
+
+    if (channelPosition === undefined || channelPosition === null || channelPosition === '') {
+      res.status(400).json({ error: 'channelPosition is required' });
+      return;
+    }
+
+    // Validate channelPosition
+    const validPositions = ['Start', 'Finish', 'Split1', 'Split2'] as const;
+    // Normalize case - first letter uppercase, rest lowercase
+    const normalizedPosition = String(channelPosition).charAt(0).toUpperCase() +
+      String(channelPosition).slice(1).toLowerCase();
+
+    if (!validPositions.includes(normalizedPosition as (typeof validPositions)[number])) {
+      res.status(400).json({
+        error: 'channelPosition must be Start, Finish, Split1, or Split2',
+      });
+      return;
+    }
+
+    try {
+      await this.c123Server.sendTiming({
+        bib: String(bib),
+        channelPosition: normalizedPosition as 'Start' | 'Finish' | 'Split1' | 'Split2',
+      });
+
+      // Broadcast scoring event to admin connections
+      this.broadcastScoringEvent({
+        eventType: 'timing',
+        bib: String(bib),
+        details: { channelPosition: normalizedPosition as 'Start' | 'Finish' | 'Split1' | 'Split2' },
+      });
+
+      res.json({
+        success: true,
+        bib: String(bib),
+        channelPosition: normalizedPosition,
+      });
+    } catch (err) {
+      Logger.error('Unified', 'Timing error', err);
       res.status(500).json({
         error: err instanceof Error ? err.message : 'Unknown error',
       });
