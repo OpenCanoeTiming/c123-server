@@ -694,7 +694,20 @@ c123-scoring (FE)
 └─────────────────────────────────────┘
 ```
 
-### Validace
+#### Blok I: Unit testy pro Write API (1 session) ✅ DONE
+
+- [x] I1: Vytvořit unit testy pro ScoringService (sendScoring, sendRemoveFromCourse, sendTiming)
+- [x] I2: Testy validace vstupů (bib, gate, value, reason, channelPosition)
+- [x] I3: Testy formátování XML (escapování speciálních znaků)
+- [x] I4: Testy propagace chyb
+
+**Poznámky k bloku I:**
+- 20 unit testů pro ScoringService v `src/service/__tests__/ScoringService.test.ts`
+- MockWritableSource pro testování bez reálného TCP spojení
+- Pokrytí: všechny tři metody (scoring, remove, timing), validace, XML formátování, error handling
+- Testy pro escapování XML speciálních znaků (`<`, `>`, `&`, `"`, `'`)
+
+### Validace (vyžaduje reálné C123)
 
 - [ ] Test s reálným C123 (penalizace se projeví v OnCourse)
 - [ ] Test bez C123 (graceful error handling)
