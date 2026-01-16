@@ -553,3 +553,134 @@ Všech 6 bloků (A-F) je dokončeno. Admin UI má nyní:
 - Keyboard navigation
 - Focus management
 - Reduced motion support
+
+---
+
+## Write API pro Scoring terminály
+
+### Motivace
+
+Server aktuálně pouze čte data z C123 (jednosměrná komunikace). Pro podporu scoring terminálů (c123-scoring) je potřeba implementovat zápis zpět na C123.
+
+### Reference
+
+- **Protokol:** `../c123-protocol-docs/c123-protocol.md` (sekce "Typy zpráv Terminál -> Server", řádky 325-375)
+- **XML formát:** Zprávy oddělené `|` (pipe), UTF-8
+
+### Chybějící endpointy
+
+#### 1. Scoring API (Priorita: Kritická)
+
+**Endpoint:** `POST /api/c123/scoring`
+
+**Request:**
+```json
+{
+  "bib": "10",
+  "gate": 5,
+  "value": 2
+}
+```
+
+**XML (odesláno na C123):**
+```xml
+<Canoe123 System="Main">
+  <Scoring Bib="10">
+    <Penalty Gate="5" Value="2" />
+  </Scoring>
+</Canoe123>|
+```
+
+**Hodnoty penalizace:**
+| Value | Význam |
+|-------|--------|
+| `0` | Čistý průjezd |
+| `2` | Dotek branky (+2s) |
+| `50` | Nejetí/promeškání (+50s) |
+
+#### 2. RemoveFromCourse API (Priorita: Střední)
+
+**Endpoint:** `POST /api/c123/remove-from-course`
+
+**Request:**
+```json
+{
+  "bib": "10",
+  "reason": "DNS"
+}
+```
+
+**XML:**
+```xml
+<Canoe123 System="Main">
+  <RemoveFromCourse Bib="10" Position="1" Reason="DNS" />
+</Canoe123>|
+```
+
+**Hodnoty reason:**
+| Reason | Význam |
+|--------|--------|
+| `DNS` | Did Not Start (Nestartoval) |
+| `DNF` | Did Not Finish (Nedokončil) |
+| `CAP` | Capsized (Převrácení) |
+
+#### 3. Timing API (Priorita: Nízká)
+
+**Endpoint:** `POST /api/c123/timing`
+
+**Request:**
+```json
+{
+  "bib": "10",
+  "channelPosition": "Start"
+}
+```
+
+**XML:**
+```xml
+<Canoe123 System="Main">
+  <Timing Bib="10" ChannelPosition="Start" HasChannel="1" />
+</Canoe123>|
+```
+
+**Hodnoty channelPosition:** `Start`, `Finish`, `Split1`, `Split2`
+
+### Implementační plán
+
+#### Blok G: TCP Write support (1 session)
+
+- [ ] G1: Rozšířit `TcpSource` o metodu `write(xml: string)`
+- [ ] G2: Vytvořit `ScoringService` pro formátování XML zpráv
+- [ ] G3: Přidat REST endpoint `POST /api/c123/scoring`
+- [ ] G4: Přidat validaci vstupu (bib, gate 1-24, value 0|2|50)
+- [ ] G5: Přidat error handling a timeout
+
+#### Blok H: RemoveFromCourse a Timing (1 session)
+
+- [ ] H1: Přidat endpoint `POST /api/c123/remove-from-course`
+- [ ] H2: Přidat endpoint `POST /api/c123/timing`
+- [ ] H3: WebSocket notifikace o úspěšném odeslání
+- [ ] H4: Dokumentace v `docs/REST-API.md`
+
+### Architektura
+
+```
+c123-scoring (FE)
+    │
+    ▼ POST /api/c123/scoring
+┌─────────────────────────────────────┐
+│           c123-server               │
+│                                     │
+│  UnifiedServer                      │
+│    └─ POST /api/c123/scoring        │
+│         └─ ScoringService.send()    │
+│              └─ TcpSource.write()   │
+│                   └─ TCP:27333 ─────┼──► C123
+└─────────────────────────────────────┘
+```
+
+### Validace
+
+- [ ] Test s reálným C123 (penalizace se projeví v OnCourse)
+- [ ] Test bez C123 (graceful error handling)
+- [ ] Test s více scoring terminály současně
