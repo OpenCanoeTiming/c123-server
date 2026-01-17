@@ -26,7 +26,8 @@ C123 Server - chytrá mezivrstva mezi Canoe123 a scoreboardy pro kanoistické sl
 
 ## Jazyk
 
-- Komunikace a dokumentace: **čeština**
+- Komunikace s uživatelem: **čeština**
+- Dokumentace (README, docs): **angličtina**
 - Kód, komentáře, commit messages: **angličtina**
 
 ---
