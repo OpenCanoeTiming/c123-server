@@ -1,33 +1,33 @@
-# C123 Server - Plán a stav projektu
+# C123 Server - Plan and Project Status
 
-## Vize
+## Vision
 
-**C123 Server** = štíhlá mezivrstva předávající **autentická data z C123** scoreboardům.
+**C123 Server** = lean middleware layer passing **authentic C123 data** to scoreboards.
 
-- Scoreboard pracuje přímo s nativními C123 daty (ne CLI formátem)
-- Server nemodifikuje data, pouze je parsuje a předává
-- XML soubor slouží jako sekundární zdroj pro historická/doplňková data
-
----
-
-## Stav projektu: FUNKČNÍ ✅
-
-Server je kompletně implementovaný a funkční.
-
-| Oblast | Popis |
-|--------|-------|
-| **TCP/UDP** | Připojení k C123 na :27333, reconnect logika, UDP discovery |
-| **WebSocket** | Real-time stream pro scoreboardy na `/ws` |
-| **REST API** | XML data, konfigurace klientů, status, assets, C123 write |
-| **Admin UI** | Dashboard na `/`, správa klientů, log viewer, asset management |
-| **XML polling** | Auto/manual/URL režimy, file watcher |
-| **Client config** | Remote konfigurace scoreboardů přes ConfigPush |
-| **Assets** | Centrální správa obrázků s per-client overrides, SVG podpora |
-| **Write API** | Scoring, RemoveFromCourse, Timing endpointy pro c123-scoring |
+- Scoreboard works directly with native C123 data (not CLI format)
+- Server doesn't modify data, only parses and forwards it
+- XML file serves as secondary source for historical/supplementary data
 
 ---
 
-## Architektura
+## Project Status: FUNCTIONAL ✅
+
+Server is completely implemented and functional.
+
+| Area | Description |
+|------|-------------|
+| **TCP/UDP** | Connection to C123 on :27333, reconnect logic, UDP discovery |
+| **WebSocket** | Real-time stream for scoreboards on `/ws` |
+| **REST API** | XML data, client configuration, status, assets, C123 write |
+| **Admin UI** | Dashboard on `/`, client management, log viewer, asset management |
+| **XML polling** | Auto/manual/URL modes, file watcher |
+| **Client config** | Remote scoreboard configuration via ConfigPush |
+| **Assets** | Centralized image management with per-client overrides, SVG support |
+| **Write API** | Scoring, RemoveFromCourse, Timing endpoints for c123-scoring |
+
+---
+
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -48,95 +48,95 @@ Server je kompletně implementovaný a funkční.
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Porty
+### Ports
 
-| Služba | Port | Poznámka |
-|--------|------|----------|
-| **C123 (upstream)** | 27333 | Canoe123 protokol, nelze měnit |
-| **C123 Server** | 27123 | HTTP + WS + API (vše na jednom portu) |
+| Service | Port | Note |
+|---------|------|------|
+| **C123 (upstream)** | 27333 | Canoe123 protocol, cannot be changed |
+| **C123 Server** | 27123 | HTTP + WS + API (all on one port) |
 
 ---
 
-## Klíčové koncepty
+## Key Concepts
 
-### C123 Protokol
+### C123 Protocol
 
-| Zpráva | Frekvence | Popis |
-|--------|-----------|-------|
+| Message | Frequency | Description |
+|---------|-----------|-------------|
 | **TimeOfDay** | ~1×/s | Heartbeat |
-| **OnCourse** | vícekrát/s | Závodníci na trati |
-| **Results** | nepravidelně | Výsledky (rotují kategorie) |
-| **RaceConfig** | ~20s | Konfigurace kategorie |
-| **Schedule** | ~40s | Rozpis závodů |
+| **OnCourse** | multiple/s | Competitors on course |
+| **Results** | irregular | Results (categories rotate) |
+| **RaceConfig** | ~20s | Category configuration |
+| **Schedule** | ~40s | Race schedule |
 
 ### BR1/BR2 (BetterRun)
 
-- CZ specifický formát pro dvě jízdy
-- **Server NEŘEŠÍ merge** - předává autentická data
-- **Scoreboard řeší merge** pomocí REST API `/api/xml/races/:raceId/results?merged=true`
+- CZ-specific format for two runs
+- **Server DOESN'T handle merge** - passes authentic data
+- **Scoreboard handles merge** using REST API `/api/xml/races/:raceId/results?merged=true`
 
 ### Current="Y"
 
-Označuje aktuálně jedoucí kategorii v Results - klíčové pro sledování flow závodu.
+Indicates currently running category in Results - key for race flow tracking.
 
 ---
 
-## Dokumentace
+## Documentation
 
-| Soubor | Účel |
-|--------|------|
-| `docs/C123-PROTOCOL.md` | WebSocket protokol, typy zpráv |
-| `docs/REST-API.md` | REST endpointy včetně Assets a Write API |
-| `docs/INTEGRATION.md` | Návod pro integrátory |
-| `docs/CLIENT-CONFIG.md` | Remote konfigurace klientů (ConfigPush) |
-| `docs/SCOREBOARD-REQUIREMENTS.md` | Požadavky na scoreboard |
-| `docs/CLI-DIFFERENCES.md` | Rozdíly oproti CLI verzi |
-| `docs/XML-FORMAT.md` | XML struktura s příklady |
-
----
-
-## Reference
-
-| Zdroj | Popis |
-|-------|-------|
-| `../c123-protocol-docs/` | C123 protokol dokumentace |
-| `../analysis/07-sitova-komunikace.md` | C123 protokol analýza |
-| `../analysis/captures/*.xml` | XML struktura příklady |
-| `../analysis/recordings/*.jsonl` | Timing analýza |
-| Tag `v1.0.0-cli` | Archivovaná CLI-kompatibilní verze |
+| File | Purpose |
+|------|---------|
+| `docs/C123-PROTOCOL.md` | WebSocket protocol, message types |
+| `docs/REST-API.md` | REST endpoints including Assets and Write API |
+| `docs/INTEGRATION.md` | Integration guide |
+| `docs/CLIENT-CONFIG.md` | Remote client configuration (ConfigPush) |
+| `docs/SCOREBOARD-REQUIREMENTS.md` | Scoreboard requirements |
+| `docs/CLI-DIFFERENCES.md` | Differences from CLI version |
+| `docs/XML-FORMAT.md` | XML structure with examples |
 
 ---
 
-## Zbývající práce
+## References
 
-### Validace s reálným C123 (vyžaduje hardware)
-
-- [ ] Test Write API s reálným C123 (penalizace se projeví v OnCourse)
-- [ ] Test graceful error handling bez C123
-- [ ] Test s více scoring terminály současně
-
-### Nice-to-have (future)
-
-- [ ] Service worker pro offline podporu
-- [ ] Cross-browser testování (Chrome, Firefox, Safari, Edge)
+| Source | Description |
+|--------|-------------|
+| `../c123-protocol-docs/` | C123 protocol documentation |
+| `../analysis/07-sitova-komunikace.md` | C123 protocol analysis |
+| `../analysis/captures/*.xml` | XML structure examples |
+| `../analysis/recordings/*.jsonl` | Timing analysis |
+| Tag `v1.0.0-cli` | Archived CLI-compatible version |
 
 ---
 
-## Historie implementace
+## Remaining Work
 
-| Fáze | Popis | Status |
-|------|-------|--------|
+### Validation with Real C123 (Requires Hardware)
+
+- [ ] Test Write API with real C123 (penalties reflect in OnCourse)
+- [ ] Test graceful error handling without C123
+- [ ] Test with multiple scoring terminals simultaneously
+
+### Nice-to-have (Future)
+
+- [ ] Service worker for offline support
+- [ ] Cross-browser testing (Chrome, Firefox, Safari, Edge)
+
+---
+
+## Implementation History
+
+| Phase | Description | Status |
+|-------|-------------|--------|
 | Core | TCP/UDP sources, WebSocket, REST API, XML polling | ✅ |
-| Admin UI v1 | Inline HTML/CSS/JS v UnifiedServer | ✅ |
-| Admin UI v2 | Extrakce do souborů, "Dark Performance" design, accessibility | ✅ |
-| Write API | Scoring, RemoveFromCourse, Timing endpointy + testy | ✅ |
+| Admin UI v1 | Inline HTML/CSS/JS in UnifiedServer | ✅ |
+| Admin UI v2 | Extraction to files, "Dark Performance" design, accessibility | ✅ |
+| Write API | Scoring, RemoveFromCourse, Timing endpoints + tests | ✅ |
 
-### Design rozhodnutí
+### Design Decisions
 
-| Aspekt | Rozhodnutí | Důvod |
-|--------|-----------|-------|
-| Framework | Vanilla JS + CSS | Jednoduchost, žádné build tools |
-| Fonts | Self-hosted (Inter, JetBrains Mono) | Offline provoz na závodech |
-| Icons | Inline SVG | Žádné externí závislosti |
+| Aspect | Decision | Reason |
+|--------|----------|--------|
+| Framework | Vanilla JS + CSS | Simplicity, no build tools |
+| Fonts | Self-hosted (Inter, JetBrains Mono) | Offline operation at races |
+| Icons | Inline SVG | No external dependencies |
 | State | URL hash + localStorage | Persistence, shareable |
-| Mobile | Mobile-first | Časté použití na tabletu |
+| Mobile | Mobile-first | Frequent tablet usage |

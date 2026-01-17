@@ -1,125 +1,123 @@
 # Claude Code Instructions - C123 Server
 
-## Projekt
+## Project
 
-C123 Server - chytrá mezivrstva mezi Canoe123 a scoreboardy pro kanoistické slalomové závody.
+C123 Server - smart middleware layer between Canoe123 and scoreboards for canoe slalom races.
 
 ---
 
-## Cesty a dokumentace
+## Paths and Documentation
 
-| Účel | Cesta |
-|------|-------|
-| **Tento projekt** | `/workspace/csb-v2/c123-server/` |
-| **Implementační plán** | `./PLAN.md` |
-| **Scoreboard projekt** | `../canoe-scoreboard-v2/` (READONLY - reference) |
-| **Analýza** | `../analysis/` (READONLY) |
+| Purpose | Path |
+|---------|------|
+| **This project** | `/workspace/csb-v2/c123-server/` |
+| **Implementation plan** | `./PLAN.md` |
+| **Scoreboard project** | `../canoe-scoreboard-v2/` (READONLY - reference) |
+| **Analysis** | `../analysis/` (READONLY) |
 
-### Klíčové reference
+### Key References
 
-- **`../analysis/07-sitova-komunikace.md`** - C123 protokol, detekce dojetí
-- **`../analysis/captures/xboardtest02_jarni_v1.xml`** - XML struktura, BR1/BR2 formát
-- **`../canoe-scoreboard-v2/scripts/c123-proxy.js`** - TCP socket handling (základ pro TcpSource)
+- **`../analysis/07-sitova-komunikace.md`** - C123 protocol, finish detection
+- **`../analysis/captures/xboardtest02_jarni_v1.xml`** - XML structure, BR1/BR2 format
+- **`../canoe-scoreboard-v2/scripts/c123-proxy.js`** - TCP socket handling (basis for TcpSource)
 - **`../canoe-scoreboard-v2/src/providers/C123Provider.ts`** - XML parsing (reference)
 
 ---
 
-## Jazyk
+## Language
 
-- Komunikace s uživatelem: **čeština**
-- Dokumentace (README, docs): **angličtina**
-- Kód, komentáře, commit messages: **angličtina**
+- User communication: **Czech**
+- Documentation (README, docs): **English**
+- Code, comments, commit messages: **English**
 
 ---
 
-## Architektura
+## Architecture
 
 ```
 c123-server/
 ├── src/
 │   ├── index.ts              # Entry point
-│   ├── server.ts             # Hlavní orchestrace
-│   ├── sources/              # Zdroje dat (UDP, TCP, XML)
-│   ├── parsers/              # XML parsování
-│   ├── state/                # Agregovaný stav
+│   ├── server.ts             # Main orchestration
+│   ├── sources/              # Data sources (UDP, TCP, XML)
+│   ├── parsers/              # XML parsing
+│   ├── state/                # Aggregated state
 │   ├── output/               # WebSocket server
 │   └── admin/                # Admin dashboard
-└── shared/types/             # Sdílené typy
+└── shared/types/             # Shared types
 ```
 
 ---
 
-## Porty
+## Ports
 
-| Služba | Port | Poznámka |
-|--------|------|----------|
-| C123 (upstream) | 27333 | Canoe123 protokol (TCP + UDP), nelze měnit |
-| **C123 Server** | 27123 | Jeden port pro vše (HTTP + WS) |
+| Service | Port | Note |
+|---------|------|------|
+| C123 (upstream) | 27333 | Canoe123 protocol (TCP + UDP), cannot be changed |
+| **C123 Server** | 27123 | One port for everything (HTTP + WS) |
 
-### Endpointy na portu 27123
+### Endpoints on Port 27123
 
-| Path | Protokol | Účel |
-|------|----------|------|
+| Path | Protocol | Purpose |
+|------|----------|---------|
 | `/` | HTTP | Admin dashboard (SPA) |
-| `/ws` | WebSocket | Real-time data pro scoreboardy |
+| `/ws` | WebSocket | Real-time data for scoreboards |
 | `/api/*` | HTTP | REST API (status, config, XML data) |
 
-Port 27123 je mnemotechnický (C-1-2-3) a IANA unassigned.
+Port 27123 is mnemonic (C-1-2-3) and IANA unassigned.
 
 ---
 
-## Vývoj a testování
+## Development and Testing
 
-Vývoj běží proti **nahraným datům z analýzy**:
+Development runs against **recorded data from analysis**:
 
 ```bash
-# Nahrávka obsahuje TCP (C123) i WS (CLI) data
+# Recording contains TCP (C123) and WS (CLI) data
 ../analysis/recordings/rec-2025-12-28T09-34-10.jsonl
 ```
 
+Process: Always, especially for additional requests and changes, first update documentation as plan and intent, add necessary steps to the plan, then implement them gradually. Try to divide planned tasks into blocks that can be handled by Claude Code with Opus 4.5 up to ~70% context usage, because we'll run fresh instances for each block. Commit at the latest after each block. Don't do more than one block before clear or compact.
 
-Proces: vzdy, zejmena u dodateckych pozadavku a zmen, nejprve aktualizovat dokumentaci jako plan a zamer, doplnit pripadne kroky do planu a ty pak postupne realizovat. Snažit se plánované úkoly dělit do bloků, které jdou zvládnout pomocí claude code s opus 4.5 do cca 70% použitého kontextu, protože budeme pouštět na bloky postupně čerstvé instance. Commit nejpozději po každém bloku. Nedělat víc než jeden blok před clear nebo compact.
+If any deviation from required behavior is discovered, or a problem cannot be solved or turns out to be bigger, then update the plan with new sections and steps as needed, finish, and leave further work to a fresh instance.
 
-Pokud se zjistí nějaká odchylka od požadovaného chování, nebo se nedaří nějaký problém vyřešit nebo se ukáže že je větší, tak další postup je takový, že aktualizuješ plán o nové sekce a kroky dle potřeby a skončíš a necháš další práci na čerstvé instance.
-
-Piš si deníček vývoje - co šlo, co nešlo, co se zkusilo, atd. Ať se neprozkoumávají slepé uličky.
-
+Keep a development log - what worked, what didn't, what was tried, etc. So dead ends aren't explored again.
 
 ---
 
-## Klíčové kvality
+## Key Qualities
 
-1. **Sledování flow závodu** - zobrazovat výsledky kategorie, která zrovna jede
-2. **XML validace** - identifikovat správný XML soubor, detekovat nekompatibilitu
-3. **XML je živá databáze** - soubor se průběžně mění, polling pro aktualizace
-4. **Cross-platform** - Windows primární, ale běží i na Linux/macOS
-5. **Jeden port** - všechny služby (Admin, WS, API) na jednom portu 27123
+1. **Race flow tracking** - display results for the currently running category
+2. **XML validation** - identify correct XML file, detect incompatibility
+3. **XML as live database** - file changes continuously, polling for updates
+4. **Cross-platform** - Windows primary, but runs on Linux/macOS too
+5. **Single port** - all services (Admin, WS, API) on one port 27123
 
 ---
 
-## Persistentní nastavení
+## Persistent Settings
 
-Aplikace ukládá uživatelská nastavení do souboru, aby přežila restart:
+Application saves user settings to file to survive restart:
 
-| Platforma | Cesta |
-|-----------|-------|
+| Platform | Path |
+|----------|------|
 | Windows | `%APPDATA%\c123-server\settings.json` |
 | Linux/macOS | `~/.c123-server/settings.json` |
 
-**Princip:** Každé manuální nastavení (XML path, autodetekce on/off) se automaticky ukládá. Při dalších úpravách vždy používat `AppSettingsManager` z `src/config/AppSettings.ts`.
+**Principle:** Every manual setting (XML path, autodetect on/off) is automatically saved. For future modifications always use `AppSettingsManager` from `src/config/AppSettings.ts`.
 
 ---
 
-## Oddělitelnost
+## Separability
 
-Tento projekt je připraven na vyčlenění do samostatného repozitáře:
-- Žádné importy z `canoe-scoreboard-v2/src/`
-- Sdílené typy v `shared/types/`
-- Samostatný package.json
+This project is prepared for extraction to a standalone repository:
+- No imports from `canoe-scoreboard-v2/src/`
+- Shared types in `shared/types/`
+- Standalone package.json
 
 ---
 
-## Commit message formát
+## Commit Message Format
 
 ```
 feat: add TcpSource with reconnect logic
@@ -129,4 +127,4 @@ test: add unit tests for FinishDetector
 
 ---
 
-*Detailní plán implementace → viz `./PLAN.md`*
+*Detailed implementation plan → see `./PLAN.md`*
