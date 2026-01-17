@@ -7,7 +7,7 @@ Smart middleware for canoe slalom timing - bridge between Canoe123 timing softwa
 - **Zero configuration** - Works out of the box on Windows with auto-discovery and auto-detect
 - **Single port architecture** - All services (Admin, WebSocket, REST API) on port 27123
 - **Auto-discovery** - Automatically finds C123 on the local network via UDP broadcast
-- **Native C123 protocol** - Passes authentic C123 data (XML → JSON) without CLI emulation
+- **Native C123 protocol** - Passes authentic C123 data (XML → JSON)
 - **XML REST API** - Full access to race data (schedule, participants, results)
 - **C123 Write API** - Send scoring, timing, and DNS/DNF commands back to C123
 - **Finish detection** - Detects when athletes cross the finish line via dtFinish tracking
@@ -367,7 +367,6 @@ npm run build
 - [INTEGRATION.md](docs/INTEGRATION.md) - Scoreboard integration guide
 - [CLIENT-CONFIG.md](docs/CLIENT-CONFIG.md) - Remote client configuration
 - [SCOREBOARD-REQUIREMENTS.md](docs/SCOREBOARD-REQUIREMENTS.md) - What scoreboards must implement
-- [CLI-DIFFERENCES.md](docs/CLI-DIFFERENCES.md) - Migration from CLI format
 
 ## License
 

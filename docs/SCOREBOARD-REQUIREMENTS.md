@@ -1,18 +1,18 @@
 # Scoreboard Requirements
 
-This document describes what a scoreboard client must implement when working with C123 Server v2. Unlike the legacy CLI version, C123 Server passes through raw C123 data, so the scoreboard must handle several tasks that were previously done server-side.
+This document describes what a scoreboard client must implement when working with C123 Server. The server passes through raw C123 data, so the scoreboard must handle several processing tasks.
 
 ---
 
 ## Overview
 
-| Responsibility | CLI (v1) | C123 Server (v2) |
-|----------------|----------|------------------|
-| Finish detection | Server (`HighlightBib`) | **Client** |
-| BR1/BR2 merge | Server | **Client** (or REST API) |
-| Results filtering | Server | **Client** |
-| Competitor highlight | Server (`comp`) | **Client** |
-| Race status tracking | Server (`RaceStatus`) | **Client** (`isCurrent`) |
+| Responsibility | Implementation |
+|----------------|----------------|
+| Finish detection | Client (track `dtFinish`) |
+| BR1/BR2 merge | Client or REST API (`?merged=true`) |
+| Results filtering | Client (use `isCurrent`) |
+| Competitor highlight | Client |
+| Race status tracking | Client (use `isCurrent`) |
 
 ---
 
@@ -536,6 +536,5 @@ Essential features for a working scoreboard:
 ## See Also
 
 - [INTEGRATION.md](INTEGRATION.md) - How to connect to C123 Server
-- [CLI-DIFFERENCES.md](CLI-DIFFERENCES.md) - Migration from CLI format
 - [C123-PROTOCOL.md](C123-PROTOCOL.md) - C123 message reference
 - [REST-API.md](REST-API.md) - REST API documentation

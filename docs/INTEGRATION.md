@@ -1103,4 +1103,3 @@ function formatTime(centiseconds: number): string {
 - [C123-PROTOCOL.md](C123-PROTOCOL.md) - Complete C123 protocol reference
 - [REST-API.md](REST-API.md) - REST API documentation
 - [CLIENT-CONFIG.md](CLIENT-CONFIG.md) - Remote client configuration
-- [CLI-DIFFERENCES.md](CLI-DIFFERENCES.md) - Migration guide from CLI format
