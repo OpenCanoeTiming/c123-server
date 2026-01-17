@@ -4,14 +4,53 @@ Smart middleware for canoe slalom timing - bridge between Canoe123 timing softwa
 
 ## Features
 
+- **Zero configuration** - Works out of the box on Windows with auto-discovery and auto-detect
 - **Single port architecture** - All services (Admin, WebSocket, REST API) on port 27123
 - **Auto-discovery** - Automatically finds C123 on the local network via UDP broadcast
 - **Native C123 protocol** - Passes authentic C123 data (XML → JSON) without CLI emulation
 - **XML REST API** - Full access to race data (schedule, participants, results)
+- **C123 Write API** - Send scoring, timing, and DNS/DNF commands back to C123
 - **Finish detection** - Detects when athletes cross the finish line via dtFinish tracking
 - **Admin dashboard** - Web interface for monitoring and configuration
 - **Windows auto-config** - Automatically detects XML path from Canoe123 settings
 - **Persistent settings** - Configuration survives restarts
+
+## Zero Configuration (Windows)
+
+On Windows, the server works out of the box with no configuration needed:
+
+```bash
+# 1. Make sure Canoe123 has been run at least once (creates config)
+# 2. Start the server
+npm start
+
+# That's it! The server will:
+# - Find running C123 on the network (UDP auto-discovery)
+# - Load XML file path from Canoe123 settings (auto-detect)
+# - Start serving on http://localhost:27123
+```
+
+### How Auto-Discovery Works
+
+The server broadcasts UDP packets on port 27333 to find Canoe123:
+
+1. **UDP broadcast** - Sends discovery packets to the local network
+2. **C123 responds** - Canoe123 replies with its IP address
+3. **TCP connection** - Server connects to C123 for real-time data
+
+No need to know the C123 IP address - just run the server and it finds C123 automatically.
+
+### How Auto-Detect Works (Windows)
+
+The server reads Canoe123's `user.config` file to find XML paths:
+
+| Mode | Description |
+|------|-------------|
+| **auto-offline** | Uses `AutoCopyFolder` path (default, recommended) |
+| **auto-main** | Uses `CurrentEventFile` path (main event file) |
+| **manual** | User-specified path |
+
+The offline copy is recommended because it's updated atomically and safer to read.
 
 ## Installation
 
@@ -38,6 +77,48 @@ The server starts on port **27123** with:
 - Admin dashboard: http://localhost:27123/
 - WebSocket: ws://localhost:27123/ws
 - REST API: http://localhost:27123/api/
+
+## Use Cases
+
+### Scoreboards
+
+Display real-time results on TVs, LED walls, or web pages:
+
+```javascript
+const ws = new WebSocket('ws://server:27123/ws');
+ws.onmessage = (e) => {
+  const msg = JSON.parse(e.data);
+  if (msg.type === 'OnCourse') updateDisplay(msg.data);
+};
+```
+
+### Scoring Applications
+
+Send penalties and timing commands to C123:
+
+```bash
+# Send penalty (2 seconds on gate 5)
+curl -X POST http://server:27123/api/c123/scoring \
+  -H "Content-Type: application/json" \
+  -d '{"bib": "10", "gate": 5, "value": 2}'
+
+# Mark DNS (Did Not Start)
+curl -X POST http://server:27123/api/c123/remove-from-course \
+  -H "Content-Type: application/json" \
+  -d '{"bib": "10", "reason": "DNS"}'
+```
+
+### Custom Integrations
+
+Access race data via REST API for custom applications:
+
+```bash
+# Get race schedule
+curl http://server:27123/api/xml/schedule
+
+# Get merged BR1+BR2 results
+curl http://server:27123/api/xml/races/K1M_ST_BR1_6/results?merged=true
+```
 
 ## Command Line Options
 
@@ -82,6 +163,7 @@ Environment variables:
 | `/ws` | WebSocket | Real-time C123 data + XML change notifications |
 | `/api/*` | HTTP | REST API (status, config, XML data) |
 | `/api/discover` | HTTP | Server discovery endpoint |
+| `/api/c123/*` | HTTP | C123 Write API (scoring, timing) |
 
 ## WebSocket Messages
 
@@ -96,7 +178,7 @@ Real-time C123 data in JSON format:
     "competitors": [
       {
         "bib": "9",
-        "name": "KOPEČEK Michal",
+        "name": "SMITH John",
         "time": "81.15",
         "dtFinish": null,
         "rank": 8
@@ -109,6 +191,8 @@ Real-time C123 data in JSON format:
 Message types: `TimeOfDay`, `OnCourse`, `Results`, `RaceConfig`, `Schedule`, `XmlChange`
 
 ## REST API
+
+### Read Operations
 
 ```bash
 # Server status
@@ -125,6 +209,22 @@ GET /api/xml/races/:id/results
 
 # Merged BR1+BR2 results
 GET /api/xml/races/:id/results?merged=true
+```
+
+### Write Operations (C123)
+
+```bash
+# Send penalty
+POST /api/c123/scoring
+{ "bib": "10", "gate": 5, "value": 2 }
+
+# Remove from course (DNS/DNF/CAP)
+POST /api/c123/remove-from-course
+{ "bib": "10", "reason": "DNS" }
+
+# Manual timing impulse
+POST /api/c123/timing
+{ "bib": "10", "channelPosition": "Finish" }
 ```
 
 See [docs/REST-API.md](docs/REST-API.md) for full API documentation.
@@ -160,18 +260,7 @@ Settings include:
 - XML file path and source mode
 - Event name override
 - Server port
-
-### XML Source Modes
-
-Three modes for selecting the XML data source:
-
-| Mode | Description |
-|------|-------------|
-| **auto-offline** | Offline copy from `AutoCopyFolder` (default, recommended) |
-| **auto-main** | Main event file (`CurrentEventFile` from C123 config) |
-| **manual** | User-specified path |
-
-On Windows, the server automatically detects Canoe123 configuration and extracts XML paths.
+- Client configurations
 
 ## Admin Dashboard
 
@@ -181,6 +270,7 @@ Open http://localhost:27123 to access the admin dashboard:
 - Monitor data sources (C123, XML)
 - Configure XML source mode (auto-main, auto-offline, manual)
 - Set event name override
+- Manage client configurations
 - View real-time logs
 - Force refresh all connected clients
 
@@ -192,13 +282,13 @@ Open http://localhost:27123 to access the admin dashboard:
 │                                                                     │
 │   Sources                    Core                     Output        │
 │  ┌──────────────┐       ┌──────────────┐       ┌──────────────┐    │
-│  │ TcpSource    │──────▶│              │       │              │    │
-│  │   :27333     │       │  C123Proxy   │──────▶│  Unified     │    │
+│  │ TcpSource    │◀─────▶│              │       │              │    │
+│  │   :27333     │  R/W  │  C123Proxy   │──────▶│  Unified     │    │
 │  ├──────────────┤       │ (XML → JSON) │       │  Server      │    │
 │  │ UdpDiscovery │──────▶│              │       │   :27123     │───▶│ Clients
 │  │   :27333     │       └──────────────┘       │              │    │
 │  └──────────────┘                              │  /      admin│    │
-│                         ┌──────────────┐       │  /ws   WS    │    │
+│                         ┌──────────────┐       │  /ws   WS    │◀───│ Scoring
 │  ┌──────────────┐       │  XmlService  │──────▶│  /api  REST  │    │
 │  │ XmlSource    │──────▶│ (data + push)│       └──────────────┘    │
 │  │ (file/URL)   │       └──────────────┘                           │
@@ -206,6 +296,10 @@ Open http://localhost:27123 to access the admin dashboard:
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+**Data Flow:**
+- **Read path**: C123 → TcpSource → C123Proxy → WebSocket/REST → Clients
+- **Write path**: Scoring App → REST API → C123Proxy → TcpSource → C123
 
 ## Development
 
