@@ -107,6 +107,59 @@ Indicates currently running category in Results - key for race flow tracking.
 
 ---
 
+## Next: Admin UI Design System Integration
+
+### Goal
+
+Integrate `timing-design-system` CSS into vanilla JS admin UI for visual consistency across timing tools.
+
+### Approach: Vanilla CSS Only
+
+**No React, no build tools** - just CSS classes from the design system.
+
+**What we use from timing-design-system:**
+- `dist/timing.css` - compiled CSS bundle
+- CSS classes: buttons, cards, badges, tables, modals, toasts, tabs, header, status dots
+- Fonts: Inter, JetBrains Mono (already self-hosted in admin-ui)
+
+### Steps
+
+- [ ] 1. Copy `timing.css` from design system to `src/admin-ui/`
+- [ ] 2. Update `index.html` to link timing.css instead of styles.css
+- [ ] 3. Replace custom CSS classes with design system classes:
+  - `.btn-*` → design system buttons
+  - `.card` → design system cards
+  - `.badge-*` → design system badges
+  - `.table` → design system tables
+  - `.modal` → design system modals
+  - `.toast-*` → design system toasts
+  - `.tabs` → design system tabs
+  - `.app-header` → design system header
+  - `.status-dot-*` → design system status indicators
+- [ ] 4. Keep `main.js` logic, only update class names if needed
+- [ ] 5. Remove old `styles.css` (or keep as override layer)
+- [ ] 6. Test all functionality
+
+### Files
+
+```
+src/admin-ui/
+├── index.html      # Update CSS links
+├── timing.css      # NEW - copy from design system
+├── main.js         # Update class names if needed
+├── styles.css      # Remove or keep for overrides
+└── fonts/          # Already have Inter, JetBrains Mono
+```
+
+### Benefits
+
+- Visual consistency with c123-scoreboard and c123-scoring
+- No npm dependencies for admin-ui
+- No build step
+- Easy updates - just copy new timing.css
+
+---
+
 ## Remaining Work
 
 ### Validation with Real C123 (Requires Hardware)
