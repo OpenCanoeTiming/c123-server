@@ -2172,12 +2172,12 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       return;
     }
 
-    // Validate penalty value
-    const valueNum = Number(value);
-    if (![0, 2, 50].includes(valueNum)) {
+    // Validate penalty value (null = delete penalty)
+    const valueNum = value === null ? null : Number(value);
+    if (valueNum !== null && ![0, 2, 50].includes(valueNum)) {
       res.status(400).json({
-        error: 'value must be 0, 2, or 50',
-        detail: '0 = clean, 2 = touch (+2s), 50 = missed (+50s)',
+        error: 'value must be 0, 2, 50, or null (to delete)',
+        detail: '0 = clean, 2 = touch (+2s), 50 = missed (+50s), null = delete',
       });
       return;
     }
@@ -2192,14 +2192,14 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
     try {
       const scoringRequest = raceId
-        ? { raceId: String(raceId), bib: String(bib), gate: gateNum, value: valueNum as 0 | 2 | 50 }
-        : { bib: String(bib), gate: gateNum, value: valueNum as 0 | 2 | 50 };
+        ? { raceId: String(raceId), bib: String(bib), gate: gateNum, value: valueNum as 0 | 2 | 50 | null }
+        : { bib: String(bib), gate: gateNum, value: valueNum as 0 | 2 | 50 | null };
       await this.c123Server.sendScoring(scoringRequest);
 
       // Broadcast scoring event to admin connections
       const penaltyDetails = raceId
-        ? { gate: gateNum, value: valueNum as 0 | 2 | 50, raceId: String(raceId) }
-        : { gate: gateNum, value: valueNum as 0 | 2 | 50 };
+        ? { gate: gateNum, value: valueNum as 0 | 2 | 50 | null, raceId: String(raceId) }
+        : { gate: gateNum, value: valueNum as 0 | 2 | 50 | null };
       this.broadcastScoringEvent({
         eventType: 'penalty',
         bib: String(bib),

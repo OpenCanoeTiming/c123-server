@@ -68,6 +68,26 @@ describe('ScoringService', () => {
       }
     });
 
+    it('should handle null value (delete penalty)', async () => {
+      await service.sendScoring({ bib: '1', gate: 1, value: null });
+      expect(source.writtenMessages[0]).toContain('Value=""');
+    });
+
+    it('should use PenaltyCorrection format when raceId is provided', async () => {
+      await service.sendScoring({ raceId: 'K1M_BR1', bib: '5', gate: 3, value: 2 });
+      expect(source.writtenMessages[0]).toContain('<PenaltyCorrection');
+      expect(source.writtenMessages[0]).toContain('RaceId="K1M_BR1"');
+      expect(source.writtenMessages[0]).toContain('Bib="5"');
+      expect(source.writtenMessages[0]).toContain('Gate="3"');
+      expect(source.writtenMessages[0]).toContain('Value="2"');
+    });
+
+    it('should use Scoring format when raceId is not provided', async () => {
+      await service.sendScoring({ bib: '5', gate: 3, value: 2 });
+      expect(source.writtenMessages[0]).toContain('<Scoring');
+      expect(source.writtenMessages[0]).not.toContain('<PenaltyCorrection');
+    });
+
     it('should escape XML special characters in bib', async () => {
       await service.sendScoring({ bib: '<test&">', gate: 1, value: 0 });
       expect(source.writtenMessages[0]).toContain('Bib="&lt;test&amp;&quot;&gt;"');
@@ -96,7 +116,7 @@ describe('ScoringService', () => {
 
       it('should throw error for invalid penalty value', async () => {
         await expect(service.sendScoring({ bib: '10', gate: 1, value: 5 as any }))
-          .rejects.toThrow('Value must be 0, 2, or 50');
+          .rejects.toThrow('Value must be 0, 2, 50, or null');
       });
     });
 

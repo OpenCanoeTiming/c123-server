@@ -196,7 +196,7 @@ export interface C123ScoringEvent extends C123MessageBase {
     bib: string;
     /** Event-specific details */
     details:
-      | { gate: number; value: 0 | 2 | 50; raceId?: string }  // for penalty (raceId = finished competitor)
+      | { gate: number; value: 0 | 2 | 50 | null; raceId?: string }  // for penalty (raceId = finished, null = delete)
       | { reason: 'DNS' | 'DNF' | 'CAP'; position: number }  // for remove
       | { channelPosition: 'Start' | 'Finish' | 'Split1' | 'Split2' };  // for timing
   };

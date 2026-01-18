@@ -3,8 +3,10 @@ import { Logger } from '../utils/logger.js';
 
 /**
  * Penalty values supported by C123
+ * - 0, 2, 50: Standard penalty values
+ * - null/undefined: Delete penalty (empty value)
  */
-export type PenaltyValue = 0 | 2 | 50;
+export type PenaltyValue = 0 | 2 | 50 | null;
 
 /**
  * Reason codes for removing competitor from course
@@ -135,8 +137,8 @@ export class ScoringService {
       throw new Error('Gate must be a number between 1 and 24');
     }
 
-    if (![0, 2, 50].includes(request.value)) {
-      throw new Error('Value must be 0, 2, or 50');
+    if (request.value !== null && ![0, 2, 50].includes(request.value)) {
+      throw new Error('Value must be 0, 2, 50, or null (to delete)');
     }
   }
 
@@ -171,7 +173,8 @@ export class ScoringService {
    * Note: C123 expects compact XML without whitespace/newlines
    */
   private formatScoringXml(request: ScoringRequest): string {
-    return `<Canoe123 System="Main"><Scoring Bib="${this.escapeXml(request.bib)}"><Penalty Gate="${request.gate}" Value="${request.value}" /></Scoring></Canoe123>`;
+    const valueStr = request.value === null ? '' : String(request.value);
+    return `<Canoe123 System="Main"><Scoring Bib="${this.escapeXml(request.bib)}"><Penalty Gate="${request.gate}" Value="${valueStr}" /></Scoring></Canoe123>`;
   }
 
   /**
@@ -179,7 +182,8 @@ export class ScoringService {
    * Note: C123 expects compact XML without whitespace/newlines
    */
   private formatPenaltyCorrectionXml(request: ScoringRequest): string {
-    return `<Canoe123 System="Main"><PenaltyCorrection RaceId="${this.escapeXml(request.raceId!)}" Bib="${this.escapeXml(request.bib)}" Gate="${request.gate}" Value="${request.value}" /></Canoe123>`;
+    const valueStr = request.value === null ? '' : String(request.value);
+    return `<Canoe123 System="Main"><PenaltyCorrection RaceId="${this.escapeXml(request.raceId!)}" Bib="${this.escapeXml(request.bib)}" Gate="${request.gate}" Value="${valueStr}" /></Canoe123>`;
   }
 
   /**
