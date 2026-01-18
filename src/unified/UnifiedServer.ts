@@ -5,7 +5,7 @@ import { EventEmitter } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import type { ScoreboardConfig } from '../admin/types.js';
-import type { C123Message, C123XmlChange, C123ForceRefresh, C123LogEntry, C123Connected, C123ScoringEvent, XmlSection, LogLevel, C123ClientState } from '../protocol/types.js';
+import type { C123Message, C123XmlChange, C123ForceRefresh, C123LogEntry, C123Connected, C123ScoringEvent, C123Schedule, XmlSection, LogLevel, C123ClientState } from '../protocol/types.js';
 import { getLogBuffer, type LogEntry, type LogFilterOptions } from '../utils/LogBuffer.js';
 import { ScoreboardSession } from '../ws/ScoreboardSession.js';
 import { Logger } from '../utils/logger.js';
@@ -716,6 +716,19 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     if (storedConfig) {
       session.sendConfigPush();
       Logger.debug('Unified', `Sent ConfigPush to ${sessionId}`, storedConfig);
+    }
+
+    // Send Schedule if available from EventState
+    if (this.eventState && this.eventState.state.schedule.length > 0) {
+      const scheduleMsg: C123Schedule = {
+        type: 'Schedule',
+        timestamp: new Date().toISOString(),
+        data: {
+          races: this.eventState.state.schedule,
+        },
+      };
+      session.sendRaw(JSON.stringify(scheduleMsg));
+      Logger.debug('Unified', `Sent Schedule to ${sessionId} (${this.eventState.state.schedule.length} races)`);
     }
 
     // Update lastSeen timestamp for this configKey
