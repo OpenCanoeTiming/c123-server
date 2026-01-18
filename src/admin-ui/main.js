@@ -871,7 +871,11 @@ function renderClientCard(client) {
   const editIcon = '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg>';
   const refreshIcon = '<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>';
 
-  return '<div class="client-card ' + statusClass + '" data-ip="' + escapeHtml(configKey) + '">' +
+  // Card status class for colored left border (design system .card-status-*)
+  const cardStatusClass = client.online ? 'card-status-success' : '';
+
+  // Use design system .card .card-interactive + .card-compact + status variant
+  return '<div class="card card-interactive card-compact client-card ' + cardStatusClass + ' ' + statusClass + '" data-ip="' + escapeHtml(configKey) + '">' +
     '<div class="client-header">' +
       '<div class="client-identity">' +
         '<span class="client-ip" title="' + idTypeLabel + ': ' + escapeHtml(configKey) + '">' + escapeHtml(configKey) + '</span>' +
@@ -884,7 +888,7 @@ function renderClientCard(client) {
         '</span>' +
       '</div>' +
     '</div>' +
-    '<div class="client-body">' +
+    '<div class="card-body client-body">' +
       '<div class="client-label ' + labelClass + '" onclick="openClientModal(\'' + escapeHtml(configKey) + '\')">' + escapeHtml(label) + '</div>' +
       configHtml +
       '<div class="client-actions">' +

@@ -142,7 +142,7 @@ Replace local/inline styles with design system classes:
 
 - [x] **Header** - migrated to `.status-dot-*` classes from design system
 - [x] **LIVE indicator** - vodácký badge style (`.badge-success` + `.status-dot-glow`)
-- [ ] **Clients cards** - use `.card` vodácký variant
+- [x] **Clients cards** - use `.card .card-interactive .card-compact .card-status-success` from design system
 - [ ] **Tabs** - FIX: currently vertical, should be horizontal `.tabs` from design system
 - [ ] **Log viewer** - migrate from inline styles to design system `.log-viewer` component
 - [ ] **Modal (client editor)** - FIX: broken layout (partial screen), use `.modal` properly

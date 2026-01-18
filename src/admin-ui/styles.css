@@ -122,19 +122,16 @@ h2 {
 }
 
 /* ============================================
-   Card Component
+   Card Component - App-specific extensions
+   Base .card styles come from timing.css design system
    ============================================ */
+/* Local override: add margin-bottom for app layout */
 .card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
   margin-bottom: var(--space-4);
 }
 
-.card-header {
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--border);
+/* Card header style override for uppercase labels */
+.card-header-uppercase {
   font-weight: var(--font-weight-medium);
   font-size: var(--text-sm);
   text-transform: uppercase;
@@ -525,27 +522,16 @@ input[type="radio"]:focus-visible {
   gap: var(--space-3);
 }
 
+/* Client cards use design system .card + .card-interactive as base */
+/* Applied in main.js via renderClientCard() */
 .client-card {
-  background: var(--bg-surface);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  transition: all 0.2s ease;
+  /* Remove margin-bottom from design system .card for grid layout */
+  margin-bottom: 0;
   overflow: hidden;
 }
 
-.client-card:hover {
-  border-color: var(--border-focus);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-}
-
-/* Online/Offline state styling */
-.client-card.online {
-  border-top: 2px solid var(--success);
-}
-
+/* Online/Offline state styling - extends design system .card-status-* */
 .client-card.offline {
-  border-top: 2px solid var(--text-muted);
   opacity: 0.85;
 }
 
