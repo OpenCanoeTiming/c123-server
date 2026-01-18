@@ -1436,7 +1436,7 @@ Send a penalty scoring command to C123.
 |-------|------|----------|------------|-------------|
 | `bib` | string | Yes | Non-empty | Competitor start number |
 | `gate` | number | Yes | 1-24 | Gate number |
-| `value` | number | Yes | 0, 2, or 50 | Penalty value |
+| `value` | number\|null | Yes | 0, 2, 50, or null | Penalty value (null to delete) |
 
 **Penalty Values:**
 
@@ -1445,6 +1445,7 @@ Send a penalty scoring command to C123.
 | `0` | Clean pass (no penalty) |
 | `2` | Touch (+2 seconds) |
 | `50` | Missed/not taken (+50 seconds) |
+| `null` | Delete penalty (remove from C123) |
 
 **Response:**
 
@@ -1463,7 +1464,7 @@ Send a penalty scoring command to C123.
 |--------|----------|
 | 400 | `{ "error": "bib is required" }` |
 | 400 | `{ "error": "gate must be a number between 1 and 24" }` |
-| 400 | `{ "error": "value must be 0, 2, or 50" }` |
+| 400 | `{ "error": "value must be 0, 2, 50, or null (to delete)" }` |
 | 503 | `{ "error": "Not connected to C123", "detail": "TCP connection to C123 is not established" }` |
 
 ---

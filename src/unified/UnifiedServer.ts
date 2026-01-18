@@ -2158,8 +2158,8 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       return;
     }
 
-    if (value === undefined || value === null) {
-      res.status(400).json({ error: 'value is required' });
+    if (value === undefined) {
+      res.status(400).json({ error: 'value is required (use null to delete)' });
       return;
     }
 
