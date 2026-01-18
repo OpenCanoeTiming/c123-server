@@ -9,3 +9,6 @@ core
 
 # Test config files (reference only)
 user.config
+
+# Downloaded test fixtures cache
+.cache/

@@ -2,70 +2,41 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Server } from '../server.js';
 import { WebSocket } from 'ws';
 import net from 'node:net';
-import fs from 'node:fs';
-import readline from 'node:readline';
-import path from 'node:path';
 import type { C123Message } from '../protocol/types.js';
+import {
+  getRecordingPath,
+  loadRecording,
+  extractTcpMessages,
+  type RecordingEntry,
+} from './fixtures/recordingLoader.js';
 
 /**
  * E2E test using recorded data from a real C123 timing session.
  *
- * This test:
- * 1. Creates a mock TCP server that replays recorded C123 messages
- * 2. Starts the C123 Server connected to the mock
- * 3. Connects a WebSocket client to receive output
- * 4. Verifies the server correctly processes and forwards data
+ * Recording is loaded from:
+ * 1. Local c123-protocol-docs (if checked out next to this project)
+ * 2. GitHub raw URL (downloaded and cached in .cache/)
+ *
+ * Tests are skipped if recording cannot be obtained (e.g., offline without cache).
  */
-
-interface RecordingEntry {
-  ts: number;
-  src: string;
-  type: string;
-  data: unknown;
-  _meta?: unknown;
-}
-
-const RECORDING_PATH = path.resolve(
-  import.meta.dirname,
-  '../../../analysis/recordings/rec-2025-12-28T09-34-10.jsonl'
-);
-
-async function loadRecording(): Promise<RecordingEntry[]> {
-  const entries: RecordingEntry[] = [];
-
-  const fileStream = fs.createReadStream(RECORDING_PATH);
-  const rl = readline.createInterface({
-    input: fileStream,
-    crlfDelay: Infinity,
-  });
-
-  for await (const line of rl) {
-    try {
-      const entry = JSON.parse(line) as RecordingEntry;
-      entries.push(entry);
-    } catch {
-      // Skip malformed lines
-    }
-  }
-
-  return entries;
-}
-
-function extractTcpMessages(entries: RecordingEntry[]): string[] {
-  return entries
-    .filter((e) => e.src === 'tcp' && typeof e.data === 'string')
-    .map((e) => e.data as string);
-}
 
 describe('E2E Recording Replay', () => {
   let mockTcpServer: net.Server;
   let mockTcpPort: number;
   let server: Server;
   let tcpMessages: string[];
+  let recordingPath: string | null;
 
   beforeAll(async () => {
+    // Get recording path (downloads from GitHub if needed)
+    recordingPath = await getRecordingPath();
+    if (!recordingPath) {
+      console.warn('Recording not available - tests will be skipped');
+      return;
+    }
+
     // Load recording
-    const entries = await loadRecording();
+    const entries = await loadRecording(recordingPath);
     tcpMessages = extractTcpMessages(entries);
 
     // Create mock TCP server
@@ -86,7 +57,8 @@ describe('E2E Recording Replay', () => {
     });
   });
 
-  it('should have loaded TCP messages from recording', () => {
+  it('should have loaded TCP messages from recording', ({ skip }) => {
+    if (!recordingPath) skip();
     expect(tcpMessages.length).toBeGreaterThan(0);
     // Recording should contain various message types
     expect(tcpMessages.some((m) => m.includes('TimeOfDay'))).toBe(true);
@@ -94,7 +66,8 @@ describe('E2E Recording Replay', () => {
     expect(tcpMessages.some((m) => m.includes('Schedule'))).toBe(true);
   });
 
-  it('should process recording and emit C123 messages to WebSocket clients', async () => {
+  it('should process recording and emit C123 messages to WebSocket clients', async ({ skip }) => {
+    if (!recordingPath) skip();
     // Setup: server will connect to our mock TCP
     server = new Server({
       port: 0, // Use dynamic port
@@ -176,7 +149,8 @@ describe('E2E Recording Replay', () => {
     expect(messageTypes.has('TimeOfDay')).toBe(true);
   }, 15000);
 
-  it('should correctly parse race information from Schedule', async () => {
+  it('should correctly parse race information from Schedule', async ({ skip }) => {
+    if (!recordingPath) skip();
     // This test verifies that Schedule XML is parsed correctly
     const scheduleMsg = tcpMessages.find((m) => m.includes('<Schedule>'));
     expect(scheduleMsg).toBeDefined();
@@ -186,7 +160,8 @@ describe('E2E Recording Replay', () => {
     expect(scheduleMsg).toContain('RaceStatus');
   });
 
-  it('should correctly parse OnCourse XML', async () => {
+  it('should correctly parse OnCourse XML', async ({ skip }) => {
+    if (!recordingPath) skip();
     const onCourseMsg = tcpMessages.find((m) => m.includes('<OnCourse'));
     expect(onCourseMsg).toBeDefined();
 
@@ -195,7 +170,8 @@ describe('E2E Recording Replay', () => {
     expect(onCourseMsg).toMatch(/Position="\d+"/);
   });
 
-  it('should correctly parse TimeOfDay XML', async () => {
+  it('should correctly parse TimeOfDay XML', async ({ skip }) => {
+    if (!recordingPath) skip();
     const timeMsg = tcpMessages.find((m) => m.includes('<TimeOfDay>'));
     expect(timeMsg).toBeDefined();
 

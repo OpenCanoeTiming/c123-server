@@ -1,36 +1,25 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { Server } from '../server.js';
 import net from 'node:net';
-import fs from 'node:fs';
-import readline from 'node:readline';
-import path from 'node:path';
 import { WebSocket } from 'ws';
 import type { C123Message, C123OnCourse, C123Results } from '../protocol/types.js';
+import {
+  getRecordingPath,
+  loadRecording,
+  extractTcpMessages,
+} from './fixtures/recordingLoader.js';
 
 /**
  * Scoreboard Integration Test
  *
  * Tests that C123 Server emits valid C123 protocol messages.
  *
- * This test:
- * 1. Creates a mock TCP server replaying recorded C123 messages
- * 2. Starts the C123 Server connected to the mock
- * 3. Connects a WebSocket client
- * 4. Validates received messages match C123 protocol format
+ * Recording is loaded from:
+ * 1. Local c123-protocol-docs (if checked out next to this project)
+ * 2. GitHub raw URL (downloaded and cached in .cache/)
+ *
+ * Tests are skipped if recording cannot be obtained (e.g., offline without cache).
  */
-
-interface RecordingEntry {
-  ts: number;
-  src: string;
-  type: string;
-  data: unknown;
-  _meta?: unknown;
-}
-
-const RECORDING_PATH = path.resolve(
-  import.meta.dirname,
-  '../../../analysis/recordings/rec-2025-12-28T09-34-10.jsonl'
-);
 
 // C123 protocol message validation
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -59,36 +48,9 @@ function validateC123Message(
   return { valid: true, type: msg.type };
 }
 
-async function loadRecording(): Promise<RecordingEntry[]> {
-  const entries: RecordingEntry[] = [];
-
-  const fileStream = fs.createReadStream(RECORDING_PATH);
-  const rl = readline.createInterface({
-    input: fileStream,
-    crlfDelay: Infinity,
-  });
-
-  for await (const line of rl) {
-    try {
-      const entry = JSON.parse(line) as RecordingEntry;
-      entries.push(entry);
-    } catch {
-      // Skip malformed lines
-    }
-  }
-
-  return entries;
-}
-
-function extractTcpMessages(entries: RecordingEntry[]): string[] {
-  return entries
-    .filter((e) => e.src === 'tcp' && typeof e.data === 'string')
-    .map((e) => e.data as string);
-}
-
 /** Helper to create isolated test environment with dynamic ports */
-async function createTestEnv() {
-  const entries = await loadRecording();
+async function createTestEnv(recordingPath: string) {
+  const entries = await loadRecording(recordingPath);
   const tcpMessages = extractTcpMessages(entries);
 
   // Create mock TCP server
@@ -147,8 +109,18 @@ async function createTestEnv() {
 }
 
 describe('Scoreboard Integration', () => {
-  it('should emit valid C123 protocol messages', async () => {
-    const { server, cleanup } = await createTestEnv();
+  let recordingPath: string | null = null;
+
+  beforeAll(async () => {
+    recordingPath = await getRecordingPath();
+    if (!recordingPath) {
+      console.warn('Recording not available - tests will be skipped');
+    }
+  });
+
+  it('should emit valid C123 protocol messages', async ({ skip }) => {
+    if (!recordingPath) skip();
+    const { server, cleanup } = await createTestEnv(recordingPath!);
 
     try {
       // Track received messages by type
@@ -230,8 +202,9 @@ describe('Scoreboard Integration', () => {
     }
   }, 15000);
 
-  it('should include required fields in Results message', async () => {
-    const { server, cleanup } = await createTestEnv();
+  it('should include required fields in Results message', async ({ skip }) => {
+    if (!recordingPath) skip();
+    const { server, cleanup } = await createTestEnv(recordingPath!);
 
     try {
       let resultsMessage: C123Results | null = null;
@@ -285,8 +258,9 @@ describe('Scoreboard Integration', () => {
     }
   }, 15000);
 
-  it('should include required fields in OnCourse message', async () => {
-    const { server, cleanup } = await createTestEnv();
+  it('should include required fields in OnCourse message', async ({ skip }) => {
+    if (!recordingPath) skip();
+    const { server, cleanup } = await createTestEnv(recordingPath!);
 
     try {
       let onCourseMessage: C123OnCourse | null = null;
