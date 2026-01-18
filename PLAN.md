@@ -146,10 +146,20 @@ Replace local/inline styles with design system classes:
 - [x] **Tabs** - migrated to `.tabs > .tab-list > .tab` structure from design system
 - [x] **Log viewer** - migrated from inline styles to `.log-*` component classes in styles.css
 - [x] **Modal (client editor)** - added responsive `.modal-two-col` single column on mobile
-- [x] **Buttons** - local implementation in styles.css (design system doesn't have button component)
-- [x] **Status dots** - local implementation using `.status-dot-*` classes (design system doesn't have)
-- [x] **Tables** - local implementation in styles.css (design system doesn't have table component)
-- [x] **Forms/inputs** - local implementation in styles.css (design system doesn't have form component)
+- [x] **Buttons** - migrated to DS `.btn .btn-primary .btn-secondary`, added `.btn-danger-outline` for outline style
+- [x] **Status dots** - using `.status-dot-*` classes from design system
+- [x] **Tables** - migrated to DS `.table .table-hover`, kept uppercase header override
+- [x] **Forms/inputs** - using DS `.input` class, removed redundant local styles
+- [x] **Badges** - using DS `.badge .badge-success` etc., removed local duplicates
+
+### Phase 4: Design System Migration (Completed ✅)
+
+All components now use timing-design-system as base with minimal local overrides:
+
+- [x] **Buttons** - DS `.btn .btn-primary .btn-secondary .btn-ghost`, local `.btn-danger-outline` for outline delete
+- [x] **Tables** - DS `.table .table-hover`, local override for uppercase headers
+- [x] **Forms** - DS `.input .select`, local `.config-form` for layout only
+- [x] **Cleanup** - removed ~80 lines of redundant local component styles
 
 ### Known Issues to Fix
 

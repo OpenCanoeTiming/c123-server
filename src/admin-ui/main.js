@@ -649,7 +649,7 @@ function renderLogEntry(entry) {
   return '<div class="log-entry" data-level="' + entry.level + '">' +
     '<span class="log-time">' + time + '</span>' +
     '<span class="' + levelClass + '">' + level + '</span>' +
-    '<span class="log-component">[' + escapeHtml(entry.component) + ']</span>' +
+    '<span class="log-component">' + escapeHtml(entry.component) + '</span>' +
     '<span class="log-message">' + escapeHtml(entry.message) + '</span>' +
     '</div>';
 }

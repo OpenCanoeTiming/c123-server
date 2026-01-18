@@ -54,7 +54,7 @@
     <div class="event-bar-form" id="eventNameForm" role="group" aria-label="Event name settings" style="display: none;">
       <label for="eventNameInput" class="visually-hidden">Event name override</label>
       <input type="text" id="eventNameInput" placeholder="Event name override" aria-describedby="eventError">
-      <button class="btn" onclick="saveEventName()">Save</button>
+      <button class="btn btn-primary" onclick="saveEventName()">Save</button>
       <button class="btn btn-secondary" onclick="cancelEventNameEdit()">Cancel</button>
     </div>
     <div id="eventError" class="error" role="alert" style="display: none;"></div>
@@ -118,7 +118,7 @@
   <!-- Sources Panel -->
   <section class="tab-panel" id="panel-sources" role="tabpanel" aria-labelledby="tab-sources">
     <div class="card">
-      <table id="sourcesTable" aria-label="Data sources">
+      <table id="sourcesTable" class="table table-hover" aria-label="Data sources">
         <thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Details</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -161,8 +161,8 @@
       <!-- Manual path input -->
       <div id="manualPathSection" class="config-form" role="group" aria-label="Manual XML path">
         <label for="xmlPathInput" class="visually-hidden">XML file path</label>
-        <input type="text" id="xmlPathInput" placeholder="XML file path" aria-describedby="xmlConfigError" style="flex: 1; min-width: 200px; padding: 6px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary);">
-        <button class="btn" onclick="setXmlPath()">Set Path</button>
+        <input type="text" id="xmlPathInput" class="input" placeholder="XML file path" aria-describedby="xmlConfigError" style="flex: 1; min-width: 200px;">
+        <button class="btn btn-primary" onclick="setXmlPath()">Set Path</button>
       </div>
       <div id="xmlConfigError" class="error" role="alert" style="margin-top: 10px; display: none;"></div>
     </div>
@@ -273,8 +273,8 @@
       </div>
 
       <div class="modal-actions">
-        <button class="btn" onclick="saveClientConfig()">Save Configuration</button>
-        <button class="btn btn-danger" onclick="deleteClientConfig()">Delete</button>
+        <button class="btn btn-primary" onclick="saveClientConfig()">Save Configuration</button>
+        <button class="btn btn-danger-outline" onclick="deleteClientConfig()">Delete</button>
       </div>
 
       <div id="modalError" class="error" role="alert" style="padding: 10px 20px; display: none;"></div>
@@ -315,7 +315,7 @@
           <div class="asset-actions">
             <label for="logoUrlInput" class="visually-hidden">Logo URL</label>
             <input type="text" id="logoUrlInput" placeholder="Or paste URL..." class="asset-url-input">
-            <button class="btn asset-btn" onclick="setAssetFromUrl('logoUrl')">Load</button>
+            <button class="btn btn-primary asset-btn" onclick="setAssetFromUrl('logoUrl')">Load</button>
             <button class="btn asset-btn btn-secondary" onclick="clearAsset('logoUrl')">Clear</button>
           </div>
           <div class="asset-info" id="logoInfo" aria-live="polite"></div>
@@ -346,7 +346,7 @@
           <div class="asset-actions">
             <label for="partnerLogoUrlInput" class="visually-hidden">Partner logo URL</label>
             <input type="text" id="partnerLogoUrlInput" placeholder="Or paste URL..." class="asset-url-input">
-            <button class="btn asset-btn" onclick="setAssetFromUrl('partnerLogoUrl')">Load</button>
+            <button class="btn btn-primary asset-btn" onclick="setAssetFromUrl('partnerLogoUrl')">Load</button>
             <button class="btn asset-btn btn-secondary" onclick="clearAsset('partnerLogoUrl')">Clear</button>
           </div>
           <div class="asset-info" id="partnerLogoInfo" aria-live="polite"></div>
@@ -377,7 +377,7 @@
           <div class="asset-actions">
             <label for="footerImageUrlInput" class="visually-hidden">Footer banner URL</label>
             <input type="text" id="footerImageUrlInput" placeholder="Or paste URL..." class="asset-url-input">
-            <button class="btn asset-btn" onclick="setAssetFromUrl('footerImageUrl')">Load</button>
+            <button class="btn btn-primary asset-btn" onclick="setAssetFromUrl('footerImageUrl')">Load</button>
             <button class="btn asset-btn btn-secondary" onclick="clearAsset('footerImageUrl')">Clear</button>
           </div>
           <div class="asset-info" id="footerImageInfo" aria-live="polite"></div>
