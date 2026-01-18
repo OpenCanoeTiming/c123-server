@@ -1820,6 +1820,10 @@ fieldset.modal-section > legend {
     max-height: 95vh;
   }
 
+  .modal-two-col {
+    grid-template-columns: 1fr;
+  }
+
   /* Larger touch targets */
   .btn {
     min-height: 44px;

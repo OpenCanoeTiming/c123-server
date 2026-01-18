@@ -145,7 +145,7 @@ Replace local/inline styles with design system classes:
 - [x] **Clients cards** - use `.card .card-interactive .card-compact .card-status-success` from design system
 - [x] **Tabs** - migrated to `.tabs > .tab-list > .tab` structure from design system
 - [x] **Log viewer** - migrated from inline styles to `.log-*` component classes in styles.css
-- [ ] **Modal (client editor)** - FIX: broken layout (partial screen), use `.modal` properly
+- [x] **Modal (client editor)** - added responsive `.modal-two-col` single column on mobile
 - [ ] **Buttons** - ensure all use `.btn`, `.btn-secondary`, `.btn-danger`
 - [ ] **Status dots** - use `.status`, `.status--connected`, `.status--error`
 - [ ] **Tables** - use design system table classes
@@ -155,7 +155,7 @@ Replace local/inline styles with design system classes:
 
 | Component | Problem | Solution |
 |-----------|---------|----------|
-| Client editor modal | Shows in partial screen, not fullscreen overlay | Fix modal CSS, use design system `.modal` |
+| ~~Client editor modal~~ | ~~Shows in partial screen, not fullscreen overlay~~ | ~~Added responsive two-col → one-col~~ ✅ Fixed |
 | ~~Tabs (Logs/Sources/XML/Assets)~~ | ~~Rendered vertically~~ | ~~Use horizontal `.tabs` from design system~~ ✅ Fixed |
 | ~~Log viewer~~ | ~~Hardcoded inline styles~~ | ~~Migrated to `.log-*` classes~~ ✅ Fixed |
 | ~~LIVE badge~~ | ~~Generic styling~~ | ~~Use vodácký (canoe) accent from design system~~ ✅ Fixed |
