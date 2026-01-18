@@ -107,51 +107,82 @@ Indicates currently running category in Results - key for race flow tracking.
 
 ---
 
-## Next: Admin UI Design System Integration
+## Next: Admin UI - Full Design System Migration
 
 ### Goal
 
-Integrate `timing-design-system` CSS into vanilla JS admin UI for visual consistency across timing tools.
+Complete migration from CSS variable aliasing to **native design system classes**. Current state uses aliases which is a compatibility layer - target is strict design system usage.
 
-### Approach: Vanilla CSS Only
+### Approach: Strict Design System
 
-**No React, no build tools** - just CSS classes from the design system.
+**No fallbacks, no local component styles** - all UI components must use `timing-design-system` classes directly.
 
-**What we use from timing-design-system:**
-- `dist/timing.css` - compiled CSS bundle
-- CSS classes: buttons, cards, badges, tables, modals, toasts, tabs, header, status dots
-- Fonts: Inter, JetBrains Mono (already self-hosted in admin-ui)
-
-### Steps
+### Phase 1: CSS Sync (Completed ✅)
 
 - [x] 1. Copy `timing.css` from design system to `src/admin-ui/`
-- [x] 2. Update `index.html` to link timing.css (before styles.css as override layer)
-- [x] 3. Integrate design system via CSS variable aliasing:
-  - Added `theme-dark` class to body
-  - Aliased `--color-*` variables to legacy `--var` names in styles.css
-  - All existing classes now use design system tokens
-  - No class name changes needed - aliasing approach maintains compatibility
-- [x] 4. Keep `main.js` logic - no changes needed (class names unchanged)
-- [x] 5. Keep `styles.css` as override/extension layer with variable aliases
-- [x] 6. Build and tests pass
+- [x] 2. Update `index.html` to link timing.css
+- [x] 3. CSS variable aliasing for backward compatibility
 
-### Files
+### Phase 2: Auto-refresh timing.css
+
+- [ ] 1. Add `postinstall` script to copy fresh `timing.css` from `timing-design-system`
+- [ ] 2. Add `prebuild` script as backup
+- [ ] 3. Document: after `npm install` timing.css is always current
+- [ ] 4. Fallback: if timing-design-system not found, keep existing file (offline mode)
+
+```json
+// package.json scripts
+"postinstall": "node scripts/sync-design-system.js",
+"prebuild": "node scripts/sync-design-system.js"
+```
+
+### Phase 3: Component Migration
+
+Replace local/inline styles with design system classes:
+
+- [ ] **Header** - use `.header`, `.header-live` with vodácký (canoe) styling
+- [ ] **LIVE indicator** - vodácký badge style from design system
+- [ ] **Clients cards** - use `.card` vodácký variant
+- [ ] **Tabs** - FIX: currently vertical, should be horizontal `.tabs` from design system
+- [ ] **Log viewer** - migrate from inline styles to design system `.log-viewer` component
+- [ ] **Modal (client editor)** - FIX: broken layout (partial screen), use `.modal` properly
+- [ ] **Buttons** - ensure all use `.btn`, `.btn-secondary`, `.btn-danger`
+- [ ] **Status dots** - use `.status`, `.status--connected`, `.status--error`
+- [ ] **Tables** - use design system table classes
+- [ ] **Forms/inputs** - use design system form classes
+
+### Known Issues to Fix
+
+| Component | Problem | Solution |
+|-----------|---------|----------|
+| Client editor modal | Shows in partial screen, not fullscreen overlay | Fix modal CSS, use design system `.modal` |
+| Tabs (Logs/Sources/XML/Assets) | Rendered vertically | Use horizontal `.tabs` from design system |
+| Log viewer | Hardcoded inline styles | Migrate to design system log component |
+| LIVE badge | Generic styling | Use vodácký (canoe) accent from design system |
+
+### Files to Modify
 
 ```
 src/admin-ui/
-├── index.html      # Update CSS links
-├── timing.css      # NEW - copy from design system
-├── main.js         # Update class names if needed
-├── styles.css      # Remove or keep for overrides
-└── fonts/          # Already have Inter, JetBrains Mono
+├── index.html      # Update class names to design system
+├── styles.css      # MINIMIZE - only app-specific overrides
+├── main.js         # Update generated HTML class names
+└── timing.css      # Auto-synced from design system
+scripts/
+└── sync-design-system.js  # NEW - auto-sync script
 ```
 
-### Benefits
+### Verification
 
-- Visual consistency with c123-scoreboard and c123-scoring
-- No npm dependencies for admin-ui
-- No build step
-- Easy updates - just copy new timing.css
+```bash
+# After npm install, timing.css should be fresh
+npm install
+ls -la src/admin-ui/timing.css
+
+# Visual check - all components should match design system
+npm start
+# Open http://localhost:27123
+```
 
 ---
 

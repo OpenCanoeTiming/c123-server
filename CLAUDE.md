@@ -127,4 +127,32 @@ test: add unit tests for FinishDetector
 
 ---
 
+## Design System Priority
+
+**`timing-design-system` is mandatory for all UI components.**
+
+### Rules
+
+1. **Always use design system classes first** - buttons, cards, modals, tabs, badges, tables, forms
+2. **Only create local styles when component doesn't exist** in design system
+3. **Never duplicate** - if design system has it, use it
+4. **Vodácký (canoe) theme** - use design system's canoe-specific styling for LIVE indicators, accents
+5. **No inline styles** for things that design system covers
+
+### Location
+
+```
+../timing-design-system/dist/timing.css  # Source
+src/admin-ui/timing.css                   # Auto-synced copy
+```
+
+### When Adding New UI
+
+1. Check `timing-design-system` for existing component
+2. If exists → use design system class names
+3. If doesn't exist → create minimal local style in `styles.css`
+4. Consider contributing missing component back to design system
+
+---
+
 *Detailed implementation plan → see `./PLAN.md`*
