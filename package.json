@@ -13,7 +13,9 @@
     "start": "node dist/cli.js",
     "test": "vitest",
     "lint": "eslint src",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "node scripts/sync-design-system.js",
+    "prebuild": "node scripts/sync-design-system.js"
   },
   "dependencies": {
     "chokidar": "^5.0.0",

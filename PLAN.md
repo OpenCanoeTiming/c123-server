@@ -123,12 +123,12 @@ Complete migration from CSS variable aliasing to **native design system classes*
 - [x] 2. Update `index.html` to link timing.css
 - [x] 3. CSS variable aliasing for backward compatibility
 
-### Phase 2: Auto-refresh timing.css
+### Phase 2: Auto-refresh timing.css (Completed ✅)
 
-- [ ] 1. Add `postinstall` script to copy fresh `timing.css` from `timing-design-system`
-- [ ] 2. Add `prebuild` script as backup
-- [ ] 3. Document: after `npm install` timing.css is always current
-- [ ] 4. Fallback: if timing-design-system not found, keep existing file (offline mode)
+- [x] 1. Add `postinstall` script to copy fresh `timing.css` from `timing-design-system`
+- [x] 2. Add `prebuild` script as backup
+- [x] 3. Document: after `npm install` timing.css is always current
+- [x] 4. Fallback: if timing-design-system not found, keep existing file (offline mode)
 
 ```json
 // package.json scripts
