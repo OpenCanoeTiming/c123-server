@@ -188,7 +188,8 @@ export class TcpSource extends EventEmitter<SourceEvents> implements Source {
           Logger.error('TcpSource', 'Write error', err);
           reject(err);
         } else {
-          Logger.debug('TcpSource', `Sent: ${xml.substring(0, 100)}${xml.length > 100 ? '...' : ''}`);
+          Logger.info('TcpSource', `Sent ${message.length} bytes to C123`);
+          Logger.debug('TcpSource', `Sent: ${xml.substring(0, 200)}${xml.length > 200 ? '...' : ''}`);
           resolve();
         }
       });

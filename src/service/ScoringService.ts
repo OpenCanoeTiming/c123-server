@@ -151,32 +151,27 @@ export class ScoringService {
 
   /**
    * Format scoring request as C123 XML
+   * Note: C123 expects compact XML without whitespace/newlines
    */
   private formatScoringXml(request: ScoringRequest): string {
-    return `<Canoe123 System="Main">
-  <Scoring Bib="${this.escapeXml(request.bib)}">
-    <Penalty Gate="${request.gate}" Value="${request.value}" />
-  </Scoring>
-</Canoe123>`;
+    return `<Canoe123 System="Main"><Scoring Bib="${this.escapeXml(request.bib)}"><Penalty Gate="${request.gate}" Value="${request.value}" /></Scoring></Canoe123>`;
   }
 
   /**
    * Format remove from course request as C123 XML
+   * Note: C123 expects compact XML without whitespace/newlines
    */
   private formatRemoveFromCourseXml(request: RemoveFromCourseRequest): string {
     const positionAttr = request.position !== undefined ? ` Position="${request.position}"` : ' Position="1"';
-    return `<Canoe123 System="Main">
-  <RemoveFromCourse Bib="${this.escapeXml(request.bib)}"${positionAttr} Reason="${request.reason}" />
-</Canoe123>`;
+    return `<Canoe123 System="Main"><RemoveFromCourse Bib="${this.escapeXml(request.bib)}"${positionAttr} Reason="${request.reason}" /></Canoe123>`;
   }
 
   /**
    * Format timing request as C123 XML
+   * Note: C123 expects compact XML without whitespace/newlines
    */
   private formatTimingXml(request: TimingRequest): string {
-    return `<Canoe123 System="Main">
-  <Timing Bib="${this.escapeXml(request.bib)}" ChannelPosition="${request.channelPosition}" HasChannel="1" />
-</Canoe123>`;
+    return `<Canoe123 System="Main"><Timing Bib="${this.escapeXml(request.bib)}" ChannelPosition="${request.channelPosition}" HasChannel="1" /></Canoe123>`;
   }
 
   /**
