@@ -14,7 +14,6 @@ Smart middleware for canoe slalom timing - bridge between Canoe123 timing softwa
 - **Native C123 protocol** - Passes authentic C123 data (XML → JSON)
 - **XML REST API** - Full access to race data (schedule, participants, results)
 - **C123 Write API** - Send scoring, timing, and DNS/DNF commands back to C123
-- **Finish detection** - Detects when athletes cross the finish line via dtFinish tracking
 - **Admin dashboard** - Web interface for monitoring and configuration
 - **Windows auto-config** - Automatically detects XML path from Canoe123 settings
 - **Persistent settings** - Configuration survives restarts
@@ -95,6 +94,7 @@ ws.onmessage = (e) => {
   if (msg.type === 'OnCourse') updateDisplay(msg.data);
 };
 ```
+For example: [c123-scoreboard](https://github.com/OpenCanoeTiming/c123-scoreboard)
 
 ### Scoring Applications
 
@@ -111,6 +111,7 @@ curl -X POST http://server:27123/api/c123/remove-from-course \
   -H "Content-Type: application/json" \
   -d '{"bib": "10", "reason": "DNS"}'
 ```
+For example: [c123-scoring-terminal-app](https://github.com/OpenCanoeTiming/c123-scoring)
 
 ### Custom Integrations
 
