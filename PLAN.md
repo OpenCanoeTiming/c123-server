@@ -140,8 +140,8 @@ Complete migration from CSS variable aliasing to **native design system classes*
 
 Replace local/inline styles with design system classes:
 
-- [ ] **Header** - use `.header`, `.header-live` with vodácký (canoe) styling
-- [ ] **LIVE indicator** - vodácký badge style from design system
+- [x] **Header** - migrated to `.status-dot-*` classes from design system
+- [x] **LIVE indicator** - vodácký badge style (`.badge-success` + `.status-dot-glow`)
 - [ ] **Clients cards** - use `.card` vodácký variant
 - [ ] **Tabs** - FIX: currently vertical, should be horizontal `.tabs` from design system
 - [ ] **Log viewer** - migrate from inline styles to design system `.log-viewer` component

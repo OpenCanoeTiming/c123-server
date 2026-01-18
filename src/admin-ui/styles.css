@@ -145,25 +145,8 @@ h2 {
 /* ============================================
    Status Indicators
    ============================================ */
-.status {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-right: var(--space-2);
-}
-
-.status.connected { background: var(--success); }
-.status.disconnected { background: var(--error); }
-.status.connecting {
-  background: var(--warning);
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
+/* Using design system .status-dot-* classes from timing.css */
+/* Local .status class removed - use .status-dot instead */
 
 /* ============================================
    Grid Layout
@@ -1574,15 +1557,16 @@ fieldset.modal-section > legend {
   gap: var(--space-2);
 }
 
+/* Header LIVE indicator - extends design system .badge-success */
 .header-live {
-  display: flex;
-  align-items: center;
   gap: var(--space-2);
-  color: var(--success);
   font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  box-shadow: var(--glow-success);
 }
 
-.header-live .status {
+.header-live .status-dot {
   margin-right: 0;
 }
 

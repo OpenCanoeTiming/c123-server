@@ -248,7 +248,7 @@ function renderStatusBar(sources) {
     const details = s.host ? s.host + ':' + s.port : (s.path || '-');
     const isXml = s.type === 'xml';
     return '<div class="status-bar-item' + (isXml ? ' status-bar-item-wide' : '') + '">' +
-      '<span class="status ' + statusCls + '"></span>' +
+      '<span class="status-dot ' + statusCls + '"></span>' +
       '<span class="status-bar-label">' + s.name + '</span>' +
       '<span class="status-bar-value' + (isXml ? ' status-bar-value-path' : '') + '" title="' + escapeHtml(details) + '">' + escapeHtml(details) + '</span>' +
       '</div>';
@@ -268,9 +268,9 @@ function formatTime(iso) {
 }
 
 function statusClass(status) {
-  if (status === 'connected') return 'connected';
-  if (status === 'connecting') return 'connecting';
-  return 'disconnected';
+  if (status === 'connected') return 'status-dot-success';
+  if (status === 'connecting') return 'status-dot-warning status-dot-pulse';
+  return 'status-dot-error';
 }
 
 function hasFocus(el) {
@@ -323,7 +323,7 @@ async function refresh() {
           '<tr>' +
           '<td>' + escapeHtml(s.name) + '</td>' +
           '<td>' + s.type.toUpperCase() + '</td>' +
-          '<td><span class="status ' + statusClass(s.status) + '"></span>' + s.status + '</td>' +
+          '<td><span class="status-dot ' + statusClass(s.status) + '"></span>' + s.status + '</td>' +
           '<td>' + escapeHtml(s.host ? s.host + ':' + s.port : (s.path || '-')) + '</td>' +
           '</tr>'
         ).join('');
@@ -352,17 +352,17 @@ function updateHeaderStatus(sources) {
 
   // Update TCP status
   if (tcpEl && tcp) {
-    tcpEl.className = 'status ' + statusClass(tcp.status);
+    tcpEl.className = 'status-dot ' + statusClass(tcp.status);
   }
 
   // Update UDP status
   if (udpEl && udp) {
-    udpEl.className = 'status ' + statusClass(udp.status);
+    udpEl.className = 'status-dot ' + statusClass(udp.status);
   }
 
   // Update XML status
   if (xmlEl && xml) {
-    xmlEl.className = 'status ' + statusClass(xml.status);
+    xmlEl.className = 'status-dot ' + statusClass(xml.status);
   }
 
   // Show LIVE indicator if TCP is connected
