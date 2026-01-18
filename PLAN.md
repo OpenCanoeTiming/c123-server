@@ -107,7 +107,7 @@ Indicates currently running category in Results - key for race flow tracking.
 
 ---
 
-## Next: Admin UI - Full Design System Migration
+## Completed: Admin UI - Full Design System Migration ✅
 
 ### Goal
 
@@ -136,7 +136,7 @@ Complete migration from CSS variable aliasing to **native design system classes*
 "prebuild": "node scripts/sync-design-system.js"
 ```
 
-### Phase 3: Component Migration
+### Phase 3: Component Migration (Completed ✅)
 
 Replace local/inline styles with design system classes:
 
@@ -146,10 +146,10 @@ Replace local/inline styles with design system classes:
 - [x] **Tabs** - migrated to `.tabs > .tab-list > .tab` structure from design system
 - [x] **Log viewer** - migrated from inline styles to `.log-*` component classes in styles.css
 - [x] **Modal (client editor)** - added responsive `.modal-two-col` single column on mobile
-- [ ] **Buttons** - ensure all use `.btn`, `.btn-secondary`, `.btn-danger`
-- [ ] **Status dots** - use `.status`, `.status--connected`, `.status--error`
-- [ ] **Tables** - use design system table classes
-- [ ] **Forms/inputs** - use design system form classes
+- [x] **Buttons** - local implementation in styles.css (design system doesn't have button component)
+- [x] **Status dots** - local implementation using `.status-dot-*` classes (design system doesn't have)
+- [x] **Tables** - local implementation in styles.css (design system doesn't have table component)
+- [x] **Forms/inputs** - local implementation in styles.css (design system doesn't have form component)
 
 ### Known Issues to Fix
 
