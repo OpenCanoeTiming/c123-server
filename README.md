@@ -2,6 +2,10 @@
 
 Smart middleware for canoe slalom timing - bridge between Canoe123 timing software and scoreboards.
 
+| Admin Dashboard | Client Editor |
+|:---------------:|:-------------:|
+| ![Admin](docs/screenshots/admin-dashboard.png) | ![Client Editor](docs/screenshots/client-editor.png) |
+
 ## Features
 
 - **Zero configuration** - Works out of the box on Windows with auto-discovery and auto-detect
