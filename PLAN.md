@@ -23,7 +23,7 @@ Server is completely implemented and functional.
 | **XML polling** | Auto/manual/URL modes, file watcher |
 | **Client config** | Remote scoreboard configuration via ConfigPush |
 | **Assets** | Centralized image management with per-client overrides, SVG support |
-| **Write API** | Scoring, RemoveFromCourse, Timing endpoints for c123-scoring |
+| **Write API** | PenaltyCorrection, Scoring, RemoveFromCourse, Timing for c123-scoring |
 
 ---
 
@@ -69,6 +69,15 @@ Server is completely implemented and functional.
 | **RaceConfig** | ~20s | Category configuration |
 | **Schedule** | ~40s | Race schedule |
 
+### Write API (for c123-scoring)
+
+| Endpoint | Format | Use Case |
+|----------|--------|----------|
+| `POST /api/c123/scoring` | `<Scoring>` | Competitors ON COURSE |
+| `POST /api/c123/scoring` + raceId | `<PenaltyCorrection>` | FINISHED competitors |
+| `POST /api/c123/remove-from-course` | `<RemoveFromCourse>` | DNS/DNF/CAP |
+| `POST /api/c123/timing` | `<Timing>` | Manual timing impulse |
+
 ### BR1/BR2 (BetterRun)
 
 - CZ-specific format for two runs
@@ -100,29 +109,12 @@ Indicates currently running category in Results - key for race flow tracking.
 | Source | Description |
 |--------|-------------|
 | `../c123-protocol-docs/` | C123 protocol documentation |
-| `../analysis/07-sitova-komunikace.md` | C123 protocol analysis |
-| `../analysis/captures/*.xml` | XML structure examples |
-| `../analysis/recordings/*.jsonl` | Timing analysis |
+| `../c123-scoring/resources-private/orig_src/` | Original Canoe123Term source |
 | Tag `v1.0.0-cli` | Archived CLI-compatible version |
 
 ---
 
-## Completed: CourseData REST Endpoint ✅
-
-**Cíl:** Přidat endpoint `/api/xml/courses` pro načtení segmentů trati.
-
-Endpoint `/api/xml/courses` vrací course data včetně gate configuration a split pozic.
-Pro c123-scoring automatické gate groups.
-
----
-
 ## Remaining Work
-
-### Validation with Real C123 (Requires Hardware)
-
-- [ ] Test Write API with real C123 (penalties reflect in OnCourse)
-- [ ] Test graceful error handling without C123
-- [ ] Test with multiple scoring terminals simultaneously
 
 ### Nice-to-have (Future)
 
@@ -138,9 +130,10 @@ Pro c123-scoring automatické gate groups.
 | Core | TCP/UDP sources, WebSocket, REST API, XML polling | ✅ |
 | Admin UI v1 | Inline HTML/CSS/JS in UnifiedServer | ✅ |
 | Admin UI v2 | Extraction to files, "Dark Performance" design, accessibility | ✅ |
-| Write API | Scoring, RemoveFromCourse, Timing endpoints + tests | ✅ |
+| Write API v1 | Scoring, RemoveFromCourse, Timing endpoints + tests | ✅ |
 | CourseData API | `/api/xml/courses` endpoint for gate config and splits | ✅ |
 | Design System | Full migration to `timing-design-system` components | ✅ |
+| Write API v2 | PenaltyCorrection for finished competitors, null for delete | ✅ |
 
 ### Design Decisions
 
