@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc && cp -r src/admin-ui dist/",
+    "build": "tsc && node scripts/copy-admin-ui.js",
     "start": "node dist/cli.js",
     "test": "vitest",
     "lint": "eslint src",
