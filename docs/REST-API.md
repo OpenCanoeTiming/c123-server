@@ -564,6 +564,50 @@ Get results for a specific run (BR1 or BR2) of a race.
 
 ---
 
+### GET /api/xml/courses
+
+Get course configuration data including gate setup and split positions.
+
+**Response:**
+
+```json
+{
+  "courses": [
+    {
+      "courseNr": 1,
+      "courseConfig": "NNRNSNRNSRNNSNRNSNRNSRNSNRNSNRNS",
+      "splits": [5, 9, 14, 19, 24, 28, 32]
+    },
+    {
+      "courseNr": 2,
+      "courseConfig": "RNNRNSNNRSNNRNSRNNSRNNS",
+      "splits": [6, 10, 15, 19, 23]
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `courseNr` | number | Course number (1-based) |
+| `courseConfig` | string | Gate configuration string |
+| `splits` | number[] | Gate numbers where splits occur (1-indexed) |
+
+**CourseConfig Characters:**
+
+| Character | Meaning |
+|-----------|---------|
+| `N` | Normal gate (downstream) |
+| `R` | Reverse gate (upstream) |
+| `S` | Split point (timing checkpoint) |
+
+**Use cases:**
+- c123-scoring uses splits for automatic gate grouping
+- Visual course map generation
+- Split time validation
+
+---
+
 ## Broadcast API
 
 ### POST /api/broadcast/refresh

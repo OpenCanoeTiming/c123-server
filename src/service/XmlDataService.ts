@@ -109,6 +109,15 @@ export interface XmlStartlistEntry {
 }
 
 /**
+ * Course data from XML - gate configuration and split positions
+ */
+export interface XmlCourseData {
+  courseNr: number;
+  courseConfig: string; // "NNRNSNRNS..." including S for splits
+  splits: number[]; // Gate numbers where splits occur (1-indexed)
+}
+
+/**
  * Merged result combining BR1 and BR2
  */
 export interface XmlMergedResult {
@@ -533,6 +542,14 @@ export class XmlDataService {
   }
 
   /**
+   * Get course data with gate configuration and split positions
+   */
+  async getCourses(): Promise<XmlCourseData[]> {
+    await this.loadIfNeeded();
+    return this.getCoursesFromCache();
+  }
+
+  /**
    * Load XML file if not already loaded or if it has changed
    */
   private async loadIfNeeded(): Promise<void> {
@@ -667,6 +684,38 @@ export class XmlDataService {
   }
 
   /**
+   * Extract course data from cached data
+   * Calculates split positions from CourseConfig string
+   */
+  private getCoursesFromCache(): XmlCourseData[] {
+    if (!this.cachedData?.CourseData) {
+      return [];
+    }
+
+    const courses = Array.isArray(this.cachedData.CourseData)
+      ? this.cachedData.CourseData
+      : [this.cachedData.CourseData];
+
+    return courses.map((c) => {
+      const courseConfig = String(c.CourseConfig ?? '');
+      // Calculate split positions - find gate numbers where 'S' occurs
+      // Each character represents a gate (N=normal, R=reverse, S=split)
+      const splits: number[] = [];
+      for (let i = 0; i < courseConfig.length; i++) {
+        if (courseConfig[i] === 'S') {
+          splits.push(i + 1); // 1-indexed gate number
+        }
+      }
+
+      return {
+        courseNr: Number(c.CourseNr ?? 0),
+        courseConfig,
+        splits,
+      };
+    });
+  }
+
+  /**
    * Force reload of XML data (clears cache)
    */
   clearCache(): void {
@@ -683,6 +732,7 @@ interface Canoe123Data {
   Participants?: RawParticipant | RawParticipant[];
   Schedule?: RawSchedule | RawSchedule[];
   Results?: RawResult | RawResult[];
+  CourseData?: RawCourseData | RawCourseData[];
   Classes?: unknown;
 }
 
@@ -739,4 +789,9 @@ interface RawResult {
   PrevPen?: string | number;
   PrevTotal?: string | number;
   PrevRnk?: string | number;
+}
+
+interface RawCourseData {
+  CourseNr?: string | number;
+  CourseConfig?: string;
 }

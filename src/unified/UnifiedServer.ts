@@ -844,6 +844,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     this.app.get('/api/xml/races/:id/startlist', this.handleXmlRaceStartlist.bind(this));
     this.app.get('/api/xml/races/:id/results', this.handleXmlRaceResults.bind(this));
     this.app.get('/api/xml/races/:id/results/:run', this.handleXmlRaceResultsByRun.bind(this));
+    this.app.get('/api/xml/courses', this.handleXmlCourses.bind(this));
 
     // Config API routes
     this.app.get('/api/config', this.handleGetConfig.bind(this));
@@ -1083,6 +1084,25 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     try {
       const races = await this.xmlDataService.getRaces();
       res.json({ races });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * GET /api/xml/courses - Course data with gate configuration and splits
+   */
+  private async handleXmlCourses(_req: Request, res: Response): Promise<void> {
+    if (!this.xmlDataService) {
+      res.status(503).json({ error: 'XML data service not available' });
+      return;
+    }
+
+    try {
+      const courses = await this.xmlDataService.getCourses();
+      res.json({ courses });
     } catch (err) {
       res.status(500).json({
         error: err instanceof Error ? err.message : 'Unknown error',

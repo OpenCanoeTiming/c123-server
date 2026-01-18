@@ -168,7 +168,7 @@ src/admin-ui/
 
 ### Kroky
 
-- [ ] 1. Přidat interface `XmlCourseData` do `src/service/XmlDataService.ts`
+- [x] 1. Přidat interface `XmlCourseData` do `src/service/XmlDataService.ts`
   ```typescript
   export interface XmlCourseData {
     courseNr: number
@@ -177,19 +177,19 @@ src/admin-ui/
   }
   ```
 
-- [ ] 2. Přidat metodu `getCourses()` do `XmlDataService`
+- [x] 2. Přidat metodu `getCourses()` do `XmlDataService`
   - Parsovat `<CourseData>` elementy z XML
   - Extrahovat `CourseNr` a `CourseConfig`
   - Spočítat `splits[]` - pozice branek kde je `S`
 
-- [ ] 3. Přidat route a handler do `src/unified/UnifiedServer.ts`
+- [x] 3. Přidat route a handler do `src/unified/UnifiedServer.ts`
   ```typescript
   this.app.get('/api/xml/courses', this.handleXmlCourses.bind(this));
   ```
 
-- [ ] 4. Dokumentace - přidat do `docs/REST-API.md`
+- [x] 4. Dokumentace - přidat do `docs/REST-API.md`
 
-- [ ] 5. Build a test
+- [x] 5. Build a test
 
 **Soubory:**
 ```
