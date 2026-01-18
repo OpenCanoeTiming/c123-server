@@ -124,8 +124,8 @@ Integrate `timing-design-system` CSS into vanilla JS admin UI for visual consist
 
 ### Steps
 
-- [ ] 1. Copy `timing.css` from design system to `src/admin-ui/`
-- [ ] 2. Update `index.html` to link timing.css instead of styles.css
+- [x] 1. Copy `timing.css` from design system to `src/admin-ui/`
+- [x] 2. Update `index.html` to link timing.css (before styles.css as override layer)
 - [ ] 3. Replace custom CSS classes with design system classes:
   - `.btn-*` → design system buttons
   - `.card` → design system cards
@@ -157,6 +157,58 @@ src/admin-ui/
 - No npm dependencies for admin-ui
 - No build step
 - Easy updates - just copy new timing.css
+
+---
+
+## Next: CourseData REST Endpoint
+
+**Cíl:** Přidat endpoint `/api/xml/courses` pro načtení segmentů trati.
+
+**Důvod:** c123-scoring potřebuje segment informace pro automatické gate groups.
+
+**Kontext:**
+- XML obsahuje `<CourseData>` s `CourseConfig: "NNRNSNRNS..."` kde `S` = split
+- Aktuální WS `RaceConfig` posílá `gateConfig` bez `S`
+- Nový endpoint vrátí původní data včetně split pozic
+
+### Kroky
+
+- [ ] 1. Přidat interface `XmlCourseData` do `src/service/XmlDataService.ts`
+  ```typescript
+  export interface XmlCourseData {
+    courseNr: number
+    courseConfig: string  // "NNRNSNRNS..." včetně S
+    splits: number[]      // Gate numbers where splits occur
+  }
+  ```
+
+- [ ] 2. Přidat metodu `getCourses()` do `XmlDataService`
+  - Parsovat `<CourseData>` elementy z XML
+  - Extrahovat `CourseNr` a `CourseConfig`
+  - Spočítat `splits[]` - pozice branek kde je `S`
+
+- [ ] 3. Přidat route a handler do `src/unified/UnifiedServer.ts`
+  ```typescript
+  this.app.get('/api/xml/courses', this.handleXmlCourses.bind(this));
+  ```
+
+- [ ] 4. Dokumentace - přidat do `docs/REST-API.md`
+
+- [ ] 5. Build a test
+
+**Soubory:**
+```
+src/service/XmlDataService.ts    # Přidat XmlCourseData + getCourses()
+src/unified/UnifiedServer.ts     # Přidat /api/xml/courses route
+docs/REST-API.md                 # Dokumentace
+```
+
+**Verifikace:**
+```bash
+npm run build && npm test
+curl http://localhost:27123/api/xml/courses
+# Očekávat: {"courses":[{"courseNr":1,"courseConfig":"NNRN...","splits":[4,8,12]},...]}
+```
 
 ---
 
