@@ -637,13 +637,6 @@ let logEntries = [];
 let ws = null;
 const MAX_LOG_ENTRIES = 200;
 
-const levelColors = {
-  debug: '#888',
-  info: '#00ff88',
-  warn: '#ffaa00',
-  error: '#ff6b6b'
-};
-
 function formatLogTime(iso) {
   if (!iso) return '';
   return iso.slice(11, 23); // HH:mm:ss.SSS
@@ -651,13 +644,13 @@ function formatLogTime(iso) {
 
 function renderLogEntry(entry) {
   const time = formatLogTime(entry.timestamp);
-  const color = levelColors[entry.level] || '#eee';
   const level = entry.level.toUpperCase().padEnd(5);
-  return '<div class="log-entry" data-level="' + entry.level + '" style="margin-bottom: 2px;">' +
-    '<span style="color: #666;">' + time + '</span> ' +
-    '<span style="color: ' + color + ';">' + level + '</span> ' +
-    '<span style="color: #00d4ff;">[' + escapeHtml(entry.component) + ']</span> ' +
-    '<span>' + escapeHtml(entry.message) + '</span>' +
+  const levelClass = 'log-level log-level-' + entry.level;
+  return '<div class="log-entry" data-level="' + entry.level + '">' +
+    '<span class="log-time">' + time + '</span>' +
+    '<span class="' + levelClass + '">' + level + '</span>' +
+    '<span class="log-component">[' + escapeHtml(entry.component) + ']</span>' +
+    '<span class="log-message">' + escapeHtml(entry.message) + '</span>' +
     '</div>';
 }
 

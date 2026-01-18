@@ -144,7 +144,7 @@ Replace local/inline styles with design system classes:
 - [x] **LIVE indicator** - vodácký badge style (`.badge-success` + `.status-dot-glow`)
 - [x] **Clients cards** - use `.card .card-interactive .card-compact .card-status-success` from design system
 - [x] **Tabs** - migrated to `.tabs > .tab-list > .tab` structure from design system
-- [ ] **Log viewer** - migrate from inline styles to design system `.log-viewer` component
+- [x] **Log viewer** - migrated from inline styles to `.log-*` component classes in styles.css
 - [ ] **Modal (client editor)** - FIX: broken layout (partial screen), use `.modal` properly
 - [ ] **Buttons** - ensure all use `.btn`, `.btn-secondary`, `.btn-danger`
 - [ ] **Status dots** - use `.status`, `.status--connected`, `.status--error`
@@ -157,7 +157,7 @@ Replace local/inline styles with design system classes:
 |-----------|---------|----------|
 | Client editor modal | Shows in partial screen, not fullscreen overlay | Fix modal CSS, use design system `.modal` |
 | ~~Tabs (Logs/Sources/XML/Assets)~~ | ~~Rendered vertically~~ | ~~Use horizontal `.tabs` from design system~~ ✅ Fixed |
-| Log viewer | Hardcoded inline styles | Migrate to design system log component |
+| ~~Log viewer~~ | ~~Hardcoded inline styles~~ | ~~Migrated to `.log-*` classes~~ ✅ Fixed |
 | ~~LIVE badge~~ | ~~Generic styling~~ | ~~Use vodácký (canoe) accent from design system~~ ✅ Fixed |
 
 ### Files to Modify

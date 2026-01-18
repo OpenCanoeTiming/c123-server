@@ -389,34 +389,34 @@
   <!-- Logs Panel -->
   <section class="tab-panel active" id="panel-logs" role="tabpanel" aria-labelledby="tab-logs">
     <div class="card">
-      <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; align-items: center;" role="group" aria-label="Log filters">
-        <fieldset style="display: flex; gap: 5px; align-items: center; border: none; padding: 0; margin: 0;">
+      <div class="log-toolbar" role="group" aria-label="Log filters">
+        <fieldset class="log-filters">
           <legend class="visually-hidden">Log levels</legend>
-          <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
-            <input type="checkbox" id="logLevelDebug" onchange="filterLogs()"> <span style="color: var(--text-secondary);">debug</span>
+          <label class="log-filter-label">
+            <input type="checkbox" id="logLevelDebug" onchange="filterLogs()"> <span class="log-level-debug">debug</span>
           </label>
-          <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
-            <input type="checkbox" id="logLevelInfo" checked onchange="filterLogs()"> <span style="color: var(--success);">info</span>
+          <label class="log-filter-label">
+            <input type="checkbox" id="logLevelInfo" checked onchange="filterLogs()"> <span class="log-level-info">info</span>
           </label>
-          <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
-            <input type="checkbox" id="logLevelWarn" checked onchange="filterLogs()"> <span style="color: var(--warning);">warn</span>
+          <label class="log-filter-label">
+            <input type="checkbox" id="logLevelWarn" checked onchange="filterLogs()"> <span class="log-level-warn">warn</span>
           </label>
-          <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
-            <input type="checkbox" id="logLevelError" checked onchange="filterLogs()"> <span style="color: var(--error);">error</span>
+          <label class="log-filter-label">
+            <input type="checkbox" id="logLevelError" checked onchange="filterLogs()"> <span class="log-level-error">error</span>
           </label>
         </fieldset>
         <label for="logSearch" class="visually-hidden">Search logs</label>
-        <input type="text" id="logSearch" placeholder="Search logs..." onkeyup="filterLogs()" aria-label="Search logs" style="flex: 1; min-width: 150px; padding: 4px 8px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary);">
-        <label style="display: flex; align-items: center; gap: 3px; cursor: pointer;">
+        <input type="text" id="logSearch" class="log-search" placeholder="Search logs..." onkeyup="filterLogs()" aria-label="Search logs">
+        <label class="log-filter-label">
           <input type="checkbox" id="logAutoScroll" checked> Auto-scroll
         </label>
-        <button class="btn btn-secondary" onclick="clearLogDisplay()" style="padding: 4px 8px;" aria-label="Clear log display">Clear</button>
+        <button class="btn btn-secondary" onclick="clearLogDisplay()" aria-label="Clear log display">Clear</button>
       </div>
-      <div id="logContainer" role="log" aria-live="polite" aria-label="Log entries" style="max-height: 400px; overflow-y: auto; font-family: var(--font-mono); font-size: 12px; background: var(--bg-input); border-radius: var(--radius-md); padding: 8px;">
+      <div id="logContainer" class="log-container" role="log" aria-live="polite" aria-label="Log entries">
         <div id="logEntries" aria-atomic="false"></div>
-        <div id="noLogs" style="color: var(--text-muted); padding: 10px; text-align: center;" role="status">No log entries</div>
+        <div id="noLogs" class="log-empty" role="status">No log entries</div>
       </div>
-      <div style="margin-top: 5px; color: var(--text-muted); font-size: var(--text-xs);">
+      <div class="log-footer">
         <span id="logStats" role="status" aria-live="polite">0 entries</span>
       </div>
     </div>
