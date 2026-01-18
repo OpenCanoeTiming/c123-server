@@ -47,65 +47,45 @@
 }
 
 /* ============================================
-   CSS Custom Properties - Design System
+   CSS Custom Properties - Local Overrides
    ============================================ */
+
+/*
+ * This file extends timing-design-system (timing.css)
+ * We use aliases from --color-* to legacy --var names for backward compatibility
+ * All base tokens are defined in timing.css
+ */
+
 :root {
-  /* Base colors (shared across apps) */
-  --bg-body:       #0a0a0a;
-  --bg-surface:    #141414;
-  --bg-elevated:   #1f1f1f;
-  --bg-input:      #0d0d0d;
+  /* Alias design system variables to legacy names used in this file */
+  --bg-body:       var(--color-bg-body);
+  --bg-surface:    var(--color-bg-surface);
+  --bg-elevated:   var(--color-bg-elevated);
+  --bg-input:      var(--color-bg-input);
 
-  --border:        #2a2a2a;
-  --border-focus:  #404040;
+  --border:        var(--color-border);
+  --border-focus:  var(--color-border-focus);
 
-  /* Text colors */
-  --text-primary:  #ffffff;
-  --text-secondary:#999999;  /* Increased from #888 for better contrast (6.6:1) */
-  --text-muted:    #707070;  /* Increased from #555 for WCAG AA compliance (4.7:1) */
+  --text-primary:  var(--color-text-primary);
+  --text-secondary: var(--color-text-secondary);
+  --text-muted:    var(--color-text-muted);
 
-  /* Semantic colors (shared) */
-  --success:       #00d26a;
-  --warning:       #ff9500;
-  --error:         #ff3b30;
+  --success:       var(--color-success);
+  --warning:       var(--color-warning);
+  --error:         var(--color-error);
 
-  /* App-specific accent: Electric Blue (C123-SERVER) */
-  --accent:        #0088ff;
-  --accent-hover:  #0066cc;
-  --accent-subtle: rgba(0,136,255,0.12);
-  --accent-glow:   rgba(0,136,255,0.4);
+  --accent:        var(--color-accent);
+  --accent-hover:  var(--color-accent-hover);
+  --accent-subtle: var(--color-accent-subtle);
+  --accent-glow:   var(--color-accent-glow);
 
-  /* Typography */
-  --font-sans:  'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono:  'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
-
-  --text-xs:    0.75rem;   /* 12px */
-  --text-sm:    0.8125rem; /* 13px */
-  --text-base:  0.875rem;  /* 14px */
-  --text-lg:    1rem;      /* 16px */
-  --text-xl:    1.125rem;  /* 18px */
-  --text-2xl:   1.5rem;    /* 24px */
-
-  --font-weight-normal: 400;
-  --font-weight-medium: 500;
-  --font-weight-bold:   600;
-
-  /* Spacing */
-  --space-1:  4px;
-  --space-2:  8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-8: 32px;
-
-  /* Border radius */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-
-  /* Layout */
+  /* Layout - app specific */
   --header-height: 48px;
+
+  /* Legacy font weight names (design system uses --font-normal, --font-medium, etc.) */
+  --font-weight-normal: var(--font-normal);
+  --font-weight-medium: var(--font-medium);
+  --font-weight-bold:   var(--font-semibold);
 }
 
 /* ============================================
