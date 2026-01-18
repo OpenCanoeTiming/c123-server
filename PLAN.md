@@ -107,95 +107,6 @@ Indicates currently running category in Results - key for race flow tracking.
 
 ---
 
-## Completed: Admin UI - Full Design System Migration ✅
-
-### Goal
-
-Complete migration from CSS variable aliasing to **native design system classes**. Current state uses aliases which is a compatibility layer - target is strict design system usage.
-
-### Approach: Strict Design System
-
-**No fallbacks, no local component styles** - all UI components must use `timing-design-system` classes directly.
-
-### Phase 1: CSS Sync (Completed ✅)
-
-- [x] 1. Copy `timing.css` from design system to `src/admin-ui/`
-- [x] 2. Update `index.html` to link timing.css
-- [x] 3. CSS variable aliasing for backward compatibility
-
-### Phase 2: Auto-refresh timing.css (Completed ✅)
-
-- [x] 1. Add `postinstall` script to copy fresh `timing.css` from `timing-design-system`
-- [x] 2. Add `prebuild` script as backup
-- [x] 3. Document: after `npm install` timing.css is always current
-- [x] 4. Fallback: if timing-design-system not found, keep existing file (offline mode)
-
-```json
-// package.json scripts
-"postinstall": "node scripts/sync-design-system.js",
-"prebuild": "node scripts/sync-design-system.js"
-```
-
-### Phase 3: Component Migration (Completed ✅)
-
-Replace local/inline styles with design system classes:
-
-- [x] **Header** - migrated to `.status-dot-*` classes from design system
-- [x] **LIVE indicator** - vodácký badge style (`.badge-success` + `.status-dot-glow`)
-- [x] **Clients cards** - use `.card .card-interactive .card-compact .card-status-success` from design system
-- [x] **Tabs** - migrated to `.tabs > .tab-list > .tab` structure from design system
-- [x] **Log viewer** - migrated from inline styles to `.log-*` component classes in styles.css
-- [x] **Modal (client editor)** - added responsive `.modal-two-col` single column on mobile
-- [x] **Buttons** - migrated to DS `.btn .btn-primary .btn-secondary`, added `.btn-danger-outline` for outline style
-- [x] **Status dots** - using `.status-dot-*` classes from design system
-- [x] **Tables** - migrated to DS `.table .table-hover`, kept uppercase header override
-- [x] **Forms/inputs** - using DS `.input` class, removed redundant local styles
-- [x] **Badges** - using DS `.badge .badge-success` etc., removed local duplicates
-
-### Phase 4: Design System Migration (Completed ✅)
-
-All components now use timing-design-system as base with minimal local overrides:
-
-- [x] **Buttons** - DS `.btn .btn-primary .btn-secondary .btn-ghost`, local `.btn-danger-outline` for outline delete
-- [x] **Tables** - DS `.table .table-hover`, local override for uppercase headers
-- [x] **Forms** - DS `.input .select`, local `.config-form` for layout only
-- [x] **Cleanup** - removed ~80 lines of redundant local component styles
-
-### Known Issues to Fix
-
-| Component | Problem | Solution |
-|-----------|---------|----------|
-| ~~Client editor modal~~ | ~~Shows in partial screen, not fullscreen overlay~~ | ~~Added responsive two-col → one-col~~ ✅ Fixed |
-| ~~Tabs (Logs/Sources/XML/Assets)~~ | ~~Rendered vertically~~ | ~~Use horizontal `.tabs` from design system~~ ✅ Fixed |
-| ~~Log viewer~~ | ~~Hardcoded inline styles~~ | ~~Migrated to `.log-*` classes~~ ✅ Fixed |
-| ~~LIVE badge~~ | ~~Generic styling~~ | ~~Use vodácký (canoe) accent from design system~~ ✅ Fixed |
-
-### Files to Modify
-
-```
-src/admin-ui/
-├── index.html      # Update class names to design system
-├── styles.css      # MINIMIZE - only app-specific overrides
-├── main.js         # Update generated HTML class names
-└── timing.css      # Auto-synced from design system
-scripts/
-└── sync-design-system.js  # NEW - auto-sync script
-```
-
-### Verification
-
-```bash
-# After npm install, timing.css should be fresh
-npm install
-ls -la src/admin-ui/timing.css
-
-# Visual check - all components should match design system
-npm start
-# Open http://localhost:27123
-```
-
----
-
 ## Completed: CourseData REST Endpoint ✅
 
 **Cíl:** Přidat endpoint `/api/xml/courses` pro načtení segmentů trati.
@@ -229,6 +140,7 @@ Pro c123-scoring automatické gate groups.
 | Admin UI v2 | Extraction to files, "Dark Performance" design, accessibility | ✅ |
 | Write API | Scoring, RemoveFromCourse, Timing endpoints + tests | ✅ |
 | CourseData API | `/api/xml/courses` endpoint for gate config and splits | ✅ |
+| Design System | Full migration to `timing-design-system` components | ✅ |
 
 ### Design Decisions
 
