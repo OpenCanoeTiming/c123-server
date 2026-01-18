@@ -186,55 +186,12 @@ npm start
 
 ---
 
-## Next: CourseData REST Endpoint
+## Completed: CourseData REST Endpoint ✅
 
 **Cíl:** Přidat endpoint `/api/xml/courses` pro načtení segmentů trati.
 
-**Důvod:** c123-scoring potřebuje segment informace pro automatické gate groups.
-
-**Kontext:**
-- XML obsahuje `<CourseData>` s `CourseConfig: "NNRNSNRNS..."` kde `S` = split
-- Aktuální WS `RaceConfig` posílá `gateConfig` bez `S`
-- Nový endpoint vrátí původní data včetně split pozic
-
-### Kroky
-
-- [x] 1. Přidat interface `XmlCourseData` do `src/service/XmlDataService.ts`
-  ```typescript
-  export interface XmlCourseData {
-    courseNr: number
-    courseConfig: string  // "NNRNSNRNS..." včetně S
-    splits: number[]      // Gate numbers where splits occur
-  }
-  ```
-
-- [x] 2. Přidat metodu `getCourses()` do `XmlDataService`
-  - Parsovat `<CourseData>` elementy z XML
-  - Extrahovat `CourseNr` a `CourseConfig`
-  - Spočítat `splits[]` - pozice branek kde je `S`
-
-- [x] 3. Přidat route a handler do `src/unified/UnifiedServer.ts`
-  ```typescript
-  this.app.get('/api/xml/courses', this.handleXmlCourses.bind(this));
-  ```
-
-- [x] 4. Dokumentace - přidat do `docs/REST-API.md`
-
-- [x] 5. Build a test
-
-**Soubory:**
-```
-src/service/XmlDataService.ts    # Přidat XmlCourseData + getCourses()
-src/unified/UnifiedServer.ts     # Přidat /api/xml/courses route
-docs/REST-API.md                 # Dokumentace
-```
-
-**Verifikace:**
-```bash
-npm run build && npm test
-curl http://localhost:27123/api/xml/courses
-# Očekávat: {"courses":[{"courseNr":1,"courseConfig":"NNRN...","splits":[4,8,12]},...]}
-```
+Endpoint `/api/xml/courses` vrací course data včetně gate configuration a split pozic.
+Pro c123-scoring automatické gate groups.
 
 ---
 
@@ -261,6 +218,7 @@ curl http://localhost:27123/api/xml/courses
 | Admin UI v1 | Inline HTML/CSS/JS in UnifiedServer | ✅ |
 | Admin UI v2 | Extraction to files, "Dark Performance" design, accessibility | ✅ |
 | Write API | Scoring, RemoveFromCourse, Timing endpoints + tests | ✅ |
+| CourseData API | `/api/xml/courses` endpoint for gate config and splits | ✅ |
 
 ### Design Decisions
 
