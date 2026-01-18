@@ -18,8 +18,11 @@ export type ChannelPosition = 'Start' | 'Finish' | 'Split1' | 'Split2';
 
 /**
  * Scoring request payload
+ * - Without raceId: Scoring for competitors ON COURSE
+ * - With raceId: PenaltyCorrection for FINISHED competitors
  */
 export interface ScoringRequest {
+  raceId?: string;
   bib: string;
   gate: number;
   value: PenaltyValue;
@@ -62,16 +65,25 @@ export class ScoringService {
   }
 
   /**
-   * Send a penalty scoring command to C123.
+   * Send a penalty command to C123.
+   * - Without raceId: Scoring for competitors ON COURSE
+   * - With raceId: PenaltyCorrection for FINISHED competitors
    *
-   * @param request - Scoring request with bib, gate, and penalty value
+   * @param request - Scoring request with bib, gate, value, and optional raceId
    * @throws Error if validation fails or write fails
    */
   async sendScoring(request: ScoringRequest): Promise<void> {
     this.validateScoringRequest(request);
 
-    const xml = this.formatScoringXml(request);
-    Logger.info('ScoringService', `Sending penalty: Bib=${request.bib} Gate=${request.gate} Value=${request.value}`);
+    const xml = request.raceId
+      ? this.formatPenaltyCorrectionXml(request)
+      : this.formatScoringXml(request);
+
+    if (request.raceId) {
+      Logger.info('ScoringService', `Sending penalty correction: RaceId=${request.raceId} Bib=${request.bib} Gate=${request.gate} Value=${request.value}`);
+    } else {
+      Logger.info('ScoringService', `Sending penalty: Bib=${request.bib} Gate=${request.gate} Value=${request.value}`);
+    }
 
     await this.source.write(xml);
   }
@@ -110,6 +122,11 @@ export class ScoringService {
    * Validate scoring request
    */
   private validateScoringRequest(request: ScoringRequest): void {
+    // raceId is optional - if provided, will use PenaltyCorrection format
+    if (request.raceId !== undefined && request.raceId.trim() === '') {
+      throw new Error('RaceId cannot be empty if provided');
+    }
+
     if (!request.bib || request.bib.trim() === '') {
       throw new Error('Bib is required');
     }
@@ -150,11 +167,19 @@ export class ScoringService {
   }
 
   /**
-   * Format scoring request as C123 XML
+   * Format scoring request as C123 XML (for competitors ON COURSE)
    * Note: C123 expects compact XML without whitespace/newlines
    */
   private formatScoringXml(request: ScoringRequest): string {
     return `<Canoe123 System="Main"><Scoring Bib="${this.escapeXml(request.bib)}"><Penalty Gate="${request.gate}" Value="${request.value}" /></Scoring></Canoe123>`;
+  }
+
+  /**
+   * Format penalty correction request as C123 XML (for FINISHED competitors)
+   * Note: C123 expects compact XML without whitespace/newlines
+   */
+  private formatPenaltyCorrectionXml(request: ScoringRequest): string {
+    return `<Canoe123 System="Main"><PenaltyCorrection RaceId="${this.escapeXml(request.raceId!)}" Bib="${this.escapeXml(request.bib)}" Gate="${request.gate}" Value="${request.value}" /></Canoe123>`;
   }
 
   /**

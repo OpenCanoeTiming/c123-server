@@ -2118,14 +2118,18 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   // ==========================================================================
 
   /**
-   * POST /api/c123/scoring - Send penalty scoring command to C123
+   * POST /api/c123/scoring - Send penalty command to C123
    *
-   * Body: { bib: string, gate: number, value: 0 | 2 | 50 }
+   * Body: { bib: string, gate: number, value: 0 | 2 | 50, raceId?: string }
    *
    * Value meanings:
    * - 0: Clean pass (no penalty)
    * - 2: Touch (+2 seconds)
    * - 50: Missed/not taken (+50 seconds)
+   *
+   * Mode:
+   * - Without raceId: Scoring for competitors ON COURSE
+   * - With raceId: PenaltyCorrection for FINISHED competitors
    */
   private async handleC123Scoring(req: Request, res: Response): Promise<void> {
     if (!this.c123Server) {
@@ -2141,7 +2145,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       return;
     }
 
-    const { bib, gate, value } = req.body;
+    const { bib, gate, value, raceId } = req.body;
 
     // Validate required fields
     if (bib === undefined || bib === null || bib === '') {
@@ -2178,22 +2182,33 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       return;
     }
 
-    try {
-      await this.c123Server.sendScoring({
-        bib: String(bib),
-        gate: gateNum,
-        value: valueNum as 0 | 2 | 50,
+    // Validate raceId if provided
+    if (raceId !== undefined && (typeof raceId !== 'string' || raceId.trim() === '')) {
+      res.status(400).json({
+        error: 'raceId must be a non-empty string if provided',
       });
+      return;
+    }
+
+    try {
+      const scoringRequest = raceId
+        ? { raceId: String(raceId), bib: String(bib), gate: gateNum, value: valueNum as 0 | 2 | 50 }
+        : { bib: String(bib), gate: gateNum, value: valueNum as 0 | 2 | 50 };
+      await this.c123Server.sendScoring(scoringRequest);
 
       // Broadcast scoring event to admin connections
+      const penaltyDetails = raceId
+        ? { gate: gateNum, value: valueNum as 0 | 2 | 50, raceId: String(raceId) }
+        : { gate: gateNum, value: valueNum as 0 | 2 | 50 };
       this.broadcastScoringEvent({
         eventType: 'penalty',
         bib: String(bib),
-        details: { gate: gateNum, value: valueNum as 0 | 2 | 50 },
+        details: penaltyDetails,
       });
 
       res.json({
         success: true,
+        raceId: raceId ? String(raceId) : undefined,
         bib: String(bib),
         gate: gateNum,
         value: valueNum,
