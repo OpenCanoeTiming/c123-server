@@ -103,12 +103,15 @@
   </section>
 
   <!-- Tab Navigation -->
-  <nav class="tabs" role="tablist" aria-label="Admin sections">
-    <button class="tab active" role="tab" aria-selected="true" aria-controls="panel-logs" id="tab-logs" data-tab="logs" onclick="switchTab('logs')">Logs</button>
-    <button class="tab" role="tab" aria-selected="false" aria-controls="panel-sources" id="tab-sources" data-tab="sources" onclick="switchTab('sources')">Sources</button>
-    <button class="tab" role="tab" aria-selected="false" aria-controls="panel-xml" id="tab-xml" data-tab="xml" onclick="switchTab('xml')">XML</button>
-    <button class="tab" role="tab" aria-selected="false" aria-controls="panel-assets" id="tab-assets" data-tab="assets" onclick="switchTab('assets')">Assets</button>
-  </nav>
+  <div class="tabs">
+    <nav class="tab-list" role="tablist" aria-label="Admin sections">
+      <button class="tab active" role="tab" aria-selected="true" aria-controls="panel-logs" id="tab-logs" data-tab="logs" onclick="switchTab('logs')">Logs</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-sources" id="tab-sources" data-tab="sources" onclick="switchTab('sources')">Sources</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-xml" id="tab-xml" data-tab="xml" onclick="switchTab('xml')">XML</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-assets" id="tab-assets" data-tab="assets" onclick="switchTab('assets')">Assets</button>
+    </nav>
+
+    <div class="tab-panels">
 
   <!-- Tab Panels -->
 
@@ -418,6 +421,9 @@
       </div>
     </div>
   </section>
+
+    </div><!-- /.tab-panels -->
+  </div><!-- /.tabs -->
 
   <div id="lastUpdate" role="status" aria-live="polite"></div>
 

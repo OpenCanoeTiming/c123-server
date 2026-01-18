@@ -1557,50 +1557,21 @@ fieldset.modal-section > legend {
 }
 
 /* ============================================
-   Tab Navigation
+   Tab Navigation - Using design system tabs.css
+   Local overrides only
    ============================================ */
-.tabs {
-  display: flex;
-  gap: 0;
-  border-bottom: 1px solid var(--border);
+/* Design system provides: .tabs, .tab-list, .tab, .tab-panels, .tab-panel */
+/* Override margin for this layout */
+.tab-list {
   margin-bottom: var(--space-4);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 
+/* Uppercase style for admin UI tabs */
 .tab {
-  padding: var(--space-3) var(--space-4);
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--text-secondary);
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-medium);
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-  position: relative;
-}
-
-.tab:hover {
-  color: var(--text-primary);
-  background: var(--bg-elevated);
-}
-
-.tab.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-}
-
-.tab-panel {
-  display: none;
-}
-
-.tab-panel.active {
-  display: block;
 }
 
 /* ============================================
@@ -1818,7 +1789,7 @@ fieldset.modal-section > legend {
     width: 100%;
   }
 
-  .tabs {
+  .tab-list {
     gap: 0;
   }
 
