@@ -281,25 +281,44 @@ Open http://localhost:27123 to access the admin dashboard:
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         C123 Server v2                              │
-│                                                                     │
-│   Sources                    Core                     Output        │
-│  ┌──────────────┐       ┌──────────────┐       ┌──────────────┐    │
-│  │ TcpSource    │◀─────▶│              │       │              │    │
-│  │   :27333     │  R/W  │  C123Proxy   │──────▶│  Unified     │    │
-│  ├──────────────┤       │ (XML → JSON) │       │  Server      │    │
-│  │ UdpDiscovery │──────▶│              │       │   :27123     │───▶│ Clients
-│  │   :27333     │       └──────────────┘       │              │    │
-│  └──────────────┘                              │  /      admin│    │
-│                         ┌──────────────┐       │  /ws   WS    │◀───│ Scoring
-│  ┌──────────────┐       │  XmlService  │──────▶│  /api  REST  │    │
-│  │ XmlSource    │──────▶│ (data + push)│       └──────────────┘    │
-│  │ (file/URL)   │       └──────────────┘                           │
-│  └──────────────┘                                                   │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph LR
+    subgraph sources ["Data Sources"]
+        TCP["TcpSource
+:27333"]
+        UDP["UdpDiscovery
+:27333"]
+        XML["XmlSource
+(file/URL)"]
+    end
+
+    subgraph core ["Core"]
+        PROXY["C123Proxy
+(XML → JSON)"]
+        XMLSVC["XmlService
+(data + push)"]
+    end
+
+    subgraph output ["Unified Server :27123"]
+        ADMIN["/ admin"]
+        WS["/ws WebSocket"]
+        API["/api REST"]
+    end
+
+    TCP <-->|"R/W"| PROXY
+    UDP --> PROXY
+    XML --> XMLSVC
+    PROXY --> WS
+    PROXY --> API
+    XMLSVC --> WS
+    XMLSVC --> API
+    WS --> Clients
+    API --> Clients
+    API <--> Scoring
+
+    style sources fill:#1a1a2e,stroke:#888,stroke-width:1px,color:#fff
+    style core fill:#1a1a2e,stroke:#0f3460,stroke-width:2px,color:#fff
+    style output fill:#1a1a2e,stroke:#e94560,stroke-width:2px,color:#fff
 ```
 
 **Data Flow:**
