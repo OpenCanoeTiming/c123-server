@@ -109,8 +109,8 @@ export class TcpSource extends EventEmitter<SourceEvents> implements Source {
     });
   }
 
-  private handleData(data: Buffer): void {
-    const text = data.toString('utf8');
+  private handleData(data: Buffer | string): void {
+    const text = typeof data === 'string' ? data : data.toString('utf8');
     this.buffer += text;
 
     // C123 uses pipe delimiter between XML messages
