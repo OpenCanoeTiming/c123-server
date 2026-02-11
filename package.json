@@ -18,6 +18,7 @@
     "prebuild": "node scripts/sync-design-system.js"
   },
   "dependencies": {
+    "@opencanoetiming/timing-design-system": "^0.4.0",
     "chokidar": "^5.0.0",
     "express": "^4.21.0",
     "fast-xml-parser": "^4.5.0",

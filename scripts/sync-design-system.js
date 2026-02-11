@@ -17,7 +17,11 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..');
 
-const SOURCE = join(projectRoot, '..', 'timing-design-system', 'dist', 'timing.css');
+// Primary: from npm package (GitHub Packages)
+const SOURCE_PKG = join(projectRoot, 'node_modules', '@opencanoetiming', 'timing-design-system', 'dist', 'timing.css');
+// Fallback: from sibling folder (local development without npm install)
+const SOURCE_LOCAL = join(projectRoot, '..', 'timing-design-system', 'dist', 'timing.css');
+const SOURCE = existsSync(SOURCE_PKG) ? SOURCE_PKG : SOURCE_LOCAL;
 const TARGET = join(projectRoot, 'src', 'admin-ui', 'timing.css');
 
 function sync() {
