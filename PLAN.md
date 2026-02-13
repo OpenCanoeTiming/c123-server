@@ -126,7 +126,7 @@ C123.exe ──TCP:27333──► c123-server ──HTTP/JSON──► c123-live
 
 ### Next step
 
-Block 2: LiveMiniTransformer
+Block 3: Pusher + Server Integration
 
 ### Block 1: Types, HTTP Client, Settings ✅
 
@@ -140,17 +140,17 @@ Block 2: LiveMiniTransformer
   - Fields: enabled, serverUrl, apiKey, eventId, eventStatus, pushXml, pushOnCourse, pushResults
 - [x] Unit tests for LiveMiniClient (mocked fetch)
 
-### Block 2: Transformer
+### Block 2: Transformer ✅
 
-- [ ] Create `src/live-mini/LiveMiniTransformer.ts`
-- [ ] Participant ID mapping: `Map<"bib:raceId", participantId>`
+- [x] Create `src/live-mini/LiveMiniTransformer.ts`
+- [x] Participant ID mapping: `Map<"bib:raceId", participantId>`
   - Built from XML: for each schedule item (raceId → classId), map all participants of that class
   - Refreshed on every XML change via XmlDataService
   - If mapping missing → skip push (XML must come first)
-- [ ] OnCourse transform: bib→number, gates→(number|null)[], pen×100, time→number, dt→ISO 8601
-- [ ] Results transform: time/total seconds→centiseconds, gates→structured array, status extraction
-- [ ] Event metadata extraction from XmlDataService (mainTitle, eventId, location, discipline)
-- [ ] Unit tests for all transformations (especially participant ID mapping edge cases)
+- [x] OnCourse transform: bib→number, gates→(number|null)[], pen×100, time→number, dt→ISO 8601
+- [x] Results transform: time/total seconds→centiseconds, gates→structured array, status extraction
+- [x] Event metadata extraction from XmlDataService (mainTitle, eventId, location, discipline)
+- [x] Unit tests for all transformations (especially participant ID mapping edge cases)
 
 ### Block 3: Pusher + Server Integration
 
