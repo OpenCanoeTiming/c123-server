@@ -13,6 +13,7 @@ import type { EventState } from '../state/EventState.js';
 import type { Source } from '../sources/types.js';
 import type { XmlDataService } from '../service/XmlDataService.js';
 import type { Server as C123Server } from '../server.js';
+import type { LiveMiniPusher } from '../live-mini/LiveMiniPusher.js';
 import { getAppSettings, WindowsConfigDetector } from '../config/index.js';
 import type { ClientConfig } from '../config/types.js';
 
@@ -107,6 +108,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   private sources: RegisteredSource[] = [];
   private xmlDataService: XmlDataService | null = null;
   private c123Server: C123Server | null = null;
+  private liveMiniPusher: LiveMiniPusher | null = null;
 
   constructor(config?: UnifiedServerConfig) {
     super();
@@ -134,6 +136,13 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    */
   setServer(server: C123Server): void {
     this.c123Server = server;
+  }
+
+  /**
+   * Register LiveMiniPusher for live-mini integration
+   */
+  setLiveMiniPusher(pusher: LiveMiniPusher): void {
+    this.liveMiniPusher = pusher;
   }
 
   /**

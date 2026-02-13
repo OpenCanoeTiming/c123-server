@@ -126,7 +126,7 @@ C123.exe ──TCP:27333──► c123-server ──HTTP/JSON──► c123-live
 
 ### Next step
 
-Block 3: Pusher + Server Integration
+Block 4: API Endpoints
 
 ### Block 1: Types, HTTP Client, Settings ✅
 
@@ -152,15 +152,16 @@ Block 3: Pusher + Server Integration
 - [x] Event metadata extraction from XmlDataService (mainTitle, eventId, location, discipline)
 - [x] Unit tests for all transformations (especially participant ID mapping edge cases)
 
-### Block 3: Pusher + Server Integration
+### Block 3: Pusher + Server Integration ✅
 
-- [ ] Create `src/live-mini/LiveMiniPusher.ts` — main orchestrator
+- [x] Create `src/live-mini/LiveMiniPusher.ts` — main orchestrator
   - Subscribe to: XmlChangeNotifier (XML push, debounce 2s), EventState change (OnCourse throttle 2/s, Results debounce 1s per raceId)
-  - Buffer strategy: XML "last wins", Results "last wins per raceId", OnCourse drop, transitions queue
+  - Buffer strategy: XML "last wins", Results "last wins per raceId", OnCourse throttle/drop, transitions queue
   - Circuit breaker: 5 consecutive failures → 30s pause → retry
   - Emit `statusChange` for Admin UI WebSocket
-- [ ] Integrate into `src/server.ts` — create LiveMiniPusher, wire up events
-- [ ] Pusher starts/stops via API, not automatically on server start
+- [x] Integrate into `src/server.ts` — create LiveMiniPusher, wire up events via getters
+- [x] Pusher starts/stops via API, not automatically on server start
+- [x] Unit tests for LiveMiniPusher (connect, disconnect, pause/resume, debounce/throttle, circuit breaker)
 
 ### Block 4: API Endpoints
 

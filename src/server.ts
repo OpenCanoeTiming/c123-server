@@ -10,6 +10,7 @@ import { UnifiedServer } from './unified/UnifiedServer.js';
 import { XmlDataService } from './service/XmlDataService.js';
 import { ScoringService, type ScoringRequest, type RemoveFromCourseRequest, type TimingRequest } from './service/index.js';
 import { XmlChangeNotifier } from './xml/XmlChangeNotifier.js';
+import { LiveMiniPusher } from './live-mini/LiveMiniPusher.js';
 import { Logger } from './utils/logger.js';
 import {
   createTimeOfDay,
@@ -103,6 +104,7 @@ export class Server extends EventEmitter<ServerEvents> {
   private unifiedServer: UnifiedServer;
   private xmlDataService: XmlDataService;
   private windowsConfigDetector: WindowsConfigDetector | null = null;
+  private liveMiniPusher: LiveMiniPusher;
 
   private isRunning = false;
   private discoveredHost: string | null = null;
@@ -115,6 +117,7 @@ export class Server extends EventEmitter<ServerEvents> {
     this.eventState = new EventState();
     this.unifiedServer = new UnifiedServer({ port: this.config.port });
     this.xmlDataService = new XmlDataService();
+    this.liveMiniPusher = new LiveMiniPusher(this.xmlDataService);
 
     this.setupEventHandlers();
   }
@@ -134,6 +137,7 @@ export class Server extends EventEmitter<ServerEvents> {
     this.unifiedServer.setEventState(this.eventState);
     this.unifiedServer.setXmlDataService(this.xmlDataService);
     this.unifiedServer.setServer(this);
+    this.unifiedServer.setLiveMiniPusher(this.liveMiniPusher);
 
     // Start data sources
     if (this.config.autoDiscovery && !this.config.tcpHost) {
@@ -203,6 +207,27 @@ export class Server extends EventEmitter<ServerEvents> {
    */
   getPort(): number {
     return this.unifiedServer.getPort();
+  }
+
+  /**
+   * Get XmlChangeNotifier (for LiveMiniPusher)
+   */
+  getXmlChangeNotifier(): XmlChangeNotifier | null {
+    return this.xmlChangeNotifier;
+  }
+
+  /**
+   * Get EventState (for LiveMiniPusher)
+   */
+  getEventState(): EventState {
+    return this.eventState;
+  }
+
+  /**
+   * Get LiveMiniPusher
+   */
+  getLiveMiniPusher(): LiveMiniPusher {
+    return this.liveMiniPusher;
   }
 
   /**
