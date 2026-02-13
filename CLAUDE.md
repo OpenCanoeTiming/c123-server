@@ -77,11 +77,67 @@ Development runs against **recorded data from analysis**:
 ../analysis/recordings/rec-2025-12-28T09-34-10.jsonl
 ```
 
-Process: Always, especially for additional requests and changes, first update documentation as plan and intent, add necessary steps to the plan, then implement them gradually. Try to divide planned tasks into blocks that can be handled by Claude Code with Opus 4.5 up to ~70% context usage, because we'll run fresh instances for each block. Commit at the latest after each block. Don't do more than one block before clear or compact.
+---
 
-If any deviation from required behavior is discovered, or a problem cannot be solved or turns out to be bigger, then update the plan with new sections and steps as needed, finish, and leave further work to a fresh instance.
+## Process
 
-Keep a development log - what worked, what didn't, what was tried, etc. So dead ends aren't explored again.
+### Before starting work
+
+1. Read `PLAN.md` — current status and next steps (~100 lines max)
+2. If a step is too large, split into smaller parts
+
+### During work
+
+1. **Implementation:** Work in blocks (~70% context usage)
+2. **Continuously:** Update `PLAN.md` when plan changes
+3. **After completing a step:** Mark `- [x]` in PLAN.md
+
+### After completing a block/iteration
+
+1. **PLAN.md:** Mark completed steps, update "Next step"
+2. **DEVLOG.md:** **APPEND ONLY** (see below)
+3. **Commit:** Commit changes
+
+### If blocked or problem is bigger than expected
+
+Update PLAN.md with new sections and steps, finish current work, leave further work to a fresh instance.
+
+### DEVLOG.md rules
+
+⚠️ **DEVLOG.md is NOT read at the start of an iteration!**
+
+- Serves as append-only log for history
+- Read only when diagnosing problems
+- After each iteration, append entry at the end:
+
+```bash
+cat >> DEVLOG.md << 'EOF'
+
+---
+
+## YYYY-MM-DD - Phase X.Y: Description
+
+### Completed
+- [x] Task 1
+- [x] Task 2
+
+### Problems and solutions
+1. **Problem:** description
+   **Solution:** how resolved
+
+### Notes
+Important decisions, tasks for next time
+EOF
+```
+
+### Project files
+
+| File | Purpose | When to read |
+|------|---------|--------------|
+| `PLAN.md` | Current plan (~100 lines) | **Always at start** |
+| `CLAUDE.md` | Instructions + quick reference | Always (automatic) |
+| `DEVLOG.md` | Work history | **Only when diagnosing** |
+| `docs/` | Protocol, API, integration docs | When needed |
 
 ---
 
