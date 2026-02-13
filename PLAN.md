@@ -114,12 +114,97 @@ Indicates currently running category in Results - key for race flow tracking.
 
 ---
 
+## Current: Live-Mini Integration (Issues #4, #5)
+
+Push timing data to remote c123-live-mini-server + Admin UI panel.
+
+```
+C123.exe ──TCP:27333──► c123-server ──HTTP/JSON──► c123-live-mini (cloud)
+                            │                            │
+                       (local LAN)                  (public internet)
+```
+
+### Next step
+
+Block 1: Types + LiveMiniClient + settings extension
+
+### Block 1: Types, HTTP Client, Settings
+
+- [ ] Create `src/live-mini/types.ts` — API request/response types, LiveMiniStatus, LiveMiniConfig
+- [ ] Create `src/live-mini/LiveMiniClient.ts` — stateless HTTP client (native fetch)
+  - Methods: `createEvent()`, `pushXml()`, `pushOnCourse()`, `pushResults()`, `transitionStatus()`
+  - Retry with exponential backoff (1s → 2s → 4s → 8s → 30s max)
+  - Respect 429 Too Many Requests, 10s timeout per request
+  - X-API-Key header authentication
+- [ ] Extend `AppSettings` in `src/config/AppSettings.ts` — add `liveMini` section
+  - Fields: enabled, serverUrl, apiKey, eventId, eventStatus, pushXml, pushOnCourse, pushResults
+- [ ] Unit tests for LiveMiniClient (mocked fetch)
+
+### Block 2: Transformer
+
+- [ ] Create `src/live-mini/LiveMiniTransformer.ts`
+- [ ] Participant ID mapping: `Map<"bib:raceId", participantId>`
+  - Built from XML: for each schedule item (raceId → classId), map all participants of that class
+  - Refreshed on every XML change via XmlDataService
+  - If mapping missing → skip push (XML must come first)
+- [ ] OnCourse transform: bib→number, gates→(number|null)[], pen×100, time→number, dt→ISO 8601
+- [ ] Results transform: time/total seconds→centiseconds, gates→structured array, status extraction
+- [ ] Event metadata extraction from XmlDataService (mainTitle, eventId, location, discipline)
+- [ ] Unit tests for all transformations (especially participant ID mapping edge cases)
+
+### Block 3: Pusher + Server Integration
+
+- [ ] Create `src/live-mini/LiveMiniPusher.ts` — main orchestrator
+  - Subscribe to: XmlChangeNotifier (XML push, debounce 2s), EventState change (OnCourse throttle 2/s, Results debounce 1s per raceId)
+  - Buffer strategy: XML "last wins", Results "last wins per raceId", OnCourse drop, transitions queue
+  - Circuit breaker: 5 consecutive failures → 30s pause → retry
+  - Emit `statusChange` for Admin UI WebSocket
+- [ ] Integrate into `src/server.ts` — create LiveMiniPusher, wire up events
+- [ ] Pusher starts/stops via API, not automatically on server start
+
+### Block 4: API Endpoints
+
+- [ ] Add routes to `src/unified/UnifiedServer.ts`:
+  - `GET /api/live-mini/status` — current pusher state
+  - `POST /api/live-mini/connect` — set URL, create event on live-mini, store apiKey, start push
+  - `POST /api/live-mini/disconnect` — stop push, optionally clear config
+  - `POST /api/live-mini/pause` — pause/resume push
+  - `POST /api/live-mini/force-push-xml` — immediate XML push
+  - `POST /api/live-mini/transition` — event status change on live-mini
+  - `PATCH /api/live-mini/config` — toggle push channels (xml/oncourse/results)
+- [ ] Add `LiveMiniStatus` message type to admin WS broadcast (throttle 2/s)
+
+### Block 5: Admin UI — Live Results Panel
+
+- [ ] Add HTML section in `index.html` — after clients section, before tabs
+- [ ] Three UI states: Not Configured → Connected/Active → Error/Disconnected
+- [ ] Not Configured: URL input + "Connect & Create Event" button
+- [ ] Event creation flow: pre-fill metadata from XML, editable fields, confirm → POST /api/live-mini/connect
+- [ ] Connected: status dot, server/event info, push status card (per-channel), event lifecycle viz, channel toggles, action buttons (pause, force push, disconnect)
+- [ ] Error: failure count, last error, retry/disconnect buttons
+- [ ] WebSocket handler for `LiveMiniStatus` messages
+- [ ] Use design system classes (.card, .badge, .status-dot, .btn), minimal local CSS
+- [ ] All patterns consistent with existing Admin UI (vanilla JS, fetch, toasts)
+
+### Key Design Decisions
+
+| Aspect | Decision | Reason |
+|--------|----------|--------|
+| Participant ID | `(bib, raceId)` → lookup XML `<Id>` | Bib not unique across classes, raceId available in TCP |
+| Admin UI placement | Standalone section above tabs (after clients) | Operator needs at-a-glance status during race |
+| Framework | Vanilla JS (same as existing Admin UI) | Consistency, no build step |
+| Buffering | "Last wins" per channel/race, drop stale OnCourse | Fresh data always better, no need for deep queue |
+| XML first | OnCourse/Results push skipped until XML sent | live-mini needs participants from XML before accepting JSON |
+
+---
+
 ## Remaining Work
 
 ### Nice-to-have (Future)
 
 - [ ] Service worker for offline support
 - [ ] Cross-browser testing (Chrome, Firefox, Safari, Edge)
+- [ ] Auto-transition suggestions (C123 race status → live-mini event lifecycle)
 
 ---
 
