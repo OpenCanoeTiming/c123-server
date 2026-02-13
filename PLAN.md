@@ -126,19 +126,19 @@ C123.exe ──TCP:27333──► c123-server ──HTTP/JSON──► c123-live
 
 ### Next step
 
-Block 1: Types + LiveMiniClient + settings extension
+Block 2: LiveMiniTransformer
 
-### Block 1: Types, HTTP Client, Settings
+### Block 1: Types, HTTP Client, Settings ✅
 
-- [ ] Create `src/live-mini/types.ts` — API request/response types, LiveMiniStatus, LiveMiniConfig
-- [ ] Create `src/live-mini/LiveMiniClient.ts` — stateless HTTP client (native fetch)
+- [x] Create `src/live-mini/types.ts` — API request/response types, LiveMiniStatus, LiveMiniConfig
+- [x] Create `src/live-mini/LiveMiniClient.ts` — stateless HTTP client (native fetch)
   - Methods: `createEvent()`, `pushXml()`, `pushOnCourse()`, `pushResults()`, `transitionStatus()`
   - Retry with exponential backoff (1s → 2s → 4s → 8s → 30s max)
   - Respect 429 Too Many Requests, 10s timeout per request
   - X-API-Key header authentication
-- [ ] Extend `AppSettings` in `src/config/AppSettings.ts` — add `liveMini` section
+- [x] Extend `AppSettings` in `src/config/AppSettings.ts` — add `liveMini` section
   - Fields: enabled, serverUrl, apiKey, eventId, eventStatus, pushXml, pushOnCourse, pushResults
-- [ ] Unit tests for LiveMiniClient (mocked fetch)
+- [x] Unit tests for LiveMiniClient (mocked fetch)
 
 ### Block 2: Transformer
 

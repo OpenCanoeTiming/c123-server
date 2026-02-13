@@ -2,6 +2,8 @@
  * Configuration types for C123 Server
  */
 
+import type { LiveMiniConfig } from '../live-mini/types.js';
+
 // ============================================================================
 // Asset Configuration Types
 // ============================================================================
@@ -218,6 +220,14 @@ export interface AppSettings {
    * Individual clients can override these via per-client assets config.
    */
   defaultAssets?: AssetUrls;
+
+  // === Live-Mini Integration ===
+
+  /**
+   * Live-Mini configuration for pushing data to remote server.
+   * Enables public live results viewing via c123-live-mini.
+   */
+  liveMini?: LiveMiniConfig;
 }
 
 /**
@@ -227,4 +237,14 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   xmlSourceMode: 'auto-offline',
   xmlAutoDetect: true, // deprecated, kept for backwards compatibility
   xmlAutoDetectInterval: 30000, // 30 seconds
+  liveMini: {
+    enabled: false,
+    serverUrl: null,
+    apiKey: null,
+    eventId: null,
+    eventStatus: null,
+    pushXml: true,
+    pushOnCourse: true,
+    pushResults: true,
+  },
 };

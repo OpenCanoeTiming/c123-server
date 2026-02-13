@@ -514,6 +514,79 @@ export class AppSettingsManager {
     this.settings = { ...DEFAULT_APP_SETTINGS };
     this.save();
   }
+
+  // =========================================================================
+  // Live-Mini Configuration Management
+  // =========================================================================
+
+  /**
+   * Get Live-Mini configuration
+   */
+  getLiveMiniConfig() {
+    return this.settings.liveMini
+      ? { ...this.settings.liveMini }
+      : { ...DEFAULT_APP_SETTINGS.liveMini! };
+  }
+
+  /**
+   * Update Live-Mini configuration (partial update)
+   */
+  updateLiveMiniConfig(updates: Partial<typeof DEFAULT_APP_SETTINGS.liveMini>): void {
+    this.settings.liveMini = {
+      ...(this.settings.liveMini || DEFAULT_APP_SETTINGS.liveMini!),
+      ...updates,
+    };
+    this.save();
+  }
+
+  /**
+   * Set Live-Mini connection (serverUrl, apiKey, eventId)
+   */
+  setLiveMiniConnection(
+    serverUrl: string,
+    apiKey: string,
+    eventId: string,
+    eventStatus: string,
+  ): void {
+    this.updateLiveMiniConfig({
+      enabled: true,
+      serverUrl,
+      apiKey,
+      eventId,
+      eventStatus: eventStatus as any,
+    });
+  }
+
+  /**
+   * Clear Live-Mini connection
+   */
+  clearLiveMiniConnection(): void {
+    this.updateLiveMiniConfig({
+      enabled: false,
+      serverUrl: null,
+      apiKey: null,
+      eventId: null,
+      eventStatus: null,
+    });
+  }
+
+  /**
+   * Enable/disable Live-Mini push
+   */
+  setLiveMiniEnabled(enabled: boolean): void {
+    this.updateLiveMiniConfig({ enabled });
+  }
+
+  /**
+   * Set which channels to push
+   */
+  setLiveMiniChannels(channels: {
+    pushXml?: boolean;
+    pushOnCourse?: boolean;
+    pushResults?: boolean;
+  }): void {
+    this.updateLiveMiniConfig(channels);
+  }
 }
 
 // Singleton instance
