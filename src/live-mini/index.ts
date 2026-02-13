@@ -6,3 +6,5 @@
 
 export * from './types.js';
 export * from './LiveMiniClient.js';
+export * from './LiveMiniTransformer.js';
+export * from './LiveMiniPusher.js';
