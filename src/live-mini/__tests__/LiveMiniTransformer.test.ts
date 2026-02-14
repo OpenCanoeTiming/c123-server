@@ -143,9 +143,9 @@ describe('LiveMiniTransformer', () => {
         gates: [0, 2, 0, 50],
         dtStart: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T10:15:30.000Z$/),
         dtFinish: null,
-        time: 85.50,
+        time: 8550, // 85.50 seconds → 8550 centiseconds
         pen: 5200, // 52 seconds → 5200 centiseconds
-        total: 137.50,
+        total: 13750, // 137.50 seconds → 13750 centiseconds
         rank: 3,
         ttbDiff: '+5.23',
         ttbName: 'Leader',

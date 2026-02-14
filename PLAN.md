@@ -126,7 +126,7 @@ C123.exe ──TCP:27333──► c123-server ──HTTP/JSON──► c123-live
 
 ### Next step
 
-Live-Mini Integration complete! All blocks finished.
+All blocks completed. Ready for merge.
 
 ### Block 1: Types, HTTP Client, Settings ✅
 
@@ -186,6 +186,33 @@ Live-Mini Integration complete! All blocks finished.
 - [x] WebSocket handler for `LiveMiniStatus` messages
 - [x] Use design system classes (.card, .badge, .status-dot, .btn), minimal local CSS
 - [x] All patterns consistent with existing Admin UI (vanilla JS, fetch, toasts)
+
+### Block 6: Post-review fixes ✅
+
+Found during PR review (#22). Three breaking bugs + code quality.
+
+#### Bugs (breaking)
+
+- [x] Fix `loadLiveMiniStatus()` in `main.js` — response is `{ status: {...} }`, must call `renderLiveMiniStatus(data.status)` not `renderLiveMiniStatus(data)`
+- [x] Fix `createLiveMiniEvent()` in `main.js` — sends `eventMetadata` key but server reads `metadata` → rename to `metadata`
+- [x] Fix OnCourse time/total units in `LiveMiniTransformer.ts` — `time` and `total` sent as seconds (float) but live-mini expects hundredths (centiseconds). Use `parseFormattedTimeToCentiseconds()` instead of `parseTimeToSeconds()`
+
+#### Code quality
+
+- [x] Static import `node:fs/promises` at top of `LiveMiniPusher.ts` instead of dynamic `await import()`
+- [x] Deep copy in `LiveMiniPusher.getStatus()` — `channels` and `circuitBreaker` are nested objects, shallow spread `{...this.status}` leaks references
+- [x] Remove unused `_checksum` parameter from `xmlChangeListener` callback type (line 84)
+
+#### Admin UI: inline styles → CSS classes
+
+- [x] Extract inline styles from `index.html` Live Results section into proper CSS classes in `styles.css`
+- [x] Use design system classes where applicable (flex layouts, spacing, typography)
+- [x] Match pattern used in rest of Admin UI (clients section, status bar, etc.)
+
+#### Tests
+
+- [x] Fix unit tests for transformer (time/total unit change)
+- [x] Verify all existing tests still pass after fixes
 
 ### Key Design Decisions
 

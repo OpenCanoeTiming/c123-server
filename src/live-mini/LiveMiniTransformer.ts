@@ -107,9 +107,9 @@ export class LiveMiniTransformer {
       gates: this.parseGatesOnCourse(competitor.gates),
       dtStart: this.formatTimestampISO(competitor.dtStart),
       dtFinish: this.formatTimestampISO(competitor.dtFinish),
-      time: this.parseTimeToSeconds(competitor.time),
+      time: this.parseFormattedTimeToCentiseconds(competitor.time),
       pen: Math.round(competitor.pen * 100), // seconds → centiseconds
-      total: this.parseTimeToSeconds(competitor.total),
+      total: this.parseFormattedTimeToCentiseconds(competitor.total),
       rank: competitor.rank > 0 ? competitor.rank : null,
       ttbDiff: competitor.ttbDiff || null,
       ttbName: competitor.ttbName || null,
@@ -228,19 +228,6 @@ export class LiveMiniTransformer {
       const num = parseInt(trimmed, 10);
       return isNaN(num) ? null : num;
     });
-  }
-
-  /**
-   * Parse time string to seconds
-   * Examples:
-   *   null → null
-   *   "75.09" → 75.09
-   *   "127.09" → 127.09
-   */
-  private parseTimeToSeconds(time: string | null): number | null {
-    if (!time) return null;
-    const parsed = parseFloat(time);
-    return isNaN(parsed) ? null : parsed;
   }
 
   /**

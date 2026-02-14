@@ -1368,7 +1368,7 @@ async function createLiveMiniEvent() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         serverUrl: serverUrl,
-        eventMetadata: {
+        metadata: {
           mainTitle: mainTitle,
           eventId: eventId,
           location: location || null,
@@ -1572,7 +1572,7 @@ async function loadLiveMiniStatus() {
   try {
     const res = await fetch('/api/live-mini/status');
     const data = await res.json();
-    renderLiveMiniStatus(data);
+    renderLiveMiniStatus(data.status);
   } catch (error) {
     console.error('Failed to load live-mini status:', error);
   }

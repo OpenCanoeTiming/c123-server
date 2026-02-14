@@ -7,6 +7,7 @@
  */
 
 import { EventEmitter } from 'node:events';
+import { readFile } from 'node:fs/promises';
 import type { XmlDataService } from '../service/XmlDataService.js';
 import type { EventState } from '../state/EventState.js';
 import type { XmlChangeNotifier } from '../xml/XmlChangeNotifier.js';
@@ -81,7 +82,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
   private onCourseThrottleTimer: NodeJS.Timeout | null = null;
 
   // Event listeners (stored for cleanup)
-  private xmlChangeListener: ((sections: XmlSection[], checksum: string) => void) | null = null;
+  private xmlChangeListener: ((sections: XmlSection[]) => void) | null = null;
   private eventStateListener: ((state: EventStateData) => void) | null = null;
 
   constructor(xmlDataService: XmlDataService) {
@@ -286,7 +287,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
    * Get current status
    */
   getStatus(): LiveMiniStatus {
-    return { ...this.status };
+    return structuredClone(this.status);
   }
 
   // ==========================================================================
@@ -302,8 +303,8 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
     }
 
     // XML change listener (debounced)
-    this.xmlChangeListener = (sections: XmlSection[], checksum: string) => {
-      this.handleXmlChange(sections, checksum);
+    this.xmlChangeListener = (sections: XmlSection[]) => {
+      this.handleXmlChange(sections);
     };
     this.xmlChangeNotifier.on('change', this.xmlChangeListener);
 
@@ -320,7 +321,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
    * Handle XML change event
    * Debounces XML push by 2 seconds
    */
-  private handleXmlChange(sections: XmlSection[], _checksum: string): void {
+  private handleXmlChange(sections: XmlSection[]): void {
     // Skip if paused or not connected
     if (this.status.state !== 'connected') {
       return;
@@ -432,8 +433,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
       }
 
       // Read XML file
-      const fs = await import('node:fs/promises');
-      const xml = await fs.readFile(xmlPath, 'utf-8');
+      const xml = await readFile(xmlPath, 'utf-8');
 
       Logger.info('LiveMiniPusher', 'Pushing XML');
       const response = await this.client.pushXml(xml);
