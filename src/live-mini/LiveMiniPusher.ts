@@ -16,10 +16,8 @@ import { LiveMiniClient } from './LiveMiniClient.js';
 import { LiveMiniTransformer } from './LiveMiniTransformer.js';
 import type {
   LiveMiniStatus,
-  PusherState,
   ChannelStatus,
   EventStatus,
-  CreateEventRequest,
 } from './types.js';
 import { Logger } from '../utils/logger.js';
 
@@ -75,7 +73,6 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
   private circuitBreakerOpenAt: Date | null = null;
 
   // Buffers
-  private xmlBuffer: { checksum: string; sections: XmlSection[] } | null = null;
   private onCourseLastPush: Date | null = null;
   private resultsDebounceTimers: Map<string, NodeJS.Timeout> = new Map();
 
@@ -186,7 +183,6 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
     this.resultsDebounceTimers.clear();
 
     // Clear buffers
-    this.xmlBuffer = null;
     this.onCourseLastPush = null;
 
     // Clear references
@@ -324,7 +320,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
    * Handle XML change event
    * Debounces XML push by 2 seconds
    */
-  private handleXmlChange(sections: XmlSection[], checksum: string): void {
+  private handleXmlChange(sections: XmlSection[], _checksum: string): void {
     // Skip if paused or not connected
     if (this.status.state !== 'connected') {
       return;
@@ -336,9 +332,6 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
     }
 
     Logger.debug('LiveMiniPusher', `XML changed: ${sections.join(', ')}`);
-
-    // Buffer the change
-    this.xmlBuffer = { sections, checksum };
 
     // Clear existing timer
     if (this.xmlDebounceTimer) {
@@ -550,7 +543,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
   private handleSuccess(
     channel: 'xml' | 'oncourse' | 'results',
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    response: any,
+    _response: any,
   ): void {
     // Reset circuit breaker
     this.consecutiveFailures = 0;

@@ -25,8 +25,8 @@ import type {
 export interface LiveMiniClientConfig {
   /** Server base URL (e.g., "https://live.example.com") */
   serverUrl: string;
-  /** API key for authentication */
-  apiKey: string;
+  /** API key for authentication (optional, required for authenticated endpoints) */
+  apiKey?: string;
   /** Request timeout in milliseconds (default: 10000) */
   timeout?: number;
 }
@@ -88,7 +88,7 @@ const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
  * Live-Mini HTTP Client
  */
 export class LiveMiniClient {
-  private config: Required<LiveMiniClientConfig>;
+  private config: { serverUrl: string; apiKey?: string; timeout: number };
   private retryConfig: Required<RetryConfig>;
 
   constructor(
@@ -97,9 +97,11 @@ export class LiveMiniClient {
   ) {
     this.config = {
       serverUrl: config.serverUrl.replace(/\/$/, ''), // Remove trailing slash
-      apiKey: config.apiKey,
       timeout: config.timeout ?? 10000,
     };
+    if (config.apiKey) {
+      this.config.apiKey = config.apiKey;
+    }
     this.retryConfig = {
       ...DEFAULT_RETRY_CONFIG,
       ...retryConfig,
@@ -185,12 +187,18 @@ export class LiveMiniClient {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
 
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+
+        // Add API key header only if configured
+        if (this.config.apiKey) {
+          headers['X-API-Key'] = this.config.apiKey;
+        }
+
         const fetchOptions: RequestInit = {
           method,
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': this.config.apiKey,
-          },
+          headers,
           signal: controller.signal,
         };
 

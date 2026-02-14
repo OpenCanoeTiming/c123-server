@@ -126,7 +126,7 @@ C123.exe ──TCP:27333──► c123-server ──HTTP/JSON──► c123-live
 
 ### Next step
 
-Block 4: API Endpoints
+Block 5: Admin UI - Live Results Panel
 
 ### Block 1: Types, HTTP Client, Settings ✅
 
@@ -163,9 +163,9 @@ Block 4: API Endpoints
 - [x] Pusher starts/stops via API, not automatically on server start
 - [x] Unit tests for LiveMiniPusher (connect, disconnect, pause/resume, debounce/throttle, circuit breaker)
 
-### Block 4: API Endpoints
+### Block 4: API Endpoints ✅
 
-- [ ] Add routes to `src/unified/UnifiedServer.ts`:
+- [x] Add routes to `src/unified/UnifiedServer.ts`:
   - `GET /api/live-mini/status` — current pusher state
   - `POST /api/live-mini/connect` — set URL, create event on live-mini, store apiKey, start push
   - `POST /api/live-mini/disconnect` — stop push, optionally clear config
@@ -173,7 +173,7 @@ Block 4: API Endpoints
   - `POST /api/live-mini/force-push-xml` — immediate XML push
   - `POST /api/live-mini/transition` — event status change on live-mini
   - `PATCH /api/live-mini/config` — toggle push channels (xml/oncourse/results)
-- [ ] Add `LiveMiniStatus` message type to admin WS broadcast (throttle 2/s)
+- [x] Add `LiveMiniStatus` message type to admin WS broadcast (throttle 2/s)
 
 ### Block 5: Admin UI — Live Results Panel
 
