@@ -293,6 +293,22 @@ function truncate(str, len) {
   return str.length > len ? str.substring(0, len) + '...' : str;
 }
 
+function showError(elementId, msg) {
+  const el = document.getElementById(elementId);
+  if (el) {
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+}
+
+function hideError(elementId) {
+  const el = document.getElementById(elementId);
+  if (el) {
+    el.textContent = '';
+    el.style.display = 'none';
+  }
+}
+
 // ===========================================
 // Status Refresh
 // ===========================================
@@ -754,6 +770,9 @@ function connectLogWebSocket() {
         // Live update of clients list
         clientsData = msg.data.clients || [];
         renderClients();
+      } else if (msg.type === 'LiveMiniStatus') {
+        // Live update of Live-Mini status
+        renderLiveMiniStatus(msg.data);
       }
     } catch (e) {
       // Ignore parse errors
@@ -1098,6 +1117,465 @@ function showModalError(msg) {
 function showClientMessage(msg, isError) {
   // Use toast notifications instead of inline message
   showToast(msg, isError ? 'error' : 'success');
+}
+
+// ===========================================
+// Live-Mini Functions
+// ===========================================
+
+let liveMiniStatus = null;
+
+/**
+ * Render Live-Mini status panel
+ */
+function renderLiveMiniStatus(status) {
+  liveMiniStatus = status;
+
+  const notConfigured = document.getElementById('liveMiniNotConfigured');
+  const connected = document.getElementById('liveMiniConnected');
+  const statusBadge = document.getElementById('liveMiniStatusBadge');
+
+  if (!notConfigured || !connected || !statusBadge) return;
+
+  // Update status badge
+  const stateBadgeMap = {
+    'not_configured': { text: 'Not Configured', class: 'badge-secondary' },
+    'connected': { text: 'Connected', class: 'badge-success' },
+    'paused': { text: 'Paused', class: 'badge-warning' },
+    'error': { text: 'Error', class: 'badge-danger' },
+    'disconnected': { text: 'Disconnected', class: 'badge-secondary' }
+  };
+  const badge = stateBadgeMap[status.state] || stateBadgeMap['not_configured'];
+  statusBadge.innerHTML = '<span class="badge ' + badge.class + '">' + escapeHtml(badge.text) + '</span>';
+
+  // Show appropriate panel
+  if (status.state === 'not_configured') {
+    notConfigured.style.display = 'block';
+    connected.style.display = 'none';
+    return;
+  }
+
+  notConfigured.style.display = 'none';
+  connected.style.display = 'block';
+
+  // Update server & event info
+  const serverDisplay = document.getElementById('liveMiniServerDisplay');
+  const eventIdDisplay = document.getElementById('liveMiniEventIdDisplay');
+  const eventStatusDisplay = document.getElementById('liveMiniEventStatusDisplay');
+  const connectedAtDisplay = document.getElementById('liveMiniConnectedAtDisplay');
+
+  if (serverDisplay) serverDisplay.textContent = status.serverUrl || '-';
+  if (eventIdDisplay) eventIdDisplay.textContent = status.eventId || '-';
+  if (eventStatusDisplay) {
+    const statusBadgeClass = {
+      'draft': 'badge-secondary',
+      'startlist': 'badge-info',
+      'running': 'badge-success',
+      'finished': 'badge-warning',
+      'official': 'badge-primary'
+    }[status.eventStatus] || 'badge-secondary';
+    eventStatusDisplay.innerHTML = '<span class="badge ' + statusBadgeClass + '">' + escapeHtml(status.eventStatus || '-') + '</span>';
+  }
+  if (connectedAtDisplay) {
+    connectedAtDisplay.textContent = status.connectedAt ? formatRelativeTime(status.connectedAt) : '-';
+  }
+
+  // Update channel cards
+  updateLiveMiniChannel('Xml', status.channels.xml);
+  updateLiveMiniChannel('OnCourse', status.channels.oncourse);
+  updateLiveMiniChannel('Results', status.channels.results);
+
+  // Update channel toggles
+  const toggleXml = document.getElementById('liveMiniToggleXml');
+  const toggleOnCourse = document.getElementById('liveMiniToggleOnCourse');
+  const toggleResults = document.getElementById('liveMiniToggleResults');
+
+  if (toggleXml) toggleXml.checked = status.channels.xml.enabled;
+  if (toggleOnCourse) toggleOnCourse.checked = status.channels.oncourse.enabled;
+  if (toggleResults) toggleResults.checked = status.channels.results.enabled;
+
+  // Update pause button
+  const pauseBtn = document.getElementById('liveMiniPauseBtn');
+  const pauseBtnText = document.getElementById('liveMiniPauseBtnText');
+  if (pauseBtn && pauseBtnText) {
+    if (status.state === 'paused') {
+      pauseBtnText.textContent = 'Resume';
+    } else {
+      pauseBtnText.textContent = 'Pause';
+    }
+  }
+
+  // Show circuit breaker warning
+  const cbWarning = document.getElementById('liveMiniCircuitBreakerWarning');
+  if (cbWarning) {
+    if (status.circuitBreaker.isOpen) {
+      cbWarning.style.display = 'block';
+      cbWarning.textContent = 'Circuit breaker open! ' + status.circuitBreaker.consecutiveFailures + ' consecutive failures. Will retry automatically.';
+    } else {
+      cbWarning.style.display = 'none';
+    }
+  }
+
+  // Show global error
+  const errorDisplay = document.getElementById('liveMiniErrorDisplay');
+  if (errorDisplay) {
+    if (status.state === 'error' && status.lastError) {
+      errorDisplay.style.display = 'block';
+      errorDisplay.innerHTML = '<strong>Last error:</strong> ' + escapeHtml(status.lastError);
+    } else {
+      errorDisplay.style.display = 'none';
+    }
+  }
+}
+
+/**
+ * Update single channel card
+ */
+function updateLiveMiniChannel(channelName, channelStatus) {
+  const dot = document.getElementById('liveMiniChannel' + channelName + 'Dot');
+  const pushes = document.getElementById('liveMiniChannel' + channelName + 'Pushes');
+  const errors = document.getElementById('liveMiniChannel' + channelName + 'Errors');
+  const last = document.getElementById('liveMiniChannel' + channelName + 'Last');
+
+  if (!dot || !pushes || !errors || !last) return;
+
+  // Update status dot
+  if (channelStatus.enabled) {
+    if (channelStatus.lastError) {
+      dot.className = 'status-dot status-dot-danger';
+    } else if (channelStatus.totalPushes > 0) {
+      dot.className = 'status-dot status-dot-success';
+    } else {
+      dot.className = 'status-dot status-dot-warning';
+    }
+  } else {
+    dot.className = 'status-dot status-dot-muted';
+  }
+
+  // Update stats
+  pushes.textContent = channelStatus.totalPushes;
+  errors.textContent = channelStatus.totalErrors;
+  last.textContent = channelStatus.lastPushAt ? formatRelativeTime(channelStatus.lastPushAt) : 'Never';
+}
+
+/**
+ * Format relative time
+ */
+function formatRelativeTime(isoString) {
+  try {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffSec = Math.floor(diffMs / 1000);
+
+    if (diffSec < 60) return diffSec + 's ago';
+    if (diffSec < 3600) return Math.floor(diffSec / 60) + 'm ago';
+    if (diffSec < 86400) return Math.floor(diffSec / 3600) + 'h ago';
+    return Math.floor(diffSec / 86400) + 'd ago';
+  } catch (e) {
+    return isoString;
+  }
+}
+
+/**
+ * Open event creation modal
+ */
+async function openEventCreationModal() {
+  const serverUrl = document.getElementById('liveMiniServerUrl').value.trim();
+  if (!serverUrl) {
+    showError('liveMiniConnectError', 'Please enter a server URL');
+    return;
+  }
+
+  // Validate URL
+  try {
+    new URL(serverUrl);
+  } catch (e) {
+    showError('liveMiniConnectError', 'Invalid URL format');
+    return;
+  }
+
+  // Fetch event metadata from XML
+  try {
+    const res = await fetch('/api/live-mini/status');
+    const data = await res.json();
+    // Pre-fill from server (will be extracted from XML)
+  } catch (e) {
+    // Ignore, use defaults
+  }
+
+  // Pre-fill modal (these would ideally come from XML metadata endpoint)
+  const mainTitleInput = document.getElementById('liveMiniEventMainTitle');
+  const eventIdInput = document.getElementById('liveMiniEventEventId');
+  const locationInput = document.getElementById('liveMiniEventLocation');
+  const disciplineSelect = document.getElementById('liveMiniEventDiscipline');
+
+  // For now, use event name from header if available
+  const eventNameEl = document.getElementById('eventName');
+  if (mainTitleInput && eventNameEl) {
+    mainTitleInput.value = eventNameEl.textContent.trim();
+  }
+
+  // Generate eventId from mainTitle
+  if (eventIdInput && mainTitleInput && mainTitleInput.value) {
+    eventIdInput.value = mainTitleInput.value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  if (locationInput) locationInput.value = '';
+  if (disciplineSelect) disciplineSelect.value = 'Slalom';
+
+  // Show modal
+  const modal = document.getElementById('liveMiniEventModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    trapFocus(modal.querySelector('.modal-content'));
+  }
+}
+
+/**
+ * Close event creation modal
+ */
+function closeLiveMiniEventModal() {
+  const modal = document.getElementById('liveMiniEventModal');
+  if (modal) {
+    modal.style.display = 'none';
+    releaseFocus();
+  }
+  hideError('liveMiniEventModalError');
+}
+
+/**
+ * Create live-mini event and connect
+ */
+async function createLiveMiniEvent() {
+  const serverUrl = document.getElementById('liveMiniServerUrl').value.trim();
+  const mainTitle = document.getElementById('liveMiniEventMainTitle').value.trim();
+  const eventId = document.getElementById('liveMiniEventEventId').value.trim();
+  const location = document.getElementById('liveMiniEventLocation').value.trim();
+  const discipline = document.getElementById('liveMiniEventDiscipline').value;
+
+  if (!mainTitle || !eventId) {
+    showError('liveMiniEventModalError', 'Event name and ID are required');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/live-mini/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        serverUrl: serverUrl,
+        eventMetadata: {
+          mainTitle: mainTitle,
+          eventId: eventId,
+          location: location || null,
+          discipline: discipline
+        }
+      })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to connect');
+    }
+
+    showToast('Connected to Live-Mini server', 'success');
+    closeLiveMiniEventModal();
+    hideError('liveMiniConnectError');
+
+    // Refresh status
+    loadLiveMiniStatus();
+  } catch (error) {
+    showError('liveMiniEventModalError', error.message);
+  }
+}
+
+/**
+ * Disconnect from live-mini
+ */
+async function disconnectLiveMini() {
+  if (!confirm('Disconnect from Live-Mini server? This will stop all data push.')) {
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/live-mini/disconnect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clearConfig: true })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to disconnect');
+    }
+
+    showToast('Disconnected from Live-Mini', 'success');
+    loadLiveMiniStatus();
+  } catch (error) {
+    showToast('Failed to disconnect: ' + error.message, 'error');
+  }
+}
+
+/**
+ * Toggle pause/resume
+ */
+async function toggleLiveMiniPause() {
+  if (!liveMiniStatus) return;
+
+  const isPaused = liveMiniStatus.state === 'paused';
+
+  try {
+    const res = await fetch('/api/live-mini/pause', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paused: !isPaused })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to toggle pause');
+    }
+
+    showToast(isPaused ? 'Push resumed' : 'Push paused', 'success');
+    loadLiveMiniStatus();
+  } catch (error) {
+    showToast('Failed to toggle pause: ' + error.message, 'error');
+  }
+}
+
+/**
+ * Force push XML
+ */
+async function forcePushXml() {
+  try {
+    const res = await fetch('/api/live-mini/force-push-xml', {
+      method: 'POST'
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to force push');
+    }
+
+    showToast('XML push triggered', 'success');
+  } catch (error) {
+    showToast('Failed to push XML: ' + error.message, 'error');
+  }
+}
+
+/**
+ * Toggle channel push
+ */
+async function toggleLiveMiniChannel(channel) {
+  const checkbox = document.getElementById('liveMiniToggle' + (channel === 'xml' ? 'Xml' : channel === 'oncourse' ? 'OnCourse' : 'Results'));
+  if (!checkbox) return;
+
+  const enabled = checkbox.checked;
+
+  try {
+    const body = {};
+    body['push' + (channel === 'xml' ? 'Xml' : channel === 'oncourse' ? 'OnCourse' : 'Results')] = enabled;
+
+    const res = await fetch('/api/live-mini/config', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to update config');
+    }
+
+    showToast('Channel ' + (enabled ? 'enabled' : 'disabled'), 'success');
+  } catch (error) {
+    showToast('Failed to update channel: ' + error.message, 'error');
+    checkbox.checked = !enabled; // Revert
+  }
+}
+
+/**
+ * Open status transition modal
+ */
+function openTransitionModal() {
+  if (!liveMiniStatus) return;
+
+  const select = document.getElementById('liveMiniNewStatus');
+  if (select && liveMiniStatus.eventStatus) {
+    select.value = liveMiniStatus.eventStatus;
+  }
+
+  const modal = document.getElementById('liveMiniTransitionModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    trapFocus(modal.querySelector('.modal-content'));
+  }
+}
+
+/**
+ * Close transition modal
+ */
+function closeLiveMiniTransitionModal() {
+  const modal = document.getElementById('liveMiniTransitionModal');
+  if (modal) {
+    modal.style.display = 'none';
+    releaseFocus();
+  }
+  hideError('liveMiniTransitionModalError');
+}
+
+/**
+ * Transition event status
+ */
+async function transitionLiveMiniStatus() {
+  if (!liveMiniStatus || !liveMiniStatus.eventId) return;
+
+  const newStatus = document.getElementById('liveMiniNewStatus').value;
+
+  try {
+    const res = await fetch('/api/live-mini/transition', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventId: liveMiniStatus.eventId,
+        status: newStatus
+      })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to transition status');
+    }
+
+    showToast('Event status updated to ' + newStatus, 'success');
+    closeLiveMiniTransitionModal();
+    loadLiveMiniStatus();
+  } catch (error) {
+    showError('liveMiniTransitionModalError', error.message);
+  }
+}
+
+/**
+ * Load live-mini status from API
+ */
+async function loadLiveMiniStatus() {
+  try {
+    const res = await fetch('/api/live-mini/status');
+    const data = await res.json();
+    renderLiveMiniStatus(data);
+  } catch (error) {
+    console.error('Failed to load live-mini status:', error);
+  }
 }
 
 // ===========================================
@@ -1715,10 +2193,33 @@ function init() {
     if (e.target === this) closeClientModal();
   });
 
+  const liveMiniEventModal = document.getElementById('liveMiniEventModal');
+  if (liveMiniEventModal) {
+    liveMiniEventModal.addEventListener('click', function(e) {
+      if (e.target === this) closeLiveMiniEventModal();
+    });
+  }
+
+  const liveMiniTransitionModal = document.getElementById('liveMiniTransitionModal');
+  if (liveMiniTransitionModal) {
+    liveMiniTransitionModal.addEventListener('click', function(e) {
+      if (e.target === this) closeLiveMiniTransitionModal();
+    });
+  }
+
   // Keyboard navigation for modal
   document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && document.getElementById('clientModal').style.display !== 'none') {
-      closeClientModal();
+    if (e.key === 'Escape') {
+      const clientModal = document.getElementById('clientModal');
+      if (clientModal && clientModal.style.display !== 'none') {
+        closeClientModal();
+      }
+      if (liveMiniEventModal && liveMiniEventModal.style.display !== 'none') {
+        closeLiveMiniEventModal();
+      }
+      if (liveMiniTransitionModal && liveMiniTransitionModal.style.display !== 'none') {
+        closeLiveMiniTransitionModal();
+      }
     }
   });
 
@@ -1729,6 +2230,7 @@ function init() {
   loadInitialLogs();
   loadClients();
   loadAssets();
+  loadLiveMiniStatus();
   connectLogWebSocket();
 
   // Periodic refresh
