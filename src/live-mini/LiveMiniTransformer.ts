@@ -5,8 +5,8 @@
  * Handles participant ID mapping from XML.
  */
 
-import type { OnCourseCompetitor, ResultRow, ResultsMessage } from '../protocol/parser-types.js';
-import type { XmlDataService, XmlScheduleItem, XmlParticipant } from '../service/XmlDataService.js';
+import type { OnCourseCompetitor, ResultsMessage } from '../protocol/parser-types.js';
+import type { XmlDataService, XmlParticipant } from '../service/XmlDataService.js';
 import type { OnCourseInput, ResultInput } from './types.js';
 import { Logger } from '../utils/logger.js';
 
