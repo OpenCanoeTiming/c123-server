@@ -126,7 +126,7 @@ C123.exe ──TCP:27333──► c123-server ──HTTP/JSON──► c123-live
 
 ### Next step
 
-Block 5: Admin UI - Live Results Panel
+Live-Mini Integration complete! All blocks finished.
 
 ### Block 1: Types, HTTP Client, Settings ✅
 
@@ -175,17 +175,17 @@ Block 5: Admin UI - Live Results Panel
   - `PATCH /api/live-mini/config` — toggle push channels (xml/oncourse/results)
 - [x] Add `LiveMiniStatus` message type to admin WS broadcast (throttle 2/s)
 
-### Block 5: Admin UI — Live Results Panel
+### Block 5: Admin UI — Live Results Panel ✅
 
-- [ ] Add HTML section in `index.html` — after clients section, before tabs
-- [ ] Three UI states: Not Configured → Connected/Active → Error/Disconnected
-- [ ] Not Configured: URL input + "Connect & Create Event" button
-- [ ] Event creation flow: pre-fill metadata from XML, editable fields, confirm → POST /api/live-mini/connect
-- [ ] Connected: status dot, server/event info, push status card (per-channel), event lifecycle viz, channel toggles, action buttons (pause, force push, disconnect)
-- [ ] Error: failure count, last error, retry/disconnect buttons
-- [ ] WebSocket handler for `LiveMiniStatus` messages
-- [ ] Use design system classes (.card, .badge, .status-dot, .btn), minimal local CSS
-- [ ] All patterns consistent with existing Admin UI (vanilla JS, fetch, toasts)
+- [x] Add HTML section in `index.html` — after clients section, before tabs
+- [x] Three UI states: Not Configured → Connected/Active → Error/Disconnected
+- [x] Not Configured: URL input + "Connect & Create Event" button
+- [x] Event creation flow: pre-fill metadata from XML, editable fields, confirm → POST /api/live-mini/connect
+- [x] Connected: status dot, server/event info, push status card (per-channel), event lifecycle viz, channel toggles, action buttons (pause, force push, disconnect)
+- [x] Error: failure count, last error, retry/disconnect buttons
+- [x] WebSocket handler for `LiveMiniStatus` messages
+- [x] Use design system classes (.card, .badge, .status-dot, .btn), minimal local CSS
+- [x] All patterns consistent with existing Admin UI (vanilla JS, fetch, toasts)
 
 ### Key Design Decisions
 

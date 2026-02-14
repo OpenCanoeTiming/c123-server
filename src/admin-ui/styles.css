@@ -2477,6 +2477,80 @@ fieldset.modal-section > legend {
 }
 
 /* ============================================
+   Live-Mini Section
+   ============================================ */
+.live-mini-section {
+  margin-bottom: var(--space-4);
+}
+
+.live-mini-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.live-mini-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+}
+
+.live-mini-channel-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.live-mini-channel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.live-mini-channel-name {
+  font-weight: 600;
+  font-size: 0.9em;
+  color: var(--text-primary);
+}
+
+.live-mini-channel-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.live-mini-channel-last {
+  font-size: 0.8em;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.live-mini-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.live-mini-toggle input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.live-mini-toggle span {
+  font-size: 0.9em;
+  color: var(--text-primary);
+}
+
+/* ============================================
    Print Styles (Accessibility)
    ============================================ */
 @media print {

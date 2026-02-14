@@ -102,6 +102,217 @@
     </div>
   </section>
 
+  <!-- Live Results Panel (Live-Mini Integration) -->
+  <section class="live-mini-section" aria-labelledby="liveMiniSectionTitle">
+    <div class="live-mini-header">
+      <h2 class="live-mini-title" id="liveMiniSectionTitle">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" style="vertical-align: text-bottom; margin-right: 6px;" aria-hidden="true">
+          <path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+        </svg>
+        Live Results
+      </h2>
+      <div id="liveMiniStatusBadge"></div>
+    </div>
+
+    <!-- NOT CONFIGURED STATE -->
+    <div id="liveMiniNotConfigured" class="card" style="display: none;">
+      <p style="margin-bottom: 16px; color: var(--text-secondary);">
+        Publish live results to a remote c123-live-mini server for public viewing.
+      </p>
+      <div class="config-form" role="group" aria-label="Live-Mini server configuration">
+        <label for="liveMiniServerUrl" class="visually-hidden">Server URL</label>
+        <input type="text" id="liveMiniServerUrl" class="input" placeholder="https://live.example.com" aria-describedby="liveMiniConnectError" style="flex: 1; min-width: 300px;">
+        <button class="btn btn-primary" onclick="openEventCreationModal()">Connect & Create Event</button>
+      </div>
+      <div id="liveMiniConnectError" class="error" role="alert" style="margin-top: 10px; display: none;"></div>
+    </div>
+
+    <!-- CONNECTED / PAUSED / ERROR STATE -->
+    <div id="liveMiniConnected" class="card" style="display: none;">
+      <!-- Server & Event Info -->
+      <div style="display: flex; gap: 24px; margin-bottom: 20px; flex-wrap: wrap;">
+        <div>
+          <div style="font-size: 0.85em; color: var(--text-secondary); margin-bottom: 4px;">Server</div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.9em;" id="liveMiniServerDisplay">-</div>
+        </div>
+        <div>
+          <div style="font-size: 0.85em; color: var(--text-secondary); margin-bottom: 4px;">Event ID</div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.9em;" id="liveMiniEventIdDisplay">-</div>
+        </div>
+        <div>
+          <div style="font-size: 0.85em; color: var(--text-secondary); margin-bottom: 4px;">Status</div>
+          <div id="liveMiniEventStatusDisplay">-</div>
+        </div>
+        <div>
+          <div style="font-size: 0.85em; color: var(--text-secondary); margin-bottom: 4px;">Connected</div>
+          <div id="liveMiniConnectedAtDisplay">-</div>
+        </div>
+      </div>
+
+      <!-- Push Status Cards (per-channel) -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px;">
+        <div class="live-mini-channel-card" id="liveMiniChannelXml">
+          <div class="live-mini-channel-header">
+            <span class="live-mini-channel-name">XML</span>
+            <span class="status-dot" id="liveMiniChannelXmlDot"></span>
+          </div>
+          <div class="live-mini-channel-stats">
+            <div><span id="liveMiniChannelXmlPushes">0</span> pushes</div>
+            <div><span id="liveMiniChannelXmlErrors">0</span> errors</div>
+          </div>
+          <div class="live-mini-channel-last" id="liveMiniChannelXmlLast">Never</div>
+        </div>
+
+        <div class="live-mini-channel-card" id="liveMiniChannelOnCourse">
+          <div class="live-mini-channel-header">
+            <span class="live-mini-channel-name">OnCourse</span>
+            <span class="status-dot" id="liveMiniChannelOnCourseDot"></span>
+          </div>
+          <div class="live-mini-channel-stats">
+            <div><span id="liveMiniChannelOnCoursePushes">0</span> pushes</div>
+            <div><span id="liveMiniChannelOnCourseErrors">0</span> errors</div>
+          </div>
+          <div class="live-mini-channel-last" id="liveMiniChannelOnCourseLast">Never</div>
+        </div>
+
+        <div class="live-mini-channel-card" id="liveMiniChannelResults">
+          <div class="live-mini-channel-header">
+            <span class="live-mini-channel-name">Results</span>
+            <span class="status-dot" id="liveMiniChannelResultsDot"></span>
+          </div>
+          <div class="live-mini-channel-stats">
+            <div><span id="liveMiniChannelResultsPushes">0</span> pushes</div>
+            <div><span id="liveMiniChannelResultsErrors">0</span> errors</div>
+          </div>
+          <div class="live-mini-channel-last" id="liveMiniChannelResultsLast">Never</div>
+        </div>
+      </div>
+
+      <!-- Circuit Breaker Warning -->
+      <div id="liveMiniCircuitBreakerWarning" class="error" role="alert" style="display: none; margin-bottom: 16px;">
+        <strong>Circuit breaker open!</strong> Too many failures. Push is paused. Will retry automatically.
+      </div>
+
+      <!-- Global Error Display -->
+      <div id="liveMiniErrorDisplay" class="error" role="alert" style="display: none; margin-bottom: 16px;"></div>
+
+      <!-- Channel Toggles -->
+      <div style="display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap;" role="group" aria-label="Channel toggles">
+        <label class="live-mini-toggle">
+          <input type="checkbox" id="liveMiniToggleXml" onchange="toggleLiveMiniChannel('xml')">
+          <span>Push XML</span>
+        </label>
+        <label class="live-mini-toggle">
+          <input type="checkbox" id="liveMiniToggleOnCourse" onchange="toggleLiveMiniChannel('oncourse')">
+          <span>Push OnCourse</span>
+        </label>
+        <label class="live-mini-toggle">
+          <input type="checkbox" id="liveMiniToggleResults" onchange="toggleLiveMiniChannel('results')">
+          <span>Push Results</span>
+        </label>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <button class="btn btn-secondary" id="liveMiniPauseBtn" onclick="toggleLiveMiniPause()">
+          <span id="liveMiniPauseBtnText">Pause</span>
+        </button>
+        <button class="btn btn-secondary" onclick="forcePushXml()">Force Push XML</button>
+        <button class="btn btn-secondary" onclick="openTransitionModal()">Change Event Status</button>
+        <button class="btn btn-danger-outline" onclick="disconnectLiveMini()">Disconnect</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Event Creation Modal -->
+  <div id="liveMiniEventModal" class="modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="liveMiniEventModalTitle">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="liveMiniEventModalTitle">Create Live Event</h3>
+        <button class="modal-close" onclick="closeLiveMiniEventModal()" aria-label="Close modal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div style="margin-bottom: 20px;">
+          <p style="color: var(--text-secondary); margin-bottom: 16px;">
+            Event metadata will be sent to the live-mini server. Fields are pre-filled from XML data.
+          </p>
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveMiniEventMainTitle">Event Name *</label>
+          <input type="text" id="liveMiniEventMainTitle" class="modal-input" required>
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveMiniEventEventId">Event ID *</label>
+          <input type="text" id="liveMiniEventEventId" class="modal-input" placeholder="e.g., world-cup-prague-2024" required>
+          <div style="font-size: 0.85em; color: var(--text-secondary); margin-top: 4px;">
+            URL-friendly identifier (lowercase, hyphens)
+          </div>
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveMiniEventLocation">Location</label>
+          <input type="text" id="liveMiniEventLocation" class="modal-input" placeholder="e.g., Prague, Czech Republic">
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveMiniEventDiscipline">Discipline</label>
+          <select id="liveMiniEventDiscipline" class="modal-select">
+            <option value="Slalom">Slalom</option>
+            <option value="Sprint">Sprint</option>
+            <option value="WildWater">Wild Water</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="createLiveMiniEvent()">Create & Connect</button>
+        <button class="btn btn-secondary" onclick="closeLiveMiniEventModal()">Cancel</button>
+      </div>
+
+      <div id="liveMiniEventModalError" class="error" role="alert" style="padding: 10px 20px; display: none;"></div>
+    </div>
+  </div>
+
+  <!-- Event Status Transition Modal -->
+  <div id="liveMiniTransitionModal" class="modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="liveMiniTransitionModalTitle">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 id="liveMiniTransitionModalTitle">Change Event Status</h3>
+        <button class="modal-close" onclick="closeLiveMiniTransitionModal()" aria-label="Close modal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveMiniNewStatus">New Status</label>
+          <select id="liveMiniNewStatus" class="modal-select">
+            <option value="draft">Draft</option>
+            <option value="startlist">Start List</option>
+            <option value="running">Running</option>
+            <option value="finished">Finished</option>
+            <option value="official">Official</option>
+          </select>
+        </div>
+
+        <div style="margin-top: 16px; padding: 12px; background: var(--bg-surface); border-radius: 6px; font-size: 0.9em;">
+          <div style="color: var(--text-secondary); margin-bottom: 8px;">Status progression:</div>
+          <div style="font-family: 'JetBrains Mono', monospace; color: var(--text-primary);">
+            draft → startlist → running → finished → official
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="transitionLiveMiniStatus()">Update Status</button>
+        <button class="btn btn-secondary" onclick="closeLiveMiniTransitionModal()">Cancel</button>
+      </div>
+
+      <div id="liveMiniTransitionModalError" class="error" role="alert" style="padding: 10px 20px; display: none;"></div>
+    </div>
+  </div>
+
   <!-- Tab Navigation -->
   <div class="tabs">
     <nav class="tab-list" role="tablist" aria-label="Admin sections">
