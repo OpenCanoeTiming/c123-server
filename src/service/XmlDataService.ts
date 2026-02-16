@@ -198,6 +198,13 @@ export class XmlDataService {
   }
 
   /**
+   * Get the current XML checksum
+   */
+  getChecksum(): string | null {
+    return this.checksum;
+  }
+
+  /**
    * Get event name from XML (MainTitle element)
    * Returns null if not available
    */
