@@ -55,6 +55,7 @@ export interface XmlResultRow {
   prevPen?: number | undefined;
   prevTotal?: number | undefined;
   prevRank?: number | undefined;
+  gates?: string | undefined; // Space-separated gate penalties (e.g., "0 0 2 0 50 0 ...")
 }
 
 /**
@@ -672,6 +673,7 @@ export class XmlDataService {
         prevPen: r.PrevPen !== undefined ? Number(r.PrevPen) : undefined,
         prevTotal: r.PrevTotal !== undefined ? Number(r.PrevTotal) : undefined,
         prevRank: r.PrevRnk !== undefined ? Number(r.PrevRnk) : undefined,
+        gates: r.Gates ? String(r.Gates).trim() : undefined,
       };
 
       if (!resultsMap.has(raceId)) {
@@ -789,6 +791,7 @@ interface RawResult {
   PrevPen?: string | number;
   PrevTotal?: string | number;
   PrevRnk?: string | number;
+  Gates?: string;
 }
 
 interface RawCourseData {
