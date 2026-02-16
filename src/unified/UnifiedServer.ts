@@ -5,7 +5,7 @@ import { EventEmitter } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import type { ScoreboardConfig } from '../admin/types.js';
-import type { C123Message, C123XmlChange, C123ForceRefresh, C123LogEntry, C123Connected, C123ScoringEvent, C123Schedule, XmlSection, LogLevel, C123ClientState } from '../protocol/types.js';
+import type { C123Message, C123XmlChange, C123ForceRefresh, C123LogEntry, C123Connected, C123ScoringEvent, C123Schedule, XmlSection, LogLevel, C123ClientState, C123ChecksChanged, C123FlagChanged } from '../protocol/types.js';
 import { getLogBuffer, type LogEntry, type LogFilterOptions } from '../utils/LogBuffer.js';
 import { ScoreboardSession } from '../ws/ScoreboardSession.js';
 import { Logger } from '../utils/logger.js';
@@ -490,6 +490,32 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     }
 
     Logger.debug('Unified', `Broadcast ScoringEvent: ${event.eventType} bib=${event.bib}`);
+  }
+
+  /**
+   * Broadcast a checks change event to all scoreboard sessions
+   */
+  broadcastChecksChanged(data: import('../checks/types.js').CheckChangedEvent): void {
+    const message: C123ChecksChanged = {
+      type: 'ChecksChanged',
+      timestamp: new Date().toISOString(),
+      data,
+    };
+    this.broadcast(message);
+    Logger.debug('Unified', `Broadcast ChecksChanged: ${data.event} race=${data.raceId} ${data.bib ? `bib=${data.bib}` : ''}`);
+  }
+
+  /**
+   * Broadcast a flag change event to all scoreboard sessions
+   */
+  broadcastFlagChanged(data: import('../checks/types.js').FlagChangedEvent): void {
+    const message: C123FlagChanged = {
+      type: 'FlagChanged',
+      timestamp: new Date().toISOString(),
+      data,
+    };
+    this.broadcast(message);
+    Logger.debug('Unified', `Broadcast FlagChanged: ${data.event} race=${data.raceId}`);
   }
 
   /**
@@ -2223,6 +2249,32 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         bib: String(bib),
         details: penaltyDetails,
       });
+
+      // Invalidate penalty check when scoring changes a gate value
+      if (this.checksStore) {
+        const bibStr = String(bib);
+        if (raceId) {
+          // Finished competitor — we know the raceId
+          const invalidated = this.checksStore.invalidateCheck(String(raceId), bibStr, gateNum);
+          if (invalidated) {
+            Logger.info('Unified', `Check invalidated: bib=${bibStr} gate=${gateNum} race=${raceId}`);
+          }
+        } else {
+          // On-course competitor — search all races for this bib:gate
+          const allChecks = this.checksStore.getAllChecks();
+          if (allChecks) {
+            const key = `${bibStr}:${gateNum}`;
+            for (const rId of Object.keys(allChecks.races)) {
+              if (allChecks.races[rId].checks[key]) {
+                const invalidated = this.checksStore.invalidateCheck(rId, bibStr, gateNum);
+                if (invalidated) {
+                  Logger.info('Unified', `Check invalidated (on-course): bib=${bibStr} gate=${gateNum} race=${rId}`);
+                }
+              }
+            }
+          }
+        }
+      }
 
       res.json({
         success: true,
