@@ -155,8 +155,13 @@ export class Server extends EventEmitter<ServerEvents> {
       this.xmlPathSource = 'manual';
 
       // Load checks for this XML file
+      // Note: checksum may be empty before first XML parse, validated on next XML file switch
       const xmlBasename = path.basename(this.config.xmlPath);
       this.checksStore.loadForFile(xmlBasename, this.xmlDataService.getChecksum() || '');
+
+      if (!this.xmlDataService.getChecksum()) {
+        Logger.warn('Server', `Checks loaded for ${xmlBasename} with empty fingerprint (XML not yet parsed)`);
+      }
     }
 
     // Start XML autodetection if enabled and no manual path set
@@ -184,7 +189,6 @@ export class Server extends EventEmitter<ServerEvents> {
     this.stopAutoDetection();
 
     // Flush and cleanup checks
-    this.checksStore.flush();
     this.checksStore.destroy();
 
     // Stop unified server
@@ -236,29 +240,33 @@ export class Server extends EventEmitter<ServerEvents> {
   /**
    * Set XML source path manually (disables autodetect)
    */
-  setXmlPath(path: string, saveToSettings: boolean = true): void {
+  setXmlPath(xmlPath: string, saveToSettings: boolean = true): void {
     // Flush current checks before switching XML
     this.checksStore.flush();
 
     this.xmlSource?.stop();
     this.xmlChangeNotifier?.stop();
-    this.config.xmlPath = path;
-    this.xmlDataService.setPath(path);
-    this.xmlPathSource = path ? 'manual' : null;
+    this.config.xmlPath = xmlPath;
+    this.xmlDataService.setPath(xmlPath);
+    this.xmlPathSource = xmlPath ? 'manual' : null;
 
-    if (saveToSettings && path) {
-      getAppSettings().setXmlPath(path);
+    if (saveToSettings && xmlPath) {
+      getAppSettings().setXmlPath(xmlPath);
       this.stopAutoDetection();
     }
 
-    if (path) {
+    if (xmlPath) {
       this.startXmlSource();
       this.startXmlChangeNotifier();
 
       // Load checks for the new XML file
-      const xmlBasename = path.split(/[\\/]/).pop() || path; // Get basename (path param shadows path module)
+      const xmlBasename = path.basename(xmlPath);
       const checksum = this.xmlDataService.getChecksum() || '';
       this.checksStore.loadForFile(xmlBasename, checksum);
+
+      if (!checksum) {
+        Logger.warn('Server', `Checks loaded for ${xmlBasename} with empty fingerprint (XML not yet parsed)`);
+      }
     }
   }
 

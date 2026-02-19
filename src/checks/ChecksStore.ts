@@ -143,6 +143,7 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
    */
   getChecks(raceId: string): RaceChecksData {
     if (!this.currentData) {
+      Logger.debug('ChecksStore', 'getChecks: no data loaded');
       return { checks: {}, flags: [] };
     }
 
@@ -199,6 +200,7 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
    */
   removeCheck(raceId: string, bib: string, gate: number): boolean {
     if (!this.currentData || !this.currentData.races[raceId]) {
+      Logger.debug('ChecksStore', `removeCheck: no data for race ${raceId}`);
       return false;
     }
 
@@ -206,6 +208,7 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
     const checks = this.currentData.races[raceId].checks;
 
     if (!(key in checks)) {
+      Logger.debug('ChecksStore', `removeCheck: ${raceId} ${bib}:${gate} not found`);
       return false;
     }
 
@@ -231,6 +234,7 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
    */
   clearRace(raceId: string): void {
     if (!this.currentData || !this.currentData.races[raceId]) {
+      Logger.debug('ChecksStore', `clearRace: race ${raceId} not found or no data`);
       return;
     }
 
@@ -361,6 +365,7 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
    */
   deleteFlag(raceId: string, flagId: string): FlagEntry | null {
     if (!this.currentData || !this.currentData.races[raceId]) {
+      Logger.debug('ChecksStore', `deleteFlag: no data for race ${raceId}`);
       return null;
     }
 
@@ -368,6 +373,7 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
     const index = flags.findIndex((f) => f.id === flagId);
 
     if (index === -1) {
+      Logger.debug('ChecksStore', `deleteFlag: flag ${flagId} not found in race ${raceId}`);
       return null;
     }
 
@@ -394,6 +400,7 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
    */
   invalidateCheck(raceId: string, bib: string, gate: number): boolean {
     if (!this.currentData || !this.currentData.races[raceId]) {
+      Logger.debug('ChecksStore', `invalidateCheck: no data for race ${raceId}`);
       return false;
     }
 
