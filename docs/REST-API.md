@@ -22,6 +22,7 @@ The C123 Server provides the following APIs:
 | **Logs API** | `/api/logs` | Log entries retrieval |
 | **C123 Write API** | `/api/c123` | Send commands to C123 (scoring, timing) |
 | **Live API** | `/api/live` | Push data to remote live server |
+| **Penalty Checks API** | `/api/checks` | Penalty verification checks and review flags |
 
 **Base URL:** `http://<server>:27123`
 
@@ -1590,6 +1591,177 @@ When a C123 command is successfully sent, a `ScoringEvent` message is broadcast 
 | `penalty` | `{ gate: number, value: 0 \| 2 \| 50 }` |
 | `remove` | `{ reason: "DNS" \| "DNF" \| "CAP", position: number }` |
 | `timing` | `{ channelPosition: "Start" \| "Finish" \| "Split1" \| "Split2" }` |
+
+**Check Invalidation:** When a penalty is scored via this endpoint, any existing check for the same bib+gate is automatically invalidated (removed). This ensures checks don't become stale when the underlying penalty changes.
+
+---
+
+## Penalty Checks API
+
+Manages penalty verification checks and review flags (podněty) for gate judges. Data persists across server restarts.
+
+**Storage:** Checks are saved to `{xmlFilename}.checks.json` in platform-specific directories:
+- Windows: `%APPDATA%\c123-server\checks\`
+- Linux/macOS: `~/.c123-server/checks/`
+
+When the XML file changes (different fingerprint), old checks are archived automatically.
+
+---
+
+### GET /api/checks/:raceId
+
+Get all checks and flags for a race.
+
+**Response:**
+
+```json
+{
+  "checks": {
+    "checks": {
+      "1:5": {
+        "checkedAt": "2025-01-02T10:30:00.000Z",
+        "value": 2,
+        "tag": "verified"
+      }
+    },
+    "flags": []
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `checks.checks` | object | Map of "bib:gate" → CheckEntry |
+| `checks.flags` | FlagEntry[] | Array of review flags |
+
+**CheckEntry fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `checkedAt` | string | ISO 8601 timestamp |
+| `value` | number\|null | Penalty value snapshot (0, 2, 50, or null) |
+| `tag` | string | Optional note |
+
+---
+
+### PUT /api/checks/:raceId/check
+
+Set or update a penalty check.
+
+**Request:**
+
+```json
+{
+  "bib": "1",
+  "gate": 5,
+  "value": 2,
+  "tag": "verified"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `bib` | string | Yes | Competitor start number |
+| `gate` | number | Yes | Gate number (1-25) |
+| `value` | number\|null | No | Penalty value. If omitted, looked up from XML |
+| `tag` | string | No | Optional note |
+
+**Response:** `{ "success": true, "check": { ... } }`
+
+**Errors:** 400 for missing/invalid bib or gate, 503 if checks service not available.
+
+---
+
+### DELETE /api/checks/:raceId/check
+
+Remove a penalty check.
+
+**Request body:** `{ "bib": "1", "gate": 5 }`
+
+**Response:** `{ "success": true }`
+
+---
+
+### DELETE /api/checks/:raceId
+
+Clear all checks and flags for a race.
+
+**Response:** `{ "success": true }`
+
+---
+
+### POST /api/checks/:raceId/flag
+
+Create a review flag (podnět).
+
+**Request:**
+
+```json
+{
+  "bib": "1",
+  "gate": 5,
+  "comment": "Possible touch on gate 5",
+  "suggestedValue": 2
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `bib` | string | Yes | Competitor start number |
+| `gate` | number | Yes | Gate number (1-25) |
+| `comment` | string | Yes | Description of the issue |
+| `suggestedValue` | number\|null | No | Suggested penalty value |
+
+**Response (201):** `{ "success": true, "flag": { ... } }`
+
+**FlagEntry fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique flag ID (UUID) |
+| `bib` | string | Start number |
+| `gate` | number | Gate number |
+| `createdAt` | string | ISO 8601 timestamp |
+| `comment` | string | Issue description |
+| `suggestedValue` | number\|null | Suggested penalty |
+| `resolved` | boolean | Whether resolved |
+| `resolvedAt` | string | When resolved |
+| `resolution` | string | Resolution comment |
+
+---
+
+### PATCH /api/checks/:raceId/flag/:id
+
+Resolve a flag. Auto-creates a check entry with current XML penalty value.
+
+**Request:** `{ "resolution": "Confirmed touch" }`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `resolution` | string | No | Resolution comment |
+
+**Response:** `{ "success": true, "flag": { ... }, "check": { ... } }`
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| 404 | `{ "error": "Flag not found" }` |
+| 409 | `{ "error": "Flag is already resolved" }` |
+
+---
+
+### DELETE /api/checks/:raceId/flag/:id
+
+Delete a flag.
+
+**Response:** `{ "success": true, "flag": { ... } }`
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| 404 | `{ "error": "Flag not found" }` |
 
 ---
 
