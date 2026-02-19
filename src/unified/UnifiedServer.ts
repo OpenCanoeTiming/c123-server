@@ -3303,10 +3303,73 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   // ==========================================================================
 
   /**
+   * Helper: Look up current gate penalty value from XML data
+   * Returns the penalty value or null if not found
+   */
+  private async lookupGateValueFromXml(raceId: string, bib: string, gate: number): Promise<number | null> {
+    if (!this.xmlDataService) {
+      return null;
+    }
+
+    try {
+      const results = await this.xmlDataService.getResultsForRace(raceId);
+      if (!results) {
+        return null;
+      }
+
+      const competitor = results.find((r) => r.bib === bib);
+      if (!competitor || !competitor.gates) {
+        return null;
+      }
+
+      // Parse gates string: space-separated values
+      // e.g., "0 0 2 0 50 0 ..." where index corresponds to gate number (1-indexed)
+      const gateValues = competitor.gates.trim().split(/\s+/).map((v) => parseInt(v, 10));
+      const gateIndex = gate - 1; // Convert to 0-indexed
+
+      if (gateIndex >= 0 && gateIndex < gateValues.length) {
+        return gateValues[gateIndex];
+      }
+
+      return null;
+    } catch (err) {
+      Logger.warn('Unified', `Failed to lookup gate value from XML: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      return null;
+    }
+  }
+
+  /**
+   * Helper: Parse and validate bib and gate from request body
+   * Returns parsed values or null (and sends 400 response)
+   */
+  private parseBibGate(req: Request, res: Response): { bib: string; gate: number } | null {
+    const { bib, gate } = req.body;
+
+    if (bib === undefined || bib === null || String(bib).trim() === '') {
+      res.status(400).json({ error: 'bib is required' });
+      return null;
+    }
+
+    if (gate === undefined || gate === null) {
+      res.status(400).json({ error: 'gate is required' });
+      return null;
+    }
+
+    const gateNum = Number(gate);
+    if (isNaN(gateNum) || gateNum < 1 || gateNum > 25) {
+      res.status(400).json({ error: 'gate must be a number between 1 and 25' });
+      return null;
+    }
+
+    return { bib: String(bib).trim(), gate: gateNum };
+  }
+
+  /**
    * GET /api/checks/:raceId - Get checks and flags for a race
    */
   private async handleGetChecks(req: Request, res: Response): Promise<void> {
     if (!this.checksStore) {
+      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
       res.status(503).json({ error: 'Checks service not available' });
       return;
     }
@@ -3323,29 +3386,20 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    */
   private async handleSetCheck(req: Request, res: Response): Promise<void> {
     if (!this.checksStore) {
+      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
       res.status(503).json({ error: 'Checks service not available' });
       return;
     }
 
     const { raceId } = req.params;
-    const { bib, gate, value, tag } = req.body;
+    const { value, tag } = req.body;
 
-    // Validate required fields
-    if (bib === undefined || bib === null || String(bib).trim() === '') {
-      res.status(400).json({ error: 'bib is required' });
+    // Validate bib and gate
+    const parsed = this.parseBibGate(req, res);
+    if (!parsed) {
       return;
     }
-
-    if (gate === undefined || gate === null) {
-      res.status(400).json({ error: 'gate is required' });
-      return;
-    }
-
-    const gateNum = Number(gate);
-    if (isNaN(gateNum) || gateNum < 1 || gateNum > 25) {
-      res.status(400).json({ error: 'gate must be a number between 1 and 25' });
-      return;
-    }
+    const { bib, gate: gateNum } = parsed;
 
     // Determine penalty value
     let penaltyValue: number | null = null;
@@ -3362,29 +3416,11 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       }
     } else {
       // Value not provided, try to look up from XML
-      if (this.xmlDataService) {
-        try {
-          const results = await this.xmlDataService.getResultsForRace(raceId);
-          if (results) {
-            const competitor = results.find((r) => r.bib === String(bib).trim());
-            if (competitor && competitor.gates) {
-              // Parse gates string: space-separated values
-              // e.g., "0 0 2 0 50 0 ..." where index corresponds to gate number (1-indexed)
-              const gateValues = competitor.gates.trim().split(/\s+/).map((v) => parseInt(v, 10));
-              const gateIndex = gateNum - 1; // Convert to 0-indexed
-              if (gateIndex >= 0 && gateIndex < gateValues.length) {
-                penaltyValue = gateValues[gateIndex];
-              }
-            }
-          }
-        } catch (err) {
-          Logger.warn('Unified', `Failed to lookup penalty value from XML: ${err instanceof Error ? err.message : 'Unknown error'}`);
-        }
-      }
+      penaltyValue = await this.lookupGateValueFromXml(raceId, bib, gateNum);
     }
 
     try {
-      const check = this.checksStore.setCheck(raceId, String(bib).trim(), gateNum, penaltyValue, tag);
+      const check = this.checksStore.setCheck(raceId, bib, gateNum, penaltyValue, tag);
       res.json({ success: true, check });
     } catch (err) {
       Logger.error('Unified', 'SetCheck error', err);
@@ -3400,32 +3436,22 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    */
   private async handleRemoveCheck(req: Request, res: Response): Promise<void> {
     if (!this.checksStore) {
+      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
       res.status(503).json({ error: 'Checks service not available' });
       return;
     }
 
     const { raceId } = req.params;
-    const { bib, gate } = req.body;
 
-    // Validate required fields
-    if (bib === undefined || bib === null || String(bib).trim() === '') {
-      res.status(400).json({ error: 'bib is required' });
+    // Validate bib and gate
+    const parsed = this.parseBibGate(req, res);
+    if (!parsed) {
       return;
     }
-
-    if (gate === undefined || gate === null) {
-      res.status(400).json({ error: 'gate is required' });
-      return;
-    }
-
-    const gateNum = Number(gate);
-    if (isNaN(gateNum) || gateNum < 1 || gateNum > 25) {
-      res.status(400).json({ error: 'gate must be a number between 1 and 25' });
-      return;
-    }
+    const { bib, gate: gateNum } = parsed;
 
     try {
-      this.checksStore.removeCheck(raceId, String(bib).trim(), gateNum);
+      this.checksStore.removeCheck(raceId, bib, gateNum);
       res.json({ success: true });
     } catch (err) {
       Logger.error('Unified', 'RemoveCheck error', err);
@@ -3440,6 +3466,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    */
   private async handleClearChecks(req: Request, res: Response): Promise<void> {
     if (!this.checksStore) {
+      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
       res.status(503).json({ error: 'Checks service not available' });
       return;
     }
@@ -3463,32 +3490,24 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    */
   private async handleCreateFlag(req: Request, res: Response): Promise<void> {
     if (!this.checksStore) {
+      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
       res.status(503).json({ error: 'Checks service not available' });
       return;
     }
 
     const { raceId } = req.params;
-    const { bib, gate, comment, suggestedValue } = req.body;
+    const { comment, suggestedValue } = req.body;
 
-    // Validate required fields
-    if (bib === undefined || bib === null || String(bib).trim() === '') {
-      res.status(400).json({ error: 'bib is required' });
+    // Validate bib and gate
+    const parsed = this.parseBibGate(req, res);
+    if (!parsed) {
       return;
     }
+    const { bib, gate: gateNum } = parsed;
 
-    if (gate === undefined || gate === null) {
-      res.status(400).json({ error: 'gate is required' });
-      return;
-    }
-
+    // Validate comment
     if (comment === undefined || comment === null || String(comment).trim() === '') {
       res.status(400).json({ error: 'comment is required' });
-      return;
-    }
-
-    const gateNum = Number(gate);
-    if (isNaN(gateNum) || gateNum < 1 || gateNum > 25) {
-      res.status(400).json({ error: 'gate must be a number between 1 and 25' });
       return;
     }
 
@@ -3510,7 +3529,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     try {
       const flag = this.checksStore.createFlag(
         raceId,
-        String(bib).trim(),
+        bib,
         gateNum,
         String(comment).trim(),
         suggestedValueProcessed,
@@ -3530,6 +3549,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    */
   private async handleResolveFlag(req: Request, res: Response): Promise<void> {
     if (!this.checksStore) {
+      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
       res.status(503).json({ error: 'Checks service not available' });
       return;
     }
@@ -3548,37 +3568,23 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     const checksData = this.checksStore.getChecks(raceId);
     const flag = checksData.flags.find((f) => f.id === id);
 
-    if (flag && this.xmlDataService) {
-      try {
-        const results = await this.xmlDataService.getResultsForRace(raceId);
-        if (results) {
-          const competitor = results.find((r) => r.bib === flag.bib);
-          if (competitor && competitor.gates) {
-            const gateValues = competitor.gates.trim().split(/\s+/).map((v) => parseInt(v, 10));
-            const gateIndex = flag.gate - 1; // Convert to 0-indexed
-            if (gateIndex >= 0 && gateIndex < gateValues.length) {
-              currentValue = gateValues[gateIndex];
-            }
-          }
-        }
-      } catch (err) {
-        Logger.warn('Unified', `Failed to lookup current penalty value from XML: ${err instanceof Error ? err.message : 'Unknown error'}`);
-      }
+    if (flag) {
+      currentValue = await this.lookupGateValueFromXml(raceId, flag.bib, flag.gate);
     }
 
     try {
       const result = this.checksStore.resolveFlag(raceId, id, resolution, currentValue);
-      if (!result) {
-        res.status(404).json({ error: 'Flag not found' });
-        return;
-      }
-
       res.json({ success: true, flag: result.flag, check: result.check });
     } catch (err) {
-      Logger.error('Unified', 'ResolveFlag error', err);
-      res.status(500).json({
-        error: err instanceof Error ? err.message : 'Unknown error',
-      });
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      if (errorMessage.includes('not found')) {
+        res.status(404).json({ error: errorMessage });
+      } else if (errorMessage.includes('already resolved')) {
+        res.status(409).json({ error: errorMessage });
+      } else {
+        Logger.error('Unified', 'ResolveFlag error', err);
+        res.status(500).json({ error: errorMessage });
+      }
     }
   }
 
@@ -3587,6 +3593,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    */
   private async handleDeleteFlag(req: Request, res: Response): Promise<void> {
     if (!this.checksStore) {
+      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
       res.status(503).json({ error: 'Checks service not available' });
       return;
     }
@@ -3596,6 +3603,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     try {
       const flag = this.checksStore.deleteFlag(raceId, id);
       if (!flag) {
+        Logger.debug('Unified', `DELETE /api/checks/${raceId}/flag/${id}: not found`);
         res.status(404).json({ error: 'Flag not found' });
         return;
       }

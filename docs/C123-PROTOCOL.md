@@ -286,6 +286,65 @@ Real-time log for admin dashboard:
 }
 ```
 
+### ChecksChanged
+
+Sent when a penalty check is set, removed, invalidated, or cleared:
+
+```json
+{
+  "type": "ChecksChanged",
+  "timestamp": "2025-01-02T10:31:00.000Z",
+  "data": {
+    "event": "check-set",
+    "raceId": "K1M_ST_BR1_6",
+    "bib": "1",
+    "gate": 5,
+    "check": {
+      "checkedAt": "2025-01-02T10:31:00.000Z",
+      "value": 2
+    }
+  }
+}
+```
+
+| Event | Description |
+|-------|-------------|
+| `check-set` | Check created or updated |
+| `check-removed` | Check manually removed |
+| `check-invalidated` | Check auto-removed after scoring change |
+| `checks-cleared` | All checks cleared for a race |
+
+### FlagChanged
+
+Sent when a review flag is created, resolved, or deleted:
+
+```json
+{
+  "type": "FlagChanged",
+  "timestamp": "2025-01-02T10:31:00.000Z",
+  "data": {
+    "event": "flag-created",
+    "raceId": "K1M_ST_BR1_6",
+    "flag": {
+      "id": "abc-123",
+      "bib": "1",
+      "gate": 5,
+      "comment": "Possible touch",
+      "resolved": false,
+      "createdAt": "2025-01-02T10:31:00.000Z"
+    },
+    "bib": "1",
+    "gate": 5
+  }
+}
+```
+
+| Event | Description |
+|-------|-------------|
+| `flag-created` | New flag created |
+| `flag-resolved` | Flag resolved (may include auto-created check) |
+| `flag-deleted` | Flag deleted |
+
 ---
 
 ## Client-to-Server Messages
