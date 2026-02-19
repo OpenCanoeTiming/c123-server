@@ -12,15 +12,17 @@ import type { XmlChangeNotifier } from '../../xml/XmlChangeNotifier.js';
 import type { EventStateData } from '../../state/types.js';
 import type { XmlSection } from '../../protocol/types.js';
 
-// Mock LiveMiniClient
+// Mock LiveMiniClient (use regular function, not arrow, for constructor compatibility)
 vi.mock('../LiveMiniClient.js', () => {
   return {
-    LiveMiniClient: vi.fn().mockImplementation(() => ({
-      pushXml: vi.fn().mockResolvedValue({ imported: { classes: 1, categories: 1, races: 2, participants: 10 } }),
-      pushOnCourse: vi.fn().mockResolvedValue({ active: 2 }),
-      pushResults: vi.fn().mockResolvedValue({ updated: 5 }),
-      transitionStatus: vi.fn().mockResolvedValue({ eventId: 'test', previousStatus: 'draft', status: 'running', statusChangedAt: '2024-01-01T00:00:00Z' }),
-    })),
+    LiveMiniClient: vi.fn().mockImplementation(function () {
+      return {
+        pushXml: vi.fn().mockResolvedValue({ imported: { classes: 1, categories: 1, races: 2, participants: 10 } }),
+        pushOnCourse: vi.fn().mockResolvedValue({ active: 2 }),
+        pushResults: vi.fn().mockResolvedValue({ updated: 5 }),
+        transitionStatus: vi.fn().mockResolvedValue({ eventId: 'test', previousStatus: 'draft', status: 'running', statusChangedAt: '2024-01-01T00:00:00Z' }),
+      };
+    }),
   };
 });
 
