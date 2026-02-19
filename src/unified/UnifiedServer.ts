@@ -834,8 +834,8 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       next();
     });
 
-    // Handle OPTIONS preflight requests
-    this.app.options('*', (_req: Request, res: Response) => {
+    // Handle OPTIONS preflight requests (Express 5 requires named wildcard)
+    this.app.options('{*path}', (_req: Request, res: Response) => {
       res.sendStatus(204);
     });
 
