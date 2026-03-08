@@ -418,8 +418,8 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
     const rowsFingerprint = results.rows.map(r => `${r.bib}:${r.total}:${r.pen}:${r.rank}`).join('|');
     const fingerprint = `${raceId}:${results.rows.length}:${rowsFingerprint}`;
 
-    // Skip if same results as already scheduled (only OnCourse/other state changed)
-    if (this.lastScheduledResults.get(raceId) === fingerprint && this.resultsDebounceTimers.has(raceId)) {
+    // Skip if same results as last scheduled/pushed (nothing actually changed)
+    if (this.lastScheduledResults.get(raceId) === fingerprint) {
       return;
     }
     this.lastScheduledResults.set(raceId, fingerprint);
@@ -434,7 +434,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
     const timer = setTimeout(() => {
       this.pushResults(results);
       this.resultsDebounceTimers.delete(raceId);
-      this.lastScheduledResults.delete(raceId);
+      // Keep lastScheduledResults fingerprint so identical data won't re-trigger
     }, RESULTS_DEBOUNCE_MS);
 
     this.resultsDebounceTimers.set(raceId, timer);
