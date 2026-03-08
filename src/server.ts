@@ -159,6 +159,11 @@ export class Server extends EventEmitter<ServerEvents> {
       this.startAutoDetection();
     }
 
+    // Auto-reconnect live-mini from saved settings (if previously connected)
+    if (this.xmlChangeNotifier) {
+      await this.unifiedServer.autoReconnectLiveMini(this.xmlChangeNotifier, this.eventState);
+    }
+
     this.isRunning = true;
     this.emit('started');
   }

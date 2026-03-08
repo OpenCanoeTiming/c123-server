@@ -207,7 +207,7 @@ export class LiveMiniTransformer {
    * Make map key from bib and raceId
    */
   private makeKey(bib: string, raceId: string): string {
-    return `${bib}:${raceId}`;
+    return `${bib.trim()}:${raceId}`;
   }
 
   /**

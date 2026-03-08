@@ -16,6 +16,7 @@ import type { Server as C123Server } from '../server.js';
 import type { LiveMiniPusher } from '../live-mini/LiveMiniPusher.js';
 import { LiveMiniClient } from '../live-mini/LiveMiniClient.js';
 import type { CreateEventRequest, EventStatus } from '../live-mini/types.js';
+import type { XmlChangeNotifier } from '../xml/XmlChangeNotifier.js';
 import { getAppSettings, WindowsConfigDetector } from '../config/index.js';
 import type { ClientConfig } from '../config/types.js';
 
@@ -149,6 +150,46 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    */
   setLiveMiniPusher(pusher: LiveMiniPusher): void {
     this.liveMiniPusher = pusher;
+  }
+
+  /**
+   * Auto-reconnect live-mini pusher from saved settings (called on server start).
+   * Does NOT create a new event — uses saved apiKey directly.
+   */
+  async autoReconnectLiveMini(
+    xmlChangeNotifier: XmlChangeNotifier,
+    eventState: EventState,
+  ): Promise<void> {
+    if (!this.liveMiniPusher) return;
+
+    const settings = getAppSettings();
+    const config = settings.getLiveMiniConfig();
+
+    if (!config.enabled || !config.serverUrl || !config.apiKey || !config.eventId) return;
+
+    try {
+      await this.liveMiniPusher.connect(
+        {
+          serverUrl: config.serverUrl,
+          apiKey: config.apiKey,
+          eventId: config.eventId,
+          eventStatus: config.eventStatus ?? 'draft',
+          pushXml: config.pushXml,
+          pushOnCourse: config.pushOnCourse,
+          pushResults: config.pushResults,
+        },
+        xmlChangeNotifier,
+        eventState,
+      );
+
+      this.liveMiniPusher.on('statusChange', (status) => {
+        this.broadcastLiveMiniStatus(status);
+      });
+
+      Logger.info('Unified', `Live-Mini auto-reconnected to ${config.serverUrl} (event: ${config.eventId})`);
+    } catch (err) {
+      Logger.error('Unified', 'Live-Mini auto-reconnect failed', err);
+    }
   }
 
   /**

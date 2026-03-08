@@ -76,6 +76,8 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
   // Buffers
   private onCourseLastPush: Date | null = null;
   private resultsDebounceTimers: Map<string, NodeJS.Timeout> = new Map();
+  // Track last scheduled results per raceId to avoid debounce reset on unrelated state changes
+  private lastScheduledResults: Map<string, string> = new Map(); // raceId → fingerprint
 
   // Timers
   private xmlDebounceTimer: NodeJS.Timeout | null = null;
@@ -140,6 +142,12 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
     // Setup event listeners
     this.setupEventListeners();
 
+    // Initial push of current state (in case state arrived before connect)
+    const currentState = eventState.state;
+    if (config.pushResults && currentState.results) {
+      this.scheduleResultsPush(currentState.results);
+    }
+
     // Reset circuit breaker
     this.consecutiveFailures = 0;
     this.circuitBreakerOpenAt = null;
@@ -182,6 +190,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
       clearTimeout(timer);
     }
     this.resultsDebounceTimers.clear();
+    this.lastScheduledResults.clear();
 
     // Clear buffers
     this.onCourseLastPush = null;
@@ -390,10 +399,18 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
   }
 
   /**
-   * Schedule Results push with debouncing (1s per raceId)
+   * Schedule Results push with debouncing (1s per raceId).
+   * Only resets debounce timer when results actually changed (not just because OnCourse changed).
    */
   private scheduleResultsPush(results: NonNullable<EventStateData['results']>): void {
     const raceId = results.raceId;
+    const fingerprint = `${raceId}:${results.rows.length}:${results.rows[0]?.total ?? ''}:${results.rows[results.rows.length - 1]?.total ?? ''}`;
+
+    // Skip if same results as already scheduled (only OnCourse/other state changed)
+    if (this.lastScheduledResults.get(raceId) === fingerprint && this.resultsDebounceTimers.has(raceId)) {
+      return;
+    }
+    this.lastScheduledResults.set(raceId, fingerprint);
 
     // Clear existing timer for this raceId
     const existingTimer = this.resultsDebounceTimers.get(raceId);
@@ -405,6 +422,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
     const timer = setTimeout(() => {
       this.pushResults(results);
       this.resultsDebounceTimers.delete(raceId);
+      this.lastScheduledResults.delete(raceId);
     }, RESULTS_DEBOUNCE_MS);
 
     this.resultsDebounceTimers.set(raceId, timer);
