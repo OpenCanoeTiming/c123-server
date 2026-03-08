@@ -236,7 +236,7 @@ export class LiveMiniTransformer {
    *   "79.99" → 7999
    *   "78.99" → 7899
    */
-  private parseFormattedTimeToCentiseconds(time: string): number | null {
+  private parseFormattedTimeToCentiseconds(time: string | null): number | null {
     if (!time) return null;
     const parsed = parseFloat(time);
     if (isNaN(parsed)) return null;
