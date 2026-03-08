@@ -404,7 +404,9 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
    */
   private scheduleResultsPush(results: NonNullable<EventStateData['results']>): void {
     const raceId = results.raceId;
-    const fingerprint = `${raceId}:${results.rows.length}:${results.rows[0]?.total ?? ''}:${results.rows[results.rows.length - 1]?.total ?? ''}`;
+    // Include all rows' scoring data so any change (penalty, time, rank) is detected
+    const rowsFingerprint = results.rows.map(r => `${r.bib}:${r.total}:${r.pen}:${r.rank}`).join('|');
+    const fingerprint = `${raceId}:${results.rows.length}:${rowsFingerprint}`;
 
     // Skip if same results as already scheduled (only OnCourse/other state changed)
     if (this.lastScheduledResults.get(raceId) === fingerprint && this.resultsDebounceTimers.has(raceId)) {
