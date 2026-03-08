@@ -544,8 +544,13 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   private setupLiveMiniStatusListener(): void {
     if (!this.liveMiniPusher) return;
     this.liveMiniPusher.removeAllListeners('statusChange');
+    this.liveMiniPusher.removeAllListeners('error');
     this.liveMiniPusher.on('statusChange', (status) => {
       this.broadcastLiveMiniStatus(status);
+    });
+    // Prevent unhandled 'error' event from crashing the process
+    this.liveMiniPusher.on('error', (err) => {
+      Logger.error('Unified', 'Live-Mini pusher error', err);
     });
   }
 
