@@ -377,4 +377,80 @@ describe('LiveMiniPusher', () => {
       expect(status.channels.oncourse.totalPushes).toBe(0);
     });
   });
+
+  describe('reset()', () => {
+    it('should reset state back to not_configured after disconnect', async () => {
+      // Connect first
+      await pusher.connect(
+        {
+          serverUrl: 'https://live.example.com',
+          apiKey: 'test-key',
+          eventId: 'event-123',
+          eventStatus: 'draft',
+          pushXml: true,
+          pushOnCourse: false,
+          pushResults: false,
+        },
+        mockXmlChangeNotifier,
+        mockEventState,
+      );
+
+      expect(pusher.getStatus().state).toBe('connected');
+
+      // Disconnect (sets state to 'disconnected')
+      await pusher.disconnect();
+      expect(pusher.getStatus().state).toBe('disconnected');
+
+      // Reset (sets state back to 'not_configured')
+      pusher.reset();
+
+      const status = pusher.getStatus();
+      expect(status.state).toBe('not_configured');
+      expect(status.serverUrl).toBeNull();
+      expect(status.eventId).toBeNull();
+      expect(status.connectedAt).toBeNull();
+      expect(status.channels.xml.enabled).toBe(false);
+      expect(status.channels.oncourse.enabled).toBe(false);
+      expect(status.channels.results.enabled).toBe(false);
+    });
+
+    it('should emit statusChange event on reset', async () => {
+      await pusher.connect(
+        {
+          serverUrl: 'https://live.example.com',
+          apiKey: 'test-key',
+          eventId: 'event-123',
+          eventStatus: 'draft',
+          pushXml: true,
+          pushOnCourse: false,
+          pushResults: false,
+        },
+        mockXmlChangeNotifier,
+        mockEventState,
+      );
+
+      await pusher.disconnect();
+
+      const statusHandler = vi.fn();
+      pusher.on('statusChange', statusHandler);
+
+      pusher.reset();
+
+      expect(statusHandler).toHaveBeenCalledTimes(1);
+      expect(statusHandler.mock.calls[0][0].state).toBe('not_configured');
+    });
+
+    it('should be idempotent when already not_configured', () => {
+      expect(pusher.getStatus().state).toBe('not_configured');
+
+      const statusHandler = vi.fn();
+      pusher.on('statusChange', statusHandler);
+
+      pusher.reset();
+
+      const status = pusher.getStatus();
+      expect(status.state).toBe('not_configured');
+      expect(statusHandler).toHaveBeenCalledTimes(1);
+    });
+  });
 });

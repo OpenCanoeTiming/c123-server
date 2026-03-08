@@ -182,9 +182,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         eventState,
       );
 
-      this.liveMiniPusher.on('statusChange', (status) => {
-        this.broadcastLiveMiniStatus(status);
-      });
+      this.setupLiveMiniStatusListener();
 
       Logger.info('Unified', `Live-Mini auto-reconnected to ${config.serverUrl} (event: ${config.eventId})`);
     } catch (err) {
@@ -537,6 +535,18 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     }
 
     Logger.debug('Unified', `Broadcast ScoringEvent: ${event.eventType} bib=${event.bib}`);
+  }
+
+  /**
+   * Setup single statusChange listener on liveMiniPusher (replaces any previous one).
+   * Prevents listener leak when connect/reconnect is called multiple times.
+   */
+  private setupLiveMiniStatusListener(): void {
+    if (!this.liveMiniPusher) return;
+    this.liveMiniPusher.removeAllListeners('statusChange');
+    this.liveMiniPusher.on('statusChange', (status) => {
+      this.broadcastLiveMiniStatus(status);
+    });
   }
 
   /**
@@ -993,6 +1003,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     this.app.get('/api/live-mini/status', this.handleLiveMiniStatus.bind(this));
     this.app.post('/api/live-mini/connect', this.handleLiveMiniConnect.bind(this));
     this.app.post('/api/live-mini/disconnect', this.handleLiveMiniDisconnect.bind(this));
+    this.app.post('/api/live-mini/reconnect', this.handleLiveMiniReconnect.bind(this));
     this.app.post('/api/live-mini/pause', this.handleLiveMiniPause.bind(this));
     this.app.post('/api/live-mini/force-push-xml', this.handleLiveMiniForceXml.bind(this));
     this.app.post('/api/live-mini/transition', this.handleLiveMiniTransition.bind(this));
@@ -2595,10 +2606,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         eventState,
       );
 
-      // Subscribe to pusher status changes
-      this.liveMiniPusher.on('statusChange', (status) => {
-        this.broadcastLiveMiniStatus(status);
-      });
+      this.setupLiveMiniStatusListener();
 
       const status = this.liveMiniPusher.getStatus();
 
@@ -2638,6 +2646,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       if (clearConfig === true) {
         const settings = getAppSettings();
         settings.clearLiveMiniConnection();
+        this.liveMiniPusher.reset();
         Logger.info('Unified', 'Live-Mini config cleared');
       }
 
@@ -2651,6 +2660,84 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       });
     } catch (err) {
       Logger.error('Unified', 'Live-Mini disconnect error', err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * POST /api/live-mini/reconnect - Connect to an existing event (no event creation)
+   *
+   * Body: { serverUrl: string, apiKey: string, eventId: string }
+   */
+  private async handleLiveMiniReconnect(req: Request, res: Response): Promise<void> {
+    if (!this.liveMiniPusher) {
+      res.status(503).json({ error: 'Live-Mini pusher not available' });
+      return;
+    }
+
+    if (!this.c123Server) {
+      res.status(503).json({ error: 'C123 server not available' });
+      return;
+    }
+
+    const { serverUrl, apiKey, eventId } = req.body;
+
+    if (!serverUrl || typeof serverUrl !== 'string') {
+      res.status(400).json({ error: 'serverUrl is required' });
+      return;
+    }
+    if (!apiKey || typeof apiKey !== 'string') {
+      res.status(400).json({ error: 'apiKey is required' });
+      return;
+    }
+    if (!eventId || typeof eventId !== 'string') {
+      res.status(400).json({ error: 'eventId is required' });
+      return;
+    }
+
+    try {
+      // Save connection to settings
+      const settings = getAppSettings();
+      settings.setLiveMiniConnection(serverUrl, apiKey, eventId, 'draft');
+
+      // Get updated config and connect pusher
+      const liveMiniConfig = settings.getLiveMiniConfig();
+      const xmlChangeNotifier = this.c123Server.getXmlChangeNotifier();
+      const eventState = this.c123Server.getEventState();
+
+      if (!xmlChangeNotifier || !eventState) {
+        res.status(503).json({ error: 'XmlChangeNotifier or EventState not available' });
+        return;
+      }
+
+      await this.liveMiniPusher.connect(
+        {
+          serverUrl,
+          apiKey,
+          eventId,
+          eventStatus: 'draft',
+          pushXml: liveMiniConfig.pushXml,
+          pushOnCourse: liveMiniConfig.pushOnCourse,
+          pushResults: liveMiniConfig.pushResults,
+        },
+        xmlChangeNotifier,
+        eventState,
+      );
+
+      this.setupLiveMiniStatusListener();
+
+      const status = this.liveMiniPusher.getStatus();
+      this.broadcastLiveMiniStatus(status);
+
+      res.json({
+        success: true,
+        eventId,
+        status,
+      });
+    } catch (err) {
+      Logger.error('Unified', 'Live-Mini reconnect error', err);
       res.status(500).json({
         error: err instanceof Error ? err.message : 'Unknown error',
       });

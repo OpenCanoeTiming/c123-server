@@ -2522,6 +2522,51 @@ fieldset.modal-section > legend {
   margin-top: var(--space-3);
 }
 
+.live-mini-tabs {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.live-mini-tab {
+  padding: var(--space-2) var(--space-4);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--font-sm);
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.live-mini-tab:hover {
+  color: var(--text-primary);
+}
+
+.live-mini-tab.tab-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.config-form-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.config-form-vertical .form-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.config-form-vertical .form-row label {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
 .live-mini-info-grid {
   display: flex;
   gap: var(--space-5);

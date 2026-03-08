@@ -1149,7 +1149,7 @@ function renderLiveMiniStatus(status) {
   statusBadge.innerHTML = '<span class="badge ' + badge.class + '">' + escapeHtml(badge.text) + '</span>';
 
   // Show appropriate panel
-  if (status.state === 'not_configured') {
+  if (status.state === 'not_configured' || status.state === 'disconnected') {
     notConfigured.style.display = 'block';
     connected.style.display = 'none';
     return;
@@ -1419,6 +1419,81 @@ async function disconnectLiveMini() {
     loadLiveMiniStatus();
   } catch (error) {
     showToast('Failed to disconnect: ' + error.message, 'error');
+  }
+}
+
+/**
+ * Toggle between "Create New" and "Connect to Existing" modes
+ */
+function toggleLiveMiniMode(mode) {
+  const createSection = document.getElementById('liveMiniCreateSection');
+  const reconnectSection = document.getElementById('liveMiniReconnectSection');
+  const createTab = document.getElementById('liveMiniTabCreate');
+  const reconnectTab = document.getElementById('liveMiniTabReconnect');
+
+  if (!createSection || !reconnectSection || !createTab || !reconnectTab) return;
+
+  if (mode === 'reconnect') {
+    createSection.style.display = 'none';
+    reconnectSection.style.display = 'block';
+    createTab.classList.remove('tab-active');
+    reconnectTab.classList.add('tab-active');
+  } else {
+    createSection.style.display = 'block';
+    reconnectSection.style.display = 'none';
+    createTab.classList.add('tab-active');
+    reconnectTab.classList.remove('tab-active');
+  }
+}
+
+/**
+ * Connect to existing live-mini event
+ */
+async function reconnectLiveMini() {
+  const serverUrl = document.getElementById('liveMiniReconnectServerUrl').value.trim();
+  const apiKey = document.getElementById('liveMiniReconnectApiKey').value.trim();
+  const eventId = document.getElementById('liveMiniReconnectEventId').value.trim();
+
+  if (!serverUrl) {
+    showError('liveMiniReconnectError', 'Please enter a server URL');
+    return;
+  }
+
+  try {
+    new URL(serverUrl);
+  } catch (e) {
+    showError('liveMiniReconnectError', 'Invalid URL format');
+    return;
+  }
+
+  if (!apiKey) {
+    showError('liveMiniReconnectError', 'Please enter an API key');
+    return;
+  }
+
+  if (!eventId) {
+    showError('liveMiniReconnectError', 'Please enter an event ID');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/live-mini/reconnect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ serverUrl, apiKey, eventId })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to connect');
+    }
+
+    showToast('Connected to existing Live-Mini event', 'success');
+    hideError('liveMiniReconnectError');
+    loadLiveMiniStatus();
+  } catch (error) {
+    showError('liveMiniReconnectError', error.message);
   }
 }
 

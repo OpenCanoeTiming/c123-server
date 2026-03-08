@@ -119,12 +119,42 @@
       <p class="live-mini-description">
         Publish live results to a remote c123-live-mini server for public viewing.
       </p>
-      <div class="config-form" role="group" aria-label="Live-Mini server configuration">
-        <label for="liveMiniServerUrl" class="visually-hidden">Server URL</label>
-        <input type="text" id="liveMiniServerUrl" class="input live-mini-url-input" placeholder="https://live.example.com" aria-describedby="liveMiniConnectError">
-        <button class="btn btn-primary" onclick="openEventCreationModal()">Connect & Create Event</button>
+
+      <!-- Mode tabs -->
+      <div class="live-mini-tabs" role="tablist">
+        <button id="liveMiniTabCreate" class="live-mini-tab tab-active" role="tab" onclick="toggleLiveMiniMode('create')">Create New Event</button>
+        <button id="liveMiniTabReconnect" class="live-mini-tab" role="tab" onclick="toggleLiveMiniMode('reconnect')">Connect to Existing</button>
       </div>
-      <div id="liveMiniConnectError" class="error live-mini-error" role="alert" style="display: none;"></div>
+
+      <!-- Create new event mode -->
+      <div id="liveMiniCreateSection">
+        <div class="config-form" role="group" aria-label="Live-Mini server configuration">
+          <label for="liveMiniServerUrl" class="visually-hidden">Server URL</label>
+          <input type="text" id="liveMiniServerUrl" class="input live-mini-url-input" placeholder="https://live.example.com" aria-describedby="liveMiniConnectError">
+          <button class="btn btn-primary" onclick="openEventCreationModal()">Connect & Create Event</button>
+        </div>
+        <div id="liveMiniConnectError" class="error live-mini-error" role="alert" style="display: none;"></div>
+      </div>
+
+      <!-- Connect to existing event mode -->
+      <div id="liveMiniReconnectSection" style="display: none;">
+        <div class="config-form config-form-vertical" role="group" aria-label="Connect to existing event">
+          <div class="form-row">
+            <label for="liveMiniReconnectServerUrl">Server URL</label>
+            <input type="text" id="liveMiniReconnectServerUrl" class="input" placeholder="https://live.example.com">
+          </div>
+          <div class="form-row">
+            <label for="liveMiniReconnectApiKey">API Key</label>
+            <input type="text" id="liveMiniReconnectApiKey" class="input" placeholder="API key from event creation">
+          </div>
+          <div class="form-row">
+            <label for="liveMiniReconnectEventId">Event ID</label>
+            <input type="text" id="liveMiniReconnectEventId" class="input" placeholder="e.g. my-race-2026">
+          </div>
+          <button class="btn btn-primary" onclick="reconnectLiveMini()">Connect to Event</button>
+        </div>
+        <div id="liveMiniReconnectError" class="error live-mini-error" role="alert" style="display: none;"></div>
+      </div>
     </div>
 
     <!-- CONNECTED / PAUSED / ERROR STATE -->

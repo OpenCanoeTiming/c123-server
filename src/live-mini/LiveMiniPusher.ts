@@ -209,6 +209,16 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
   }
 
   /**
+   * Reset state back to not_configured.
+   * Use after disconnect + clearConfig to allow UI to show setup form again.
+   * Separate from disconnect() because disconnect() is also called internally in connect().
+   */
+  reset(): void {
+    this.status = this.createInitialStatus();
+    this.emitStatusChange();
+  }
+
+  /**
    * Pause pushing (keep connection, stop data flow)
    */
   pause(): void {
