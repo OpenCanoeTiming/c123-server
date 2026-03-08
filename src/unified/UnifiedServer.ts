@@ -2573,14 +2573,12 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         'draft',
       );
 
-      // Update channel settings if provided
-      if (pushXml !== undefined || pushOnCourse !== undefined || pushResults !== undefined) {
-        settings.setLiveMiniChannels({
-          pushXml: pushXml ?? true,
-          pushOnCourse: pushOnCourse ?? true,
-          pushResults: pushResults ?? true,
-        });
-      }
+      // Update channel settings — default all off so user explicitly enables what they need
+      settings.setLiveMiniChannels({
+        pushXml: pushXml ?? false,
+        pushOnCourse: pushOnCourse ?? false,
+        pushResults: pushResults ?? false,
+      });
 
       // Get updated config and connect pusher
       const liveMiniConfig = settings.getLiveMiniConfig();
