@@ -1320,7 +1320,7 @@ async function openEventCreationModal() {
 
   // Fetch event metadata from XML
   try {
-    const res = await fetch('/api/live-mini/status');
+    const res = await fetch('/api/live/status');
     const data = await res.json();
     // Pre-fill from server (will be extracted from XML)
   } catch (e) {
@@ -1386,7 +1386,7 @@ async function createLiveMiniEvent() {
   }
 
   try {
-    const res = await fetch('/api/live-mini/connect', {
+    const res = await fetch('/api/live/connect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1426,7 +1426,7 @@ async function disconnectLiveMini() {
   }
 
   try {
-    const res = await fetch('/api/live-mini/disconnect', {
+    const res = await fetch('/api/live/disconnect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clearConfig: true })
@@ -1500,7 +1500,7 @@ async function reconnectLiveMini() {
   }
 
   try {
-    const res = await fetch('/api/live-mini/reconnect', {
+    const res = await fetch('/api/live/reconnect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ serverUrl, apiKey, eventId })
@@ -1529,7 +1529,7 @@ async function toggleLiveMiniPause() {
   const isPaused = liveMiniStatus.state === 'paused';
 
   try {
-    const res = await fetch('/api/live-mini/pause', {
+    const res = await fetch('/api/live/pause', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ paused: !isPaused })
@@ -1553,7 +1553,7 @@ async function toggleLiveMiniPause() {
  */
 async function forcePushXml() {
   try {
-    const res = await fetch('/api/live-mini/force-push-xml', {
+    const res = await fetch('/api/live/force-push-xml', {
       method: 'POST'
     });
 
@@ -1582,7 +1582,7 @@ async function toggleLiveMiniChannel(channel) {
     const body = {};
     body['push' + (channel === 'xml' ? 'Xml' : channel === 'oncourse' ? 'OnCourse' : 'Results')] = enabled;
 
-    const res = await fetch('/api/live-mini/config', {
+    const res = await fetch('/api/live/config', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -1640,7 +1640,7 @@ async function transitionLiveMiniStatus() {
   const newStatus = document.getElementById('liveMiniNewStatus').value;
 
   try {
-    const res = await fetch('/api/live-mini/transition', {
+    const res = await fetch('/api/live/transition', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1668,7 +1668,7 @@ async function transitionLiveMiniStatus() {
  */
 async function loadLiveMiniStatus() {
   try {
-    const res = await fetch('/api/live-mini/status');
+    const res = await fetch('/api/live/status');
     const data = await res.json();
     renderLiveMiniStatus(data.status);
   } catch (error) {

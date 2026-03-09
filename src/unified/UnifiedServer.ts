@@ -1005,14 +1005,14 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     this.app.post('/api/c123/timing', this.handleC123Timing.bind(this));
 
     // Live-Mini API
-    this.app.get('/api/live-mini/status', this.handleLiveMiniStatus.bind(this));
-    this.app.post('/api/live-mini/connect', this.handleLiveMiniConnect.bind(this));
-    this.app.post('/api/live-mini/disconnect', this.handleLiveMiniDisconnect.bind(this));
-    this.app.post('/api/live-mini/reconnect', this.handleLiveMiniReconnect.bind(this));
-    this.app.post('/api/live-mini/pause', this.handleLiveMiniPause.bind(this));
-    this.app.post('/api/live-mini/force-push-xml', this.handleLiveMiniForceXml.bind(this));
-    this.app.post('/api/live-mini/transition', this.handleLiveMiniTransition.bind(this));
-    this.app.patch('/api/live-mini/config', this.handleLiveMiniConfig.bind(this));
+    this.app.get('/api/live/status', this.handleLiveMiniStatus.bind(this));
+    this.app.post('/api/live/connect', this.handleLiveMiniConnect.bind(this));
+    this.app.post('/api/live/disconnect', this.handleLiveMiniDisconnect.bind(this));
+    this.app.post('/api/live/reconnect', this.handleLiveMiniReconnect.bind(this));
+    this.app.post('/api/live/pause', this.handleLiveMiniPause.bind(this));
+    this.app.post('/api/live/force-push-xml', this.handleLiveMiniForceXml.bind(this));
+    this.app.post('/api/live/transition', this.handleLiveMiniTransition.bind(this));
+    this.app.patch('/api/live/config', this.handleLiveMiniConfig.bind(this));
 
     // Health check
     this.app.get('/health', (_req: Request, res: Response) => {
@@ -2507,7 +2507,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   // ==========================================================================
 
   /**
-   * GET /api/live-mini/status - Get current Live-Mini pusher status
+   * GET /api/live/status - Get current Live-Mini pusher status
    */
   private handleLiveMiniStatus(_req: Request, res: Response): void {
     if (!this.liveMiniPusher) {
@@ -2520,7 +2520,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
-   * POST /api/live-mini/connect - Connect to live-mini server and create event
+   * POST /api/live/connect - Connect to live-mini server and create event
    *
    * Body: {
    *   serverUrl: string,
@@ -2630,7 +2630,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
-   * POST /api/live-mini/disconnect - Disconnect from live-mini
+   * POST /api/live/disconnect - Disconnect from live-mini
    *
    * Body: { clearConfig?: boolean }
    */
@@ -2670,7 +2670,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
-   * POST /api/live-mini/reconnect - Connect to an existing event (no event creation)
+   * POST /api/live/reconnect - Connect to an existing event (no event creation)
    *
    * Body: { serverUrl: string, apiKey: string, eventId: string }
    */
@@ -2748,7 +2748,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
-   * POST /api/live-mini/pause - Pause or resume push
+   * POST /api/live/pause - Pause or resume push
    *
    * Body: { paused: boolean }
    */
@@ -2791,7 +2791,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
-   * POST /api/live-mini/force-push-xml - Force immediate XML push
+   * POST /api/live/force-push-xml - Force immediate XML push
    */
   private async handleLiveMiniForceXml(_req: Request, res: Response): Promise<void> {
     if (!this.liveMiniPusher) {
@@ -2819,7 +2819,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
-   * POST /api/live-mini/transition - Transition event status
+   * POST /api/live/transition - Transition event status
    *
    * Body: { status: EventStatus }
    */
@@ -2865,7 +2865,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
-   * PATCH /api/live-mini/config - Update push channel configuration
+   * PATCH /api/live/config - Update push channel configuration
    *
    * Body: { pushXml?: boolean, pushOnCourse?: boolean, pushResults?: boolean }
    */

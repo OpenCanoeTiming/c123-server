@@ -166,13 +166,13 @@ All blocks completed. Ready for merge.
 ### Block 4: API Endpoints ✅
 
 - [x] Add routes to `src/unified/UnifiedServer.ts`:
-  - `GET /api/live-mini/status` — current pusher state
-  - `POST /api/live-mini/connect` — set URL, create event on live-mini, store apiKey, start push
-  - `POST /api/live-mini/disconnect` — stop push, optionally clear config
-  - `POST /api/live-mini/pause` — pause/resume push
-  - `POST /api/live-mini/force-push-xml` — immediate XML push
-  - `POST /api/live-mini/transition` — event status change on live-mini
-  - `PATCH /api/live-mini/config` — toggle push channels (xml/oncourse/results)
+  - `GET /api/live/status` — current pusher state
+  - `POST /api/live/connect` — set URL, create event on live-mini, store apiKey, start push
+  - `POST /api/live/disconnect` — stop push, optionally clear config
+  - `POST /api/live/pause` — pause/resume push
+  - `POST /api/live/force-push-xml` — immediate XML push
+  - `POST /api/live/transition` — event status change on live-mini
+  - `PATCH /api/live/config` — toggle push channels (xml/oncourse/results)
 - [x] Add `LiveMiniStatus` message type to admin WS broadcast (throttle 2/s)
 
 ### Block 5: Admin UI — Live Results Panel ✅
@@ -180,7 +180,7 @@ All blocks completed. Ready for merge.
 - [x] Add HTML section in `index.html` — after clients section, before tabs
 - [x] Three UI states: Not Configured → Connected/Active → Error/Disconnected
 - [x] Not Configured: URL input + "Connect & Create Event" button
-- [x] Event creation flow: pre-fill metadata from XML, editable fields, confirm → POST /api/live-mini/connect
+- [x] Event creation flow: pre-fill metadata from XML, editable fields, confirm → POST /api/live/connect
 - [x] Connected: status dot, server/event info, push status card (per-channel), event lifecycle viz, channel toggles, action buttons (pause, force push, disconnect)
 - [x] Error: failure count, last error, retry/disconnect buttons
 - [x] WebSocket handler for `LiveMiniStatus` messages
