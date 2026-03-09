@@ -148,17 +148,20 @@ export class LiveMiniTransformer {
    * Transform Results rows to live-mini format.
    * Returns only rows with valid participant mapping.
    *
-   * For BR races (detected via totalTotal field): rows where betterRun=1
-   * have corrupted pen/total (C123 puts best-run values there).
-   * These are fixed using OnCourse penalty cache > XML > skip.
+   * For BR2 races (detected via raceId pattern /_BR2_/):
+   * C123 TCP puts best-run pen/total in standard fields. TCP does NOT
+   * include betterRun/totalTotal fields. Corruption is detected per-row
+   * via consistency check: Total ≈ Time + Pen → consistent (BR2 is best),
+   * otherwise → corrupted (pen/total are from BR1 best-run).
+   * Fix: OnCourse penalty cache > XML > TCP passthrough (if consistent) > skip.
    */
   async transformResults(resultsMessage: ResultsMessage): Promise<ResultInput[]> {
     const results: ResultInput[] = [];
-    const isBr = resultsMessage.rows.some(r => r.totalTotal !== undefined);
+    const isBr2 = /_BR2_/.test(resultsMessage.raceId);
 
-    // One-time XML lookup for BR race (build bib→XmlResultRow map)
+    // One-time XML lookup for BR2 race (build bib→XmlResultRow map)
     let xmlByBib: Map<string, XmlResultRow> | null = null;
-    if (isBr) {
+    if (isBr2) {
       const xmlRows = await this.xmlDataService.getResultsForRace(resultsMessage.raceId);
       if (xmlRows) {
         xmlByBib = new Map(xmlRows.map(r => [r.bib, r]));
@@ -181,25 +184,32 @@ export class LiveMiniTransformer {
       let pen = Math.round(row.pen * 100); // seconds → centiseconds
       let total = this.parseFormattedTimeToCentiseconds(row.total);
 
-      // BR row where second run is worse → TCP pen/total are BR1 (best-run) values
-      if (isBr && row.betterRun === 1) {
+      // BR2 race: TCP pen/total may be best-run (BR1) values, not actual BR2
+      // Detect per-row via consistency: Total ≈ Time + Pen means data is correct
+      if (isBr2) {
+        const tcpConsistent = this.isTcpConsistent(row.time, row.pen, row.total);
         const cached = this.onCoursePenCache.get(row.bib);
         const xmlRow = xmlByBib?.get(row.bib);
 
         if (cached !== undefined) {
-          pen = Math.round(cached.pen * 100); // OnCourse seconds → cs
+          // Priority 1: OnCourse penalty (freshest, includes post-finish corrections)
+          pen = Math.round(cached.pen * 100);
+          total = time != null ? time + pen : null;
         } else if (xmlRow?.pen != null) {
-          pen = xmlRow.pen * 100;             // XML seconds → cs
+          // Priority 2: XML penalty (may be stale but correct per-run data)
+          pen = xmlRow.pen * 100;
+          total = time != null ? time + pen : null;
+        } else if (tcpConsistent) {
+          // Priority 3: TCP data is consistent → BR2 is the better run, data is correct
+          // pen/total already set from TCP, use as-is
         } else {
-          // No reliable penalty source → skip row (XML push will fix)
+          // No reliable penalty source and TCP is corrupted → skip
           Logger.debug(
             'LiveMiniTransformer',
-            `BR merge: no penalty source for bib=${row.bib}, skipping`
+            `BR2 merge: no penalty source for bib=${row.bib}, TCP inconsistent, skipping`
           );
           continue;
         }
-        // Always compute total for fixed BR rows (TCP total = best-run total)
-        total = time != null ? time + pen : null;
       }
 
       results.push({
@@ -269,6 +279,20 @@ export class LiveMiniTransformer {
   // ============================================================================
   // Private helpers
   // ============================================================================
+
+  /**
+   * Check if TCP Result row data is self-consistent: Total ≈ Time + Pen.
+   * For BR2 races, C123 puts best-run values in Pen/Total fields.
+   * When BR2 is the better run, Pen/Total ARE the BR2 values → consistent.
+   * When BR1 is better, Pen/Total are BR1 values but Time is BR2 → inconsistent.
+   */
+  private isTcpConsistent(time: string | null, pen: number, total: string | null): boolean {
+    if (!time || !total) return false;
+    const t = parseFloat(time);
+    const tot = parseFloat(total);
+    if (isNaN(t) || isNaN(tot)) return false;
+    return Math.abs(tot - (t + pen)) < 0.02;
+  }
 
   /**
    * Make map key from bib and raceId

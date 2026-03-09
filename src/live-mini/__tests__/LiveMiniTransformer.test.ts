@@ -498,12 +498,12 @@ describe('LiveMiniTransformer', () => {
     });
   });
 
-  describe('BR merge (transformResults)', () => {
+  describe('BR2 merge (transformResults)', () => {
     beforeEach(async () => {
       await transformer.refreshParticipantMapping();
     });
 
-    /** Helper to create a BR2 ResultsMessage with totalTotal (marks it as BR race) */
+    /** Helper to create a BR2 ResultsMessage (detected via /_BR2_/ in raceId) */
     function makeBr2Message(rows: Partial<ResultRow>[]): ResultsMessage {
       return {
         raceId: 'K1M_ST_BR2_2',
@@ -531,15 +531,14 @@ describe('LiveMiniTransformer', () => {
       };
     }
 
-    it('should pass TCP data through when betterRun=2 (BR2 is better)', async () => {
+    it('should use TCP data when consistent (BR2 is better, no OnCourse/XML)', async () => {
+      // TCP: Time + Pen = Total → consistent → BR2 is the better run
       const msg = makeBr2Message([{
         bib: '101',
         rank: 1,
         time: '90.35',
-        pen: 50,       // BR2 pen (correct — BR2 is better)
-        total: '140.35', // BR2 total (correct)
-        betterRun: 2,
-        totalTotal: 914000, // some combined value
+        pen: 50,         // BR2 pen (correct — BR2 is better)
+        total: '140.35', // 90.35 + 50 = 140.35 → consistent
       }]);
 
       const results = await transformer.transformResults(msg);
@@ -547,74 +546,71 @@ describe('LiveMiniTransformer', () => {
       expect(results).toHaveLength(1);
       expect(results[0].pen).toBe(5000);    // 50s → 5000cs from TCP
       expect(results[0].total).toBe(14035); // 140.35s → 14035cs from TCP
-      expect(results[0].time).toBe(9035);   // 90.35s → 9035cs from TCP
+      expect(results[0].time).toBe(9035);
     });
 
-    it('should fix pen/total from OnCourse cache when betterRun=1', async () => {
-      // Simulate OnCourse penalty cache: bib 101 had pen=50s
+    it('should prefer OnCourse cache even when TCP is consistent', async () => {
+      // OnCourse has authoritative penalty
       transformer.updateOnCoursePenalties([{
-        bib: '101',
-        pen: 50, // correct BR2 penalty (seconds)
-        name: 'John Smith',
-        club: 'Test Club',
-        nat: 'CZE',
-        raceId: 'K1M_ST_BR2_2',
-        raceName: 'K1 Men - Run 2',
-        startOrder: 1,
-        warning: '',
-        gates: '',
-        completed: true,
-        dtStart: '10:15:00.000',
-        dtFinish: '10:16:30.350',
-        time: '90.35',
-        total: '140.35',
-        rank: 1,
-        position: 1,
-        ttbDiff: '',
-        ttbName: '',
+        bib: '101', pen: 50,
+        name: 'John Smith', club: 'Test Club', nat: 'CZE',
+        raceId: 'K1M_ST_BR2_2', raceName: '', startOrder: 1, warning: '',
+        gates: '', completed: true, dtStart: null, dtFinish: null,
+        time: '90.35', total: '140.35', rank: 1, position: 1,
+        ttbDiff: '', ttbName: '',
       }]);
 
+      // TCP is consistent (BR2 is better) but OnCourse should still take priority
       const msg = makeBr2Message([{
-        bib: '101',
-        rank: 1,
-        time: '90.35',       // actual BR2 time (correct)
-        pen: 4,              // WRONG — BR1 pen (best-run)
-        total: '91.78',      // WRONG — BR1 total (best-run)
-        betterRun: 1,
-        totalTotal: 917800,
+        bib: '101', rank: 1,
+        time: '90.35', pen: 50, total: '140.35', // consistent
       }]);
 
       const results = await transformer.transformResults(msg);
 
       expect(results).toHaveLength(1);
-      expect(results[0].time).toBe(9035);   // TCP time (correct)
+      expect(results[0].pen).toBe(5000);    // OnCourse: 50s → 5000cs
+      expect(results[0].total).toBe(14035); // Computed: 9035 + 5000
+    });
+
+    it('should fix pen/total from OnCourse cache when TCP is inconsistent', async () => {
+      // OnCourse: bib 101 has pen=50s (correct BR2 penalty)
+      transformer.updateOnCoursePenalties([{
+        bib: '101', pen: 50,
+        name: 'John Smith', club: 'Test Club', nat: 'CZE',
+        raceId: 'K1M_ST_BR2_2', raceName: '', startOrder: 1, warning: '',
+        gates: '', completed: true, dtStart: '10:15:00.000',
+        dtFinish: '10:16:30.350', time: '90.35', total: '140.35',
+        rank: 1, position: 1, ttbDiff: '', ttbName: '',
+      }]);
+
+      // TCP: Time=90.35, Pen=4 (BR1!), Total=91.78 (BR1!) → inconsistent
+      // 90.35 + 4 = 94.35 ≠ 91.78
+      const msg = makeBr2Message([{
+        bib: '101', rank: 1,
+        time: '90.35', pen: 4, total: '91.78',
+      }]);
+
+      const results = await transformer.transformResults(msg);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].time).toBe(9035);   // TCP time (always correct)
       expect(results[0].pen).toBe(5000);    // OnCourse: 50s → 5000cs
       expect(results[0].total).toBe(14035); // Computed: 9035 + 5000
     });
 
     it('should fall back to XML when OnCourse cache empty', async () => {
-      // Mock XML results for BR2 race
       (mockXmlService as any).getResultsForRace = vi.fn().mockResolvedValue([
         {
-          raceId: 'K1M_ST_BR2_2',
-          id: 'P001',
-          bib: '101',
-          startOrder: 1,
-          time: 90350,   // ms
-          pen: 50,       // seconds
-          total: 140350, // ms
-          rank: 1,
+          raceId: 'K1M_ST_BR2_2', id: 'P001', bib: '101',
+          startOrder: 1, time: 90350, pen: 50, total: 140350, rank: 1,
         } as XmlResultRow,
       ]);
 
+      // TCP inconsistent: 90.35 + 4 = 94.35 ≠ 91.78
       const msg = makeBr2Message([{
-        bib: '101',
-        rank: 1,
-        time: '90.35',
-        pen: 4,           // WRONG — BR1 pen
-        total: '91.78',   // WRONG — BR1 total
-        betterRun: 1,
-        totalTotal: 917800,
+        bib: '101', rank: 1,
+        time: '90.35', pen: 4, total: '91.78',
       }]);
 
       const results = await transformer.transformResults(msg);
@@ -624,113 +620,91 @@ describe('LiveMiniTransformer', () => {
       expect(results[0].total).toBe(14035); // Computed: 9035 + 5000
     });
 
-    it('should skip row when no penalty source available', async () => {
-      // No OnCourse cache, no XML results
+    it('should skip row when TCP inconsistent and no penalty source', async () => {
       (mockXmlService as any).getResultsForRace = vi.fn().mockResolvedValue(null);
 
+      // TCP inconsistent, no OnCourse, no XML
       const msg = makeBr2Message([{
-        bib: '101',
-        rank: 1,
-        time: '90.35',
-        pen: 4,
-        total: '91.78',
-        betterRun: 1,
-        totalTotal: 917800,
+        bib: '101', rank: 1,
+        time: '90.35', pen: 4, total: '91.78',
       }]);
 
       const results = await transformer.transformResults(msg);
 
-      expect(results).toHaveLength(0); // Skipped — no reliable source
+      expect(results).toHaveLength(0); // Skipped
     });
 
-    it('should handle mixed batch (some betterRun=1, some betterRun=2)', async () => {
-      // OnCourse cache for bib 101 (betterRun=1 case)
+    it('should use TCP as fallback when consistent and no other source', async () => {
+      (mockXmlService as any).getResultsForRace = vi.fn().mockResolvedValue(null);
+
+      // TCP consistent: 90.35 + 50 = 140.35 → BR2 is best, data correct
+      const msg = makeBr2Message([{
+        bib: '101', rank: 1,
+        time: '90.35', pen: 50, total: '140.35',
+      }]);
+
+      const results = await transformer.transformResults(msg);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].pen).toBe(5000);    // TCP: 50s → 5000cs (consistent)
+      expect(results[0].total).toBe(14035); // TCP: 140.35s → 14035cs
+    });
+
+    it('should handle mixed batch (some consistent, some not)', async () => {
+      // OnCourse cache for bib 101 (inconsistent case)
       transformer.updateOnCoursePenalties([{
-        bib: '101',
-        pen: 50,
-        name: 'John Smith',
-        club: 'Test Club',
-        nat: 'CZE',
-        raceId: 'K1M_ST_BR2_2',
-        raceName: 'K1 Men - Run 2',
-        startOrder: 1,
-        warning: '',
-        gates: '',
-        completed: true,
-        dtStart: null,
-        dtFinish: null,
-        time: null,
-        total: null,
-        rank: 0,
-        position: 1,
-        ttbDiff: '',
-        ttbName: '',
+        bib: '101', pen: 50,
+        name: 'John Smith', club: 'Test Club', nat: 'CZE',
+        raceId: 'K1M_ST_BR2_2', raceName: '', startOrder: 1, warning: '',
+        gates: '', completed: true, dtStart: null, dtFinish: null,
+        time: null, total: null, rank: 0, position: 1,
+        ttbDiff: '', ttbName: '',
       }]);
 
       const msg = makeBr2Message([
         {
-          bib: '101',
-          rank: 2,
-          time: '90.35',
-          pen: 4,            // WRONG (betterRun=1)
-          total: '91.78',    // WRONG
-          betterRun: 1,
-          totalTotal: 917800,
+          bib: '101', rank: 2,
+          time: '90.35', pen: 4, total: '91.78', // INCONSISTENT (90.35+4≠91.78)
         },
         {
-          bib: '102',
-          rank: 1,
-          time: '80.00',
-          pen: 6,            // Correct (betterRun=2)
-          total: '86.00',    // Correct
-          betterRun: 2,
-          totalTotal: 860000,
+          bib: '102', rank: 1,
+          time: '80.00', pen: 6, total: '86.00', // CONSISTENT (80+6=86)
         },
       ]);
 
       const results = await transformer.transformResults(msg);
 
       expect(results).toHaveLength(2);
-      // bib 101: fixed from OnCourse
+      // bib 101: fixed from OnCourse (TCP was inconsistent)
       expect(results[0].bib).toBe(101);
       expect(results[0].pen).toBe(5000);    // OnCourse
       expect(results[0].total).toBe(14035); // Computed
-      // bib 102: TCP as-is
+      // bib 102: TCP consistent → use as-is (no OnCourse for this bib)
       expect(results[1].bib).toBe(102);
       expect(results[1].pen).toBe(600);     // TCP: 6s → 600cs
       expect(results[1].total).toBe(8600);  // TCP: 86.00s → 8600cs
     });
 
-    it('should not affect standard races (no totalTotal)', async () => {
+    it('should not affect BR1 races or standard races', async () => {
       const msg: ResultsMessage = {
-        raceId: 'K1M_ST_BR1_1',
+        raceId: 'K1M_ST_BR1_1', // BR1 — not BR2
         classId: 'K1M_ST',
         isCurrent: true,
         mainTitle: 'K1 Men',
         subTitle: 'Run 1',
         rows: [{
-          rank: 1,
-          bib: '101',
-          name: 'John Smith',
-          givenName: 'John',
-          familyName: 'Smith',
-          club: 'Test Club',
-          nat: 'CZE',
-          startOrder: 1,
-          startTime: '10:15:00',
-          gates: '',
-          pen: 4,
-          time: '85.50',
-          total: '89.50',
-          behind: '0.00',
-          // No totalTotal → standard race
+          rank: 1, bib: '101',
+          name: 'John Smith', givenName: 'John', familyName: 'Smith',
+          club: 'Test Club', nat: 'CZE', startOrder: 1,
+          startTime: '10:15:00', gates: '',
+          pen: 4, time: '85.50', total: '89.50', behind: '0.00',
         }],
       };
 
       const results = await transformer.transformResults(msg);
 
       expect(results).toHaveLength(1);
-      expect(results[0].pen).toBe(400);    // TCP: 4s → 400cs
+      expect(results[0].pen).toBe(400);    // TCP: 4s → 400cs (no BR2 merge)
       expect(results[0].total).toBe(8950); // TCP: 89.50s → 8950cs
     });
   });
@@ -825,10 +799,8 @@ describe('LiveMiniTransformer', () => {
           gates: '',
           pen: 4,
           time: '90.35',
-          total: '91.78',
+          total: '91.78', // inconsistent: 90.35 + 4 ≠ 91.78
           behind: '',
-          betterRun: 1,
-          totalTotal: 917800,
         }],
       };
 
