@@ -76,8 +76,12 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
   // Buffers
   private onCourseLastPush: Date | null = null;
   private resultsDebounceTimers: Map<string, NodeJS.Timeout> = new Map();
-  // Track last scheduled results per raceId to avoid debounce reset on unrelated state changes
-  private lastScheduledResults: Map<string, string> = new Map(); // raceId → fingerprint
+  // Two-level dedup for results push:
+  // - lastScheduledResultsRef: set when debounce timer is created, prevents oncourse/timeOfDay
+  //   changes from resetting the debounce timer (they don't change state.results reference)
+  // - lastPushedResultsRef: set after successful push, prevents re-pushing same data
+  private lastScheduledResultsRef: object | null = null;
+  private lastPushedResultsRef: object | null = null;
 
   // Timers
   private xmlDebounceTimer: NodeJS.Timeout | null = null;
@@ -190,7 +194,8 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
       clearTimeout(timer);
     }
     this.resultsDebounceTimers.clear();
-    this.lastScheduledResults.clear();
+    this.lastScheduledResultsRef = null;
+    this.lastPushedResultsRef = null;
 
     // Clear buffers
     this.onCourseLastPush = null;
@@ -410,31 +415,31 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
 
   /**
    * Schedule Results push with debouncing (1s per raceId).
-   * Only resets debounce timer when results actually changed (not just because OnCourse changed).
+   *
+   * Uses object reference comparison instead of content fingerprinting:
+   * EventState.updateResults() replaces _state.results reference only when
+   * a new results message is accepted. OnCourse/TimeOfDay changes don't
+   * touch _state.results, so the reference stays the same.
+   *
+   * Two-level skip:
+   * 1. lastScheduledResultsRef - prevents oncourse from resetting debounce timer
+   * 2. lastPushedResultsRef - prevents re-pushing already pushed data
    */
   private scheduleResultsPush(results: NonNullable<EventStateData['results']>): void {
-    const raceId = results.raceId;
-    // Include all rows' scoring data so any change (penalty, time, rank) is detected
-    const rowsFingerprint = results.rows.map(r => `${r.bib}:${r.total}:${r.pen}:${r.rank}`).join('|');
-    const fingerprint = `${raceId}:${results.rows.length}:${rowsFingerprint}`;
-
-    // Skip if same results as last scheduled/pushed (nothing actually changed)
-    if (this.lastScheduledResults.get(raceId) === fingerprint) {
+    if (results === this.lastScheduledResultsRef || results === this.lastPushedResultsRef) {
       return;
     }
-    this.lastScheduledResults.set(raceId, fingerprint);
+    this.lastScheduledResultsRef = results;
 
-    // Clear existing timer for this raceId
+    const raceId = results.raceId;
     const existingTimer = this.resultsDebounceTimers.get(raceId);
     if (existingTimer) {
       clearTimeout(existingTimer);
     }
 
-    // Debounce: push after 1s of no changes for this raceId
     const timer = setTimeout(() => {
       this.pushResults(results);
       this.resultsDebounceTimers.delete(raceId);
-      // Keep lastScheduledResults fingerprint so identical data won't re-trigger
     }, RESULTS_DEBOUNCE_MS);
 
     this.resultsDebounceTimers.set(raceId, timer);
@@ -529,34 +534,27 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
    * Push Results data to live-mini
    */
   private async pushResults(results: NonNullable<EventStateData['results']>): Promise<void> {
-    const raceId = results.raceId;
-
     if (!this.client) {
-      this.lastScheduledResults.delete(raceId);
       return;
     }
 
     // Check circuit breaker
     if (this.isCircuitOpen()) {
       Logger.debug('LiveMiniPusher', 'Circuit breaker open, skipping Results push');
-      this.lastScheduledResults.delete(raceId);
       return;
     }
 
     // Skip if no participant mapping available
     if (!this.transformer.hasMappingData()) {
       Logger.debug('LiveMiniPusher', 'No participant mapping, skipping Results push');
-      this.lastScheduledResults.delete(raceId);
       return;
     }
 
     try {
-      // Transform Results data
       const transformed = this.transformer.transformResults(results);
 
       if (transformed.length === 0) {
         Logger.debug('LiveMiniPusher', 'No valid Results data to push');
-        this.lastScheduledResults.delete(raceId);
         return;
       }
 
@@ -566,12 +564,12 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
       );
       const response = await this.client.pushResults({ results: transformed });
 
-      // Success
+      // Only mark as pushed on success - failed pushes will be retried
+      // on next EventState change
+      this.lastPushedResultsRef = results;
       this.handleSuccess('results', response);
     } catch (error) {
       this.handleError(error as Error, 'results');
-      // Clear fingerprint so failed push can be retried
-      this.lastScheduledResults.delete(raceId);
     }
   }
 
