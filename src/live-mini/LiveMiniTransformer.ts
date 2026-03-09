@@ -210,12 +210,13 @@ export class LiveMiniTransformer {
           // Priority 3: TCP data is consistent → BR2 is the better run, data is correct
           // pen/total already set from TCP, use as-is
         } else {
-          // No reliable penalty source and TCP is corrupted → skip
+          // No reliable penalty source — pass through TCP data as-is (pen/total
+          // are BR1 best-run values, wrong but rank+time still update).
+          // Matches scoreboard fallback: onCoursePen ?? cache ?? result.pen
           Logger.debug(
             'LiveMiniTransformer',
-            `BR2 merge: no penalty source for bib=${row.bib}, TCP inconsistent, skipping`
+            `BR2 merge: no penalty source for bib=${row.bib}, TCP inconsistent, using TCP as-is`
           );
-          continue;
         }
       }
 

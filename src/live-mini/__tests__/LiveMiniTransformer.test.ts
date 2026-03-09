@@ -620,10 +620,10 @@ describe('LiveMiniTransformer', () => {
       expect(results[0].total).toBe(14035); // Computed: 9035 + 5000
     });
 
-    it('should skip row when TCP inconsistent and no penalty source', async () => {
+    it('should pass through TCP data as-is when inconsistent and no penalty source', async () => {
       (mockXmlService as any).getResultsForRace = vi.fn().mockResolvedValue(null);
 
-      // TCP inconsistent, no OnCourse, no XML
+      // TCP inconsistent, no OnCourse, no XML → use TCP as-is (wrong pen/total but rank+time update)
       const msg = makeBr2Message([{
         bib: '101', rank: 1,
         time: '90.35', pen: 4, total: '91.78',
@@ -631,7 +631,11 @@ describe('LiveMiniTransformer', () => {
 
       const results = await transformer.transformResults(msg);
 
-      expect(results).toHaveLength(0); // Skipped
+      expect(results).toHaveLength(1);
+      expect(results[0].rnk).toBe(1);       // rank from TCP (always correct)
+      expect(results[0].time).toBe(9035);    // time from TCP (always correct)
+      expect(results[0].pen).toBe(400);      // TCP pen (BR1 value — wrong but best available)
+      expect(results[0].total).toBe(9178);   // TCP total (BR1 value — wrong but best available)
     });
 
     it('should use TCP as fallback when consistent and no other source', async () => {
@@ -817,7 +821,7 @@ describe('LiveMiniTransformer', () => {
       vi.advanceTimersByTime(6_000); // total 11s > 10s grace
       transformer.updateOnCoursePenalties([]); // trigger cleanup
 
-      // Verify: no OnCourse source, no XML → row should be skipped
+      // Verify: no OnCourse source, no XML → TCP passed through as-is
       await transformer.refreshParticipantMapping();
       (mockXmlService as any).getResultsForRace = vi.fn().mockResolvedValue(null);
 
@@ -846,7 +850,10 @@ describe('LiveMiniTransformer', () => {
       };
 
       const results = await transformer.transformResults(msg);
-      expect(results).toHaveLength(0); // Cache expired, no XML → skipped
+      // Cache expired, no XML → TCP as-is (wrong pen/total but row not skipped)
+      expect(results).toHaveLength(1);
+      expect(results[0].pen).toBe(400);    // TCP pen (BR1 value)
+      expect(results[0].total).toBe(9178); // TCP total (BR1 value)
 
       vi.useRealTimers();
     });
