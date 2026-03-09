@@ -184,9 +184,16 @@ export class LiveMiniTransformer {
       let pen = Math.round(row.pen * 100); // seconds → centiseconds
       let total = this.parseFormattedTimeToCentiseconds(row.total);
 
+      // BR2 race: skip on-course competitors (no finish time, no IRM status).
+      // TCP sends these with Time="" and Total=BR1_best — they're still racing.
+      if (isBr2 && time == null && !row.status) {
+        continue;
+      }
+
       // BR2 race: TCP pen/total may be best-run (BR1) values, not actual BR2
       // Detect per-row via consistency: Total ≈ Time + Pen means data is correct
-      if (isBr2) {
+      // Skip merge for status rows (DNS/DNF/DSQ) — no time data to fix
+      if (isBr2 && !row.status) {
         const tcpConsistent = this.isTcpConsistent(row.time, row.pen, row.total);
         const cached = this.onCoursePenCache.get(row.bib);
         const xmlRow = xmlByBib?.get(row.bib);

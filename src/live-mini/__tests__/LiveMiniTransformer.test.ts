@@ -685,6 +685,47 @@ describe('LiveMiniTransformer', () => {
       expect(results[1].total).toBe(8600);  // TCP: 86.00s → 8600cs
     });
 
+    it('should skip on-course competitors (no time, no status) in BR2', async () => {
+      // On-course competitor: Time="" (null), Total="100.14" (BR1 best), no IRM
+      const msg = makeBr2Message([
+        {
+          bib: '101', rank: 0,
+          time: '', pen: 0, total: '100.14', // On course — no finish time
+          // no status field → undefined
+        },
+        {
+          bib: '102', rank: 1,
+          time: '90.35', pen: 50, total: '140.35', // Finished — consistent
+        },
+      ]);
+
+      const results = await transformer.transformResults(msg);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].bib).toBe(102); // Only finished competitor
+    });
+
+    it('should keep DNS entries in BR2 (time empty but has status)', async () => {
+      const msg = makeBr2Message([
+        {
+          bib: '101', rank: 0,
+          time: '', pen: 0, total: '', // DNS — empty time but has status
+          status: 'DNS',
+        },
+        {
+          bib: '102', rank: 1,
+          time: '90.35', pen: 50, total: '140.35',
+        },
+      ]);
+
+      const results = await transformer.transformResults(msg);
+
+      expect(results).toHaveLength(2);
+      expect(results[0].bib).toBe(101);
+      expect(results[0].status).toBe('DNS');
+      expect(results[1].bib).toBe(102);
+    });
+
     it('should not affect BR1 races or standard races', async () => {
       const msg: ResultsMessage = {
         raceId: 'K1M_ST_BR1_1', // BR1 — not BR2
