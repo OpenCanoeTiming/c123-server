@@ -1124,12 +1124,35 @@ function showClientMessage(msg, isError) {
 // ===========================================
 
 let liveMiniStatus = null;
+let liveMiniTimerInterval = null;
+
+/**
+ * Periodically refresh relative time displays for Live-Mini channels.
+ * Without this, timestamps only update when a new push happens.
+ */
+function startLiveMiniTimerRefresh() {
+  if (liveMiniTimerInterval) return;
+  liveMiniTimerInterval = setInterval(() => {
+    if (!liveMiniStatus || !liveMiniStatus.channels) return;
+    const channelIdMap = { xml: 'Xml', oncourse: 'OnCourse', results: 'Results' };
+    for (const [channel, idSuffix] of Object.entries(channelIdMap)) {
+      const ch = liveMiniStatus.channels[channel];
+      if (ch) {
+        const el = document.getElementById('liveMiniChannel' + idSuffix + 'Last');
+        if (el) {
+          el.textContent = ch.lastPushAt ? formatRelativeTime(ch.lastPushAt) : 'Never';
+        }
+      }
+    }
+  }, 1000);
+}
 
 /**
  * Render Live-Mini status panel
  */
 function renderLiveMiniStatus(status) {
   liveMiniStatus = status;
+  startLiveMiniTimerRefresh();
 
   const notConfigured = document.getElementById('liveMiniNotConfigured');
   const connected = document.getElementById('liveMiniConnected');

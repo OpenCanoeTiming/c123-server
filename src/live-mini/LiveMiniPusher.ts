@@ -529,19 +529,24 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
    * Push Results data to live-mini
    */
   private async pushResults(results: NonNullable<EventStateData['results']>): Promise<void> {
+    const raceId = results.raceId;
+
     if (!this.client) {
+      this.lastScheduledResults.delete(raceId);
       return;
     }
 
     // Check circuit breaker
     if (this.isCircuitOpen()) {
       Logger.debug('LiveMiniPusher', 'Circuit breaker open, skipping Results push');
+      this.lastScheduledResults.delete(raceId);
       return;
     }
 
     // Skip if no participant mapping available
     if (!this.transformer.hasMappingData()) {
       Logger.debug('LiveMiniPusher', 'No participant mapping, skipping Results push');
+      this.lastScheduledResults.delete(raceId);
       return;
     }
 
@@ -551,6 +556,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
 
       if (transformed.length === 0) {
         Logger.debug('LiveMiniPusher', 'No valid Results data to push');
+        this.lastScheduledResults.delete(raceId);
         return;
       }
 
@@ -564,6 +570,8 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
       this.handleSuccess('results', response);
     } catch (error) {
       this.handleError(error as Error, 'results');
+      // Clear fingerprint so failed push can be retried
+      this.lastScheduledResults.delete(raceId);
     }
   }
 
