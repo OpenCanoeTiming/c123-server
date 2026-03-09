@@ -6,7 +6,7 @@
  */
 
 import type { OnCourseCompetitor, ResultsMessage } from '../protocol/parser-types.js';
-import type { XmlDataService, XmlParticipant } from '../service/XmlDataService.js';
+import type { XmlDataService, XmlParticipant, XmlResultRow } from '../service/XmlDataService.js';
 import type { OnCourseInput, ResultInput } from './types.js';
 import { Logger } from '../utils/logger.js';
 
@@ -29,6 +29,12 @@ export class LiveMiniTransformer {
 
   /** Last XML refresh timestamp */
   private lastXmlRefresh: Date | null = null;
+
+  /** OnCourse penalty cache for BR merge: bib -> { pen (seconds), lastSeen } */
+  private onCoursePenCache: Map<string, { pen: number; lastSeen: number }> = new Map();
+
+  /** Grace period for OnCourse penalty cache (10s, matching scoreboard) */
+  private static ONCOURSE_PEN_GRACE_MS = 10_000;
 
   constructor(private xmlDataService: XmlDataService) {}
 
@@ -117,11 +123,47 @@ export class LiveMiniTransformer {
   }
 
   /**
-   * Transform Results rows to live-mini format
-   * Returns only rows with valid participant mapping
+   * Update OnCourse penalty cache.
+   * Called on every EventState change to keep cache fresh.
+   * Entries kept for 10s grace period after competitor leaves OnCourse.
    */
-  transformResults(resultsMessage: ResultsMessage): ResultInput[] {
+  updateOnCoursePenalties(onCourse: OnCourseCompetitor[]): void {
+    const now = Date.now();
+    const currentBibs = new Set(onCourse.map(c => c.bib));
+
+    // Update current competitors
+    for (const oc of onCourse) {
+      this.onCoursePenCache.set(oc.bib, { pen: oc.pen, lastSeen: now });
+    }
+
+    // Cleanup: remove entries not seen for > grace period
+    for (const [bib, entry] of this.onCoursePenCache) {
+      if (!currentBibs.has(bib) && now - entry.lastSeen > LiveMiniTransformer.ONCOURSE_PEN_GRACE_MS) {
+        this.onCoursePenCache.delete(bib);
+      }
+    }
+  }
+
+  /**
+   * Transform Results rows to live-mini format.
+   * Returns only rows with valid participant mapping.
+   *
+   * For BR races (detected via totalTotal field): rows where betterRun=1
+   * have corrupted pen/total (C123 puts best-run values there).
+   * These are fixed using OnCourse penalty cache > XML > skip.
+   */
+  async transformResults(resultsMessage: ResultsMessage): Promise<ResultInput[]> {
     const results: ResultInput[] = [];
+    const isBr = resultsMessage.rows.some(r => r.totalTotal !== undefined);
+
+    // One-time XML lookup for BR race (build bib→XmlResultRow map)
+    let xmlByBib: Map<string, XmlResultRow> | null = null;
+    if (isBr) {
+      const xmlRows = await this.xmlDataService.getResultsForRace(resultsMessage.raceId);
+      if (xmlRows) {
+        xmlByBib = new Map(xmlRows.map(r => [r.bib, r]));
+      }
+    }
 
     for (const row of resultsMessage.rows) {
       const key = this.makeKey(row.bib, resultsMessage.raceId);
@@ -135,18 +177,43 @@ export class LiveMiniTransformer {
         continue;
       }
 
+      let time = this.parseFormattedTimeToCentiseconds(row.time);
+      let pen = Math.round(row.pen * 100); // seconds → centiseconds
+      let total = this.parseFormattedTimeToCentiseconds(row.total);
+
+      // BR row where second run is worse → TCP pen/total are BR1 (best-run) values
+      if (isBr && row.betterRun === 1) {
+        const cached = this.onCoursePenCache.get(row.bib);
+        const xmlRow = xmlByBib?.get(row.bib);
+
+        if (cached !== undefined) {
+          pen = Math.round(cached.pen * 100); // OnCourse seconds → cs
+        } else if (xmlRow?.pen != null) {
+          pen = xmlRow.pen * 100;             // XML seconds → cs
+        } else {
+          // No reliable penalty source → skip row (XML push will fix)
+          Logger.debug(
+            'LiveMiniTransformer',
+            `BR merge: no penalty source for bib=${row.bib}, skipping`
+          );
+          continue;
+        }
+        // Always compute total for fixed BR rows (TCP total = best-run total)
+        total = time != null ? time + pen : null;
+      }
+
       results.push({
         participantId,
         raceId: resultsMessage.raceId,
         bib: parseInt(row.bib, 10),
         rnk: row.rank > 0 ? row.rank : null,
-        time: this.parseFormattedTimeToCentiseconds(row.time),
-        pen: Math.round(row.pen * 100), // seconds → centiseconds
-        total: this.parseFormattedTimeToCentiseconds(row.total),
+        time,
+        pen,
+        total,
         status: row.status || null,
-        catId: null, // Not available in C123 protocol
+        catId: null,
         catRnk: null,
-        totalBehind: null, // Could be parsed from row.behind
+        totalBehind: null,
         catTotalBehind: null,
       });
     }

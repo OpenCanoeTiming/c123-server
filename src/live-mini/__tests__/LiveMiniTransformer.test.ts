@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { LiveMiniTransformer } from '../LiveMiniTransformer.js';
-import type { XmlDataService, XmlScheduleItem, XmlParticipant } from '../../service/XmlDataService.js';
+import type { XmlDataService, XmlScheduleItem, XmlParticipant, XmlResultRow } from '../../service/XmlDataService.js';
 import type { OnCourseCompetitor, ResultsMessage, ResultRow } from '../../protocol/parser-types.js';
 
 describe('LiveMiniTransformer', () => {
@@ -61,6 +61,7 @@ describe('LiveMiniTransformer', () => {
       getSchedule: vi.fn().mockResolvedValue(mockSchedule),
       getParticipants: vi.fn().mockResolvedValue(mockParticipants),
       getEventName: vi.fn().mockResolvedValue('Test Event 2025'),
+      getResultsForRace: vi.fn().mockResolvedValue(null),
     } as unknown as XmlDataService;
 
     transformer = new LiveMiniTransformer(mockXmlService);
@@ -299,7 +300,7 @@ describe('LiveMiniTransformer', () => {
       await transformer.refreshParticipantMapping();
     });
 
-    it('should transform Results to live-mini format', () => {
+    it('should transform Results to live-mini format', async () => {
       const resultsMessage: ResultsMessage = {
         raceId: 'K1M_ST_BR1_1',
         classId: 'K1M_ST',
@@ -342,7 +343,7 @@ describe('LiveMiniTransformer', () => {
         ],
       };
 
-      const results = transformer.transformResults(resultsMessage);
+      const results = await transformer.transformResults(resultsMessage);
 
       expect(results).toHaveLength(2);
       expect(results[0]).toEqual({
@@ -375,7 +376,7 @@ describe('LiveMiniTransformer', () => {
       });
     });
 
-    it('should skip rows without participant mapping', () => {
+    it('should skip rows without participant mapping', async () => {
       const resultsMessage: ResultsMessage = {
         raceId: 'K1M_ST_BR1_1',
         classId: 'K1M_ST',
@@ -418,13 +419,13 @@ describe('LiveMiniTransformer', () => {
         ],
       };
 
-      const results = transformer.transformResults(resultsMessage);
+      const results = await transformer.transformResults(resultsMessage);
 
       expect(results).toHaveLength(1); // Only first row should be included
       expect(results[0].bib).toBe(101);
     });
 
-    it('should handle status field', () => {
+    it('should handle status field', async () => {
       const resultsMessage: ResultsMessage = {
         raceId: 'K1M_ST_BR1_1',
         classId: 'K1M_ST',
@@ -452,7 +453,7 @@ describe('LiveMiniTransformer', () => {
         ],
       };
 
-      const results = transformer.transformResults(resultsMessage);
+      const results = await transformer.transformResults(resultsMessage);
 
       expect(results[0].status).toBe('DNS');
       expect(results[0].rnk).toBeNull(); // rank=0 → null
@@ -494,6 +495,347 @@ describe('LiveMiniTransformer', () => {
       const metadata = await transformer.extractEventMetadata();
 
       expect(metadata.eventId).toBe('test-event-2025-location');
+    });
+  });
+
+  describe('BR merge (transformResults)', () => {
+    beforeEach(async () => {
+      await transformer.refreshParticipantMapping();
+    });
+
+    /** Helper to create a BR2 ResultsMessage with totalTotal (marks it as BR race) */
+    function makeBr2Message(rows: Partial<ResultRow>[]): ResultsMessage {
+      return {
+        raceId: 'K1M_ST_BR2_2',
+        classId: 'K1M_ST',
+        isCurrent: true,
+        mainTitle: 'K1 Men',
+        subTitle: '1st and 2nd Run',
+        rows: rows.map(r => ({
+          rank: 0,
+          bib: '101',
+          name: 'John Smith',
+          givenName: 'John',
+          familyName: 'Smith',
+          club: 'Test Club',
+          nat: 'CZE',
+          startOrder: 1,
+          startTime: '10:15:00',
+          gates: '',
+          pen: 0,
+          time: '',
+          total: '',
+          behind: '',
+          ...r,
+        })),
+      };
+    }
+
+    it('should pass TCP data through when betterRun=2 (BR2 is better)', async () => {
+      const msg = makeBr2Message([{
+        bib: '101',
+        rank: 1,
+        time: '90.35',
+        pen: 50,       // BR2 pen (correct — BR2 is better)
+        total: '140.35', // BR2 total (correct)
+        betterRun: 2,
+        totalTotal: 914000, // some combined value
+      }]);
+
+      const results = await transformer.transformResults(msg);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].pen).toBe(5000);    // 50s → 5000cs from TCP
+      expect(results[0].total).toBe(14035); // 140.35s → 14035cs from TCP
+      expect(results[0].time).toBe(9035);   // 90.35s → 9035cs from TCP
+    });
+
+    it('should fix pen/total from OnCourse cache when betterRun=1', async () => {
+      // Simulate OnCourse penalty cache: bib 101 had pen=50s
+      transformer.updateOnCoursePenalties([{
+        bib: '101',
+        pen: 50, // correct BR2 penalty (seconds)
+        name: 'John Smith',
+        club: 'Test Club',
+        nat: 'CZE',
+        raceId: 'K1M_ST_BR2_2',
+        raceName: 'K1 Men - Run 2',
+        startOrder: 1,
+        warning: '',
+        gates: '',
+        completed: true,
+        dtStart: '10:15:00.000',
+        dtFinish: '10:16:30.350',
+        time: '90.35',
+        total: '140.35',
+        rank: 1,
+        position: 1,
+        ttbDiff: '',
+        ttbName: '',
+      }]);
+
+      const msg = makeBr2Message([{
+        bib: '101',
+        rank: 1,
+        time: '90.35',       // actual BR2 time (correct)
+        pen: 4,              // WRONG — BR1 pen (best-run)
+        total: '91.78',      // WRONG — BR1 total (best-run)
+        betterRun: 1,
+        totalTotal: 917800,
+      }]);
+
+      const results = await transformer.transformResults(msg);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].time).toBe(9035);   // TCP time (correct)
+      expect(results[0].pen).toBe(5000);    // OnCourse: 50s → 5000cs
+      expect(results[0].total).toBe(14035); // Computed: 9035 + 5000
+    });
+
+    it('should fall back to XML when OnCourse cache empty', async () => {
+      // Mock XML results for BR2 race
+      (mockXmlService as any).getResultsForRace = vi.fn().mockResolvedValue([
+        {
+          raceId: 'K1M_ST_BR2_2',
+          id: 'P001',
+          bib: '101',
+          startOrder: 1,
+          time: 90350,   // ms
+          pen: 50,       // seconds
+          total: 140350, // ms
+          rank: 1,
+        } as XmlResultRow,
+      ]);
+
+      const msg = makeBr2Message([{
+        bib: '101',
+        rank: 1,
+        time: '90.35',
+        pen: 4,           // WRONG — BR1 pen
+        total: '91.78',   // WRONG — BR1 total
+        betterRun: 1,
+        totalTotal: 917800,
+      }]);
+
+      const results = await transformer.transformResults(msg);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].pen).toBe(5000);    // XML: 50s × 100
+      expect(results[0].total).toBe(14035); // Computed: 9035 + 5000
+    });
+
+    it('should skip row when no penalty source available', async () => {
+      // No OnCourse cache, no XML results
+      (mockXmlService as any).getResultsForRace = vi.fn().mockResolvedValue(null);
+
+      const msg = makeBr2Message([{
+        bib: '101',
+        rank: 1,
+        time: '90.35',
+        pen: 4,
+        total: '91.78',
+        betterRun: 1,
+        totalTotal: 917800,
+      }]);
+
+      const results = await transformer.transformResults(msg);
+
+      expect(results).toHaveLength(0); // Skipped — no reliable source
+    });
+
+    it('should handle mixed batch (some betterRun=1, some betterRun=2)', async () => {
+      // OnCourse cache for bib 101 (betterRun=1 case)
+      transformer.updateOnCoursePenalties([{
+        bib: '101',
+        pen: 50,
+        name: 'John Smith',
+        club: 'Test Club',
+        nat: 'CZE',
+        raceId: 'K1M_ST_BR2_2',
+        raceName: 'K1 Men - Run 2',
+        startOrder: 1,
+        warning: '',
+        gates: '',
+        completed: true,
+        dtStart: null,
+        dtFinish: null,
+        time: null,
+        total: null,
+        rank: 0,
+        position: 1,
+        ttbDiff: '',
+        ttbName: '',
+      }]);
+
+      const msg = makeBr2Message([
+        {
+          bib: '101',
+          rank: 2,
+          time: '90.35',
+          pen: 4,            // WRONG (betterRun=1)
+          total: '91.78',    // WRONG
+          betterRun: 1,
+          totalTotal: 917800,
+        },
+        {
+          bib: '102',
+          rank: 1,
+          time: '80.00',
+          pen: 6,            // Correct (betterRun=2)
+          total: '86.00',    // Correct
+          betterRun: 2,
+          totalTotal: 860000,
+        },
+      ]);
+
+      const results = await transformer.transformResults(msg);
+
+      expect(results).toHaveLength(2);
+      // bib 101: fixed from OnCourse
+      expect(results[0].bib).toBe(101);
+      expect(results[0].pen).toBe(5000);    // OnCourse
+      expect(results[0].total).toBe(14035); // Computed
+      // bib 102: TCP as-is
+      expect(results[1].bib).toBe(102);
+      expect(results[1].pen).toBe(600);     // TCP: 6s → 600cs
+      expect(results[1].total).toBe(8600);  // TCP: 86.00s → 8600cs
+    });
+
+    it('should not affect standard races (no totalTotal)', async () => {
+      const msg: ResultsMessage = {
+        raceId: 'K1M_ST_BR1_1',
+        classId: 'K1M_ST',
+        isCurrent: true,
+        mainTitle: 'K1 Men',
+        subTitle: 'Run 1',
+        rows: [{
+          rank: 1,
+          bib: '101',
+          name: 'John Smith',
+          givenName: 'John',
+          familyName: 'Smith',
+          club: 'Test Club',
+          nat: 'CZE',
+          startOrder: 1,
+          startTime: '10:15:00',
+          gates: '',
+          pen: 4,
+          time: '85.50',
+          total: '89.50',
+          behind: '0.00',
+          // No totalTotal → standard race
+        }],
+      };
+
+      const results = await transformer.transformResults(msg);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].pen).toBe(400);    // TCP: 4s → 400cs
+      expect(results[0].total).toBe(8950); // TCP: 89.50s → 8950cs
+    });
+  });
+
+  describe('updateOnCoursePenalties', () => {
+    it('should cache penalties from OnCourse entries', () => {
+      transformer.updateOnCoursePenalties([{
+        bib: '101',
+        pen: 50,
+        name: 'Smith',
+        club: 'Club',
+        nat: 'CZE',
+        raceId: 'K1M_ST_BR2_2',
+        raceName: '',
+        startOrder: 1,
+        warning: '',
+        gates: '',
+        completed: false,
+        dtStart: null,
+        dtFinish: null,
+        time: null,
+        total: null,
+        rank: 0,
+        position: 1,
+        ttbDiff: '',
+        ttbName: '',
+      }]);
+
+      // Cache is internal — verified via transformResults behavior in BR tests
+      // Just ensure it doesn't throw
+    });
+
+    it('should cleanup entries after grace period', async () => {
+      vi.useFakeTimers();
+
+      const oc: OnCourseCompetitor = {
+        bib: '101',
+        pen: 50,
+        name: 'Smith',
+        club: 'Club',
+        nat: 'CZE',
+        raceId: 'K1M_ST_BR2_2',
+        raceName: '',
+        startOrder: 1,
+        warning: '',
+        gates: '',
+        completed: false,
+        dtStart: null,
+        dtFinish: null,
+        time: null,
+        total: null,
+        rank: 0,
+        position: 1,
+        ttbDiff: '',
+        ttbName: '',
+      };
+
+      // Competitor on course
+      transformer.updateOnCoursePenalties([oc]);
+
+      // Competitor leaves OnCourse
+      transformer.updateOnCoursePenalties([]);
+
+      // Within grace period — cache should still have entry
+      vi.advanceTimersByTime(5_000);
+      transformer.updateOnCoursePenalties([]); // trigger cleanup
+
+      // After grace period — entry should be removed
+      vi.advanceTimersByTime(6_000); // total 11s > 10s grace
+      transformer.updateOnCoursePenalties([]); // trigger cleanup
+
+      // Verify: no OnCourse source, no XML → row should be skipped
+      await transformer.refreshParticipantMapping();
+      (mockXmlService as any).getResultsForRace = vi.fn().mockResolvedValue(null);
+
+      const msg: ResultsMessage = {
+        raceId: 'K1M_ST_BR2_2',
+        classId: 'K1M_ST',
+        isCurrent: true,
+        mainTitle: 'K1 Men',
+        subTitle: 'Run 2',
+        rows: [{
+          rank: 1,
+          bib: '101',
+          name: 'John Smith',
+          givenName: 'John',
+          familyName: 'Smith',
+          club: 'Test Club',
+          nat: 'CZE',
+          startOrder: 1,
+          startTime: '10:15:00',
+          gates: '',
+          pen: 4,
+          time: '90.35',
+          total: '91.78',
+          behind: '',
+          betterRun: 1,
+          totalTotal: 917800,
+        }],
+      };
+
+      const results = await transformer.transformResults(msg);
+      expect(results).toHaveLength(0); // Cache expired, no XML → skipped
+
+      vi.useRealTimers();
     });
   });
 

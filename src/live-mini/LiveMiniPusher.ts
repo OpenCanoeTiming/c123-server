@@ -380,6 +380,11 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
       return;
     }
 
+    // Always update OnCourse penalty cache for BR merge (even when push is throttled)
+    if (state.onCourse.length > 0) {
+      this.transformer.updateOnCoursePenalties(state.onCourse);
+    }
+
     // Handle OnCourse push (throttle 2/s)
     if (this.status.channels.oncourse.enabled && state.onCourse.length > 0) {
       this.scheduleOnCoursePush(state.onCourse);
@@ -551,7 +556,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
     }
 
     try {
-      const transformed = this.transformer.transformResults(results);
+      const transformed = await this.transformer.transformResults(results);
 
       if (transformed.length === 0) {
         Logger.debug('LiveMiniPusher', 'No valid Results data to push');
