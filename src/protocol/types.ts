@@ -203,6 +203,26 @@ export interface C123ScoringEvent extends C123MessageBase {
 }
 
 /**
+ * XML mismatch notification (server-generated)
+ * Sent when TCP schedule doesn't match XML file (different event loaded)
+ */
+export interface C123XmlMismatch extends C123MessageBase {
+  type: 'XmlMismatch';
+  data: {
+    /** Whether mismatch is active (true) or resolved (false) */
+    detected: boolean;
+    /** Schedule fingerprint from TCP (C123 live data) */
+    tcpFingerprint: string;
+    /** Schedule fingerprint from XML file */
+    xmlFingerprint: string;
+    /** Race IDs present in TCP but missing from XML */
+    unmatchedRaceIds: string[];
+    /** Human-readable description */
+    message: string;
+  };
+}
+
+/**
  * Union of all C123 protocol messages
  */
 export type C123Message =
@@ -214,6 +234,7 @@ export type C123Message =
   | C123Connected
   | C123Error
   | C123XmlChange
+  | C123XmlMismatch
   | C123ForceRefresh
   | C123LogEntry
   | C123ConfigPush
@@ -302,6 +323,13 @@ export function isConfigPush(msg: C123Message): msg is C123ConfigPush {
  */
 export function isClientState(msg: C123Message): msg is C123ClientState {
   return msg.type === 'ClientState';
+}
+
+/**
+ * Type guard for C123XmlMismatch
+ */
+export function isXmlMismatch(msg: C123Message): msg is C123XmlMismatch {
+  return msg.type === 'XmlMismatch';
 }
 
 /**
