@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fsPromises from 'node:fs/promises';
 import { XMLParser } from 'fast-xml-parser';
 
@@ -557,21 +558,16 @@ export class XmlDataService {
       throw new Error('XML path not configured');
     }
 
-    const stats = await fsPromises.stat(this.xmlPath);
-    const mtime = stats.mtime;
+    const content = await fsPromises.readFile(this.xmlPath, 'utf-8');
+    const newChecksum = crypto.createHash('md5').update(content).digest('hex');
 
-    // Check if file has changed
-    if (this.lastModified && mtime.getTime() === this.lastModified.getTime() && this.cachedData) {
-      return;
+    if (newChecksum === this.checksum && this.cachedData) {
+      return; // Content truly unchanged
     }
 
-    const content = await fsPromises.readFile(this.xmlPath, 'utf-8');
+    this.checksum = newChecksum;
+    this.lastModified = new Date();
 
-    // Calculate simple checksum (hash of length + first/last chars)
-    this.checksum = `${content.length}-${content.charCodeAt(100) || 0}-${content.charCodeAt(content.length - 100) || 0}`;
-    this.lastModified = mtime;
-
-    // Parse XML
     const parsed = this.parser.parse(content);
 
     if (!parsed.Canoe123Data) {

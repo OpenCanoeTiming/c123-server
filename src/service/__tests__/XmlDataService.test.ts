@@ -235,11 +235,9 @@ describe('XmlDataService', () => {
 
     it('reloads data when file is modified', async () => {
       service.setPath(xmlPath);
-
       await service.getParticipants();
 
-      // Modify file with delay to ensure mtime changes
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      // Write modified content — hash will differ, triggering reload
       const modifiedXml = sampleXml.replace('PRSKAVEC', 'MODIFIED');
       await fsPromises.writeFile(xmlPath, modifiedXml);
 
