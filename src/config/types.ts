@@ -201,6 +201,8 @@ export interface AppSettings {
   lastAutoDetectedPath?: string;
   /** Manual override for event name (if set, used instead of XML MainTitle) */
   eventNameOverride?: string;
+  /** TTL in ms for XML data cache — skips file re-read within this window (default: 5000) */
+  xmlCacheTtlMs?: number;
   /** Timestamp of settings last update */
   lastUpdated?: string;
 
@@ -227,4 +229,5 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   xmlSourceMode: 'auto-offline',
   xmlAutoDetect: true, // deprecated, kept for backwards compatibility
   xmlAutoDetectInterval: 30000, // 30 seconds
+  xmlCacheTtlMs: 5000, // 5 seconds
 };

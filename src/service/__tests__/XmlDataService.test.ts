@@ -89,6 +89,7 @@ describe('XmlDataService', () => {
 
   beforeEach(async () => {
     service = new XmlDataService();
+    service.setCacheTtl(0); // Disable TTL for unit tests — always re-read
     tempDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'xml-service-test-'));
     xmlPath = path.join(tempDir, 'test.xml');
     await fsPromises.writeFile(xmlPath, sampleXml);
@@ -254,6 +255,49 @@ describe('XmlDataService', () => {
       // Should reload without error
       const participants = await service.getParticipants();
       expect(participants).toHaveLength(2);
+    });
+  });
+
+  describe('cache TTL', () => {
+    it('skips file re-read within TTL window', async () => {
+      service.setCacheTtl(60000); // 60s TTL
+      service.setPath(xmlPath);
+      await service.getParticipants();
+
+      // Modify file — but TTL prevents re-read
+      const modifiedXml = sampleXml.replace('PRSKAVEC', 'MODIFIED');
+      await fsPromises.writeFile(xmlPath, modifiedXml);
+
+      const participants = await service.getParticipants();
+      expect(participants[0].familyName).toBe('PRSKAVEC'); // Still cached
+    });
+
+    it('re-reads file after TTL expires', async () => {
+      service.setCacheTtl(1); // 1ms TTL
+      service.setPath(xmlPath);
+      await service.getParticipants();
+
+      // Small delay to exceed TTL
+      await new Promise((resolve) => setTimeout(resolve, 5));
+
+      const modifiedXml = sampleXml.replace('PRSKAVEC', 'MODIFIED');
+      await fsPromises.writeFile(xmlPath, modifiedXml);
+
+      const participants = await service.getParticipants();
+      expect(participants[0].familyName).toBe('MODIFIED');
+    });
+
+    it('clearCache bypasses TTL', async () => {
+      service.setCacheTtl(60000);
+      service.setPath(xmlPath);
+      await service.getParticipants();
+
+      const modifiedXml = sampleXml.replace('PRSKAVEC', 'MODIFIED');
+      await fsPromises.writeFile(xmlPath, modifiedXml);
+
+      service.clearCache();
+      const participants = await service.getParticipants();
+      expect(participants[0].familyName).toBe('MODIFIED');
     });
   });
 

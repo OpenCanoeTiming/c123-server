@@ -160,6 +160,8 @@ export class XmlDataService {
   private lastModified: Date | null = null;
   private cachedData: Canoe123Data | null = null;
   private checksum: string | null = null;
+  private cacheTtlMs = 5000;
+  private lastCheckedAt = 0;
 
   private readonly parser: XMLParser;
 
@@ -174,6 +176,15 @@ export class XmlDataService {
   }
 
   /**
+   * Set the cache TTL in milliseconds.
+   * Within this window, loadIfNeeded() skips file re-read entirely.
+   * Default: 5000ms. Set to 0 to disable TTL (always re-read).
+   */
+  setCacheTtl(ms: number): void {
+    this.cacheTtlMs = ms;
+  }
+
+  /**
    * Set the XML file path
    */
   setPath(path: string | null): void {
@@ -181,6 +192,7 @@ export class XmlDataService {
     this.cachedData = null;
     this.lastModified = null;
     this.checksum = null;
+    this.lastCheckedAt = 0;
   }
 
   /**
@@ -558,8 +570,15 @@ export class XmlDataService {
       throw new Error('XML path not configured');
     }
 
+    // Skip file I/O if recently checked and data is cached
+    const now = Date.now();
+    if (this.cachedData && now - this.lastCheckedAt < this.cacheTtlMs) {
+      return;
+    }
+
     const content = await fsPromises.readFile(this.xmlPath, 'utf-8');
     const newChecksum = crypto.createHash('md5').update(content).digest('hex');
+    this.lastCheckedAt = now;
 
     if (newChecksum === this.checksum && this.cachedData) {
       return; // Content truly unchanged
@@ -718,6 +737,7 @@ export class XmlDataService {
     this.cachedData = null;
     this.lastModified = null;
     this.checksum = null;
+    this.lastCheckedAt = 0;
   }
 }
 
