@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fsPromises from 'node:fs/promises';
 import { XMLParser } from 'fast-xml-parser';
 
@@ -159,6 +160,8 @@ export class XmlDataService {
   private lastModified: Date | null = null;
   private cachedData: Canoe123Data | null = null;
   private checksum: string | null = null;
+  private cacheTtlMs = 5000;
+  private lastCheckedAt = 0;
 
   private readonly parser: XMLParser;
 
@@ -173,6 +176,15 @@ export class XmlDataService {
   }
 
   /**
+   * Set the cache TTL in milliseconds.
+   * Within this window, loadIfNeeded() skips file re-read entirely.
+   * Default: 5000ms. Set to 0 to disable TTL (always re-read).
+   */
+  setCacheTtl(ms: number): void {
+    this.cacheTtlMs = ms;
+  }
+
+  /**
    * Set the XML file path
    */
   setPath(path: string | null): void {
@@ -180,6 +192,7 @@ export class XmlDataService {
     this.cachedData = null;
     this.lastModified = null;
     this.checksum = null;
+    this.lastCheckedAt = 0;
   }
 
   /**
@@ -557,21 +570,23 @@ export class XmlDataService {
       throw new Error('XML path not configured');
     }
 
-    const stats = await fsPromises.stat(this.xmlPath);
-    const mtime = stats.mtime;
-
-    // Check if file has changed
-    if (this.lastModified && mtime.getTime() === this.lastModified.getTime() && this.cachedData) {
+    // Skip file I/O if recently checked and data is cached
+    const now = Date.now();
+    if (this.cachedData && now - this.lastCheckedAt < this.cacheTtlMs) {
       return;
     }
 
     const content = await fsPromises.readFile(this.xmlPath, 'utf-8');
+    const newChecksum = crypto.createHash('md5').update(content).digest('hex');
+    this.lastCheckedAt = now;
 
-    // Calculate simple checksum (hash of length + first/last chars)
-    this.checksum = `${content.length}-${content.charCodeAt(100) || 0}-${content.charCodeAt(content.length - 100) || 0}`;
-    this.lastModified = mtime;
+    if (newChecksum === this.checksum && this.cachedData) {
+      return; // Content truly unchanged
+    }
 
-    // Parse XML
+    this.checksum = newChecksum;
+    this.lastModified = new Date();
+
     const parsed = this.parser.parse(content);
 
     if (!parsed.Canoe123Data) {
@@ -722,6 +737,7 @@ export class XmlDataService {
     this.cachedData = null;
     this.lastModified = null;
     this.checksum = null;
+    this.lastCheckedAt = 0;
   }
 }
 

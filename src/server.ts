@@ -431,6 +431,11 @@ export class Server extends EventEmitter<ServerEvents> {
       this.config.xmlAutoDetectInterval = settings.xmlAutoDetectInterval;
     }
 
+    // Apply XML cache TTL
+    if (settings.xmlCacheTtlMs !== undefined) {
+      this.xmlDataService.setCacheTtl(settings.xmlCacheTtlMs);
+    }
+
     // Handle XML source mode
     const mode = settings.xmlSourceMode ?? 'auto-offline';
 
