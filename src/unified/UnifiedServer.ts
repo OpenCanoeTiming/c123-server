@@ -5,7 +5,8 @@ import { EventEmitter } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import type { ScoreboardConfig } from '../admin/types.js';
-import type { C123Message, C123XmlChange, C123ForceRefresh, C123LogEntry, C123Connected, C123ScoringEvent, C123Schedule, XmlSection, LogLevel, C123ClientState } from '../protocol/types.js';
+import type { C123Message, C123XmlChange, C123XmlMismatch, C123ForceRefresh, C123LogEntry, C123Connected, C123ScoringEvent, C123Schedule, XmlSection, LogLevel, C123ClientState } from '../protocol/types.js';
+import type { MismatchState } from '../xml/XmlMismatchDetector.js';
 import { getLogBuffer, type LogEntry, type LogFilterOptions } from '../utils/LogBuffer.js';
 import { ScoreboardSession } from '../ws/ScoreboardSession.js';
 import { Logger } from '../utils/logger.js';
@@ -107,6 +108,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   private sources: RegisteredSource[] = [];
   private xmlDataService: XmlDataService | null = null;
   private c123Server: C123Server | null = null;
+  private lastMismatchState: MismatchState | null = null;
 
   constructor(config?: UnifiedServerConfig) {
     super();
@@ -398,6 +400,45 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     }
 
     Logger.debug('Unified', `Broadcast XML change: ${sections.join(', ')} to ${this.sessions.size} clients`);
+  }
+
+  /**
+   * Broadcast an XML mismatch notification to all connected clients
+   */
+  broadcastXmlMismatch(state: MismatchState): void {
+    this.lastMismatchState = state;
+
+    const message: C123XmlMismatch = {
+      type: 'XmlMismatch',
+      timestamp: new Date().toISOString(),
+      data: {
+        detected: state.detected,
+        tcpFingerprint: state.tcpFingerprint ?? '',
+        xmlFingerprint: state.xmlFingerprint ?? '',
+        unmatchedRaceIds: state.unmatchedRaceIds ?? [],
+        message: state.message ?? (state.detected ? 'XML file does not match C123 live data' : 'Resolved'),
+      },
+    };
+
+    const json = JSON.stringify(message);
+
+    for (const [clientId, session] of this.sessions) {
+      if (session.isConnected()) {
+        session.sendRaw(json);
+      } else {
+        this.sessions.delete(clientId);
+        this.emit('disconnection', clientId);
+      }
+    }
+
+    // Also send to admin connections
+    for (const ws of this.adminConnections) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(json);
+      }
+    }
+
+    Logger.debug('Unified', `Broadcast XML mismatch (detected=${state.detected}) to ${this.sessions.size} clients`);
   }
 
   /**
@@ -858,6 +899,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     this.app.get('/api/xml/races/:id/results', this.handleXmlRaceResults.bind(this));
     this.app.get('/api/xml/races/:id/results/:run', this.handleXmlRaceResultsByRun.bind(this));
     this.app.get('/api/xml/courses', this.handleXmlCourses.bind(this));
+    this.app.get('/api/xml/mismatch', this.handleXmlMismatch.bind(this));
 
     // Config API routes
     this.app.get('/api/config', this.handleGetConfig.bind(this));
@@ -1260,6 +1302,13 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         error: err instanceof Error ? err.message : 'Unknown error',
       });
     }
+  }
+
+  /**
+   * GET /api/xml/mismatch - Current XML mismatch status
+   */
+  private handleXmlMismatch(_req: Request, res: Response): void {
+    res.json(this.lastMismatchState ?? { detected: false });
   }
 
   /**

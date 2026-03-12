@@ -750,6 +750,8 @@ function connectLogWebSocket() {
           timestamp: msg.timestamp,
           data: msg.data.data
         });
+      } else if (msg.type === 'XmlMismatch') {
+        showMismatchBanner(msg.data);
       } else if (msg.type === 'ClientsUpdate') {
         // Live update of clients list
         clientsData = msg.data.clients || [];
@@ -1695,6 +1697,46 @@ function showAssetMessage(msg) {
 // Initialization
 // ===========================================
 
+// =============================================
+// XML Mismatch Banner
+// =============================================
+
+function showMismatchBanner(data) {
+  var banner = document.getElementById('mismatchBanner');
+  if (!banner) return;
+
+  if (data.detected) {
+    var msg = data.message || 'XML file does not match C123 live data';
+    document.getElementById('mismatchMessage').textContent = msg;
+    banner.style.display = 'flex';
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+function loadMismatchStatus() {
+  fetch('/api/xml/mismatch')
+    .then(function(res) { return res.json(); })
+    .then(function(data) { showMismatchBanner(data); })
+    .catch(function() { /* ignore */ });
+}
+
+function redetectXmlPath() {
+  fetch('/api/config/xml/detect')
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.path) {
+        showToast('XML path re-detected: ' + data.path, 'success');
+        loadXmlConfig();
+      } else {
+        showToast('No XML file detected', 'warning');
+      }
+    })
+    .catch(function() {
+      showToast('Failed to re-detect XML path', 'error');
+    });
+}
+
 function init() {
   // Initialize tab from URL hash
   initTabFromHash();
@@ -1729,6 +1771,7 @@ function init() {
   loadInitialLogs();
   loadClients();
   loadAssets();
+  loadMismatchStatus();
   connectLogWebSocket();
 
   // Periodic refresh

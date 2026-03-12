@@ -10,6 +10,7 @@ import { UnifiedServer } from './unified/UnifiedServer.js';
 import { XmlDataService } from './service/XmlDataService.js';
 import { ScoringService, type ScoringRequest, type RemoveFromCourseRequest, type TimingRequest } from './service/index.js';
 import { XmlChangeNotifier } from './xml/XmlChangeNotifier.js';
+import { XmlMismatchDetector } from './xml/XmlMismatchDetector.js';
 import { Logger } from './utils/logger.js';
 import {
   createTimeOfDay,
@@ -99,6 +100,7 @@ export class Server extends EventEmitter<ServerEvents> {
   private tcpSource: TcpSource | null = null;
   private xmlSource: XmlFileSource | null = null;
   private xmlChangeNotifier: XmlChangeNotifier | null = null;
+  private xmlMismatchDetector: XmlMismatchDetector | null = null;
   private eventState: EventState;
   private unifiedServer: UnifiedServer;
   private xmlDataService: XmlDataService;
@@ -142,6 +144,9 @@ export class Server extends EventEmitter<ServerEvents> {
       this.startTcpSource(this.config.tcpHost, this.config.tcpPort);
     }
 
+    // Start mismatch detector (works regardless of XML path — listens for TCP events)
+    this.startXmlMismatchDetector();
+
     if (this.config.xmlPath) {
       this.startXmlSource();
       this.startXmlChangeNotifier();
@@ -172,6 +177,7 @@ export class Server extends EventEmitter<ServerEvents> {
     this.tcpSource?.stop();
     this.xmlSource?.stop();
     await this.xmlChangeNotifier?.stop();
+    this.xmlMismatchDetector?.stop();
     this.stopAutoDetection();
 
     // Stop unified server
@@ -650,6 +656,29 @@ export class Server extends EventEmitter<ServerEvents> {
     });
 
     this.xmlChangeNotifier.start();
+  }
+
+  private startXmlMismatchDetector(): void {
+    this.xmlMismatchDetector = new XmlMismatchDetector(
+      this.eventState,
+      this.xmlDataService,
+    );
+
+    this.xmlMismatchDetector.on('mismatch', (state) => {
+      Logger.warn('Server', `XML mismatch: ${state.message}`);
+      this.unifiedServer.broadcastXmlMismatch(state);
+    });
+
+    this.xmlMismatchDetector.on('resolved', () => {
+      Logger.info('Server', 'XML mismatch resolved');
+      this.unifiedServer.broadcastXmlMismatch({ detected: false });
+    });
+
+    this.xmlMismatchDetector.on('error', (err) => {
+      this.emit('error', err);
+    });
+
+    this.xmlMismatchDetector.start();
   }
 
   private handleXmlMessage(xml: string): void {
