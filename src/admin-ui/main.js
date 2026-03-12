@@ -1707,9 +1707,6 @@ function showMismatchBanner(data) {
 
   if (data.detected) {
     var msg = data.message || 'XML file does not match C123 live data';
-    if (data.unmatchedRaceIds && data.unmatchedRaceIds.length > 0) {
-      msg += ' (' + data.unmatchedRaceIds.length + ' unmatched races)';
-    }
     document.getElementById('mismatchMessage').textContent = msg;
     banner.style.display = 'flex';
   } else {
