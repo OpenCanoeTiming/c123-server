@@ -19,6 +19,7 @@ import {
   CustomParamDefinition,
   AssetUrls,
 } from './types.js';
+import type { LiveConfig } from '../live/types.js';
 
 export class AppSettingsManager {
   private settings: AppSettingsType;
@@ -64,6 +65,13 @@ export class AppSettingsManager {
       if (fs.existsSync(this.settingsPath)) {
         const content = fs.readFileSync(this.settingsPath, 'utf-8');
         const loaded = JSON.parse(content) as Partial<AppSettingsType>;
+
+        // Migrate old 'liveMini' key to 'live'
+        const raw = loaded as Record<string, unknown>;
+        if ('liveMini' in raw && !('live' in raw)) {
+          loaded.live = raw.liveMini as LiveConfig;
+          delete raw.liveMini;
+        }
 
         // Merge with defaults to ensure all fields exist
         this.settings = {
@@ -522,18 +530,18 @@ export class AppSettingsManager {
   /**
    * Get Live-Mini configuration
    */
-  getLiveMiniConfig() {
-    return this.settings.liveMini
-      ? { ...this.settings.liveMini }
-      : { ...DEFAULT_APP_SETTINGS.liveMini! };
+  getLiveConfig() {
+    return this.settings.live
+      ? { ...this.settings.live }
+      : { ...DEFAULT_APP_SETTINGS.live! };
   }
 
   /**
    * Update Live-Mini configuration (partial update)
    */
-  updateLiveMiniConfig(updates: Partial<typeof DEFAULT_APP_SETTINGS.liveMini>): void {
-    this.settings.liveMini = {
-      ...(this.settings.liveMini || DEFAULT_APP_SETTINGS.liveMini!),
+  updateLiveConfig(updates: Partial<typeof DEFAULT_APP_SETTINGS.live>): void {
+    this.settings.live = {
+      ...(this.settings.live || DEFAULT_APP_SETTINGS.live!),
       ...updates,
     };
     this.save();
@@ -542,13 +550,13 @@ export class AppSettingsManager {
   /**
    * Set Live-Mini connection (serverUrl, apiKey, eventId)
    */
-  setLiveMiniConnection(
+  setLiveConnection(
     serverUrl: string,
     apiKey: string,
     eventId: string,
     eventStatus: string,
   ): void {
-    this.updateLiveMiniConfig({
+    this.updateLiveConfig({
       enabled: true,
       serverUrl,
       apiKey,
@@ -560,8 +568,8 @@ export class AppSettingsManager {
   /**
    * Clear Live-Mini connection
    */
-  clearLiveMiniConnection(): void {
-    this.updateLiveMiniConfig({
+  clearLiveConnection(): void {
+    this.updateLiveConfig({
       enabled: false,
       serverUrl: null,
       apiKey: null,
@@ -573,19 +581,19 @@ export class AppSettingsManager {
   /**
    * Enable/disable Live-Mini push
    */
-  setLiveMiniEnabled(enabled: boolean): void {
-    this.updateLiveMiniConfig({ enabled });
+  setLiveEnabled(enabled: boolean): void {
+    this.updateLiveConfig({ enabled });
   }
 
   /**
    * Set which channels to push
    */
-  setLiveMiniChannels(channels: {
+  setLiveChannels(channels: {
     pushXml?: boolean;
     pushOnCourse?: boolean;
     pushResults?: boolean;
   }): void {
-    this.updateLiveMiniConfig(channels);
+    this.updateLiveConfig(channels);
   }
 }
 

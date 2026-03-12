@@ -1,7 +1,7 @@
 /**
  * Live-Mini HTTP Client
  *
- * Stateless HTTP client for pushing data to c123-live-mini-server.
+ * Stateless HTTP client for pushing data to c123-live-server.
  * Uses native fetch with exponential backoff retry logic.
  */
 
@@ -22,7 +22,7 @@ import type {
 /**
  * Client configuration
  */
-export interface LiveMiniClientConfig {
+export interface LiveClientConfig {
   /** Server base URL (e.g., "https://live.example.com") */
   serverUrl: string;
   /** API key for authentication (optional, required for authenticated endpoints) */
@@ -53,24 +53,24 @@ type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 /**
  * Custom error for API errors
  */
-export class LiveMiniApiError extends Error {
+export class LiveApiError extends Error {
   constructor(
     message: string,
     public statusCode: number,
     public response?: ApiErrorResponse,
   ) {
     super(message);
-    this.name = 'LiveMiniApiError';
+    this.name = 'LiveApiError';
   }
 }
 
 /**
  * Custom error for timeout
  */
-export class LiveMiniTimeoutError extends Error {
+export class LiveTimeoutError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'LiveMiniTimeoutError';
+    this.name = 'LiveTimeoutError';
   }
 }
 
@@ -87,12 +87,12 @@ const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
 /**
  * Live-Mini HTTP Client
  */
-export class LiveMiniClient {
+export class LiveClient {
   private config: { serverUrl: string; apiKey?: string; timeout: number };
   private retryConfig: Required<RetryConfig>;
 
   constructor(
-    config: LiveMiniClientConfig,
+    config: LiveClientConfig,
     retryConfig: RetryConfig = {},
   ) {
     this.config = {
@@ -109,7 +109,7 @@ export class LiveMiniClient {
   }
 
   /**
-   * Create a new event on live-mini
+   * Create a new event on live
    */
   async createEvent(request: CreateEventRequest): Promise<CreateEventResponse> {
     return this.request<CreateEventRequest, CreateEventResponse>(
@@ -231,7 +231,7 @@ export class LiveMiniClient {
             }
           }
 
-          throw new LiveMiniApiError(
+          throw new LiveApiError(
             errorBody?.message || `HTTP ${response.status}: ${response.statusText}`,
             response.status,
             errorBody || undefined,
@@ -245,13 +245,13 @@ export class LiveMiniClient {
 
         // Don't retry on abort (timeout)
         if (error instanceof Error && error.name === 'AbortError') {
-          throw new LiveMiniTimeoutError(
+          throw new LiveTimeoutError(
             `Request timeout after ${this.config.timeout}ms`,
           );
         }
 
         // Don't retry on API errors (4xx, 5xx except 429 handled above)
-        if (error instanceof LiveMiniApiError) {
+        if (error instanceof LiveApiError) {
           throw error;
         }
 

@@ -2479,18 +2479,18 @@ fieldset.modal-section > legend {
 /* ============================================
    Live-Mini Section
    ============================================ */
-.live-mini-section {
+.live-section {
   margin-bottom: var(--space-4);
 }
 
-.live-mini-header {
+.live-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: var(--space-3);
 }
 
-.live-mini-title {
+.live-title {
   font-size: var(--text-lg);
   font-weight: var(--font-weight-bold);
   color: var(--text-primary);
@@ -2503,33 +2503,33 @@ fieldset.modal-section > legend {
   letter-spacing: normal;
 }
 
-.live-mini-title-icon {
+.live-title-icon {
   vertical-align: text-bottom;
   margin-right: var(--space-2);
 }
 
-.live-mini-description {
+.live-description {
   margin-bottom: var(--space-4);
   color: var(--text-secondary);
 }
 
-.live-mini-url-input {
+.live-url-input {
   flex: 1;
   min-width: 300px;
 }
 
-.live-mini-error {
+.live-error {
   margin-top: var(--space-3);
 }
 
-.live-mini-tabs {
+.live-tabs {
   display: flex;
   gap: var(--space-1);
   margin-bottom: var(--space-4);
   border-bottom: 1px solid var(--border);
 }
 
-.live-mini-tab {
+.live-tab {
   padding: var(--space-2) var(--space-4);
   background: none;
   border: none;
@@ -2540,11 +2540,11 @@ fieldset.modal-section > legend {
   transition: color 0.15s, border-color 0.15s;
 }
 
-.live-mini-tab:hover {
+.live-tab:hover {
   color: var(--text-primary);
 }
 
-.live-mini-tab.tab-active {
+.live-tab.tab-active {
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
@@ -2567,51 +2567,51 @@ fieldset.modal-section > legend {
   font-weight: 500;
 }
 
-.live-mini-info-grid {
+.live-info-grid {
   display: flex;
   gap: var(--space-5);
   margin-bottom: var(--space-5);
   flex-wrap: wrap;
 }
 
-.live-mini-info-label {
+.live-info-label {
   font-size: var(--text-sm);
   color: var(--text-secondary);
   margin-bottom: var(--space-1);
 }
 
-.live-mini-info-value {
+.live-info-value {
   font-size: var(--text-sm);
 }
 
-.live-mini-channels-grid {
+.live-channels-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: var(--space-3);
   margin-bottom: var(--space-5);
 }
 
-.live-mini-channel-card {
+.live-channel-card {
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: var(--space-3);
 }
 
-.live-mini-channel-header {
+.live-channel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: var(--space-2);
 }
 
-.live-mini-channel-name {
+.live-channel-name {
   font-weight: var(--font-weight-bold);
   font-size: var(--text-sm);
   color: var(--text-primary);
 }
 
-.live-mini-channel-stats {
+.live-channel-stats {
   display: flex;
   gap: var(--space-3);
   font-size: var(--text-sm);
@@ -2619,20 +2619,20 @@ fieldset.modal-section > legend {
   margin-bottom: var(--space-2);
 }
 
-.live-mini-channel-last {
+.live-channel-last {
   font-size: var(--text-xs);
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
 
-.live-mini-toggles {
+.live-toggles {
   display: flex;
   gap: var(--space-4);
   margin-bottom: var(--space-5);
   flex-wrap: wrap;
 }
 
-.live-mini-toggle {
+.live-toggle {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -2640,40 +2640,40 @@ fieldset.modal-section > legend {
   user-select: none;
 }
 
-.live-mini-toggle input[type="checkbox"] {
+.live-toggle input[type="checkbox"] {
   cursor: pointer;
 }
 
-.live-mini-toggle span {
+.live-toggle span {
   font-size: var(--text-sm);
   color: var(--text-primary);
 }
 
-.live-mini-actions {
+.live-actions {
   display: flex;
   gap: var(--space-3);
   flex-wrap: wrap;
 }
 
-.live-mini-alert {
+.live-alert {
   margin-bottom: var(--space-4);
 }
 
-.live-mini-field-hint {
+.live-field-hint {
   font-size: var(--text-sm);
   color: var(--text-secondary);
   margin-top: var(--space-1);
 }
 
-.live-mini-modal-error {
+.live-modal-error {
   padding: var(--space-3) var(--space-5);
 }
 
-.live-mini-transition-modal {
+.live-transition-modal {
   max-width: 500px;
 }
 
-.live-mini-status-progression {
+.live-status-progression {
   margin-top: var(--space-4);
   padding: var(--space-3);
   background: var(--bg-surface);

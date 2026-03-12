@@ -772,9 +772,9 @@ function connectLogWebSocket() {
         // Live update of clients list
         clientsData = msg.data.clients || [];
         renderClients();
-      } else if (msg.type === 'LiveMiniStatus') {
+      } else if (msg.type === 'LiveStatus') {
         // Live update of Live-Mini status
-        renderLiveMiniStatus(msg.data);
+        renderLiveStatus(msg.data);
       }
     } catch (e) {
       // Ignore parse errors
@@ -1125,22 +1125,22 @@ function showClientMessage(msg, isError) {
 // Live-Mini Functions
 // ===========================================
 
-let liveMiniStatus = null;
-let liveMiniTimerInterval = null;
+let liveStatus = null;
+let liveTimerInterval = null;
 
 /**
  * Periodically refresh relative time displays for Live-Mini channels.
  * Without this, timestamps only update when a new push happens.
  */
-function startLiveMiniTimerRefresh() {
-  if (liveMiniTimerInterval) return;
-  liveMiniTimerInterval = setInterval(() => {
-    if (!liveMiniStatus || !liveMiniStatus.channels) return;
+function startLiveTimerRefresh() {
+  if (liveTimerInterval) return;
+  liveTimerInterval = setInterval(() => {
+    if (!liveStatus || !liveStatus.channels) return;
     const channelIdMap = { xml: 'Xml', oncourse: 'OnCourse', results: 'Results' };
     for (const [channel, idSuffix] of Object.entries(channelIdMap)) {
-      const ch = liveMiniStatus.channels[channel];
+      const ch = liveStatus.channels[channel];
       if (ch) {
-        const el = document.getElementById('liveMiniChannel' + idSuffix + 'Last');
+        const el = document.getElementById('liveChannel' + idSuffix + 'Last');
         if (el) {
           el.textContent = ch.lastPushAt ? formatRelativeTime(ch.lastPushAt) : 'Never';
         }
@@ -1152,13 +1152,13 @@ function startLiveMiniTimerRefresh() {
 /**
  * Render Live-Mini status panel
  */
-function renderLiveMiniStatus(status) {
-  liveMiniStatus = status;
-  startLiveMiniTimerRefresh();
+function renderLiveStatus(status) {
+  liveStatus = status;
+  startLiveTimerRefresh();
 
-  const notConfigured = document.getElementById('liveMiniNotConfigured');
-  const connected = document.getElementById('liveMiniConnected');
-  const statusBadge = document.getElementById('liveMiniStatusBadge');
+  const notConfigured = document.getElementById('liveNotConfigured');
+  const connected = document.getElementById('liveConnected');
+  const statusBadge = document.getElementById('liveStatusBadge');
 
   if (!notConfigured || !connected || !statusBadge) return;
 
@@ -1184,10 +1184,10 @@ function renderLiveMiniStatus(status) {
   connected.style.display = 'block';
 
   // Update server & event info
-  const serverDisplay = document.getElementById('liveMiniServerDisplay');
-  const eventIdDisplay = document.getElementById('liveMiniEventIdDisplay');
-  const eventStatusDisplay = document.getElementById('liveMiniEventStatusDisplay');
-  const connectedAtDisplay = document.getElementById('liveMiniConnectedAtDisplay');
+  const serverDisplay = document.getElementById('liveServerDisplay');
+  const eventIdDisplay = document.getElementById('liveEventIdDisplay');
+  const eventStatusDisplay = document.getElementById('liveEventStatusDisplay');
+  const connectedAtDisplay = document.getElementById('liveConnectedAtDisplay');
 
   if (serverDisplay) serverDisplay.textContent = status.serverUrl || '-';
   if (eventIdDisplay) eventIdDisplay.textContent = status.eventId || '-';
@@ -1206,22 +1206,22 @@ function renderLiveMiniStatus(status) {
   }
 
   // Update channel cards
-  updateLiveMiniChannel('Xml', status.channels.xml);
-  updateLiveMiniChannel('OnCourse', status.channels.oncourse);
-  updateLiveMiniChannel('Results', status.channels.results);
+  updateLiveChannel('Xml', status.channels.xml);
+  updateLiveChannel('OnCourse', status.channels.oncourse);
+  updateLiveChannel('Results', status.channels.results);
 
   // Update channel toggles
-  const toggleXml = document.getElementById('liveMiniToggleXml');
-  const toggleOnCourse = document.getElementById('liveMiniToggleOnCourse');
-  const toggleResults = document.getElementById('liveMiniToggleResults');
+  const toggleXml = document.getElementById('liveToggleXml');
+  const toggleOnCourse = document.getElementById('liveToggleOnCourse');
+  const toggleResults = document.getElementById('liveToggleResults');
 
   if (toggleXml) toggleXml.checked = status.channels.xml.enabled;
   if (toggleOnCourse) toggleOnCourse.checked = status.channels.oncourse.enabled;
   if (toggleResults) toggleResults.checked = status.channels.results.enabled;
 
   // Update pause button
-  const pauseBtn = document.getElementById('liveMiniPauseBtn');
-  const pauseBtnText = document.getElementById('liveMiniPauseBtnText');
+  const pauseBtn = document.getElementById('livePauseBtn');
+  const pauseBtnText = document.getElementById('livePauseBtnText');
   if (pauseBtn && pauseBtnText) {
     if (status.state === 'paused') {
       pauseBtnText.textContent = 'Resume';
@@ -1231,7 +1231,7 @@ function renderLiveMiniStatus(status) {
   }
 
   // Show circuit breaker warning
-  const cbWarning = document.getElementById('liveMiniCircuitBreakerWarning');
+  const cbWarning = document.getElementById('liveCircuitBreakerWarning');
   if (cbWarning) {
     if (status.circuitBreaker.isOpen) {
       cbWarning.style.display = 'block';
@@ -1242,7 +1242,7 @@ function renderLiveMiniStatus(status) {
   }
 
   // Show global error
-  const errorDisplay = document.getElementById('liveMiniErrorDisplay');
+  const errorDisplay = document.getElementById('liveErrorDisplay');
   if (errorDisplay) {
     if (status.state === 'error' && status.lastError) {
       errorDisplay.style.display = 'block';
@@ -1256,11 +1256,11 @@ function renderLiveMiniStatus(status) {
 /**
  * Update single channel card
  */
-function updateLiveMiniChannel(channelName, channelStatus) {
-  const dot = document.getElementById('liveMiniChannel' + channelName + 'Dot');
-  const pushes = document.getElementById('liveMiniChannel' + channelName + 'Pushes');
-  const errors = document.getElementById('liveMiniChannel' + channelName + 'Errors');
-  const last = document.getElementById('liveMiniChannel' + channelName + 'Last');
+function updateLiveChannel(channelName, channelStatus) {
+  const dot = document.getElementById('liveChannel' + channelName + 'Dot');
+  const pushes = document.getElementById('liveChannel' + channelName + 'Pushes');
+  const errors = document.getElementById('liveChannel' + channelName + 'Errors');
+  const last = document.getElementById('liveChannel' + channelName + 'Last');
 
   if (!dot || !pushes || !errors || !last) return;
 
@@ -1306,9 +1306,9 @@ function formatRelativeTime(isoString) {
  * Open event creation modal
  */
 async function openEventCreationModal() {
-  const serverUrl = document.getElementById('liveMiniServerUrl').value.trim();
+  const serverUrl = document.getElementById('liveServerUrl').value.trim();
   if (!serverUrl) {
-    showError('liveMiniConnectError', 'Please enter a server URL');
+    showError('liveConnectError', 'Please enter a server URL');
     return;
   }
 
@@ -1316,7 +1316,7 @@ async function openEventCreationModal() {
   try {
     new URL(serverUrl);
   } catch (e) {
-    showError('liveMiniConnectError', 'Invalid URL format');
+    showError('liveConnectError', 'Invalid URL format');
     return;
   }
 
@@ -1330,10 +1330,10 @@ async function openEventCreationModal() {
   }
 
   // Pre-fill modal (these would ideally come from XML metadata endpoint)
-  const mainTitleInput = document.getElementById('liveMiniEventMainTitle');
-  const eventIdInput = document.getElementById('liveMiniEventEventId');
-  const locationInput = document.getElementById('liveMiniEventLocation');
-  const disciplineSelect = document.getElementById('liveMiniEventDiscipline');
+  const mainTitleInput = document.getElementById('liveEventMainTitle');
+  const eventIdInput = document.getElementById('liveEventEventId');
+  const locationInput = document.getElementById('liveEventLocation');
+  const disciplineSelect = document.getElementById('liveEventDiscipline');
 
   // For now, use event name from header if available
   const eventNameEl = document.getElementById('eventName');
@@ -1353,7 +1353,7 @@ async function openEventCreationModal() {
   if (disciplineSelect) disciplineSelect.value = 'Slalom';
 
   // Show modal
-  const modal = document.getElementById('liveMiniEventModal');
+  const modal = document.getElementById('liveEventModal');
   if (modal) {
     modal.style.display = 'flex';
     trapFocus(modal.querySelector('.modal-content'));
@@ -1363,27 +1363,27 @@ async function openEventCreationModal() {
 /**
  * Close event creation modal
  */
-function closeLiveMiniEventModal() {
-  const modal = document.getElementById('liveMiniEventModal');
+function closeLiveEventModal() {
+  const modal = document.getElementById('liveEventModal');
   if (modal) {
     modal.style.display = 'none';
     releaseFocus();
   }
-  hideError('liveMiniEventModalError');
+  hideError('liveEventModalError');
 }
 
 /**
- * Create live-mini event and connect
+ * Create live event and connect
  */
-async function createLiveMiniEvent() {
-  const serverUrl = document.getElementById('liveMiniServerUrl').value.trim();
-  const mainTitle = document.getElementById('liveMiniEventMainTitle').value.trim();
-  const eventId = document.getElementById('liveMiniEventEventId').value.trim();
-  const location = document.getElementById('liveMiniEventLocation').value.trim();
-  const discipline = document.getElementById('liveMiniEventDiscipline').value;
+async function createLiveEvent() {
+  const serverUrl = document.getElementById('liveServerUrl').value.trim();
+  const mainTitle = document.getElementById('liveEventMainTitle').value.trim();
+  const eventId = document.getElementById('liveEventEventId').value.trim();
+  const location = document.getElementById('liveEventLocation').value.trim();
+  const discipline = document.getElementById('liveEventDiscipline').value;
 
   if (!mainTitle || !eventId) {
-    showError('liveMiniEventModalError', 'Event name and ID are required');
+    showError('liveEventModalError', 'Event name and ID are required');
     return;
   }
 
@@ -1409,20 +1409,20 @@ async function createLiveMiniEvent() {
     }
 
     showToast('Connected to Live-Mini server', 'success');
-    closeLiveMiniEventModal();
-    hideError('liveMiniConnectError');
+    closeLiveEventModal();
+    hideError('liveConnectError');
 
     // Refresh status
-    loadLiveMiniStatus();
+    loadLiveStatus();
   } catch (error) {
-    showError('liveMiniEventModalError', error.message);
+    showError('liveEventModalError', error.message);
   }
 }
 
 /**
- * Disconnect from live-mini
+ * Disconnect from live
  */
-async function disconnectLiveMini() {
+async function disconnectLive() {
   if (!confirm('Disconnect from Live-Mini server? This will stop all data push.')) {
     return;
   }
@@ -1441,7 +1441,7 @@ async function disconnectLiveMini() {
     }
 
     showToast('Disconnected from Live-Mini', 'success');
-    loadLiveMiniStatus();
+    loadLiveStatus();
   } catch (error) {
     showToast('Failed to disconnect: ' + error.message, 'error');
   }
@@ -1450,11 +1450,11 @@ async function disconnectLiveMini() {
 /**
  * Toggle between "Create New" and "Connect to Existing" modes
  */
-function toggleLiveMiniMode(mode) {
-  const createSection = document.getElementById('liveMiniCreateSection');
-  const reconnectSection = document.getElementById('liveMiniReconnectSection');
-  const createTab = document.getElementById('liveMiniTabCreate');
-  const reconnectTab = document.getElementById('liveMiniTabReconnect');
+function toggleLiveMode(mode) {
+  const createSection = document.getElementById('liveCreateSection');
+  const reconnectSection = document.getElementById('liveReconnectSection');
+  const createTab = document.getElementById('liveTabCreate');
+  const reconnectTab = document.getElementById('liveTabReconnect');
 
   if (!createSection || !reconnectSection || !createTab || !reconnectTab) return;
 
@@ -1472,32 +1472,32 @@ function toggleLiveMiniMode(mode) {
 }
 
 /**
- * Connect to existing live-mini event
+ * Connect to existing live event
  */
-async function reconnectLiveMini() {
-  const serverUrl = document.getElementById('liveMiniReconnectServerUrl').value.trim();
-  const apiKey = document.getElementById('liveMiniReconnectApiKey').value.trim();
-  const eventId = document.getElementById('liveMiniReconnectEventId').value.trim();
+async function reconnectLive() {
+  const serverUrl = document.getElementById('liveReconnectServerUrl').value.trim();
+  const apiKey = document.getElementById('liveReconnectApiKey').value.trim();
+  const eventId = document.getElementById('liveReconnectEventId').value.trim();
 
   if (!serverUrl) {
-    showError('liveMiniReconnectError', 'Please enter a server URL');
+    showError('liveReconnectError', 'Please enter a server URL');
     return;
   }
 
   try {
     new URL(serverUrl);
   } catch (e) {
-    showError('liveMiniReconnectError', 'Invalid URL format');
+    showError('liveReconnectError', 'Invalid URL format');
     return;
   }
 
   if (!apiKey) {
-    showError('liveMiniReconnectError', 'Please enter an API key');
+    showError('liveReconnectError', 'Please enter an API key');
     return;
   }
 
   if (!eventId) {
-    showError('liveMiniReconnectError', 'Please enter an event ID');
+    showError('liveReconnectError', 'Please enter an event ID');
     return;
   }
 
@@ -1515,20 +1515,20 @@ async function reconnectLiveMini() {
     }
 
     showToast('Connected to existing Live-Mini event', 'success');
-    hideError('liveMiniReconnectError');
-    loadLiveMiniStatus();
+    hideError('liveReconnectError');
+    loadLiveStatus();
   } catch (error) {
-    showError('liveMiniReconnectError', error.message);
+    showError('liveReconnectError', error.message);
   }
 }
 
 /**
  * Toggle pause/resume
  */
-async function toggleLiveMiniPause() {
-  if (!liveMiniStatus) return;
+async function toggleLivePause() {
+  if (!liveStatus) return;
 
-  const isPaused = liveMiniStatus.state === 'paused';
+  const isPaused = liveStatus.state === 'paused';
 
   try {
     const res = await fetch('/api/live/pause', {
@@ -1544,7 +1544,7 @@ async function toggleLiveMiniPause() {
     }
 
     showToast(isPaused ? 'Push resumed' : 'Push paused', 'success');
-    loadLiveMiniStatus();
+    loadLiveStatus();
   } catch (error) {
     showToast('Failed to toggle pause: ' + error.message, 'error');
   }
@@ -1574,8 +1574,8 @@ async function forcePushXml() {
 /**
  * Toggle channel push
  */
-async function toggleLiveMiniChannel(channel) {
-  const checkbox = document.getElementById('liveMiniToggle' + (channel === 'xml' ? 'Xml' : channel === 'oncourse' ? 'OnCourse' : 'Results'));
+async function toggleLiveChannel(channel) {
+  const checkbox = document.getElementById('liveToggle' + (channel === 'xml' ? 'Xml' : channel === 'oncourse' ? 'OnCourse' : 'Results'));
   if (!checkbox) return;
 
   const enabled = checkbox.checked;
@@ -1607,14 +1607,14 @@ async function toggleLiveMiniChannel(channel) {
  * Open status transition modal
  */
 function openTransitionModal() {
-  if (!liveMiniStatus) return;
+  if (!liveStatus) return;
 
-  const select = document.getElementById('liveMiniNewStatus');
-  if (select && liveMiniStatus.eventStatus) {
-    select.value = liveMiniStatus.eventStatus;
+  const select = document.getElementById('liveNewStatus');
+  if (select && liveStatus.eventStatus) {
+    select.value = liveStatus.eventStatus;
   }
 
-  const modal = document.getElementById('liveMiniTransitionModal');
+  const modal = document.getElementById('liveTransitionModal');
   if (modal) {
     modal.style.display = 'flex';
     trapFocus(modal.querySelector('.modal-content'));
@@ -1624,29 +1624,29 @@ function openTransitionModal() {
 /**
  * Close transition modal
  */
-function closeLiveMiniTransitionModal() {
-  const modal = document.getElementById('liveMiniTransitionModal');
+function closeLiveTransitionModal() {
+  const modal = document.getElementById('liveTransitionModal');
   if (modal) {
     modal.style.display = 'none';
     releaseFocus();
   }
-  hideError('liveMiniTransitionModalError');
+  hideError('liveTransitionModalError');
 }
 
 /**
  * Transition event status
  */
-async function transitionLiveMiniStatus() {
-  if (!liveMiniStatus || !liveMiniStatus.eventId) return;
+async function transitionLiveStatus() {
+  if (!liveStatus || !liveStatus.eventId) return;
 
-  const newStatus = document.getElementById('liveMiniNewStatus').value;
+  const newStatus = document.getElementById('liveNewStatus').value;
 
   try {
     const res = await fetch('/api/live/transition', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        eventId: liveMiniStatus.eventId,
+        eventId: liveStatus.eventId,
         status: newStatus
       })
     });
@@ -1658,23 +1658,23 @@ async function transitionLiveMiniStatus() {
     }
 
     showToast('Event status updated to ' + newStatus, 'success');
-    closeLiveMiniTransitionModal();
-    loadLiveMiniStatus();
+    closeLiveTransitionModal();
+    loadLiveStatus();
   } catch (error) {
-    showError('liveMiniTransitionModalError', error.message);
+    showError('liveTransitionModalError', error.message);
   }
 }
 
 /**
- * Load live-mini status from API
+ * Load live status from API
  */
-async function loadLiveMiniStatus() {
+async function loadLiveStatus() {
   try {
     const res = await fetch('/api/live/status');
     const data = await res.json();
-    renderLiveMiniStatus(data.status);
+    renderLiveStatus(data.status);
   } catch (error) {
-    console.error('Failed to load live-mini status:', error);
+    console.error('Failed to load live status:', error);
   }
 }
 
@@ -2333,17 +2333,17 @@ function init() {
     if (e.target === this) closeClientModal();
   });
 
-  const liveMiniEventModal = document.getElementById('liveMiniEventModal');
-  if (liveMiniEventModal) {
-    liveMiniEventModal.addEventListener('click', function(e) {
-      if (e.target === this) closeLiveMiniEventModal();
+  const liveEventModal = document.getElementById('liveEventModal');
+  if (liveEventModal) {
+    liveEventModal.addEventListener('click', function(e) {
+      if (e.target === this) closeLiveEventModal();
     });
   }
 
-  const liveMiniTransitionModal = document.getElementById('liveMiniTransitionModal');
-  if (liveMiniTransitionModal) {
-    liveMiniTransitionModal.addEventListener('click', function(e) {
-      if (e.target === this) closeLiveMiniTransitionModal();
+  const liveTransitionModal = document.getElementById('liveTransitionModal');
+  if (liveTransitionModal) {
+    liveTransitionModal.addEventListener('click', function(e) {
+      if (e.target === this) closeLiveTransitionModal();
     });
   }
 
@@ -2354,11 +2354,11 @@ function init() {
       if (clientModal && clientModal.style.display !== 'none') {
         closeClientModal();
       }
-      if (liveMiniEventModal && liveMiniEventModal.style.display !== 'none') {
-        closeLiveMiniEventModal();
+      if (liveEventModal && liveEventModal.style.display !== 'none') {
+        closeLiveEventModal();
       }
-      if (liveMiniTransitionModal && liveMiniTransitionModal.style.display !== 'none') {
-        closeLiveMiniTransitionModal();
+      if (liveTransitionModal && liveTransitionModal.style.display !== 'none') {
+        closeLiveTransitionModal();
       }
     }
   });
@@ -2371,7 +2371,7 @@ function init() {
   loadClients();
   loadAssets();
   loadMismatchStatus();
-  loadLiveMiniStatus();
+  loadLiveStatus();
   connectLogWebSocket();
 
   // Periodic refresh

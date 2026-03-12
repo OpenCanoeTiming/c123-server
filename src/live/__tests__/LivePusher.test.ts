@@ -1,21 +1,21 @@
 /**
- * Tests for LiveMiniPusher
+ * Tests for LivePusher
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { LiveMiniPusher } from '../LiveMiniPusher.js';
-import { LiveMiniClient } from '../LiveMiniClient.js';
+import { LivePusher } from '../LivePusher.js';
+import { LiveClient } from '../LiveClient.js';
 import type { XmlDataService } from '../../service/XmlDataService.js';
 import type { EventState } from '../../state/EventState.js';
 import type { XmlChangeNotifier } from '../../xml/XmlChangeNotifier.js';
 import type { EventStateData } from '../../state/types.js';
 import type { XmlSection } from '../../protocol/types.js';
 
-// Mock LiveMiniClient (use regular function, not arrow, for constructor compatibility)
-vi.mock('../LiveMiniClient.js', () => {
+// Mock LiveClient (use regular function, not arrow, for constructor compatibility)
+vi.mock('../LiveClient.js', () => {
   return {
-    LiveMiniClient: vi.fn().mockImplementation(function () {
+    LiveClient: vi.fn().mockImplementation(function () {
       return {
         pushXml: vi.fn().mockResolvedValue({ imported: { classes: 1, categories: 1, races: 2, participants: 10 } }),
         pushOnCourse: vi.fn().mockResolvedValue({ active: 2 }),
@@ -36,8 +36,8 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   };
 });
 
-describe('LiveMiniPusher', () => {
-  let pusher: LiveMiniPusher;
+describe('LivePusher', () => {
+  let pusher: LivePusher;
   let mockXmlDataService: XmlDataService;
   let mockXmlChangeNotifier: XmlChangeNotifier;
   let mockEventState: EventState;
@@ -67,7 +67,7 @@ describe('LiveMiniPusher', () => {
     } as EventStateData;
     mockEventState = emitter as unknown as EventState;
 
-    pusher = new LiveMiniPusher(mockXmlDataService);
+    pusher = new LivePusher(mockXmlDataService);
   });
 
   afterEach(() => {

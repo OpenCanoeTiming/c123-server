@@ -14,9 +14,9 @@ import type { EventState } from '../state/EventState.js';
 import type { Source } from '../sources/types.js';
 import type { XmlDataService } from '../service/XmlDataService.js';
 import type { Server as C123Server } from '../server.js';
-import type { LiveMiniPusher } from '../live-mini/LiveMiniPusher.js';
-import { LiveMiniClient } from '../live-mini/LiveMiniClient.js';
-import type { CreateEventRequest, EventStatus } from '../live-mini/types.js';
+import type { LivePusher } from '../live/LivePusher.js';
+import { LiveClient } from '../live/LiveClient.js';
+import type { CreateEventRequest, EventStatus } from '../live/types.js';
 import type { XmlChangeNotifier } from '../xml/XmlChangeNotifier.js';
 import { getAppSettings, WindowsConfigDetector } from '../config/index.js';
 import type { ClientConfig } from '../config/types.js';
@@ -108,8 +108,8 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   private adminConnections: Set<WebSocket> = new Set();
 
   // Live-Mini status broadcast throttling (max 2/s = 500ms)
-  private liveMiniStatusLastBroadcast: number = 0;
-  private readonly LIVE_MINI_STATUS_THROTTLE_MS = 500;
+  private liveStatusLastBroadcast: number = 0;
+  private readonly LIVE_STATUS_THROTTLE_MS = 500;
 
   // Registered components
   private eventState: EventState | null = null;
@@ -117,7 +117,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   private xmlDataService: XmlDataService | null = null;
   private c123Server: C123Server | null = null;
   private lastMismatchState: MismatchState | null = null;
-  private liveMiniPusher: LiveMiniPusher | null = null;
+  private livePusher: LivePusher | null = null;
 
   constructor(config?: UnifiedServerConfig) {
     super();
@@ -148,29 +148,29 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
-   * Register LiveMiniPusher for live-mini integration
+   * Register LivePusher for live integration
    */
-  setLiveMiniPusher(pusher: LiveMiniPusher): void {
-    this.liveMiniPusher = pusher;
+  setLivePusher(pusher: LivePusher): void {
+    this.livePusher = pusher;
   }
 
   /**
-   * Auto-reconnect live-mini pusher from saved settings (called on server start).
+   * Auto-reconnect live pusher from saved settings (called on server start).
    * Does NOT create a new event — uses saved apiKey directly.
    */
-  async autoReconnectLiveMini(
+  async autoReconnectLive(
     xmlChangeNotifier: XmlChangeNotifier,
     eventState: EventState,
   ): Promise<void> {
-    if (!this.liveMiniPusher) return;
+    if (!this.livePusher) return;
 
     const settings = getAppSettings();
-    const config = settings.getLiveMiniConfig();
+    const config = settings.getLiveConfig();
 
     if (!config.enabled || !config.serverUrl || !config.apiKey || !config.eventId) return;
 
     try {
-      await this.liveMiniPusher.connect(
+      await this.livePusher.connect(
         {
           serverUrl: config.serverUrl,
           apiKey: config.apiKey,
@@ -184,7 +184,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         eventState,
       );
 
-      this.setupLiveMiniStatusListener();
+      this.setupLiveStatusListener();
 
       Logger.info('Unified', `Live-Mini auto-reconnected to ${config.serverUrl} (event: ${config.eventId})`);
     } catch (err) {
@@ -579,18 +579,18 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
-   * Setup single statusChange listener on liveMiniPusher (replaces any previous one).
+   * Setup single statusChange listener on livePusher (replaces any previous one).
    * Prevents listener leak when connect/reconnect is called multiple times.
    */
-  private setupLiveMiniStatusListener(): void {
-    if (!this.liveMiniPusher) return;
-    this.liveMiniPusher.removeAllListeners('statusChange');
-    this.liveMiniPusher.removeAllListeners('error');
-    this.liveMiniPusher.on('statusChange', (status) => {
-      this.broadcastLiveMiniStatus(status);
+  private setupLiveStatusListener(): void {
+    if (!this.livePusher) return;
+    this.livePusher.removeAllListeners('statusChange');
+    this.livePusher.removeAllListeners('error');
+    this.livePusher.on('statusChange', (status) => {
+      this.broadcastLiveStatus(status);
     });
     // Prevent unhandled 'error' event from crashing the process
-    this.liveMiniPusher.on('error', (err) => {
+    this.livePusher.on('error', (err) => {
       Logger.error('Unified', 'Live-Mini pusher error', err);
     });
   }
@@ -599,20 +599,20 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    * Broadcast Live-Mini status to all admin dashboard connections
    * Throttled to max 2/s (500ms between broadcasts)
    */
-  broadcastLiveMiniStatus(status: import('../live-mini/types.js').LiveMiniStatus): void {
+  broadcastLiveStatus(status: import('../live/types.js').LiveStatus): void {
     if (this.adminConnections.size === 0) {
       return; // No admin connections, skip
     }
 
     // Throttle: skip if last broadcast was less than 500ms ago
     const now = Date.now();
-    if (now - this.liveMiniStatusLastBroadcast < this.LIVE_MINI_STATUS_THROTTLE_MS) {
+    if (now - this.liveStatusLastBroadcast < this.LIVE_STATUS_THROTTLE_MS) {
       return;
     }
-    this.liveMiniStatusLastBroadcast = now;
+    this.liveStatusLastBroadcast = now;
 
     const message = {
-      type: 'LiveMiniStatus',
+      type: 'LiveStatus',
       timestamp: new Date().toISOString(),
       data: status,
     };
@@ -628,7 +628,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       }
     }
 
-    Logger.debug('Unified', `Broadcast LiveMiniStatus: ${status.state}`);
+    Logger.debug('Unified', `Broadcast LiveStatus: ${status.state}`);
   }
 
   /**
@@ -1047,14 +1047,14 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     this.app.post('/api/c123/timing', this.handleC123Timing.bind(this));
 
     // Live-Mini API
-    this.app.get('/api/live/status', this.handleLiveMiniStatus.bind(this));
-    this.app.post('/api/live/connect', this.handleLiveMiniConnect.bind(this));
-    this.app.post('/api/live/disconnect', this.handleLiveMiniDisconnect.bind(this));
-    this.app.post('/api/live/reconnect', this.handleLiveMiniReconnect.bind(this));
-    this.app.post('/api/live/pause', this.handleLiveMiniPause.bind(this));
-    this.app.post('/api/live/force-push-xml', this.handleLiveMiniForceXml.bind(this));
-    this.app.post('/api/live/transition', this.handleLiveMiniTransition.bind(this));
-    this.app.patch('/api/live/config', this.handleLiveMiniConfig.bind(this));
+    this.app.get('/api/live/status', this.handleLiveStatus.bind(this));
+    this.app.post('/api/live/connect', this.handleLiveConnect.bind(this));
+    this.app.post('/api/live/disconnect', this.handleLiveDisconnect.bind(this));
+    this.app.post('/api/live/reconnect', this.handleLiveReconnect.bind(this));
+    this.app.post('/api/live/pause', this.handleLivePause.bind(this));
+    this.app.post('/api/live/force-push-xml', this.handleLiveForceXml.bind(this));
+    this.app.post('/api/live/transition', this.handleLiveTransition.bind(this));
+    this.app.patch('/api/live/config', this.handleLiveConfig.bind(this));
 
     // Health check
     this.app.get('/health', (_req: Request, res: Response) => {
@@ -2558,18 +2558,18 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   /**
    * GET /api/live/status - Get current Live-Mini pusher status
    */
-  private handleLiveMiniStatus(_req: Request, res: Response): void {
-    if (!this.liveMiniPusher) {
+  private handleLiveStatus(_req: Request, res: Response): void {
+    if (!this.livePusher) {
       res.status(503).json({ error: 'Live-Mini pusher not available' });
       return;
     }
 
-    const status = this.liveMiniPusher.getStatus();
+    const status = this.livePusher.getStatus();
     res.json({ status });
   }
 
   /**
-   * POST /api/live/connect - Connect to live-mini server and create event
+   * POST /api/live/connect - Connect to live server and create event
    *
    * Body: {
    *   serverUrl: string,
@@ -2579,8 +2579,8 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    *   pushResults?: boolean
    * }
    */
-  private async handleLiveMiniConnect(req: Request, res: Response): Promise<void> {
-    if (!this.liveMiniPusher) {
+  private async handleLiveConnect(req: Request, res: Response): Promise<void> {
+    if (!this.livePusher) {
       res.status(503).json({ error: 'Live-Mini pusher not available' });
       return;
     }
@@ -2611,16 +2611,16 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     }
 
     try {
-      // Create event on live-mini server
-      Logger.info('Unified', `Creating event on live-mini: ${serverUrl}`);
-      const client = new LiveMiniClient({ serverUrl });
+      // Create event on live server
+      Logger.info('Unified', `Creating event on live: ${serverUrl}`);
+      const client = new LiveClient({ serverUrl });
       const createResponse = await client.createEvent(eventMetadata);
 
       Logger.info('Unified', `Event created: ${createResponse.eventId}, apiKey received`);
 
       // Save connection to settings
       const settings = getAppSettings();
-      settings.setLiveMiniConnection(
+      settings.setLiveConnection(
         serverUrl,
         createResponse.apiKey,
         createResponse.eventId,
@@ -2628,14 +2628,14 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       );
 
       // Update channel settings — default all off so user explicitly enables what they need
-      settings.setLiveMiniChannels({
+      settings.setLiveChannels({
         pushXml: pushXml ?? false,
         pushOnCourse: pushOnCourse ?? false,
         pushResults: pushResults ?? false,
       });
 
       // Get updated config and connect pusher
-      const liveMiniConfig = settings.getLiveMiniConfig();
+      const liveConfig = settings.getLiveConfig();
       const xmlChangeNotifier = this.c123Server.getXmlChangeNotifier();
       const eventState = this.c123Server.getEventState();
 
@@ -2644,26 +2644,26 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         return;
       }
 
-      await this.liveMiniPusher.connect(
+      await this.livePusher.connect(
         {
-          serverUrl: liveMiniConfig.serverUrl!,
-          apiKey: liveMiniConfig.apiKey!,
-          eventId: liveMiniConfig.eventId!,
+          serverUrl: liveConfig.serverUrl!,
+          apiKey: liveConfig.apiKey!,
+          eventId: liveConfig.eventId!,
           eventStatus: 'draft',
-          pushXml: liveMiniConfig.pushXml,
-          pushOnCourse: liveMiniConfig.pushOnCourse,
-          pushResults: liveMiniConfig.pushResults,
+          pushXml: liveConfig.pushXml,
+          pushOnCourse: liveConfig.pushOnCourse,
+          pushResults: liveConfig.pushResults,
         },
         xmlChangeNotifier,
         eventState,
       );
 
-      this.setupLiveMiniStatusListener();
+      this.setupLiveStatusListener();
 
-      const status = this.liveMiniPusher.getStatus();
+      const status = this.livePusher.getStatus();
 
       // Broadcast initial status
-      this.broadcastLiveMiniStatus(status);
+      this.broadcastLiveStatus(status);
 
       res.json({
         success: true,
@@ -2679,12 +2679,12 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
-   * POST /api/live/disconnect - Disconnect from live-mini
+   * POST /api/live/disconnect - Disconnect from live
    *
    * Body: { clearConfig?: boolean }
    */
-  private async handleLiveMiniDisconnect(req: Request, res: Response): Promise<void> {
-    if (!this.liveMiniPusher) {
+  private async handleLiveDisconnect(req: Request, res: Response): Promise<void> {
+    if (!this.livePusher) {
       res.status(503).json({ error: 'Live-Mini pusher not available' });
       return;
     }
@@ -2692,18 +2692,18 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     const { clearConfig } = req.body;
 
     try {
-      await this.liveMiniPusher.disconnect();
+      await this.livePusher.disconnect();
 
       // Clear saved config if requested
       if (clearConfig === true) {
         const settings = getAppSettings();
-        settings.clearLiveMiniConnection();
-        this.liveMiniPusher.reset();
+        settings.clearLiveConnection();
+        this.livePusher.reset();
         Logger.info('Unified', 'Live-Mini config cleared');
       }
 
-      const status = this.liveMiniPusher.getStatus();
-      this.broadcastLiveMiniStatus(status);
+      const status = this.livePusher.getStatus();
+      this.broadcastLiveStatus(status);
 
       res.json({
         success: true,
@@ -2723,8 +2723,8 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    *
    * Body: { serverUrl: string, apiKey: string, eventId: string }
    */
-  private async handleLiveMiniReconnect(req: Request, res: Response): Promise<void> {
-    if (!this.liveMiniPusher) {
+  private async handleLiveReconnect(req: Request, res: Response): Promise<void> {
+    if (!this.livePusher) {
       res.status(503).json({ error: 'Live-Mini pusher not available' });
       return;
     }
@@ -2752,10 +2752,10 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     try {
       // Save connection to settings
       const settings = getAppSettings();
-      settings.setLiveMiniConnection(serverUrl, apiKey, eventId, 'draft');
+      settings.setLiveConnection(serverUrl, apiKey, eventId, 'draft');
 
       // Get updated config and connect pusher
-      const liveMiniConfig = settings.getLiveMiniConfig();
+      const liveConfig = settings.getLiveConfig();
       const xmlChangeNotifier = this.c123Server.getXmlChangeNotifier();
       const eventState = this.c123Server.getEventState();
 
@@ -2764,24 +2764,24 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         return;
       }
 
-      await this.liveMiniPusher.connect(
+      await this.livePusher.connect(
         {
           serverUrl,
           apiKey,
           eventId,
           eventStatus: 'draft',
-          pushXml: liveMiniConfig.pushXml,
-          pushOnCourse: liveMiniConfig.pushOnCourse,
-          pushResults: liveMiniConfig.pushResults,
+          pushXml: liveConfig.pushXml,
+          pushOnCourse: liveConfig.pushOnCourse,
+          pushResults: liveConfig.pushResults,
         },
         xmlChangeNotifier,
         eventState,
       );
 
-      this.setupLiveMiniStatusListener();
+      this.setupLiveStatusListener();
 
-      const status = this.liveMiniPusher.getStatus();
-      this.broadcastLiveMiniStatus(status);
+      const status = this.livePusher.getStatus();
+      this.broadcastLiveStatus(status);
 
       res.json({
         success: true,
@@ -2801,8 +2801,8 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    *
    * Body: { paused: boolean }
    */
-  private handleLiveMiniPause(req: Request, res: Response): void {
-    if (!this.liveMiniPusher) {
+  private handleLivePause(req: Request, res: Response): void {
+    if (!this.livePusher) {
       res.status(503).json({ error: 'Live-Mini pusher not available' });
       return;
     }
@@ -2816,15 +2816,15 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
     try {
       if (paused) {
-        this.liveMiniPusher.pause();
+        this.livePusher.pause();
         Logger.info('Unified', 'Live-Mini push paused');
       } else {
-        this.liveMiniPusher.resume();
+        this.livePusher.resume();
         Logger.info('Unified', 'Live-Mini push resumed');
       }
 
-      const status = this.liveMiniPusher.getStatus();
-      this.broadcastLiveMiniStatus(status);
+      const status = this.livePusher.getStatus();
+      this.broadcastLiveStatus(status);
 
       res.json({
         success: true,
@@ -2842,18 +2842,18 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   /**
    * POST /api/live/force-push-xml - Force immediate XML push
    */
-  private async handleLiveMiniForceXml(_req: Request, res: Response): Promise<void> {
-    if (!this.liveMiniPusher) {
+  private async handleLiveForceXml(_req: Request, res: Response): Promise<void> {
+    if (!this.livePusher) {
       res.status(503).json({ error: 'Live-Mini pusher not available' });
       return;
     }
 
     try {
-      await this.liveMiniPusher.forcePushXml();
+      await this.livePusher.forcePushXml();
       Logger.info('Unified', 'Live-Mini XML force push triggered');
 
-      const status = this.liveMiniPusher.getStatus();
-      this.broadcastLiveMiniStatus(status);
+      const status = this.livePusher.getStatus();
+      this.broadcastLiveStatus(status);
 
       res.json({
         success: true,
@@ -2872,8 +2872,8 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    *
    * Body: { status: EventStatus }
    */
-  private async handleLiveMiniTransition(req: Request, res: Response): Promise<void> {
-    if (!this.liveMiniPusher) {
+  private async handleLiveTransition(req: Request, res: Response): Promise<void> {
+    if (!this.livePusher) {
       res.status(503).json({ error: 'Live-Mini pusher not available' });
       return;
     }
@@ -2890,15 +2890,15 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     }
 
     try {
-      await this.liveMiniPusher.transitionStatus(status as EventStatus);
+      await this.livePusher.transitionStatus(status as EventStatus);
       Logger.info('Unified', `Live-Mini event status transitioned to: ${status}`);
 
       // Update stored config
       const settings = getAppSettings();
-      settings.updateLiveMiniConfig({ eventStatus: status });
+      settings.updateLiveConfig({ eventStatus: status });
 
-      const pusherStatus = this.liveMiniPusher.getStatus();
-      this.broadcastLiveMiniStatus(pusherStatus);
+      const pusherStatus = this.livePusher.getStatus();
+      this.broadcastLiveStatus(pusherStatus);
 
       res.json({
         success: true,
@@ -2918,8 +2918,8 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    *
    * Body: { pushXml?: boolean, pushOnCourse?: boolean, pushResults?: boolean }
    */
-  private handleLiveMiniConfig(req: Request, res: Response): void {
-    if (!this.liveMiniPusher) {
+  private handleLiveConfig(req: Request, res: Response): void {
+    if (!this.livePusher) {
       res.status(503).json({ error: 'Live-Mini pusher not available' });
       return;
     }
@@ -2948,16 +2948,16 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
     try {
       // Update pusher
-      this.liveMiniPusher.updateChannels({ pushXml, pushOnCourse, pushResults });
+      this.livePusher.updateChannels({ pushXml, pushOnCourse, pushResults });
 
       // Save to settings
       const settings = getAppSettings();
-      settings.setLiveMiniChannels({ pushXml, pushOnCourse, pushResults });
+      settings.setLiveChannels({ pushXml, pushOnCourse, pushResults });
 
       Logger.info('Unified', `Live-Mini channels updated: ${JSON.stringify({ pushXml, pushOnCourse, pushResults })}`);
 
-      const status = this.liveMiniPusher.getStatus();
-      this.broadcastLiveMiniStatus(status);
+      const status = this.livePusher.getStatus();
+      this.broadcastLiveStatus(status);
 
       res.json({
         success: true,

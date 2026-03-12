@@ -11,7 +11,7 @@ import { XmlDataService } from './service/XmlDataService.js';
 import { ScoringService, type ScoringRequest, type RemoveFromCourseRequest, type TimingRequest } from './service/index.js';
 import { XmlChangeNotifier } from './xml/XmlChangeNotifier.js';
 import { XmlMismatchDetector } from './xml/XmlMismatchDetector.js';
-import { LiveMiniPusher } from './live-mini/LiveMiniPusher.js';
+import { LivePusher } from './live/LivePusher.js';
 import { Logger } from './utils/logger.js';
 import {
   createTimeOfDay,
@@ -106,7 +106,7 @@ export class Server extends EventEmitter<ServerEvents> {
   private unifiedServer: UnifiedServer;
   private xmlDataService: XmlDataService;
   private windowsConfigDetector: WindowsConfigDetector | null = null;
-  private liveMiniPusher: LiveMiniPusher;
+  private livePusher: LivePusher;
 
   private isRunning = false;
   private discoveredHost: string | null = null;
@@ -119,7 +119,7 @@ export class Server extends EventEmitter<ServerEvents> {
     this.eventState = new EventState();
     this.unifiedServer = new UnifiedServer({ port: this.config.port });
     this.xmlDataService = new XmlDataService();
-    this.liveMiniPusher = new LiveMiniPusher(this.xmlDataService);
+    this.livePusher = new LivePusher(this.xmlDataService);
 
     this.setupEventHandlers();
   }
@@ -139,7 +139,7 @@ export class Server extends EventEmitter<ServerEvents> {
     this.unifiedServer.setEventState(this.eventState);
     this.unifiedServer.setXmlDataService(this.xmlDataService);
     this.unifiedServer.setServer(this);
-    this.unifiedServer.setLiveMiniPusher(this.liveMiniPusher);
+    this.unifiedServer.setLivePusher(this.livePusher);
 
     // Start data sources
     if (this.config.autoDiscovery && !this.config.tcpHost) {
@@ -169,9 +169,9 @@ export class Server extends EventEmitter<ServerEvents> {
       }
     }
 
-    // Auto-reconnect live-mini from saved settings (if previously connected)
+    // Auto-reconnect live from saved settings (if previously connected)
     if (this.xmlChangeNotifier) {
-      await this.unifiedServer.autoReconnectLiveMini(this.xmlChangeNotifier, this.eventState);
+      await this.unifiedServer.autoReconnectLive(this.xmlChangeNotifier, this.eventState);
     }
 
     this.isRunning = true;
@@ -226,24 +226,24 @@ export class Server extends EventEmitter<ServerEvents> {
   }
 
   /**
-   * Get XmlChangeNotifier (for LiveMiniPusher)
+   * Get XmlChangeNotifier (for LivePusher)
    */
   getXmlChangeNotifier(): XmlChangeNotifier | null {
     return this.xmlChangeNotifier;
   }
 
   /**
-   * Get EventState (for LiveMiniPusher)
+   * Get EventState (for LivePusher)
    */
   getEventState(): EventState {
     return this.eventState;
   }
 
   /**
-   * Get LiveMiniPusher
+   * Get LivePusher
    */
-  getLiveMiniPusher(): LiveMiniPusher {
-    return this.liveMiniPusher;
+  getLivePusher(): LivePusher {
+    return this.livePusher;
   }
 
   /**

@@ -1,7 +1,7 @@
 /**
  * Live-Mini Pusher
  *
- * Main orchestrator for pushing timing data to c123-live-mini-server.
+ * Main orchestrator for pushing timing data to c123-live-server.
  * Subscribes to XML changes and EventState changes, buffers data,
  * and pushes to remote server with circuit breaker protection.
  */
@@ -13,10 +13,10 @@ import type { EventState } from '../state/EventState.js';
 import type { XmlChangeNotifier } from '../xml/XmlChangeNotifier.js';
 import type { EventStateData } from '../state/types.js';
 import type { XmlSection } from '../protocol/types.js';
-import { LiveMiniClient } from './LiveMiniClient.js';
-import { LiveMiniTransformer } from './LiveMiniTransformer.js';
+import { LiveClient } from './LiveClient.js';
+import { LiveTransformer } from './LiveTransformer.js';
 import type {
-  LiveMiniStatus,
+  LiveStatus,
   ChannelStatus,
   EventStatus,
 } from './types.js';
@@ -25,9 +25,9 @@ import { Logger } from '../utils/logger.js';
 /**
  * Pusher events
  */
-export interface LiveMiniPusherEvents {
+export interface LivePusherEvents {
   /** Status changed */
-  statusChange: [status: LiveMiniStatus];
+  statusChange: [status: LiveStatus];
   /** Error occurred */
   error: [error: Error];
 }
@@ -35,7 +35,7 @@ export interface LiveMiniPusherEvents {
 /**
  * Configuration for starting pusher
  */
-export interface LiveMiniPusherConfig {
+export interface LivePusherConfig {
   serverUrl: string;
   apiKey: string;
   eventId: string;
@@ -57,17 +57,17 @@ const CIRCUIT_BREAKER_TIMEOUT_MS = 30000; // 30s pause when circuit opens
 /**
  * Live-Mini Pusher
  *
- * Orchestrates pushing timing data to c123-live-mini-server.
+ * Orchestrates pushing timing data to c123-live-server.
  */
-export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
-  private client: LiveMiniClient | null = null;
-  private transformer: LiveMiniTransformer;
+export class LivePusher extends EventEmitter<LivePusherEvents> {
+  private client: LiveClient | null = null;
+  private transformer: LiveTransformer;
 
   private xmlDataService: XmlDataService;
   private xmlChangeNotifier: XmlChangeNotifier | null = null;
   private eventState: EventState | null = null;
 
-  private status: LiveMiniStatus;
+  private status: LiveStatus;
 
   // Circuit breaker
   private consecutiveFailures = 0;
@@ -94,17 +94,17 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
   constructor(xmlDataService: XmlDataService) {
     super();
     this.xmlDataService = xmlDataService;
-    this.transformer = new LiveMiniTransformer(xmlDataService);
+    this.transformer = new LiveTransformer(xmlDataService);
 
     // Initialize status
     this.status = this.createInitialStatus();
   }
 
   /**
-   * Connect to live-mini server and start pushing
+   * Connect to live server and start pushing
    */
   async connect(
-    config: LiveMiniPusherConfig,
+    config: LivePusherConfig,
     xmlChangeNotifier: XmlChangeNotifier,
     eventState: EventState,
   ): Promise<void> {
@@ -114,7 +114,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
     }
 
     // Create client
-    this.client = new LiveMiniClient({
+    this.client = new LiveClient({
       serverUrl: config.serverUrl,
       apiKey: config.apiKey,
     });
@@ -138,9 +138,9 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
     // Refresh participant mapping from XML
     try {
       await this.transformer.refreshParticipantMapping();
-      Logger.info('LiveMiniPusher', 'Participant mapping refreshed');
+      Logger.info('LivePusher', 'Participant mapping refreshed');
     } catch (error) {
-      Logger.warn('LiveMiniPusher', 'Failed to refresh participant mapping', error);
+      Logger.warn('LivePusher', 'Failed to refresh participant mapping', error);
     }
 
     // Setup event listeners
@@ -160,14 +160,14 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
     this.status.circuitBreaker.openedAt = null;
 
     Logger.info(
-      'LiveMiniPusher',
+      'LivePusher',
       `Connected to ${config.serverUrl} (event: ${config.eventId})`,
     );
     this.emitStatusChange();
   }
 
   /**
-   * Disconnect from live-mini server
+   * Disconnect from live server
    */
   async disconnect(): Promise<void> {
     // Cleanup event listeners
@@ -209,7 +209,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
     this.status.state = 'disconnected';
     this.status.connectedAt = null;
 
-    Logger.info('LiveMiniPusher', 'Disconnected');
+    Logger.info('LivePusher', 'Disconnected');
     this.emitStatusChange();
   }
 
@@ -229,7 +229,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
   pause(): void {
     if (this.status.state === 'connected') {
       this.status.state = 'paused';
-      Logger.info('LiveMiniPusher', 'Paused');
+      Logger.info('LivePusher', 'Paused');
       this.emitStatusChange();
     }
   }
@@ -240,7 +240,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
   resume(): void {
     if (this.status.state === 'paused') {
       this.status.state = 'connected';
-      Logger.info('LiveMiniPusher', 'Resumed');
+      Logger.info('LivePusher', 'Resumed');
       this.emitStatusChange();
     }
   }
@@ -257,27 +257,27 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
       throw new Error('XML push is disabled');
     }
 
-    Logger.info('LiveMiniPusher', 'Force pushing XML');
+    Logger.info('LivePusher', 'Force pushing XML');
     await this.pushXml();
   }
 
   /**
-   * Transition event status on live-mini
+   * Transition event status on live
    */
   async transitionStatus(status: EventStatus): Promise<void> {
     if (!this.client || !this.status.eventId) {
       throw new Error('Not connected');
     }
 
-    Logger.info('LiveMiniPusher', `Transitioning event status to: ${status}`);
+    Logger.info('LivePusher', `Transitioning event status to: ${status}`);
 
     try {
       const response = await this.client.transitionStatus(this.status.eventId, { status });
       this.status.eventStatus = response.status;
-      Logger.info('LiveMiniPusher', `Event status transitioned to: ${response.status}`);
+      Logger.info('LivePusher', `Event status transitioned to: ${response.status}`);
       this.emitStatusChange();
     } catch (error) {
-      Logger.error('LiveMiniPusher', 'Failed to transition status', error);
+      Logger.error('LivePusher', 'Failed to transition status', error);
       throw error;
     }
   }
@@ -301,7 +301,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
     }
 
     Logger.info(
-      'LiveMiniPusher',
+      'LivePusher',
       `Channels updated: xml=${this.status.channels.xml.enabled} oncourse=${this.status.channels.oncourse.enabled} results=${this.status.channels.results.enabled}`,
     );
     this.emitStatusChange();
@@ -310,7 +310,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
   /**
    * Get current status
    */
-  getStatus(): LiveMiniStatus {
+  getStatus(): LiveStatus {
     return structuredClone(this.status);
   }
 
@@ -338,7 +338,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
     };
     this.eventState.on('change', this.eventStateListener);
 
-    Logger.info('LiveMiniPusher', 'Event listeners setup');
+    Logger.info('LivePusher', 'Event listeners setup');
   }
 
   /**
@@ -356,7 +356,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
       return;
     }
 
-    Logger.debug('LiveMiniPusher', `XML changed: ${sections.join(', ')}`);
+    Logger.debug('LivePusher', `XML changed: ${sections.join(', ')}`);
 
     // Clear existing timer
     if (this.xmlDebounceTimer) {
@@ -451,7 +451,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
   }
 
   /**
-   * Push XML to live-mini
+   * Push XML to live
    */
   private async pushXml(): Promise<void> {
     if (!this.client) {
@@ -460,7 +460,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
 
     // Check circuit breaker
     if (this.isCircuitOpen()) {
-      Logger.warn('LiveMiniPusher', 'Circuit breaker open, skipping XML push');
+      Logger.warn('LivePusher', 'Circuit breaker open, skipping XML push');
       return;
     }
 
@@ -468,14 +468,14 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
       // Get full XML export
       const xmlPath = this.xmlDataService.getPath();
       if (!xmlPath) {
-        Logger.warn('LiveMiniPusher', 'No XML path configured, skipping push');
+        Logger.warn('LivePusher', 'No XML path configured, skipping push');
         return;
       }
 
       // Read XML file
       const xml = await readFile(xmlPath, 'utf-8');
 
-      Logger.info('LiveMiniPusher', 'Pushing XML');
+      Logger.info('LivePusher', 'Pushing XML');
       const response = await this.client.pushXml(xml);
 
       // Success
@@ -484,9 +484,9 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
       // Refresh participant mapping after XML push
       try {
         await this.transformer.refreshParticipantMapping();
-        Logger.info('LiveMiniPusher', 'Participant mapping refreshed after XML push');
+        Logger.info('LivePusher', 'Participant mapping refreshed after XML push');
       } catch (error) {
-        Logger.warn('LiveMiniPusher', 'Failed to refresh participant mapping', error);
+        Logger.warn('LivePusher', 'Failed to refresh participant mapping', error);
       }
     } catch (error) {
       this.handleError(error as Error, 'xml');
@@ -494,7 +494,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
   }
 
   /**
-   * Push OnCourse data to live-mini
+   * Push OnCourse data to live
    */
   private async pushOnCourse(onCourse: EventStateData['onCourse']): Promise<void> {
     if (!this.client) {
@@ -503,13 +503,13 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
 
     // Check circuit breaker
     if (this.isCircuitOpen()) {
-      Logger.debug('LiveMiniPusher', 'Circuit breaker open, skipping OnCourse push');
+      Logger.debug('LivePusher', 'Circuit breaker open, skipping OnCourse push');
       return;
     }
 
     // Skip if no participant mapping available
     if (!this.transformer.hasMappingData()) {
-      Logger.debug('LiveMiniPusher', 'No participant mapping, skipping OnCourse push');
+      Logger.debug('LivePusher', 'No participant mapping, skipping OnCourse push');
       return;
     }
 
@@ -520,11 +520,11 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
         .filter((t): t is NonNullable<typeof t> => t !== null);
 
       if (transformed.length === 0) {
-        Logger.debug('LiveMiniPusher', 'No valid OnCourse data to push');
+        Logger.debug('LivePusher', 'No valid OnCourse data to push');
         return;
       }
 
-      Logger.debug('LiveMiniPusher', `Pushing ${transformed.length} OnCourse competitors`);
+      Logger.debug('LivePusher', `Pushing ${transformed.length} OnCourse competitors`);
       const response = await this.client.pushOnCourse({ oncourse: transformed });
 
       // Success
@@ -536,7 +536,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
   }
 
   /**
-   * Push Results data to live-mini
+   * Push Results data to live
    */
   private async pushResults(results: NonNullable<EventStateData['results']>): Promise<void> {
     if (!this.client) {
@@ -545,13 +545,13 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
 
     // Check circuit breaker
     if (this.isCircuitOpen()) {
-      Logger.debug('LiveMiniPusher', 'Circuit breaker open, skipping Results push');
+      Logger.debug('LivePusher', 'Circuit breaker open, skipping Results push');
       return;
     }
 
     // Skip if no participant mapping available
     if (!this.transformer.hasMappingData()) {
-      Logger.debug('LiveMiniPusher', 'No participant mapping, skipping Results push');
+      Logger.debug('LivePusher', 'No participant mapping, skipping Results push');
       return;
     }
 
@@ -559,12 +559,12 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
       const transformed = await this.transformer.transformResults(results);
 
       if (transformed.length === 0) {
-        Logger.debug('LiveMiniPusher', 'No valid Results data to push');
+        Logger.debug('LivePusher', 'No valid Results data to push');
         return;
       }
 
       Logger.info(
-        'LiveMiniPusher',
+        'LivePusher',
         `Pushing ${transformed.length} results for ${results.raceId}`,
       );
       const response = await this.client.pushResults({ results: transformed });
@@ -591,7 +591,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
     if (this.status.circuitBreaker.isOpen) {
       this.status.circuitBreaker.isOpen = false;
       this.status.circuitBreaker.openedAt = null;
-      Logger.info('LiveMiniPusher', 'Circuit breaker closed');
+      Logger.info('LivePusher', 'Circuit breaker closed');
     }
     this.status.circuitBreaker.consecutiveFailures = 0;
 
@@ -608,7 +608,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
    * Handle push error
    */
   private handleError(error: Error, channel: 'xml' | 'oncourse' | 'results'): void {
-    Logger.error('LiveMiniPusher', `${channel} push failed`, error);
+    Logger.error('LivePusher', `${channel} push failed`, error);
 
     // Update channel status
     const channelStatus = this.status.channels[channel];
@@ -629,7 +629,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
       this.status.circuitBreaker.openedAt = this.circuitBreakerOpenAt.toISOString();
       this.status.state = 'error';
       Logger.warn(
-        'LiveMiniPusher',
+        'LivePusher',
         `Circuit breaker opened after ${this.consecutiveFailures} failures`,
       );
     }
@@ -650,7 +650,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
     const elapsed = Date.now() - this.circuitBreakerOpenAt.getTime();
     if (elapsed > CIRCUIT_BREAKER_TIMEOUT_MS) {
       // Timeout elapsed, close circuit
-      Logger.info('LiveMiniPusher', 'Circuit breaker timeout elapsed, attempting retry');
+      Logger.info('LivePusher', 'Circuit breaker timeout elapsed, attempting retry');
       this.circuitBreakerOpenAt = null;
       this.consecutiveFailures = 0;
       this.status.circuitBreaker.isOpen = false;
@@ -674,7 +674,7 @@ export class LiveMiniPusher extends EventEmitter<LiveMiniPusherEvents> {
   /**
    * Create initial status
    */
-  private createInitialStatus(): LiveMiniStatus {
+  private createInitialStatus(): LiveStatus {
     const createChannelStatus = (channel: 'xml' | 'oncourse' | 'results'): ChannelStatus => ({
       channel,
       enabled: false,

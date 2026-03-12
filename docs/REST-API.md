@@ -21,7 +21,7 @@ The C123 Server provides the following APIs:
 | **Assets API** | `/api/config/assets` | Default asset images (logos, banners) |
 | **Logs API** | `/api/logs` | Log entries retrieval |
 | **C123 Write API** | `/api/c123` | Send commands to C123 (scoring, timing) |
-| **Live API** | `/api/live` | Push data to remote live-mini server |
+| **Live API** | `/api/live` | Push data to remote live server |
 
 **Base URL:** `http://<server>:27123`
 
@@ -1595,7 +1595,7 @@ When a C123 command is successfully sent, a `ScoringEvent` message is broadcast 
 
 ## Live API
 
-These endpoints manage the connection to a remote `c123-live-mini` server for pushing timing data (XML, OnCourse, Results) to the public internet.
+These endpoints manage the connection to a remote `c123-live` server for pushing timing data (XML, OnCourse, Results) to the public internet.
 
 **Prerequisites:**
 - Live-Mini pusher must be initialized (returns `503` if not available)
@@ -1645,7 +1645,7 @@ Get current Live-Mini pusher status.
 
 ### POST /api/live/connect
 
-Connect to a live-mini server and create a new event. Saves connection config to persistent settings.
+Connect to a live server and create a new event. Saves connection config to persistent settings.
 
 **Request:**
 
@@ -1740,7 +1740,7 @@ Reconnect to an existing event (no event creation). Used for manual reconnection
 
 ### POST /api/live/disconnect
 
-Disconnect from live-mini server. Optionally clears saved connection config.
+Disconnect from live server. Optionally clears saved connection config.
 
 **Request:**
 
@@ -1802,7 +1802,7 @@ Pause or resume data push.
 
 ### POST /api/live/force-push-xml
 
-Force an immediate XML push to the live-mini server (bypasses debounce).
+Force an immediate XML push to the live server (bypasses debounce).
 
 **Request:** Empty body.
 
@@ -1819,7 +1819,7 @@ Force an immediate XML push to the live-mini server (bypasses debounce).
 
 ### POST /api/live/transition
 
-Transition the event status on the live-mini server.
+Transition the event status on the live server.
 
 **Request:**
 
@@ -1894,13 +1894,13 @@ Toggle push channels on/off. At least one channel must be specified.
 
 ---
 
-### WebSocket: LiveMiniStatus
+### WebSocket: LiveStatus
 
-When connected to the admin WebSocket (`/ws?admin=1`), the server broadcasts `LiveMiniStatus` messages whenever the pusher state changes (throttled to max 2/s).
+When connected to the admin WebSocket (`/ws?admin=1`), the server broadcasts `LiveStatus` messages whenever the pusher state changes (throttled to max 2/s).
 
 ```json
 {
-  "type": "LiveMiniStatus",
+  "type": "LiveStatus",
   "timestamp": "2025-01-02T10:31:00.000Z",
   "data": { "..." }
 }

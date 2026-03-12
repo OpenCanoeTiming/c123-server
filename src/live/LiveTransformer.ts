@@ -1,7 +1,7 @@
 /**
  * Live-Mini Transformer
  *
- * Transforms C123 protocol data to live-mini API format.
+ * Transforms C123 protocol data to live API format.
  * Handles participant ID mapping from XML.
  */
 
@@ -21,9 +21,9 @@ export interface EventMetadata {
 }
 
 /**
- * Transformer for converting C123 data to live-mini format
+ * Transformer for converting C123 data to live format
  */
-export class LiveMiniTransformer {
+export class LiveTransformer {
   /** Participant ID mapping: "bib:raceId" -> participantId */
   private participantMap: Map<string, string> = new Map();
 
@@ -74,12 +74,12 @@ export class LiveMiniTransformer {
 
       this.lastXmlRefresh = new Date();
       Logger.info(
-        'LiveMiniTransformer',
+        'LiveTransformer',
         `Refreshed participant mapping: ${this.participantMap.size} entries`
       );
     } catch (error) {
       Logger.error(
-        'LiveMiniTransformer',
+        'LiveTransformer',
         'Failed to refresh participant mapping',
         error
       );
@@ -88,7 +88,7 @@ export class LiveMiniTransformer {
   }
 
   /**
-   * Transform OnCourse competitor to live-mini format
+   * Transform OnCourse competitor to live format
    * Returns null if participant mapping is not available
    */
   transformOnCourse(competitor: OnCourseCompetitor): OnCourseInput | null {
@@ -97,7 +97,7 @@ export class LiveMiniTransformer {
 
     if (!participantId) {
       Logger.warn(
-        'LiveMiniTransformer',
+        'LiveTransformer',
         `No participant ID for bib=${competitor.bib} raceId=${competitor.raceId}`
       );
       return null;
@@ -138,14 +138,14 @@ export class LiveMiniTransformer {
 
     // Cleanup: remove entries not seen for > grace period
     for (const [bib, entry] of this.onCoursePenCache) {
-      if (!currentBibs.has(bib) && now - entry.lastSeen > LiveMiniTransformer.ONCOURSE_PEN_GRACE_MS) {
+      if (!currentBibs.has(bib) && now - entry.lastSeen > LiveTransformer.ONCOURSE_PEN_GRACE_MS) {
         this.onCoursePenCache.delete(bib);
       }
     }
   }
 
   /**
-   * Transform Results rows to live-mini format.
+   * Transform Results rows to live format.
    * Returns only rows with valid participant mapping.
    *
    * For BR2 races (detected via raceId pattern /_BR2_/):
@@ -174,7 +174,7 @@ export class LiveMiniTransformer {
 
       if (!participantId) {
         Logger.warn(
-          'LiveMiniTransformer',
+          'LiveTransformer',
           `No participant ID for bib=${row.bib} raceId=${resultsMessage.raceId}`
         );
         continue;
@@ -214,7 +214,7 @@ export class LiveMiniTransformer {
           // are BR1 best-run values, wrong but rank+time still update).
           // Matches scoreboard fallback: onCoursePen ?? cache ?? result.pen
           Logger.debug(
-            'LiveMiniTransformer',
+            'LiveTransformer',
             `BR2 merge: no penalty source for bib=${row.bib}, TCP inconsistent, using TCP as-is`
           );
         }
@@ -253,7 +253,7 @@ export class LiveMiniTransformer {
         discipline: 'Slalom', // Default, could be detected from class names
       };
     } catch (error) {
-      Logger.warn('LiveMiniTransformer', 'Failed to extract event metadata', error);
+      Logger.warn('LiveTransformer', 'Failed to extract event metadata', error);
       return {
         mainTitle: null,
         eventId: null,

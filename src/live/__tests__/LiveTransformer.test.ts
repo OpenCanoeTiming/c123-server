@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { LiveMiniTransformer } from '../LiveMiniTransformer.js';
+import { LiveTransformer } from '../LiveTransformer.js';
 import type { XmlDataService, XmlScheduleItem, XmlParticipant, XmlResultRow } from '../../service/XmlDataService.js';
 import type { OnCourseCompetitor, ResultsMessage, ResultRow } from '../../protocol/parser-types.js';
 
-describe('LiveMiniTransformer', () => {
-  let transformer: LiveMiniTransformer;
+describe('LiveTransformer', () => {
+  let transformer: LiveTransformer;
   let mockXmlService: XmlDataService;
 
   const mockParticipants: XmlParticipant[] = [
@@ -64,7 +64,7 @@ describe('LiveMiniTransformer', () => {
       getResultsForRace: vi.fn().mockResolvedValue(null),
     } as unknown as XmlDataService;
 
-    transformer = new LiveMiniTransformer(mockXmlService);
+    transformer = new LiveTransformer(mockXmlService);
   });
 
   describe('refreshParticipantMapping', () => {
@@ -109,7 +109,7 @@ describe('LiveMiniTransformer', () => {
       await transformer.refreshParticipantMapping();
     });
 
-    it('should transform OnCourse competitor to live-mini format', () => {
+    it('should transform OnCourse competitor to live format', () => {
       const competitor: OnCourseCompetitor = {
         bib: '101',
         name: 'John Smith',
@@ -300,7 +300,7 @@ describe('LiveMiniTransformer', () => {
       await transformer.refreshParticipantMapping();
     });
 
-    it('should transform Results to live-mini format', async () => {
+    it('should transform Results to live format', async () => {
       const resultsMessage: ResultsMessage = {
         raceId: 'K1M_ST_BR1_1',
         classId: 'K1M_ST',

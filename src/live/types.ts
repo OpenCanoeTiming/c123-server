@@ -1,11 +1,11 @@
 /**
  * Live-Mini Integration Types
  *
- * Types for pushing timing data to c123-live-mini-server.
+ * Types for pushing timing data to c123-live-server.
  */
 
 // ============================================================================
-// Event Status Types (from live-mini shared)
+// Event Status Types (from live shared)
 // ============================================================================
 
 /**
@@ -172,16 +172,16 @@ export interface ApiErrorResponse {
 /**
  * Live-Mini connection configuration
  */
-export interface LiveMiniConfig {
-  /** Enable live-mini push */
+export interface LiveConfig {
+  /** Enable live push */
   enabled: boolean;
   /** Live-mini server URL (e.g., "https://live.example.com") */
   serverUrl: string | null;
   /** API key for authentication */
   apiKey: string | null;
-  /** Event ID created on live-mini */
+  /** Event ID created on live */
   eventId: string | null;
-  /** Current event status on live-mini */
+  /** Current event status on live */
   eventStatus: EventStatus | null;
   /** Push XML exports */
   pushXml: boolean;
@@ -192,9 +192,9 @@ export interface LiveMiniConfig {
 }
 
 /**
- * Default live-mini configuration
+ * Default live configuration
  */
-export const DEFAULT_LIVE_MINI_CONFIG: LiveMiniConfig = {
+export const DEFAULT_LIVE_CONFIG: LiveConfig = {
   enabled: false,
   serverUrl: null,
   apiKey: null,
@@ -240,14 +240,14 @@ export interface ChannelStatus {
 /**
  * Live-Mini pusher status
  */
-export interface LiveMiniStatus {
+export interface LiveStatus {
   /** Current pusher state */
   state: PusherState;
   /** Server URL */
   serverUrl: string | null;
   /** Event ID */
   eventId: string | null;
-  /** Event status on live-mini */
+  /** Event status on live */
   eventStatus: EventStatus | null;
   /** Per-channel push status */
   channels: {

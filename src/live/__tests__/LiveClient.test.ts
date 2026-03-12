@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
-  LiveMiniClient,
-  LiveMiniApiError,
-  LiveMiniTimeoutError,
-} from '../LiveMiniClient.js';
+  LiveClient,
+  LiveApiError,
+  LiveTimeoutError,
+} from '../LiveClient.js';
 import type { CreateEventRequest, CreateEventResponse } from '../types.js';
 
-describe('LiveMiniClient', () => {
-  let client: LiveMiniClient;
+describe('LiveClient', () => {
+  let client: LiveClient;
   const mockServerUrl = 'https://live.example.com';
   const mockApiKey = 'test-api-key-123';
 
@@ -15,7 +15,7 @@ describe('LiveMiniClient', () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
-    client = new LiveMiniClient({
+    client = new LiveClient({
       serverUrl: mockServerUrl,
       apiKey: mockApiKey,
       timeout: 5000,
@@ -86,7 +86,7 @@ describe('LiveMiniClient', () => {
           eventId: 'TEST.2025062800',
           mainTitle: 'Test Event',
         }),
-      ).rejects.toThrow(LiveMiniApiError);
+      ).rejects.toThrow(LiveApiError);
     });
   });
 
@@ -175,7 +175,7 @@ describe('LiveMiniClient', () => {
     it('should throw error after max retries exceeded', async () => {
       global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
 
-      const clientWithLowRetry = new LiveMiniClient(
+      const clientWithLowRetry = new LiveClient(
         {
           serverUrl: mockServerUrl,
           apiKey: mockApiKey,
@@ -300,7 +300,7 @@ describe('LiveMiniClient', () => {
 
       await expect(
         client.transitionStatus('TEST.2025062800', { status: 'finished' }),
-      ).rejects.toThrow(LiveMiniApiError);
+      ).rejects.toThrow(LiveApiError);
 
       // Should not retry status transitions (enableRetry = false)
       expect(global.fetch).toHaveBeenCalledTimes(1);
@@ -312,7 +312,7 @@ describe('LiveMiniClient', () => {
       'should timeout after configured duration',
       async () => {
         // Create client with very short timeout
-        const fastTimeoutClient = new LiveMiniClient({
+        const fastTimeoutClient = new LiveClient({
           serverUrl: mockServerUrl,
           apiKey: mockApiKey,
           timeout: 100, // 100ms
@@ -342,7 +342,7 @@ describe('LiveMiniClient', () => {
         });
 
         await expect(fastTimeoutClient.pushXml('<xml>test</xml>')).rejects.toThrow(
-          LiveMiniTimeoutError,
+          LiveTimeoutError,
         );
       },
       10000, // Test timeout: 10 seconds
@@ -351,7 +351,7 @@ describe('LiveMiniClient', () => {
 
   describe('URL normalization', () => {
     it('should remove trailing slash from server URL', () => {
-      const clientWithSlash = new LiveMiniClient({
+      const clientWithSlash = new LiveClient({
         serverUrl: 'https://live.example.com/',
         apiKey: mockApiKey,
       });
