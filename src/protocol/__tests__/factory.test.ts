@@ -156,8 +156,8 @@ describe('C123 Protocol Factory', () => {
       expect(msg.type).toBe('Schedule');
       expect(msg.timestamp).toBe('2025-01-02T10:30:45.123Z');
       expect(msg.data.races).toHaveLength(2);
-      expect(msg.data.races[0].raceStatus).toBe(5); // finished
-      expect(msg.data.races[1].raceStatus).toBe(3); // running
+      expect(msg.data.races[0].raceStatus).toBe(5); // Official
+      expect(msg.data.races[1].raceStatus).toBe(3); // InProgress
     });
   });
 
