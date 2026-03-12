@@ -113,6 +113,245 @@
     </div>
   </section>
 
+  <!-- Live Results Panel (Live-Mini Integration) -->
+  <section class="live-mini-section" aria-labelledby="liveMiniSectionTitle">
+    <div class="live-mini-header">
+      <h2 class="live-mini-title" id="liveMiniSectionTitle">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" class="live-mini-title-icon" aria-hidden="true">
+          <path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+        </svg>
+        Live Results
+      </h2>
+      <div id="liveMiniStatusBadge"></div>
+    </div>
+
+    <!-- NOT CONFIGURED STATE -->
+    <div id="liveMiniNotConfigured" class="card" style="display: none;">
+      <p class="live-mini-description">
+        Publish live results to a remote c123-live-mini server for public viewing.
+      </p>
+
+      <!-- Mode tabs -->
+      <div class="live-mini-tabs" role="tablist">
+        <button id="liveMiniTabCreate" class="live-mini-tab tab-active" role="tab" onclick="toggleLiveMiniMode('create')">Create New Event</button>
+        <button id="liveMiniTabReconnect" class="live-mini-tab" role="tab" onclick="toggleLiveMiniMode('reconnect')">Connect to Existing</button>
+      </div>
+
+      <!-- Create new event mode -->
+      <div id="liveMiniCreateSection">
+        <div class="config-form" role="group" aria-label="Live-Mini server configuration">
+          <label for="liveMiniServerUrl" class="visually-hidden">Server URL</label>
+          <input type="text" id="liveMiniServerUrl" class="input live-mini-url-input" placeholder="https://live.example.com" aria-describedby="liveMiniConnectError">
+          <button class="btn btn-primary" onclick="openEventCreationModal()">Connect & Create Event</button>
+        </div>
+        <div id="liveMiniConnectError" class="error live-mini-error" role="alert" style="display: none;"></div>
+      </div>
+
+      <!-- Connect to existing event mode -->
+      <div id="liveMiniReconnectSection" style="display: none;">
+        <div class="config-form config-form-vertical" role="group" aria-label="Connect to existing event">
+          <div class="form-row">
+            <label for="liveMiniReconnectServerUrl">Server URL</label>
+            <input type="text" id="liveMiniReconnectServerUrl" class="input" placeholder="https://live.example.com">
+          </div>
+          <div class="form-row">
+            <label for="liveMiniReconnectApiKey">API Key</label>
+            <input type="text" id="liveMiniReconnectApiKey" class="input" placeholder="API key from event creation">
+          </div>
+          <div class="form-row">
+            <label for="liveMiniReconnectEventId">Event ID</label>
+            <input type="text" id="liveMiniReconnectEventId" class="input" placeholder="e.g. my-race-2026">
+          </div>
+          <button class="btn btn-primary" onclick="reconnectLiveMini()">Connect to Event</button>
+        </div>
+        <div id="liveMiniReconnectError" class="error live-mini-error" role="alert" style="display: none;"></div>
+      </div>
+    </div>
+
+    <!-- CONNECTED / PAUSED / ERROR STATE -->
+    <div id="liveMiniConnected" class="card" style="display: none;">
+      <!-- Server & Event Info -->
+      <div class="live-mini-info-grid">
+        <div>
+          <div class="live-mini-info-label">Server</div>
+          <div class="live-mini-info-value text-mono" id="liveMiniServerDisplay">-</div>
+        </div>
+        <div>
+          <div class="live-mini-info-label">Event ID</div>
+          <div class="live-mini-info-value text-mono" id="liveMiniEventIdDisplay">-</div>
+        </div>
+        <div>
+          <div class="live-mini-info-label">Status</div>
+          <div id="liveMiniEventStatusDisplay">-</div>
+        </div>
+        <div>
+          <div class="live-mini-info-label">Connected</div>
+          <div id="liveMiniConnectedAtDisplay">-</div>
+        </div>
+      </div>
+
+      <!-- Push Status Cards (per-channel) -->
+      <div class="live-mini-channels-grid">
+        <div class="live-mini-channel-card" id="liveMiniChannelXml">
+          <div class="live-mini-channel-header">
+            <span class="live-mini-channel-name">XML</span>
+            <span class="status-dot" id="liveMiniChannelXmlDot"></span>
+          </div>
+          <div class="live-mini-channel-stats">
+            <div><span id="liveMiniChannelXmlPushes">0</span> pushes</div>
+            <div><span id="liveMiniChannelXmlErrors">0</span> errors</div>
+          </div>
+          <div class="live-mini-channel-last" id="liveMiniChannelXmlLast">Never</div>
+        </div>
+
+        <div class="live-mini-channel-card" id="liveMiniChannelOnCourse">
+          <div class="live-mini-channel-header">
+            <span class="live-mini-channel-name">OnCourse</span>
+            <span class="status-dot" id="liveMiniChannelOnCourseDot"></span>
+          </div>
+          <div class="live-mini-channel-stats">
+            <div><span id="liveMiniChannelOnCoursePushes">0</span> pushes</div>
+            <div><span id="liveMiniChannelOnCourseErrors">0</span> errors</div>
+          </div>
+          <div class="live-mini-channel-last" id="liveMiniChannelOnCourseLast">Never</div>
+        </div>
+
+        <div class="live-mini-channel-card" id="liveMiniChannelResults">
+          <div class="live-mini-channel-header">
+            <span class="live-mini-channel-name">Results</span>
+            <span class="status-dot" id="liveMiniChannelResultsDot"></span>
+          </div>
+          <div class="live-mini-channel-stats">
+            <div><span id="liveMiniChannelResultsPushes">0</span> pushes</div>
+            <div><span id="liveMiniChannelResultsErrors">0</span> errors</div>
+          </div>
+          <div class="live-mini-channel-last" id="liveMiniChannelResultsLast">Never</div>
+        </div>
+      </div>
+
+      <!-- Circuit Breaker Warning -->
+      <div id="liveMiniCircuitBreakerWarning" class="error live-mini-alert" role="alert" style="display: none;">
+        <strong>Circuit breaker open!</strong> Too many failures. Push is paused. Will retry automatically.
+      </div>
+
+      <!-- Global Error Display -->
+      <div id="liveMiniErrorDisplay" class="error live-mini-alert" role="alert" style="display: none;"></div>
+
+      <!-- Channel Toggles -->
+      <div class="live-mini-toggles" role="group" aria-label="Channel toggles">
+        <label class="live-mini-toggle">
+          <input type="checkbox" id="liveMiniToggleXml" onchange="toggleLiveMiniChannel('xml')">
+          <span>Push XML</span>
+        </label>
+        <label class="live-mini-toggle">
+          <input type="checkbox" id="liveMiniToggleOnCourse" onchange="toggleLiveMiniChannel('oncourse')">
+          <span>Push OnCourse</span>
+        </label>
+        <label class="live-mini-toggle">
+          <input type="checkbox" id="liveMiniToggleResults" onchange="toggleLiveMiniChannel('results')">
+          <span>Push Results</span>
+        </label>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="live-mini-actions">
+        <button class="btn btn-secondary" id="liveMiniPauseBtn" onclick="toggleLiveMiniPause()">
+          <span id="liveMiniPauseBtnText">Pause</span>
+        </button>
+        <button class="btn btn-secondary" onclick="forcePushXml()">Force Push XML</button>
+        <button class="btn btn-secondary" onclick="openTransitionModal()">Change Event Status</button>
+        <button class="btn btn-danger-outline" onclick="disconnectLiveMini()">Disconnect</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Event Creation Modal -->
+  <div id="liveMiniEventModal" class="modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="liveMiniEventModalTitle">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="liveMiniEventModalTitle">Create Live Event</h3>
+        <button class="modal-close" onclick="closeLiveMiniEventModal()" aria-label="Close modal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <p class="live-mini-description">
+          Event metadata will be sent to the live-mini server. Fields are pre-filled from XML data.
+        </p>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveMiniEventMainTitle">Event Name *</label>
+          <input type="text" id="liveMiniEventMainTitle" class="modal-input" required>
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveMiniEventEventId">Event ID *</label>
+          <input type="text" id="liveMiniEventEventId" class="modal-input" placeholder="e.g., world-cup-prague-2024" required>
+          <div class="live-mini-field-hint">
+            URL-friendly identifier (lowercase, hyphens)
+          </div>
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveMiniEventLocation">Location</label>
+          <input type="text" id="liveMiniEventLocation" class="modal-input" placeholder="e.g., Prague, Czech Republic">
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveMiniEventDiscipline">Discipline</label>
+          <select id="liveMiniEventDiscipline" class="modal-select">
+            <option value="Slalom">Slalom</option>
+            <option value="Sprint">Sprint</option>
+            <option value="WildWater">Wild Water</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="createLiveMiniEvent()">Create & Connect</button>
+        <button class="btn btn-secondary" onclick="closeLiveMiniEventModal()">Cancel</button>
+      </div>
+
+      <div id="liveMiniEventModalError" class="error live-mini-modal-error" role="alert" style="display: none;"></div>
+    </div>
+  </div>
+
+  <!-- Event Status Transition Modal -->
+  <div id="liveMiniTransitionModal" class="modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="liveMiniTransitionModalTitle">
+    <div class="modal-content live-mini-transition-modal">
+      <div class="modal-header">
+        <h3 id="liveMiniTransitionModalTitle">Change Event Status</h3>
+        <button class="modal-close" onclick="closeLiveMiniTransitionModal()" aria-label="Close modal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveMiniNewStatus">New Status</label>
+          <select id="liveMiniNewStatus" class="modal-select">
+            <option value="draft">Draft</option>
+            <option value="startlist">Start List</option>
+            <option value="running">Running</option>
+            <option value="finished">Finished</option>
+            <option value="official">Official</option>
+          </select>
+        </div>
+
+        <div class="live-mini-status-progression">
+          <div class="live-mini-info-label">Status progression:</div>
+          <div class="text-mono">
+            draft → startlist → running → finished → official
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="transitionLiveMiniStatus()">Update Status</button>
+        <button class="btn btn-secondary" onclick="closeLiveMiniTransitionModal()">Cancel</button>
+      </div>
+
+      <div id="liveMiniTransitionModalError" class="error live-mini-modal-error" role="alert" style="display: none;"></div>
+    </div>
+  </div>
+
   <!-- Tab Navigation -->
   <div class="tabs">
     <nav class="tab-list" role="tablist" aria-label="Admin sections">
