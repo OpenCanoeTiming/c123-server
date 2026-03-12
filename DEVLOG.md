@@ -47,3 +47,24 @@ Přidáno odeslání Schedule z EventState při připojení nového klienta (po 
 
 ### Commit
 - `41c27e5` - fix: send Schedule message on WebSocket client connection
+
+---
+
+## 2026-02-14 - Block 6: Post-review fixes
+
+### Completed
+- [x] Fix `loadLiveStatus()` — unwrap `data.status` from API response
+- [x] Fix `createLiveEvent()` — rename `eventMetadata` to `metadata` to match server
+- [x] Fix OnCourse time/total units — use `parseFormattedTimeToCentiseconds()` for consistent centisecond format
+- [x] Remove unused `parseTimeToSeconds()` method
+- [x] Static import `node:fs/promises` in LivePusher
+- [x] Deep copy via `structuredClone()` in `getStatus()` to prevent reference leaks
+- [x] Remove unused `_checksum` parameter from XML change listener
+- [x] Extract all inline styles from Live-Mini HTML into CSS classes
+- [x] Use design system variables (spacing, typography, border-radius) in new CSS classes
+- [x] Fix transformer test expectations for centisecond time/total values
+- [x] All 514 tests pass
+
+### Notes
+- `parseTimeToSeconds` was only used for OnCourse time/total, removed entirely after switching to centiseconds
+- `structuredClone()` is available in Node.js 17+ (our target), provides true deep copy

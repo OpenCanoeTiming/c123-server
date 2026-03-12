@@ -293,6 +293,22 @@ function truncate(str, len) {
   return str.length > len ? str.substring(0, len) + '...' : str;
 }
 
+function showError(elementId, msg) {
+  const el = document.getElementById(elementId);
+  if (el) {
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+}
+
+function hideError(elementId) {
+  const el = document.getElementById(elementId);
+  if (el) {
+    el.textContent = '';
+    el.style.display = 'none';
+  }
+}
+
 // ===========================================
 // Status Refresh
 // ===========================================
@@ -756,6 +772,9 @@ function connectLogWebSocket() {
         // Live update of clients list
         clientsData = msg.data.clients || [];
         renderClients();
+      } else if (msg.type === 'LiveStatus') {
+        // Live update of Live-Mini status
+        renderLiveStatus(msg.data);
       }
     } catch (e) {
       // Ignore parse errors
@@ -1100,6 +1119,563 @@ function showModalError(msg) {
 function showClientMessage(msg, isError) {
   // Use toast notifications instead of inline message
   showToast(msg, isError ? 'error' : 'success');
+}
+
+// ===========================================
+// Live-Mini Functions
+// ===========================================
+
+let liveStatus = null;
+let liveTimerInterval = null;
+
+/**
+ * Periodically refresh relative time displays for Live-Mini channels.
+ * Without this, timestamps only update when a new push happens.
+ */
+function startLiveTimerRefresh() {
+  if (liveTimerInterval) return;
+  liveTimerInterval = setInterval(() => {
+    if (!liveStatus || !liveStatus.channels) return;
+    const channelIdMap = { xml: 'Xml', oncourse: 'OnCourse', results: 'Results' };
+    for (const [channel, idSuffix] of Object.entries(channelIdMap)) {
+      const ch = liveStatus.channels[channel];
+      if (ch) {
+        const el = document.getElementById('liveChannel' + idSuffix + 'Last');
+        if (el) {
+          el.textContent = ch.lastPushAt ? formatRelativeTime(ch.lastPushAt) : 'Never';
+        }
+      }
+    }
+  }, 1000);
+}
+
+/**
+ * Render Live-Mini status panel
+ */
+function renderLiveStatus(status) {
+  liveStatus = status;
+  startLiveTimerRefresh();
+
+  const notConfigured = document.getElementById('liveNotConfigured');
+  const connected = document.getElementById('liveConnected');
+  const statusBadge = document.getElementById('liveStatusBadge');
+
+  if (!notConfigured || !connected || !statusBadge) return;
+
+  // Update status badge
+  const stateBadgeMap = {
+    'not_configured': { text: 'Not Configured', class: 'badge-secondary' },
+    'connected': { text: 'Connected', class: 'badge-success' },
+    'paused': { text: 'Paused', class: 'badge-warning' },
+    'error': { text: 'Error', class: 'badge-danger' },
+    'disconnected': { text: 'Disconnected', class: 'badge-secondary' }
+  };
+  const badge = stateBadgeMap[status.state] || stateBadgeMap['not_configured'];
+  statusBadge.innerHTML = '<span class="badge ' + badge.class + '">' + escapeHtml(badge.text) + '</span>';
+
+  // Show appropriate panel
+  if (status.state === 'not_configured' || status.state === 'disconnected') {
+    notConfigured.style.display = 'block';
+    connected.style.display = 'none';
+    return;
+  }
+
+  notConfigured.style.display = 'none';
+  connected.style.display = 'block';
+
+  // Update server & event info
+  const serverDisplay = document.getElementById('liveServerDisplay');
+  const eventIdDisplay = document.getElementById('liveEventIdDisplay');
+  const eventStatusDisplay = document.getElementById('liveEventStatusDisplay');
+  const connectedAtDisplay = document.getElementById('liveConnectedAtDisplay');
+
+  if (serverDisplay) serverDisplay.textContent = status.serverUrl || '-';
+  if (eventIdDisplay) eventIdDisplay.textContent = status.eventId || '-';
+  if (eventStatusDisplay) {
+    const statusBadgeClass = {
+      'draft': 'badge-secondary',
+      'startlist': 'badge-info',
+      'running': 'badge-success',
+      'finished': 'badge-warning',
+      'official': 'badge-primary'
+    }[status.eventStatus] || 'badge-secondary';
+    eventStatusDisplay.innerHTML = '<span class="badge ' + statusBadgeClass + '">' + escapeHtml(status.eventStatus || '-') + '</span>';
+  }
+  if (connectedAtDisplay) {
+    connectedAtDisplay.textContent = status.connectedAt ? formatRelativeTime(status.connectedAt) : '-';
+  }
+
+  // Update channel cards
+  updateLiveChannel('Xml', status.channels.xml);
+  updateLiveChannel('OnCourse', status.channels.oncourse);
+  updateLiveChannel('Results', status.channels.results);
+
+  // Update channel toggles
+  const toggleXml = document.getElementById('liveToggleXml');
+  const toggleOnCourse = document.getElementById('liveToggleOnCourse');
+  const toggleResults = document.getElementById('liveToggleResults');
+
+  if (toggleXml) toggleXml.checked = status.channels.xml.enabled;
+  if (toggleOnCourse) toggleOnCourse.checked = status.channels.oncourse.enabled;
+  if (toggleResults) toggleResults.checked = status.channels.results.enabled;
+
+  // Update pause button
+  const pauseBtn = document.getElementById('livePauseBtn');
+  const pauseBtnText = document.getElementById('livePauseBtnText');
+  if (pauseBtn && pauseBtnText) {
+    if (status.state === 'paused') {
+      pauseBtnText.textContent = 'Resume';
+    } else {
+      pauseBtnText.textContent = 'Pause';
+    }
+  }
+
+  // Show circuit breaker warning
+  const cbWarning = document.getElementById('liveCircuitBreakerWarning');
+  if (cbWarning) {
+    if (status.circuitBreaker.isOpen) {
+      cbWarning.style.display = 'block';
+      cbWarning.textContent = 'Circuit breaker open! ' + status.circuitBreaker.consecutiveFailures + ' consecutive failures. Will retry automatically.';
+    } else {
+      cbWarning.style.display = 'none';
+    }
+  }
+
+  // Show global error
+  const errorDisplay = document.getElementById('liveErrorDisplay');
+  if (errorDisplay) {
+    if (status.state === 'error' && status.lastError) {
+      errorDisplay.style.display = 'block';
+      errorDisplay.innerHTML = '<strong>Last error:</strong> ' + escapeHtml(status.lastError);
+    } else {
+      errorDisplay.style.display = 'none';
+    }
+  }
+}
+
+/**
+ * Update single channel card
+ */
+function updateLiveChannel(channelName, channelStatus) {
+  const dot = document.getElementById('liveChannel' + channelName + 'Dot');
+  const pushes = document.getElementById('liveChannel' + channelName + 'Pushes');
+  const errors = document.getElementById('liveChannel' + channelName + 'Errors');
+  const last = document.getElementById('liveChannel' + channelName + 'Last');
+
+  if (!dot || !pushes || !errors || !last) return;
+
+  // Update status dot
+  if (channelStatus.enabled) {
+    if (channelStatus.lastError) {
+      dot.className = 'status-dot status-dot-danger';
+    } else if (channelStatus.totalPushes > 0) {
+      dot.className = 'status-dot status-dot-success';
+    } else {
+      dot.className = 'status-dot status-dot-warning';
+    }
+  } else {
+    dot.className = 'status-dot status-dot-muted';
+  }
+
+  // Update stats
+  pushes.textContent = channelStatus.totalPushes;
+  errors.textContent = channelStatus.totalErrors;
+  last.textContent = channelStatus.lastPushAt ? formatRelativeTime(channelStatus.lastPushAt) : 'Never';
+}
+
+/**
+ * Format relative time
+ */
+function formatRelativeTime(isoString) {
+  try {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffSec = Math.floor(diffMs / 1000);
+
+    if (diffSec < 60) return diffSec + 's ago';
+    if (diffSec < 3600) return Math.floor(diffSec / 60) + 'm ago';
+    if (diffSec < 86400) return Math.floor(diffSec / 3600) + 'h ago';
+    return Math.floor(diffSec / 86400) + 'd ago';
+  } catch (e) {
+    return isoString;
+  }
+}
+
+/**
+ * Open event creation modal
+ */
+async function openEventCreationModal() {
+  const serverUrl = document.getElementById('liveServerUrl').value.trim();
+  if (!serverUrl) {
+    showError('liveConnectError', 'Please enter a server URL');
+    return;
+  }
+
+  // Validate URL
+  try {
+    new URL(serverUrl);
+  } catch (e) {
+    showError('liveConnectError', 'Invalid URL format');
+    return;
+  }
+
+  // Fetch event metadata from XML
+  try {
+    const res = await fetch('/api/live/status');
+    const data = await res.json();
+    // Pre-fill from server (will be extracted from XML)
+  } catch (e) {
+    // Ignore, use defaults
+  }
+
+  // Pre-fill modal (these would ideally come from XML metadata endpoint)
+  const mainTitleInput = document.getElementById('liveEventMainTitle');
+  const eventIdInput = document.getElementById('liveEventEventId');
+  const locationInput = document.getElementById('liveEventLocation');
+  const disciplineSelect = document.getElementById('liveEventDiscipline');
+
+  // For now, use event name from header if available
+  const eventNameEl = document.getElementById('eventName');
+  if (mainTitleInput && eventNameEl) {
+    mainTitleInput.value = eventNameEl.textContent.trim();
+  }
+
+  // Generate eventId from mainTitle
+  if (eventIdInput && mainTitleInput && mainTitleInput.value) {
+    eventIdInput.value = mainTitleInput.value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  if (locationInput) locationInput.value = '';
+  if (disciplineSelect) disciplineSelect.value = 'Slalom';
+
+  // Show modal
+  const modal = document.getElementById('liveEventModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    trapFocus(modal.querySelector('.modal-content'));
+  }
+}
+
+/**
+ * Close event creation modal
+ */
+function closeLiveEventModal() {
+  const modal = document.getElementById('liveEventModal');
+  if (modal) {
+    modal.style.display = 'none';
+    releaseFocus();
+  }
+  hideError('liveEventModalError');
+}
+
+/**
+ * Create live event and connect
+ */
+async function createLiveEvent() {
+  const serverUrl = document.getElementById('liveServerUrl').value.trim();
+  const mainTitle = document.getElementById('liveEventMainTitle').value.trim();
+  const eventId = document.getElementById('liveEventEventId').value.trim();
+  const location = document.getElementById('liveEventLocation').value.trim();
+  const discipline = document.getElementById('liveEventDiscipline').value;
+
+  if (!mainTitle || !eventId) {
+    showError('liveEventModalError', 'Event name and ID are required');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/live/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        serverUrl: serverUrl,
+        metadata: {
+          mainTitle: mainTitle,
+          eventId: eventId,
+          location: location || null,
+          discipline: discipline
+        }
+      })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to connect');
+    }
+
+    showToast('Connected to Live-Mini server', 'success');
+    closeLiveEventModal();
+    hideError('liveConnectError');
+
+    // Refresh status
+    loadLiveStatus();
+  } catch (error) {
+    showError('liveEventModalError', error.message);
+  }
+}
+
+/**
+ * Disconnect from live
+ */
+async function disconnectLive() {
+  if (!confirm('Disconnect from Live-Mini server? This will stop all data push.')) {
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/live/disconnect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clearConfig: true })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to disconnect');
+    }
+
+    showToast('Disconnected from Live-Mini', 'success');
+    loadLiveStatus();
+  } catch (error) {
+    showToast('Failed to disconnect: ' + error.message, 'error');
+  }
+}
+
+/**
+ * Toggle between "Create New" and "Connect to Existing" modes
+ */
+function toggleLiveMode(mode) {
+  const createSection = document.getElementById('liveCreateSection');
+  const reconnectSection = document.getElementById('liveReconnectSection');
+  const createTab = document.getElementById('liveTabCreate');
+  const reconnectTab = document.getElementById('liveTabReconnect');
+
+  if (!createSection || !reconnectSection || !createTab || !reconnectTab) return;
+
+  if (mode === 'reconnect') {
+    createSection.style.display = 'none';
+    reconnectSection.style.display = 'block';
+    createTab.classList.remove('tab-active');
+    reconnectTab.classList.add('tab-active');
+  } else {
+    createSection.style.display = 'block';
+    reconnectSection.style.display = 'none';
+    createTab.classList.add('tab-active');
+    reconnectTab.classList.remove('tab-active');
+  }
+}
+
+/**
+ * Connect to existing live event
+ */
+async function reconnectLive() {
+  const serverUrl = document.getElementById('liveReconnectServerUrl').value.trim();
+  const apiKey = document.getElementById('liveReconnectApiKey').value.trim();
+  const eventId = document.getElementById('liveReconnectEventId').value.trim();
+
+  if (!serverUrl) {
+    showError('liveReconnectError', 'Please enter a server URL');
+    return;
+  }
+
+  try {
+    new URL(serverUrl);
+  } catch (e) {
+    showError('liveReconnectError', 'Invalid URL format');
+    return;
+  }
+
+  if (!apiKey) {
+    showError('liveReconnectError', 'Please enter an API key');
+    return;
+  }
+
+  if (!eventId) {
+    showError('liveReconnectError', 'Please enter an event ID');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/live/reconnect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ serverUrl, apiKey, eventId })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to connect');
+    }
+
+    showToast('Connected to existing Live-Mini event', 'success');
+    hideError('liveReconnectError');
+    loadLiveStatus();
+  } catch (error) {
+    showError('liveReconnectError', error.message);
+  }
+}
+
+/**
+ * Toggle pause/resume
+ */
+async function toggleLivePause() {
+  if (!liveStatus) return;
+
+  const isPaused = liveStatus.state === 'paused';
+
+  try {
+    const res = await fetch('/api/live/pause', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paused: !isPaused })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to toggle pause');
+    }
+
+    showToast(isPaused ? 'Push resumed' : 'Push paused', 'success');
+    loadLiveStatus();
+  } catch (error) {
+    showToast('Failed to toggle pause: ' + error.message, 'error');
+  }
+}
+
+/**
+ * Force push XML
+ */
+async function forcePushXml() {
+  try {
+    const res = await fetch('/api/live/force-push-xml', {
+      method: 'POST'
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to force push');
+    }
+
+    showToast('XML push triggered', 'success');
+  } catch (error) {
+    showToast('Failed to push XML: ' + error.message, 'error');
+  }
+}
+
+/**
+ * Toggle channel push
+ */
+async function toggleLiveChannel(channel) {
+  const checkbox = document.getElementById('liveToggle' + (channel === 'xml' ? 'Xml' : channel === 'oncourse' ? 'OnCourse' : 'Results'));
+  if (!checkbox) return;
+
+  const enabled = checkbox.checked;
+
+  try {
+    const body = {};
+    body['push' + (channel === 'xml' ? 'Xml' : channel === 'oncourse' ? 'OnCourse' : 'Results')] = enabled;
+
+    const res = await fetch('/api/live/config', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to update config');
+    }
+
+    showToast('Channel ' + (enabled ? 'enabled' : 'disabled'), 'success');
+  } catch (error) {
+    showToast('Failed to update channel: ' + error.message, 'error');
+    checkbox.checked = !enabled; // Revert
+  }
+}
+
+/**
+ * Open status transition modal
+ */
+function openTransitionModal() {
+  if (!liveStatus) return;
+
+  const select = document.getElementById('liveNewStatus');
+  if (select && liveStatus.eventStatus) {
+    select.value = liveStatus.eventStatus;
+  }
+
+  const modal = document.getElementById('liveTransitionModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    trapFocus(modal.querySelector('.modal-content'));
+  }
+}
+
+/**
+ * Close transition modal
+ */
+function closeLiveTransitionModal() {
+  const modal = document.getElementById('liveTransitionModal');
+  if (modal) {
+    modal.style.display = 'none';
+    releaseFocus();
+  }
+  hideError('liveTransitionModalError');
+}
+
+/**
+ * Transition event status
+ */
+async function transitionLiveStatus() {
+  if (!liveStatus || !liveStatus.eventId) return;
+
+  const newStatus = document.getElementById('liveNewStatus').value;
+
+  try {
+    const res = await fetch('/api/live/transition', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventId: liveStatus.eventId,
+        status: newStatus
+      })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to transition status');
+    }
+
+    showToast('Event status updated to ' + newStatus, 'success');
+    closeLiveTransitionModal();
+    loadLiveStatus();
+  } catch (error) {
+    showError('liveTransitionModalError', error.message);
+  }
+}
+
+/**
+ * Load live status from API
+ */
+async function loadLiveStatus() {
+  try {
+    const res = await fetch('/api/live/status');
+    const data = await res.json();
+    renderLiveStatus(data.status);
+  } catch (error) {
+    console.error('Failed to load live status:', error);
+  }
 }
 
 // ===========================================
@@ -1757,10 +2333,33 @@ function init() {
     if (e.target === this) closeClientModal();
   });
 
+  const liveEventModal = document.getElementById('liveEventModal');
+  if (liveEventModal) {
+    liveEventModal.addEventListener('click', function(e) {
+      if (e.target === this) closeLiveEventModal();
+    });
+  }
+
+  const liveTransitionModal = document.getElementById('liveTransitionModal');
+  if (liveTransitionModal) {
+    liveTransitionModal.addEventListener('click', function(e) {
+      if (e.target === this) closeLiveTransitionModal();
+    });
+  }
+
   // Keyboard navigation for modal
   document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && document.getElementById('clientModal').style.display !== 'none') {
-      closeClientModal();
+    if (e.key === 'Escape') {
+      const clientModal = document.getElementById('clientModal');
+      if (clientModal && clientModal.style.display !== 'none') {
+        closeClientModal();
+      }
+      if (liveEventModal && liveEventModal.style.display !== 'none') {
+        closeLiveEventModal();
+      }
+      if (liveTransitionModal && liveTransitionModal.style.display !== 'none') {
+        closeLiveTransitionModal();
+      }
     }
   });
 
@@ -1772,6 +2371,7 @@ function init() {
   loadClients();
   loadAssets();
   loadMismatchStatus();
+  loadLiveStatus();
   connectLogWebSocket();
 
   // Periodic refresh
