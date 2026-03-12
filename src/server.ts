@@ -157,7 +157,12 @@ export class Server extends EventEmitter<ServerEvents> {
 
     // Start XML autodetection if enabled and no manual path set
     if (this.config.xmlAutoDetect && !this.config.xmlPath) {
-      this.startAutoDetection();
+      const mode = getAppSettings().getXmlSourceMode();
+      if (mode === 'auto-main' || mode === 'auto-offline') {
+        this.startAutoDetectionWithMode(mode);
+      } else {
+        this.startAutoDetection();
+      }
     }
 
     this.isRunning = true;
