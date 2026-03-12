@@ -180,7 +180,7 @@ export class LiveMiniTransformer {
         continue;
       }
 
-      let time = this.parseFormattedTimeToCentiseconds(row.time);
+      const time = this.parseFormattedTimeToCentiseconds(row.time);
       let pen = Math.round(row.pen * 100); // seconds → centiseconds
       let total = this.parseFormattedTimeToCentiseconds(row.total);
 

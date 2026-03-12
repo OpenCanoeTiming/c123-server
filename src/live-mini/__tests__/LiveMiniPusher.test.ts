@@ -53,8 +53,19 @@ describe('LiveMiniPusher', () => {
     // Create mock XmlChangeNotifier (EventEmitter)
     mockXmlChangeNotifier = new EventEmitter() as unknown as XmlChangeNotifier;
 
-    // Create mock EventState (EventEmitter)
-    mockEventState = new EventEmitter() as unknown as EventState;
+    // Create mock EventState (EventEmitter with state property)
+    const emitter = new EventEmitter();
+    (emitter as any).state = {
+      timeOfDay: null,
+      raceConfig: null,
+      schedule: [],
+      currentRaceId: null,
+      onCourse: [],
+      results: null,
+      highlightBib: null,
+      scheduleFingerprint: null,
+    } as EventStateData;
+    mockEventState = emitter as unknown as EventState;
 
     pusher = new LiveMiniPusher(mockXmlDataService);
   });
