@@ -278,8 +278,8 @@ export function parseResults(element: unknown): ResultsMessage | null {
         behind: String(resultT?.['@_Behind'] ?? ''),
       };
 
-      // Add IRM status if present (DNS, DNF, DSQ)
-      if (irm === 'DNS' || irm === 'DNF' || irm === 'DSQ') {
+      // Add IRM status if present (DNS, DNF, DSQ, * = under investigation)
+      if (irm === 'DNS' || irm === 'DNF' || irm === 'DSQ' || irm === '*') {
         resultRow.status = irm;
       }
 
