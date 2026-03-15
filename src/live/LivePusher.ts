@@ -75,6 +75,7 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
 
   // Buffers
   private onCourseLastPush: Date | null = null;
+  private pendingOnCourse: EventStateData['onCourse'] | null = null;
   private resultsDebounceTimers: Map<string, NodeJS.Timeout> = new Map();
   // Two-level dedup for results push:
   // - lastScheduledResultsRef: set when debounce timer is created, prevents oncourse/timeOfDay
@@ -199,6 +200,7 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
 
     // Clear buffers
     this.onCourseLastPush = null;
+    this.pendingOnCourse = null;
 
     // Clear references
     this.client = null;
@@ -385,8 +387,8 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
       this.transformer.updateOnCoursePenalties(state.onCourse);
     }
 
-    // Handle OnCourse push (throttle 2/s)
-    if (this.status.channels.oncourse.enabled && state.onCourse.length > 0) {
+    // Handle OnCourse push (throttle 2/s) — push even when empty to clear panel
+    if (this.status.channels.oncourse.enabled) {
       this.scheduleOnCoursePush(state.onCourse);
     }
 
@@ -400,6 +402,9 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
    * Schedule OnCourse push with throttling (max 2/s)
    */
   private scheduleOnCoursePush(onCourse: EventStateData['onCourse']): void {
+    // Always keep latest snapshot so the throttled push uses fresh data
+    this.pendingOnCourse = onCourse;
+
     // Check throttle: don't push if last push was < 500ms ago
     const now = Date.now();
     if (this.onCourseLastPush && now - this.onCourseLastPush.getTime() < ONCOURSE_THROTTLE_MS) {
@@ -407,14 +412,18 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
       if (!this.onCourseThrottleTimer) {
         const delay = ONCOURSE_THROTTLE_MS - (now - this.onCourseLastPush.getTime());
         this.onCourseThrottleTimer = setTimeout(() => {
-          this.pushOnCourse(onCourse);
           this.onCourseThrottleTimer = null;
+          if (this.pendingOnCourse) {
+            this.pushOnCourse(this.pendingOnCourse);
+            this.pendingOnCourse = null;
+          }
         }, delay);
       }
       return;
     }
 
     // Not throttled, push immediately
+    this.pendingOnCourse = null;
     this.pushOnCourse(onCourse);
   }
 
@@ -518,11 +527,6 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
       const transformed = onCourse
         .map((comp) => this.transformer.transformOnCourse(comp))
         .filter((t): t is NonNullable<typeof t> => t !== null);
-
-      if (transformed.length === 0) {
-        Logger.debug('LivePusher', 'No valid OnCourse data to push');
-        return;
-      }
 
       Logger.debug('LivePusher', `Pushing ${transformed.length} OnCourse competitors`);
       const response = await this.client.pushOnCourse({ oncourse: transformed });
