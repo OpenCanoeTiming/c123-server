@@ -175,49 +175,49 @@
         <div class="live-channel-card" id="liveChannelXml">
           <div class="live-channel-header">
             <span class="live-channel-name">XML</span>
+            <label class="live-channel-toggle">
+              <input type="checkbox" id="liveToggleXml" onchange="toggleLiveChannel('xml')">
+              <span>Enabled</span>
+            </label>
             <span class="status-dot" id="liveChannelXmlDot"></span>
           </div>
           <div class="live-channel-stats">
-            <div><span id="liveChannelXmlPushes">0</span> pushes</div>
-            <div><span id="liveChannelXmlErrors">0</span> errors</div>
+            <span><span id="liveChannelXmlPushes">0</span> pushes</span>
+            <span><span id="liveChannelXmlErrors">0</span> errors</span>
+            <span class="live-channel-last" id="liveChannelXmlLast">Never</span>
           </div>
-          <div class="live-channel-last" id="liveChannelXmlLast">Never</div>
-          <label class="live-channel-toggle">
-            <input type="checkbox" id="liveToggleXml" onchange="toggleLiveChannel('xml')">
-            <span>Enabled</span>
-          </label>
         </div>
 
         <div class="live-channel-card" id="liveChannelOnCourse">
           <div class="live-channel-header">
             <span class="live-channel-name">OnCourse</span>
+            <label class="live-channel-toggle">
+              <input type="checkbox" id="liveToggleOnCourse" onchange="toggleLiveChannel('oncourse')">
+              <span>Enabled</span>
+            </label>
             <span class="status-dot" id="liveChannelOnCourseDot"></span>
           </div>
           <div class="live-channel-stats">
-            <div><span id="liveChannelOnCoursePushes">0</span> pushes</div>
-            <div><span id="liveChannelOnCourseErrors">0</span> errors</div>
+            <span><span id="liveChannelOnCoursePushes">0</span> pushes</span>
+            <span><span id="liveChannelOnCourseErrors">0</span> errors</span>
+            <span class="live-channel-last" id="liveChannelOnCourseLast">Never</span>
           </div>
-          <div class="live-channel-last" id="liveChannelOnCourseLast">Never</div>
-          <label class="live-channel-toggle">
-            <input type="checkbox" id="liveToggleOnCourse" onchange="toggleLiveChannel('oncourse')">
-            <span>Enabled</span>
-          </label>
         </div>
 
         <div class="live-channel-card" id="liveChannelResults">
           <div class="live-channel-header">
             <span class="live-channel-name">Results</span>
+            <label class="live-channel-toggle">
+              <input type="checkbox" id="liveToggleResults" onchange="toggleLiveChannel('results')">
+              <span>Enabled</span>
+            </label>
             <span class="status-dot" id="liveChannelResultsDot"></span>
           </div>
           <div class="live-channel-stats">
-            <div><span id="liveChannelResultsPushes">0</span> pushes</div>
-            <div><span id="liveChannelResultsErrors">0</span> errors</div>
+            <span><span id="liveChannelResultsPushes">0</span> pushes</span>
+            <span><span id="liveChannelResultsErrors">0</span> errors</span>
+            <span class="live-channel-last" id="liveChannelResultsLast">Never</span>
           </div>
-          <div class="live-channel-last" id="liveChannelResultsLast">Never</div>
-          <label class="live-channel-toggle">
-            <input type="checkbox" id="liveToggleResults" onchange="toggleLiveChannel('results')">
-            <span>Enabled</span>
-          </label>
         </div>
       </div>
 
