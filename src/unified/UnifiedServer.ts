@@ -15,7 +15,7 @@ import type { Source } from '../sources/types.js';
 import type { XmlDataService } from '../service/XmlDataService.js';
 import type { Server as C123Server } from '../server.js';
 import type { LivePusher } from '../live/LivePusher.js';
-import { LiveClient } from '../live/LiveClient.js';
+import { LiveClient, type LiveClientConfig } from '../live/LiveClient.js';
 import type { CreateEventRequest, EventStatus } from '../live/types.js';
 import type { XmlChangeNotifier } from '../xml/XmlChangeNotifier.js';
 import { getAppSettings, WindowsConfigDetector } from '../config/index.js';
@@ -1055,7 +1055,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     this.app.post('/api/live/force-push-xml', this.handleLiveForceXml.bind(this));
     this.app.post('/api/live/transition', this.handleLiveTransition.bind(this));
     this.app.patch('/api/live/config', this.handleLiveConfig.bind(this));
-    this.app.get('/api/live/events', this.handleLiveListEvents.bind(this));
+    this.app.post('/api/live/events', this.handleLiveListEvents.bind(this));
 
     // Health check
     this.app.get('/health', (_req: Request, res: Response) => {
@@ -2572,20 +2572,20 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
-   * GET /api/live/events - List events on a live server (proxy to avoid CORS)
+   * POST /api/live/events - List events on a live server (proxy to avoid CORS)
    *
-   * Query params: serverUrl, masterKey
+   * Body: { serverUrl: string, masterKey?: string }
    */
   private async handleLiveListEvents(req: Request, res: Response): Promise<void> {
-    const { serverUrl, masterKey } = req.query;
+    const { serverUrl, masterKey } = req.body;
 
     if (!serverUrl || typeof serverUrl !== 'string') {
-      res.status(400).json({ error: 'serverUrl query parameter is required' });
+      res.status(400).json({ error: 'serverUrl is required' });
       return;
     }
 
     try {
-      const clientConfig: import('../live/LiveClient.js').LiveClientConfig = { serverUrl };
+      const clientConfig: LiveClientConfig = { serverUrl };
       if (typeof masterKey === 'string') {
         clientConfig.masterKey = masterKey;
       }
@@ -2651,7 +2651,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     try {
       // Create event on live server
       Logger.info('Unified', `Creating event on live: ${serverUrl}`);
-      const connectClientConfig: import('../live/LiveClient.js').LiveClientConfig = { serverUrl };
+      const connectClientConfig: LiveClientConfig = { serverUrl };
       if (masterKey) {
         connectClientConfig.masterKey = masterKey;
       }

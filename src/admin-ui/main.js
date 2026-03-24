@@ -1527,10 +1527,11 @@ async function openSelectEventModal() {
   hideError('liveSelectEventModalError');
 
   try {
-    var params = new URLSearchParams({ serverUrl: liveServerUrl });
-    if (liveMasterKey) params.set('masterKey', liveMasterKey);
-
-    var res = await fetch('/api/live/events?' + params.toString());
+    var res = await fetch('/api/live/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ serverUrl: liveServerUrl, masterKey: liveMasterKey || undefined })
+    });
     var data = await res.json();
 
     if (!res.ok) {
@@ -2669,14 +2670,14 @@ function init() {
     });
   }
 
-  const liveSelectEventModal = document.getElementById('liveSelectEventModal');
+  var liveSelectEventModal = document.getElementById('liveSelectEventModal');
   if (liveSelectEventModal) {
     liveSelectEventModal.addEventListener('click', function(e) {
       if (e.target === this) closeSelectEventModal();
     });
   }
 
-  const liveManualConnectModal = document.getElementById('liveManualConnectModal');
+  var liveManualConnectModal = document.getElementById('liveManualConnectModal');
   if (liveManualConnectModal) {
     liveManualConnectModal.addEventListener('click', function(e) {
       if (e.target === this) closeManualConnectModal();
