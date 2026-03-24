@@ -113,6 +113,325 @@
     </div>
   </section>
 
+  <!-- Live Results Panel (Live-Mini Integration) -->
+  <section class="live-section card" aria-labelledby="liveSectionTitle">
+    <div class="live-section-header">
+      <h2 class="live-section-title" id="liveSectionTitle">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" class="live-title-icon" aria-hidden="true">
+          <path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+        </svg>
+        Live Results
+      </h2>
+      <div id="liveStatusBadge"></div>
+    </div>
+
+    <!-- NOT CONFIGURED STATE -->
+    <div id="liveNotConfigured" class="card-body" style="display: none;">
+      <div class="live-action-buttons-row">
+        <button class="btn btn-secondary" onclick="openEventCreationModal()">Create New Event</button>
+        <button class="btn btn-secondary" onclick="openSelectEventModal()">Browse Events</button>
+        <button class="btn btn-secondary" onclick="openManualConnectModal()">Connect Manually</button>
+      </div>
+    </div>
+
+    <!-- CONNECTED / PAUSED / ERROR STATE -->
+    <div id="liveConnected" class="card-body" style="display: none;">
+      <!-- Server & Event Info -->
+      <div class="live-info-grid">
+        <div class="live-info-main">
+          <div>
+            <div class="live-info-label">Server</div>
+            <div class="live-info-value text-mono" id="liveServerDisplay">-</div>
+          </div>
+          <div>
+            <div class="live-info-label">Event ID</div>
+            <div class="live-info-value text-mono" id="liveEventIdDisplay">-</div>
+          </div>
+          <div>
+            <div class="live-info-label">Status</div>
+            <div id="liveEventStatusDisplay">-</div>
+          </div>
+          <div>
+            <div class="live-info-label">API Key</div>
+            <div class="live-api-key">
+              <code class="live-info-value text-mono" id="liveApiKeyDisplay">-</code>
+              <button class="btn btn-sm btn-secondary" onclick="copyApiKey()" title="Copy API Key" aria-label="Copy API key to clipboard">
+                <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"/>
+                  <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="live-info-connected">
+          <div class="live-info-label">Connected</div>
+          <div id="liveConnectedAtDisplay">-</div>
+        </div>
+      </div>
+
+      <!-- Push Status Cards (per-channel) with integrated toggles -->
+      <div class="live-channels-grid">
+        <div class="live-channel-card" id="liveChannelXml">
+          <div class="live-channel-header">
+            <span class="status-dot" id="liveChannelXmlDot"></span>
+            <span class="live-channel-name">XML</span>
+            <label class="live-channel-toggle">
+              <input type="checkbox" id="liveToggleXml" onchange="toggleLiveChannel('xml')">
+              <span>Enabled</span>
+            </label>
+          </div>
+          <div class="live-channel-stats">
+            <span><span id="liveChannelXmlPushes">0</span> pushes</span>
+            <span><span id="liveChannelXmlErrors">0</span> errors</span>
+            <span class="live-channel-last" id="liveChannelXmlLast">Never</span>
+          </div>
+        </div>
+
+        <div class="live-channel-card" id="liveChannelOnCourse">
+          <div class="live-channel-header">
+            <span class="status-dot" id="liveChannelOnCourseDot"></span>
+            <span class="live-channel-name">OnCourse</span>
+            <label class="live-channel-toggle">
+              <input type="checkbox" id="liveToggleOnCourse" onchange="toggleLiveChannel('oncourse')">
+              <span>Enabled</span>
+            </label>
+          </div>
+          <div class="live-channel-stats">
+            <span><span id="liveChannelOnCoursePushes">0</span> pushes</span>
+            <span><span id="liveChannelOnCourseErrors">0</span> errors</span>
+            <span class="live-channel-last" id="liveChannelOnCourseLast">Never</span>
+          </div>
+        </div>
+
+        <div class="live-channel-card" id="liveChannelResults">
+          <div class="live-channel-header">
+            <span class="status-dot" id="liveChannelResultsDot"></span>
+            <span class="live-channel-name">Results</span>
+            <label class="live-channel-toggle">
+              <input type="checkbox" id="liveToggleResults" onchange="toggleLiveChannel('results')">
+              <span>Enabled</span>
+            </label>
+          </div>
+          <div class="live-channel-stats">
+            <span><span id="liveChannelResultsPushes">0</span> pushes</span>
+            <span><span id="liveChannelResultsErrors">0</span> errors</span>
+            <span class="live-channel-last" id="liveChannelResultsLast">Never</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Circuit Breaker Warning -->
+      <div id="liveCircuitBreakerWarning" class="error live-alert" role="alert" style="display: none;">
+        <strong>Circuit breaker open!</strong> Too many failures. Push is paused. Will retry automatically.
+      </div>
+
+      <!-- Global Error Display -->
+      <div id="liveErrorDisplay" class="error live-alert" role="alert" style="display: none;"></div>
+
+      <!-- Action Buttons -->
+      <div class="live-actions">
+        <button class="btn btn-secondary" id="livePauseBtn" onclick="toggleLivePause()">
+          <span id="livePauseBtnText">Pause</span>
+        </button>
+        <button class="btn btn-secondary" onclick="forcePushXml()">Force Push XML</button>
+        <button class="btn btn-secondary" onclick="openTransitionModal()">Change Event Status</button>
+        <button class="btn btn-danger-outline" onclick="disconnectLive()">Disconnect</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Event Creation Modal -->
+  <div id="liveEventModal" class="modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="liveEventModalTitle">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="liveEventModalTitle">Create Live Event</h3>
+        <button class="modal-close" onclick="closeLiveEventModal()" aria-label="Close modal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveEventServerUrl">Server URL *</label>
+          <input type="text" id="liveEventServerUrl" class="modal-input" placeholder="https://live.example.com" required>
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveEventMasterKey">Master Key <span class="text-muted">(optional)</span></label>
+          <input type="password" id="liveEventMasterKey" class="modal-input" placeholder="Server master key for admin operations">
+        </div>
+
+        <hr class="modal-separator">
+
+        <p class="live-description">
+          Event metadata will be sent to the live server. Fields are pre-filled from XML data.
+        </p>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveEventMainTitle">Event Name *</label>
+          <input type="text" id="liveEventMainTitle" class="modal-input" required>
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveEventEventId">Event ID *</label>
+          <input type="text" id="liveEventEventId" class="modal-input" placeholder="e.g., world-cup-prague-2024" required>
+          <div class="live-field-hint">
+            Live results identifier used in public URLs. Independent from C123 XML Event ID.
+          </div>
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveEventLocation">Location</label>
+          <input type="text" id="liveEventLocation" class="modal-input" placeholder="e.g., Prague, Czech Republic">
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveEventDiscipline">Discipline</label>
+          <select id="liveEventDiscipline" class="modal-select">
+            <option value="Slalom">Slalom</option>
+            <option value="Sprint">Sprint</option>
+            <option value="WildWater">Wild Water</option>
+          </select>
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label">Event Image <span class="text-muted">(optional, max 500KB)</span></label>
+          <div id="liveImageDropZone" class="modal-asset-drop-zone live-image-upload" tabindex="0" role="button" aria-label="Click or drag to upload event image">
+            <div id="liveImagePlaceholder" class="modal-asset-placeholder">
+              <svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/>
+              </svg>
+              <span>Click or drag image here</span>
+            </div>
+            <div id="liveImagePreview" class="modal-asset-preview" style="display: none;">
+              <img id="liveImagePreviewImg" alt="Event image preview">
+              <button class="modal-asset-clear" onclick="clearLiveEventImage()" type="button" aria-label="Remove image">&times;</button>
+            </div>
+          </div>
+          <input type="file" id="liveImageInput" accept="image/*" style="display: none;">
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="createLiveEvent()">Create & Connect</button>
+        <button class="btn btn-secondary" onclick="closeLiveEventModal()">Cancel</button>
+      </div>
+
+      <div id="liveEventModalError" class="error live-modal-error" role="alert" style="display: none;"></div>
+    </div>
+  </div>
+
+  <!-- Event Status Transition Modal -->
+  <div id="liveTransitionModal" class="modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="liveTransitionModalTitle">
+    <div class="modal-content live-transition-modal">
+      <div class="modal-header">
+        <h3 id="liveTransitionModalTitle">Change Event Status</h3>
+        <button class="modal-close" onclick="closeLiveTransitionModal()" aria-label="Close modal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveNewStatus">New Status</label>
+          <select id="liveNewStatus" class="modal-select">
+            <option value="draft">Draft</option>
+            <option value="startlist">Start List</option>
+            <option value="running">Running</option>
+            <option value="finished">Finished</option>
+            <option value="official">Official</option>
+          </select>
+        </div>
+
+        <div class="live-status-progression">
+          <div class="live-info-label">Status progression:</div>
+          <div class="text-mono">
+            draft → startlist → running → finished → official
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="transitionLiveStatus()">Update Status</button>
+        <button class="btn btn-secondary" onclick="closeLiveTransitionModal()">Cancel</button>
+        <button class="btn btn-danger-outline modal-action-right" onclick="deleteLiveEvent()">Delete Event</button>
+      </div>
+
+      <div id="liveTransitionModalError" class="error live-modal-error" role="alert" style="display: none;"></div>
+    </div>
+  </div>
+
+  <!-- Select Event Modal -->
+  <div id="liveSelectEventModal" class="modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="liveSelectEventModalTitle">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="liveSelectEventModalTitle">Browse Events</h3>
+        <button class="modal-close" onclick="closeSelectEventModal()" aria-label="Close modal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveBrowseServerUrl">Server URL *</label>
+          <input type="text" id="liveBrowseServerUrl" class="modal-input" placeholder="https://live.example.com" required>
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveBrowseMasterKey">Master Key <span class="text-muted">(optional)</span></label>
+          <input type="password" id="liveBrowseMasterKey" class="modal-input" placeholder="Server master key for admin operations">
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="loadBrowseEvents()">Load Events</button>
+        </div>
+
+        <div id="liveEventsLoading" class="live-events-loading" style="display: none;">
+          Loading events...
+        </div>
+        <div id="liveEventsEmpty" class="live-events-empty" style="display: none;">
+          No events on this server
+        </div>
+        <div id="liveEventsList" class="live-events-list"></div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeSelectEventModal()">Close</button>
+      </div>
+
+      <div id="liveSelectEventModalError" class="error live-modal-error" role="alert" style="display: none;"></div>
+    </div>
+  </div>
+
+  <!-- Manual Connect Modal -->
+  <div id="liveManualConnectModal" class="modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="liveManualConnectModalTitle">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="liveManualConnectModalTitle">Connect Manually</h3>
+        <button class="modal-close" onclick="closeManualConnectModal()" aria-label="Close modal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveManualServerUrl">Server URL *</label>
+          <input type="text" id="liveManualServerUrl" class="modal-input" placeholder="https://live.example.com" required>
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveManualApiKey">API Key *</label>
+          <input type="text" id="liveManualApiKey" class="modal-input" placeholder="API key from event creation" required>
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveManualEventId">Event ID *</label>
+          <input type="text" id="liveManualEventId" class="modal-input" placeholder="e.g. my-race-2026" required>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="manualConnectLive()">Connect</button>
+        <button class="btn btn-secondary" onclick="closeManualConnectModal()">Cancel</button>
+      </div>
+
+      <div id="liveManualConnectModalError" class="error live-modal-error" role="alert" style="display: none;"></div>
+    </div>
+  </div>
+
   <!-- Tab Navigation -->
   <div class="tabs">
     <nav class="tab-list" role="tablist" aria-label="Admin sections">
@@ -128,17 +447,17 @@
 
   <!-- Sources Panel -->
   <section class="tab-panel" id="panel-sources" role="tabpanel" aria-labelledby="tab-sources">
-    <div class="card">
+    <div class="card"><div class="card-body">
       <table id="sourcesTable" class="table table-hover" aria-label="Data sources">
         <thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Details</th></tr></thead>
         <tbody></tbody>
       </table>
-    </div>
+    </div></div>
   </section>
 
   <!-- XML Configuration Panel -->
   <section class="tab-panel" id="panel-xml" role="tabpanel" aria-labelledby="tab-xml">
-    <div class="card" id="xmlConfigCard">
+    <div class="card" id="xmlConfigCard"><div class="card-body">
       <div style="margin-bottom: 10px;">
         <strong id="xmlPathLabel">Current path:</strong> <span id="xmlPath" aria-labelledby="xmlPathLabel">-</span>
         <span id="xmlSource" style="margin-left: 10px; color: var(--text-secondary);"></span>
@@ -176,7 +495,7 @@
         <button class="btn btn-primary" onclick="setXmlPath()">Set Path</button>
       </div>
       <div id="xmlConfigError" class="error" role="alert" style="margin-top: 10px; display: none;"></div>
-    </div>
+    </div></div>
   </section>
 
   <!-- Client detail modal (E2: Enhanced design) -->
@@ -294,7 +613,7 @@
 
   <!-- Assets Panel (E3: Enhanced drag-and-drop UX) -->
   <section class="tab-panel" id="panel-assets" role="tabpanel" aria-labelledby="tab-assets">
-    <div class="card">
+    <div class="card"><div class="card-body">
       <p class="assets-intro">
         Configure default images for all scoreboards. Drag & drop, paste from clipboard, or click to upload.
         Per-client overrides can be set in the client configuration modal.
@@ -394,12 +713,12 @@
           <div class="asset-info" id="footerImageInfo" aria-live="polite"></div>
         </div>
       </div>
-    </div>
+    </div></div>
   </section>
 
   <!-- Logs Panel -->
   <section class="tab-panel active" id="panel-logs" role="tabpanel" aria-labelledby="tab-logs">
-    <div class="card">
+    <div class="card"><div class="card-body">
       <div class="log-toolbar" role="group" aria-label="Log filters">
         <fieldset class="log-filters">
           <legend class="visually-hidden">Log levels</legend>
@@ -430,7 +749,7 @@
       <div class="log-footer">
         <span id="logStats" role="status" aria-live="polite">0 entries</span>
       </div>
-    </div>
+    </div></div>
   </section>
 
     </div><!-- /.tab-panels -->

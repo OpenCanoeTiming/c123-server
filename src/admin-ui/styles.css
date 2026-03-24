@@ -694,7 +694,11 @@ input[type="radio"]:focus-visible {
    ============================================ */
 /* Override DS modal which uses .modal-backdrop > .modal structure
    Our legacy structure uses .modal as backdrop, .modal-content as dialog */
-#clientModal.modal {
+#clientModal.modal,
+#liveEventModal.modal,
+#liveTransitionModal.modal,
+#liveSelectEventModal.modal,
+#liveManualConnectModal.modal {
   position: fixed;
   top: 0;
   left: 0;
@@ -2474,6 +2478,311 @@ fieldset.modal-section > legend {
   margin-top: var(--space-2);
   font-size: var(--text-xs);
   color: var(--text-muted);
+}
+
+/* ============================================
+   Live-Mini Section
+   ============================================ */
+.live-section {
+  margin-bottom: var(--space-4);
+}
+
+.live-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+}
+
+.live-section-title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  border: none;
+  padding: 0;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.live-title-icon {
+  margin-right: var(--space-2);
+}
+
+.live-description {
+  margin-bottom: var(--space-4);
+  color: var(--text-secondary);
+}
+
+.live-url-input {
+  flex: 1;
+  min-width: 300px;
+}
+
+.live-error {
+  margin-top: var(--space-3);
+}
+
+.live-tabs {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.live-tab {
+  padding: var(--space-2) var(--space-4);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--font-sm);
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.live-tab:hover {
+  color: var(--text-primary);
+}
+
+.live-tab.tab-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.config-form-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.config-form-vertical .form-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.config-form-vertical .form-row label {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.live-info-grid {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-5);
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.live-info-main {
+  display: flex;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.live-info-connected {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.live-info-label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-1);
+}
+
+.live-info-value {
+  font-size: var(--text-sm);
+}
+
+.live-channels-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.live-channel-card {
+  background: var(--bg-body);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+}
+
+.live-channel-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-1);
+}
+
+.live-channel-name {
+  font-weight: var(--font-weight-bold);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.live-channel-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  cursor: pointer;
+  user-select: none;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin-left: auto;
+}
+
+.live-channel-toggle input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.live-channel-stats {
+  display: flex;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.live-channel-last {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+
+.live-actions {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.live-alert {
+  margin-bottom: var(--space-4);
+}
+
+.live-field-hint {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin-top: var(--space-1);
+}
+
+.live-modal-error {
+  padding: var(--space-3) var(--space-5);
+}
+
+.live-transition-modal {
+  max-width: 500px;
+}
+
+.live-status-progression {
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+
+/* Not configured: action buttons row */
+.live-action-buttons-row {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Modal separator */
+.modal-separator {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: var(--space-3) 0;
+}
+
+/* Modal action pushed to right */
+.modal-action-right {
+  margin-left: auto;
+}
+
+/* API key display with copy button */
+.live-api-key {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.live-api-key code {
+  font-size: var(--text-sm);
+  word-break: break-all;
+}
+
+
+/* Event list in select modal */
+.live-events-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.live-event-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s;
+}
+
+.live-event-row:hover {
+  border-color: var(--accent);
+}
+
+.live-event-row-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+}
+
+.live-event-row-title {
+  font-weight: var(--font-weight-bold);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.live-event-row-meta {
+  display: flex;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.live-events-loading,
+.live-events-empty {
+  padding: var(--space-5);
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+/* Image upload for event creation */
+.live-image-upload {
+  min-height: 80px;
+}
+
+.live-image-upload img {
+  max-height: 100px;
+  max-width: 100%;
+  object-fit: contain;
 }
 
 /* ============================================

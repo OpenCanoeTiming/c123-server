@@ -14,6 +14,10 @@ import type { EventState } from '../state/EventState.js';
 import type { Source } from '../sources/types.js';
 import type { XmlDataService } from '../service/XmlDataService.js';
 import type { Server as C123Server } from '../server.js';
+import type { LivePusher } from '../live/LivePusher.js';
+import { LiveClient, type LiveClientConfig } from '../live/LiveClient.js';
+import type { CreateEventRequest, EventStatus } from '../live/types.js';
+import type { XmlChangeNotifier } from '../xml/XmlChangeNotifier.js';
 import { getAppSettings, WindowsConfigDetector } from '../config/index.js';
 import type { ClientConfig } from '../config/types.js';
 
@@ -103,12 +107,17 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   // Admin dashboard WebSocket connections (for log streaming only)
   private adminConnections: Set<WebSocket> = new Set();
 
+  // Live-Mini status broadcast throttling (max 2/s = 500ms)
+  private liveStatusLastBroadcast: number = 0;
+  private readonly LIVE_STATUS_THROTTLE_MS = 500;
+
   // Registered components
   private eventState: EventState | null = null;
   private sources: RegisteredSource[] = [];
   private xmlDataService: XmlDataService | null = null;
   private c123Server: C123Server | null = null;
   private lastMismatchState: MismatchState | null = null;
+  private livePusher: LivePusher | null = null;
 
   constructor(config?: UnifiedServerConfig) {
     super();
@@ -136,6 +145,51 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    */
   setServer(server: C123Server): void {
     this.c123Server = server;
+  }
+
+  /**
+   * Register LivePusher for live integration
+   */
+  setLivePusher(pusher: LivePusher): void {
+    this.livePusher = pusher;
+  }
+
+  /**
+   * Auto-reconnect live pusher from saved settings (called on server start).
+   * Does NOT create a new event — uses saved apiKey directly.
+   */
+  async autoReconnectLive(
+    xmlChangeNotifier: XmlChangeNotifier,
+    eventState: EventState,
+  ): Promise<void> {
+    if (!this.livePusher) return;
+
+    const settings = getAppSettings();
+    const config = settings.getLiveConfig();
+
+    if (!config.enabled || !config.serverUrl || !config.apiKey || !config.eventId) return;
+
+    try {
+      await this.livePusher.connect(
+        {
+          serverUrl: config.serverUrl,
+          apiKey: config.apiKey,
+          eventId: config.eventId,
+          eventStatus: config.eventStatus ?? 'draft',
+          pushXml: config.pushXml,
+          pushOnCourse: config.pushOnCourse,
+          pushResults: config.pushResults,
+        },
+        xmlChangeNotifier,
+        eventState,
+      );
+
+      this.setupLiveStatusListener();
+
+      Logger.info('Unified', `Live-Mini auto-reconnected to ${config.serverUrl} (event: ${config.eventId})`);
+    } catch (err) {
+      Logger.error('Unified', 'Live-Mini auto-reconnect failed', err);
+    }
   }
 
   /**
@@ -522,6 +576,59 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     }
 
     Logger.debug('Unified', `Broadcast ScoringEvent: ${event.eventType} bib=${event.bib}`);
+  }
+
+  /**
+   * Setup single statusChange listener on livePusher (replaces any previous one).
+   * Prevents listener leak when connect/reconnect is called multiple times.
+   */
+  private setupLiveStatusListener(): void {
+    if (!this.livePusher) return;
+    this.livePusher.removeAllListeners('statusChange');
+    this.livePusher.removeAllListeners('error');
+    this.livePusher.on('statusChange', (status) => {
+      this.broadcastLiveStatus(status);
+    });
+    // Prevent unhandled 'error' event from crashing the process
+    this.livePusher.on('error', (err) => {
+      Logger.error('Unified', 'Live-Mini pusher error', err);
+    });
+  }
+
+  /**
+   * Broadcast Live-Mini status to all admin dashboard connections
+   * Throttled to max 2/s (500ms between broadcasts)
+   */
+  broadcastLiveStatus(status: import('../live/types.js').LiveStatus): void {
+    if (this.adminConnections.size === 0) {
+      return; // No admin connections, skip
+    }
+
+    // Throttle: skip if last broadcast was less than 500ms ago
+    const now = Date.now();
+    if (now - this.liveStatusLastBroadcast < this.LIVE_STATUS_THROTTLE_MS) {
+      return;
+    }
+    this.liveStatusLastBroadcast = now;
+
+    const message = {
+      type: 'LiveStatus',
+      timestamp: new Date().toISOString(),
+      data: status,
+    };
+
+    const json = JSON.stringify(message);
+
+    // Send to admin dashboard connections
+    for (const ws of this.adminConnections) {
+      if (ws.readyState === ws.OPEN) {
+        ws.send(json);
+      } else {
+        this.adminConnections.delete(ws);
+      }
+    }
+
+    Logger.debug('Unified', `Broadcast LiveStatus: ${status.state}`);
   }
 
   /**
@@ -938,6 +1045,18 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     this.app.post('/api/c123/scoring', this.handleC123Scoring.bind(this));
     this.app.post('/api/c123/remove-from-course', this.handleC123RemoveFromCourse.bind(this));
     this.app.post('/api/c123/timing', this.handleC123Timing.bind(this));
+
+    // Live-Mini API
+    this.app.get('/api/live/status', this.handleLiveStatus.bind(this));
+    this.app.post('/api/live/connect', this.handleLiveConnect.bind(this));
+    this.app.post('/api/live/disconnect', this.handleLiveDisconnect.bind(this));
+    this.app.post('/api/live/reconnect', this.handleLiveReconnect.bind(this));
+    this.app.post('/api/live/pause', this.handleLivePause.bind(this));
+    this.app.post('/api/live/force-push-xml', this.handleLiveForceXml.bind(this));
+    this.app.post('/api/live/transition', this.handleLiveTransition.bind(this));
+    this.app.patch('/api/live/config', this.handleLiveConfig.bind(this));
+    this.app.post('/api/live/events', this.handleLiveListEvents.bind(this));
+    this.app.post('/api/live/delete-event', this.handleLiveDeleteEvent.bind(this));
 
     // Health check
     this.app.get('/health', (_req: Request, res: Response) => {
@@ -2428,6 +2547,540 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       });
     } catch (err) {
       Logger.error('Unified', 'Timing error', err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  // ==========================================================================
+  // Live-Mini API Handlers
+  // ==========================================================================
+
+  /**
+   * GET /api/live/status - Get current Live-Mini pusher status
+   */
+  private handleLiveStatus(_req: Request, res: Response): void {
+    if (!this.livePusher) {
+      res.status(503).json({ error: 'Live-Mini pusher not available' });
+      return;
+    }
+
+    const status = this.livePusher.getStatus();
+    const settings = getAppSettings();
+    const liveConfig = settings.getLiveConfig();
+    res.json({ status, apiKey: liveConfig.apiKey || null });
+  }
+
+  /**
+   * POST /api/live/events - List events on a live server (proxy to avoid CORS)
+   *
+   * Body: { serverUrl: string, masterKey?: string }
+   */
+  private async handleLiveListEvents(req: Request, res: Response): Promise<void> {
+    const { serverUrl, masterKey } = req.body;
+
+    if (!serverUrl || typeof serverUrl !== 'string') {
+      res.status(400).json({ error: 'serverUrl is required' });
+      return;
+    }
+
+    try {
+      const clientConfig: LiveClientConfig = { serverUrl };
+      if (typeof masterKey === 'string') {
+        clientConfig.masterKey = masterKey;
+      }
+      const client = new LiveClient(clientConfig);
+      const result = await client.listEvents();
+      res.json(result);
+    } catch (err) {
+      Logger.error('Unified', 'Live events list error', err);
+      const statusCode = (err as any)?.statusCode || 500;
+      res.status(statusCode).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * POST /api/live/connect - Connect to live server and create event
+   *
+   * Body: {
+   *   serverUrl: string,
+   *   metadata: CreateEventRequest,
+   *   pushXml?: boolean,
+   *   pushOnCourse?: boolean,
+   *   pushResults?: boolean
+   * }
+   */
+  private async handleLiveConnect(req: Request, res: Response): Promise<void> {
+    if (!this.livePusher) {
+      res.status(503).json({ error: 'Live-Mini pusher not available' });
+      return;
+    }
+
+    if (!this.c123Server) {
+      res.status(503).json({ error: 'C123 server not available' });
+      return;
+    }
+
+    const { serverUrl, metadata, masterKey, pushXml, pushOnCourse, pushResults } = req.body;
+
+    // Validate serverUrl
+    if (!serverUrl || typeof serverUrl !== 'string') {
+      res.status(400).json({ error: 'serverUrl is required' });
+      return;
+    }
+
+    // Validate metadata
+    if (!metadata || typeof metadata !== 'object') {
+      res.status(400).json({ error: 'metadata is required' });
+      return;
+    }
+
+    const eventMetadata = metadata as CreateEventRequest;
+    // Validate imageData: must be a base64 data URL string, max ~700KB base64 ≈ 500KB binary
+    if (eventMetadata.imageData) {
+      if (typeof eventMetadata.imageData !== 'string') {
+        res.status(400).json({ error: 'imageData must be a string' });
+        return;
+      }
+      if (!eventMetadata.imageData.startsWith('data:image/')) {
+        res.status(400).json({ error: 'imageData must be a data:image/ URL' });
+        return;
+      }
+      if (eventMetadata.imageData.length > 700 * 1024) {
+        res.status(400).json({ error: 'imageData exceeds maximum size (500KB)' });
+        return;
+      }
+    }
+    if (!eventMetadata.eventId || !eventMetadata.mainTitle) {
+      res.status(400).json({ error: 'metadata must include eventId and mainTitle' });
+      return;
+    }
+
+    try {
+      // Create event on live server
+      Logger.info('Unified', `Creating event on live: ${serverUrl}`);
+      const connectClientConfig: LiveClientConfig = { serverUrl };
+      if (masterKey) {
+        connectClientConfig.masterKey = masterKey;
+      }
+      const client = new LiveClient(connectClientConfig);
+      const createResponse = await client.createEvent(eventMetadata);
+
+      Logger.info('Unified', `Event created: ${createResponse.eventId}, apiKey received`);
+
+      // Save connection to settings
+      const settings = getAppSettings();
+      settings.setLiveConnection(
+        serverUrl,
+        createResponse.apiKey,
+        createResponse.eventId,
+        'draft',
+      );
+
+      // Update channel settings — default all off, user enables what they need
+      settings.setLiveChannels({
+        pushXml: pushXml ?? false,
+        pushOnCourse: pushOnCourse ?? false,
+        pushResults: pushResults ?? false,
+      });
+
+      // Get updated config and connect pusher
+      const liveConfig = settings.getLiveConfig();
+      const xmlChangeNotifier = this.c123Server.getXmlChangeNotifier();
+      const eventState = this.c123Server.getEventState();
+
+      if (!xmlChangeNotifier || !eventState) {
+        res.status(503).json({ error: 'XmlChangeNotifier or EventState not available' });
+        return;
+      }
+
+      await this.livePusher.connect(
+        {
+          serverUrl: liveConfig.serverUrl!,
+          apiKey: liveConfig.apiKey!,
+          eventId: liveConfig.eventId!,
+          eventStatus: 'draft',
+          pushXml: liveConfig.pushXml,
+          pushOnCourse: liveConfig.pushOnCourse,
+          pushResults: liveConfig.pushResults,
+        },
+        xmlChangeNotifier,
+        eventState,
+      );
+
+      this.setupLiveStatusListener();
+
+      const status = this.livePusher.getStatus();
+
+      // Broadcast initial status
+      this.broadcastLiveStatus(status);
+
+      res.json({
+        success: true,
+        eventId: createResponse.eventId,
+        status,
+      });
+    } catch (err) {
+      Logger.error('Unified', 'Live-Mini connect error', err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * POST /api/live/disconnect - Disconnect from live
+   *
+   * Body: { clearConfig?: boolean }
+   */
+  private async handleLiveDisconnect(req: Request, res: Response): Promise<void> {
+    if (!this.livePusher) {
+      res.status(503).json({ error: 'Live-Mini pusher not available' });
+      return;
+    }
+
+    const { clearConfig } = req.body;
+
+    try {
+      await this.livePusher.disconnect();
+
+      // Clear saved config if requested
+      if (clearConfig === true) {
+        const settings = getAppSettings();
+        settings.clearLiveConnection();
+        this.livePusher.reset();
+        Logger.info('Unified', 'Live-Mini config cleared');
+      }
+
+      const status = this.livePusher.getStatus();
+      this.broadcastLiveStatus(status);
+
+      res.json({
+        success: true,
+        configCleared: clearConfig === true,
+        status,
+      });
+    } catch (err) {
+      Logger.error('Unified', 'Live-Mini disconnect error', err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * POST /api/live/reconnect - Connect to an existing event (no event creation)
+   *
+   * Body: { serverUrl: string, apiKey: string, eventId: string }
+   */
+  private async handleLiveReconnect(req: Request, res: Response): Promise<void> {
+    if (!this.livePusher) {
+      res.status(503).json({ error: 'Live-Mini pusher not available' });
+      return;
+    }
+
+    if (!this.c123Server) {
+      res.status(503).json({ error: 'C123 server not available' });
+      return;
+    }
+
+    const { serverUrl, apiKey, eventId } = req.body;
+
+    if (!serverUrl || typeof serverUrl !== 'string') {
+      res.status(400).json({ error: 'serverUrl is required' });
+      return;
+    }
+    if (!apiKey || typeof apiKey !== 'string') {
+      res.status(400).json({ error: 'apiKey is required' });
+      return;
+    }
+    if (!eventId || typeof eventId !== 'string') {
+      res.status(400).json({ error: 'eventId is required' });
+      return;
+    }
+
+    try {
+      // Save connection to settings
+      const settings = getAppSettings();
+      settings.setLiveConnection(serverUrl, apiKey, eventId, 'draft');
+
+      // Get updated config and connect pusher
+      const liveConfig = settings.getLiveConfig();
+      const xmlChangeNotifier = this.c123Server.getXmlChangeNotifier();
+      const eventState = this.c123Server.getEventState();
+
+      if (!xmlChangeNotifier || !eventState) {
+        res.status(503).json({ error: 'XmlChangeNotifier or EventState not available' });
+        return;
+      }
+
+      await this.livePusher.connect(
+        {
+          serverUrl,
+          apiKey,
+          eventId,
+          eventStatus: 'draft',
+          pushXml: liveConfig.pushXml,
+          pushOnCourse: liveConfig.pushOnCourse,
+          pushResults: liveConfig.pushResults,
+        },
+        xmlChangeNotifier,
+        eventState,
+      );
+
+      this.setupLiveStatusListener();
+
+      const status = this.livePusher.getStatus();
+      this.broadcastLiveStatus(status);
+
+      res.json({
+        success: true,
+        eventId,
+        status,
+      });
+    } catch (err) {
+      Logger.error('Unified', 'Live-Mini reconnect error', err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * POST /api/live/pause - Pause or resume push
+   *
+   * Body: { paused: boolean }
+   */
+  private handleLivePause(req: Request, res: Response): void {
+    if (!this.livePusher) {
+      res.status(503).json({ error: 'Live-Mini pusher not available' });
+      return;
+    }
+
+    const { paused } = req.body;
+
+    if (typeof paused !== 'boolean') {
+      res.status(400).json({ error: 'paused must be a boolean' });
+      return;
+    }
+
+    try {
+      if (paused) {
+        this.livePusher.pause();
+        Logger.info('Unified', 'Live-Mini push paused');
+      } else {
+        this.livePusher.resume();
+        Logger.info('Unified', 'Live-Mini push resumed');
+      }
+
+      const status = this.livePusher.getStatus();
+      this.broadcastLiveStatus(status);
+
+      res.json({
+        success: true,
+        paused,
+        status,
+      });
+    } catch (err) {
+      Logger.error('Unified', 'Live-Mini pause error', err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * POST /api/live/force-push-xml - Force immediate XML push
+   */
+  private async handleLiveForceXml(_req: Request, res: Response): Promise<void> {
+    if (!this.livePusher) {
+      res.status(503).json({ error: 'Live-Mini pusher not available' });
+      return;
+    }
+
+    try {
+      await this.livePusher.forcePushXml();
+      Logger.info('Unified', 'Live-Mini XML force push triggered');
+
+      const status = this.livePusher.getStatus();
+      this.broadcastLiveStatus(status);
+
+      res.json({
+        success: true,
+        status,
+      });
+    } catch (err) {
+      Logger.error('Unified', 'Live-Mini force XML error', err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * POST /api/live/transition - Transition event status
+   *
+   * Body: { status: EventStatus }
+   */
+  private async handleLiveTransition(req: Request, res: Response): Promise<void> {
+    if (!this.livePusher) {
+      res.status(503).json({ error: 'Live-Mini pusher not available' });
+      return;
+    }
+
+    const { status } = req.body;
+
+    // Validate status
+    const validStatuses: EventStatus[] = ['draft', 'startlist', 'running', 'finished', 'official'];
+    if (!status || !validStatuses.includes(status)) {
+      res.status(400).json({
+        error: `status must be one of: ${validStatuses.join(', ')}`,
+      });
+      return;
+    }
+
+    try {
+      await this.livePusher.transitionStatus(status as EventStatus);
+      Logger.info('Unified', `Live-Mini event status transitioned to: ${status}`);
+
+      // Update stored config
+      const settings = getAppSettings();
+      settings.updateLiveConfig({ eventStatus: status });
+
+      const pusherStatus = this.livePusher.getStatus();
+      this.broadcastLiveStatus(pusherStatus);
+
+      res.json({
+        success: true,
+        eventStatus: status,
+        status: pusherStatus,
+      });
+    } catch (err) {
+      Logger.error('Unified', 'Live-Mini transition error', err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * POST /api/live/delete-event - Delete event on remote server and disconnect
+   *
+   * Body: { eventId: string }
+   */
+  private async handleLiveDeleteEvent(req: Request, res: Response): Promise<void> {
+    if (!this.livePusher) {
+      res.status(503).json({ error: 'Live-Mini pusher not available' });
+      return;
+    }
+
+    const { eventId } = req.body;
+
+    if (!eventId || typeof eventId !== 'string') {
+      res.status(400).json({ error: 'eventId is required' });
+      return;
+    }
+
+    try {
+      // Get current status to find server URL and API key
+      const currentStatus = this.livePusher.getStatus();
+      if (currentStatus.state === 'not_configured') {
+        res.status(400).json({ error: 'Not connected to any live server' });
+        return;
+      }
+
+      // Get saved config for server URL and API key
+      const settings = getAppSettings();
+      const liveConfig = settings.getLiveConfig();
+      const clientConfig: LiveClientConfig = {
+        serverUrl: liveConfig.serverUrl || currentStatus.serverUrl!,
+      };
+      if (liveConfig.apiKey) {
+        clientConfig.apiKey = liveConfig.apiKey;
+      }
+
+      const client = new LiveClient(clientConfig);
+      await client.deleteEvent(eventId);
+      Logger.info('Unified', `Live event deleted: ${eventId}`);
+
+      // Disconnect and clear config
+      await this.livePusher.disconnect();
+      settings.clearLiveConnection();
+      this.livePusher.reset();
+
+      const status = this.livePusher.getStatus();
+      this.broadcastLiveStatus(status);
+
+      res.json({ success: true });
+    } catch (err) {
+      Logger.error('Unified', 'Live event delete error', err);
+      const statusCode = (err as any)?.statusCode || 500;
+      res.status(statusCode).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * PATCH /api/live/config - Update push channel configuration
+   *
+   * Body: { pushXml?: boolean, pushOnCourse?: boolean, pushResults?: boolean }
+   */
+  private handleLiveConfig(req: Request, res: Response): void {
+    if (!this.livePusher) {
+      res.status(503).json({ error: 'Live-Mini pusher not available' });
+      return;
+    }
+
+    const { pushXml, pushOnCourse, pushResults } = req.body;
+
+    // Validate that at least one field is provided
+    if (pushXml === undefined && pushOnCourse === undefined && pushResults === undefined) {
+      res.status(400).json({ error: 'At least one channel must be specified' });
+      return;
+    }
+
+    // Validate field types
+    if (pushXml !== undefined && typeof pushXml !== 'boolean') {
+      res.status(400).json({ error: 'pushXml must be a boolean' });
+      return;
+    }
+    if (pushOnCourse !== undefined && typeof pushOnCourse !== 'boolean') {
+      res.status(400).json({ error: 'pushOnCourse must be a boolean' });
+      return;
+    }
+    if (pushResults !== undefined && typeof pushResults !== 'boolean') {
+      res.status(400).json({ error: 'pushResults must be a boolean' });
+      return;
+    }
+
+    try {
+      // Update pusher
+      this.livePusher.updateChannels({ pushXml, pushOnCourse, pushResults });
+
+      // Save to settings
+      const settings = getAppSettings();
+      settings.setLiveChannels({ pushXml, pushOnCourse, pushResults });
+
+      Logger.info('Unified', `Live-Mini channels updated: ${JSON.stringify({ pushXml, pushOnCourse, pushResults })}`);
+
+      const status = this.livePusher.getStatus();
+      this.broadcastLiveStatus(status);
+
+      res.json({
+        success: true,
+        channels: {
+          xml: status.channels.xml.enabled,
+          oncourse: status.channels.oncourse.enabled,
+          results: status.channels.results.enabled,
+        },
+        status,
+      });
+    } catch (err) {
+      Logger.error('Unified', 'Live-Mini config error', err);
       res.status(500).json({
         error: err instanceof Error ? err.message : 'Unknown error',
       });

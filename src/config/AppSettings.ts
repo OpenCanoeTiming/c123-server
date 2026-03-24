@@ -19,6 +19,7 @@ import {
   CustomParamDefinition,
   AssetUrls,
 } from './types.js';
+import type { LiveConfig } from '../live/types.js';
 
 export class AppSettingsManager {
   private settings: AppSettingsType;
@@ -64,6 +65,13 @@ export class AppSettingsManager {
       if (fs.existsSync(this.settingsPath)) {
         const content = fs.readFileSync(this.settingsPath, 'utf-8');
         const loaded = JSON.parse(content) as Partial<AppSettingsType>;
+
+        // Migrate old 'liveMini' key to 'live'
+        const raw = loaded as Record<string, unknown>;
+        if ('liveMini' in raw && !('live' in raw)) {
+          loaded.live = raw.liveMini as LiveConfig;
+          delete raw.liveMini;
+        }
 
         // Merge with defaults to ensure all fields exist
         this.settings = {
@@ -513,6 +521,82 @@ export class AppSettingsManager {
   reset(): void {
     this.settings = { ...DEFAULT_APP_SETTINGS };
     this.save();
+  }
+
+  // =========================================================================
+  // Live-Mini Configuration Management
+  // =========================================================================
+
+  /**
+   * Get Live-Mini configuration
+   */
+  getLiveConfig() {
+    return this.settings.live
+      ? { ...this.settings.live }
+      : { ...DEFAULT_APP_SETTINGS.live! };
+  }
+
+  /**
+   * Update Live-Mini configuration (partial update)
+   */
+  updateLiveConfig(updates: Partial<typeof DEFAULT_APP_SETTINGS.live>): void {
+    this.settings.live = {
+      ...(this.settings.live || DEFAULT_APP_SETTINGS.live!),
+      ...updates,
+    };
+    this.save();
+  }
+
+  /**
+   * Set Live-Mini connection (serverUrl, apiKey, eventId)
+   */
+  setLiveConnection(
+    serverUrl: string,
+    apiKey: string,
+    eventId: string,
+    eventStatus: string,
+  ): void {
+    this.updateLiveConfig({
+      enabled: true,
+      serverUrl,
+      apiKey,
+      eventId,
+      eventStatus: eventStatus as any,
+    });
+  }
+
+  /**
+   * Clear Live-Mini connection
+   */
+  clearLiveConnection(): void {
+    this.updateLiveConfig({
+      enabled: false,
+      serverUrl: null,
+      apiKey: null,
+      eventId: null,
+      eventStatus: null,
+      pushXml: false,
+      pushOnCourse: false,
+      pushResults: false,
+    });
+  }
+
+  /**
+   * Enable/disable Live-Mini push
+   */
+  setLiveEnabled(enabled: boolean): void {
+    this.updateLiveConfig({ enabled });
+  }
+
+  /**
+   * Set which channels to push
+   */
+  setLiveChannels(channels: {
+    pushXml?: boolean;
+    pushOnCourse?: boolean;
+    pushResults?: boolean;
+  }): void {
+    this.updateLiveConfig(channels);
   }
 }
 

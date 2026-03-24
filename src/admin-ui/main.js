@@ -293,6 +293,22 @@ function truncate(str, len) {
   return str.length > len ? str.substring(0, len) + '...' : str;
 }
 
+function showError(elementId, msg) {
+  const el = document.getElementById(elementId);
+  if (el) {
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+}
+
+function hideError(elementId) {
+  const el = document.getElementById(elementId);
+  if (el) {
+    el.textContent = '';
+    el.style.display = 'none';
+  }
+}
+
 // ===========================================
 // Status Refresh
 // ===========================================
@@ -756,6 +772,9 @@ function connectLogWebSocket() {
         // Live update of clients list
         clientsData = msg.data.clients || [];
         renderClients();
+      } else if (msg.type === 'LiveStatus') {
+        // Live update of Live-Mini status
+        renderLiveStatus(msg.data);
       }
     } catch (e) {
       // Ignore parse errors
@@ -1100,6 +1119,902 @@ function showModalError(msg) {
 function showClientMessage(msg, isError) {
   // Use toast notifications instead of inline message
   showToast(msg, isError ? 'error' : 'success');
+}
+
+// ===========================================
+// Live-Mini Functions
+// ===========================================
+
+let liveStatus = null;
+let liveTimerInterval = null;
+let liveServerUrl = '';
+let liveMasterKey = '';
+let liveApiKeyValue = null;
+let liveImageData = null;
+
+/**
+ * Periodically refresh relative time displays for Live-Mini channels.
+ * Without this, timestamps only update when a new push happens.
+ */
+function startLiveTimerRefresh() {
+  if (liveTimerInterval) return;
+  liveTimerInterval = setInterval(() => {
+    if (!liveStatus || !liveStatus.channels) return;
+    const channelIdMap = { xml: 'Xml', oncourse: 'OnCourse', results: 'Results' };
+    for (const [channel, idSuffix] of Object.entries(channelIdMap)) {
+      const ch = liveStatus.channels[channel];
+      if (ch) {
+        const el = document.getElementById('liveChannel' + idSuffix + 'Last');
+        if (el) {
+          el.textContent = ch.lastPushAt ? formatRelativeTime(ch.lastPushAt) : 'Never';
+        }
+      }
+    }
+  }, 1000);
+}
+
+/**
+ * Render Live-Mini status panel
+ */
+function renderLiveStatus(status) {
+  liveStatus = status;
+  startLiveTimerRefresh();
+
+  const notConfigured = document.getElementById('liveNotConfigured');
+  const connected = document.getElementById('liveConnected');
+  const statusBadge = document.getElementById('liveStatusBadge');
+
+  if (!notConfigured || !connected || !statusBadge) return;
+
+  // Update status badge
+  const stateBadgeMap = {
+    'not_configured': { text: 'Not Configured', class: 'badge-secondary' },
+    'connected': { text: 'Connected', class: 'badge-success' },
+    'paused': { text: 'Paused', class: 'badge-warning' },
+    'error': { text: 'Error', class: 'badge-danger' },
+    'disconnected': { text: 'Disconnected', class: 'badge-secondary' }
+  };
+  const badge = stateBadgeMap[status.state] || stateBadgeMap['not_configured'];
+  statusBadge.innerHTML = '<span class="badge ' + badge.class + '">' + escapeHtml(badge.text) + '</span>';
+
+  // Show appropriate panel
+  if (status.state === 'not_configured' || status.state === 'disconnected') {
+    notConfigured.style.display = 'block';
+    connected.style.display = 'none';
+    return;
+  }
+
+  notConfigured.style.display = 'none';
+  connected.style.display = 'block';
+
+  // Update server & event info
+  const serverDisplay = document.getElementById('liveServerDisplay');
+  const eventIdDisplay = document.getElementById('liveEventIdDisplay');
+  const eventStatusDisplay = document.getElementById('liveEventStatusDisplay');
+  const connectedAtDisplay = document.getElementById('liveConnectedAtDisplay');
+
+  if (serverDisplay) serverDisplay.textContent = status.serverUrl || '-';
+  if (eventIdDisplay) eventIdDisplay.textContent = status.eventId || '-';
+  if (eventStatusDisplay) {
+    const statusBadgeClass = {
+      'draft': 'badge-secondary',
+      'startlist': 'badge-info',
+      'running': 'badge-success',
+      'finished': 'badge-warning',
+      'official': 'badge-primary'
+    }[status.eventStatus] || 'badge-secondary';
+    eventStatusDisplay.innerHTML = '<span class="badge ' + statusBadgeClass + '">' + escapeHtml(status.eventStatus || '-') + '</span>';
+  }
+  if (connectedAtDisplay) {
+    connectedAtDisplay.textContent = status.connectedAt ? formatRelativeTime(status.connectedAt) : '-';
+  }
+
+  // Update API key display (show full key — user can copy it)
+  var apiKeyDisplay = document.getElementById('liveApiKeyDisplay');
+  if (apiKeyDisplay) {
+    apiKeyDisplay.textContent = liveApiKeyValue || '-';
+  }
+
+  // Update channel cards
+  updateLiveChannel('Xml', status.channels.xml);
+  updateLiveChannel('OnCourse', status.channels.oncourse);
+  updateLiveChannel('Results', status.channels.results);
+
+  // Update channel toggles (now inside channel cards)
+  var toggleXml = document.getElementById('liveToggleXml');
+  var toggleOnCourse = document.getElementById('liveToggleOnCourse');
+  var toggleResults = document.getElementById('liveToggleResults');
+
+  if (toggleXml) toggleXml.checked = status.channels.xml.enabled;
+  if (toggleOnCourse) toggleOnCourse.checked = status.channels.oncourse.enabled;
+  if (toggleResults) toggleResults.checked = status.channels.results.enabled;
+
+  // Update pause button
+  const pauseBtn = document.getElementById('livePauseBtn');
+  const pauseBtnText = document.getElementById('livePauseBtnText');
+  if (pauseBtn && pauseBtnText) {
+    if (status.state === 'paused') {
+      pauseBtnText.textContent = 'Resume';
+    } else {
+      pauseBtnText.textContent = 'Pause';
+    }
+  }
+
+  // Show circuit breaker warning
+  const cbWarning = document.getElementById('liveCircuitBreakerWarning');
+  if (cbWarning) {
+    if (status.circuitBreaker.isOpen) {
+      cbWarning.style.display = 'block';
+      cbWarning.textContent = 'Circuit breaker open! ' + status.circuitBreaker.consecutiveFailures + ' consecutive failures. Will retry automatically.';
+    } else {
+      cbWarning.style.display = 'none';
+    }
+  }
+
+  // Show global error
+  const errorDisplay = document.getElementById('liveErrorDisplay');
+  if (errorDisplay) {
+    if (status.state === 'error' && status.lastError) {
+      errorDisplay.style.display = 'block';
+      errorDisplay.innerHTML = '<strong>Last error:</strong> ' + escapeHtml(status.lastError);
+    } else {
+      errorDisplay.style.display = 'none';
+    }
+  }
+}
+
+/**
+ * Update single channel card
+ */
+function updateLiveChannel(channelName, channelStatus) {
+  const dot = document.getElementById('liveChannel' + channelName + 'Dot');
+  const pushes = document.getElementById('liveChannel' + channelName + 'Pushes');
+  const errors = document.getElementById('liveChannel' + channelName + 'Errors');
+  const last = document.getElementById('liveChannel' + channelName + 'Last');
+
+  if (!dot || !pushes || !errors || !last) return;
+
+  // Update status dot
+  if (channelStatus.enabled) {
+    if (channelStatus.lastError) {
+      dot.className = 'status-dot status-dot-danger';
+    } else if (channelStatus.totalPushes > 0) {
+      dot.className = 'status-dot status-dot-success';
+    } else {
+      dot.className = 'status-dot status-dot-warning';
+    }
+  } else {
+    dot.className = 'status-dot status-dot-muted';
+  }
+
+  // Update stats
+  pushes.textContent = channelStatus.totalPushes;
+  errors.textContent = channelStatus.totalErrors;
+  last.textContent = channelStatus.lastPushAt ? formatRelativeTime(channelStatus.lastPushAt) : 'Never';
+}
+
+/**
+ * Format relative time
+ */
+function formatRelativeTime(isoString) {
+  try {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffSec = Math.floor(diffMs / 1000);
+
+    if (diffSec < 60) return diffSec + 's ago';
+    if (diffSec < 3600) return Math.floor(diffSec / 60) + 'm ago';
+    if (diffSec < 86400) return Math.floor(diffSec / 3600) + 'h ago';
+    return Math.floor(diffSec / 86400) + 'd ago';
+  } catch (e) {
+    return isoString;
+  }
+}
+
+/**
+ * Open event creation modal
+ */
+async function openEventCreationModal() {
+  var modal = document.getElementById('liveEventModal');
+  if (!modal) return;
+
+  // Pre-fill server URL + master key from previous values
+  var serverUrlInput = document.getElementById('liveEventServerUrl');
+  var masterKeyInput = document.getElementById('liveEventMasterKey');
+  if (serverUrlInput) serverUrlInput.value = liveServerUrl;
+  if (masterKeyInput) masterKeyInput.value = liveMasterKey;
+
+  // Pre-fill event metadata from XML
+  var mainTitleInput = document.getElementById('liveEventMainTitle');
+  var eventIdInput = document.getElementById('liveEventEventId');
+  var locationInput = document.getElementById('liveEventLocation');
+  var disciplineSelect = document.getElementById('liveEventDiscipline');
+
+  var eventNameEl = document.getElementById('eventName');
+  if (mainTitleInput && eventNameEl) {
+    mainTitleInput.value = eventNameEl.textContent.trim();
+  }
+
+  if (eventIdInput && mainTitleInput && mainTitleInput.value) {
+    eventIdInput.value = mainTitleInput.value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  if (locationInput) locationInput.value = '';
+  if (disciplineSelect) disciplineSelect.value = 'Slalom';
+
+  modal.style.display = 'flex';
+  trapFocus(modal.querySelector('.modal-content'));
+}
+
+/**
+ * Close event creation modal
+ */
+function closeLiveEventModal() {
+  var modal = document.getElementById('liveEventModal');
+  if (modal) {
+    modal.style.display = 'none';
+    releaseFocus();
+  }
+  hideError('liveEventModalError');
+  clearLiveEventImage();
+}
+
+/**
+ * Create live event and connect
+ */
+async function createLiveEvent() {
+  var serverUrlInput = document.getElementById('liveEventServerUrl');
+  var masterKeyInput = document.getElementById('liveEventMasterKey');
+  liveServerUrl = serverUrlInput ? serverUrlInput.value.trim() : '';
+  liveMasterKey = masterKeyInput ? masterKeyInput.value.trim() : '';
+
+  if (!liveServerUrl) {
+    showError('liveEventModalError', 'Please enter a server URL');
+    return;
+  }
+  try { new URL(liveServerUrl); } catch (e) {
+    showError('liveEventModalError', 'Invalid URL format');
+    return;
+  }
+
+  var mainTitle = document.getElementById('liveEventMainTitle').value.trim();
+  var eventId = document.getElementById('liveEventEventId').value.trim();
+  var location = document.getElementById('liveEventLocation').value.trim();
+  var discipline = document.getElementById('liveEventDiscipline').value;
+
+  if (!mainTitle || !eventId) {
+    showError('liveEventModalError', 'Event name and ID are required');
+    return;
+  }
+
+  var metadata = {
+    mainTitle: mainTitle,
+    eventId: eventId,
+    location: location || null,
+    discipline: discipline
+  };
+
+  if (liveImageData) {
+    metadata.imageData = liveImageData;
+  }
+
+  try {
+    var res = await fetch('/api/live/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        serverUrl: liveServerUrl,
+        masterKey: liveMasterKey || undefined,
+        metadata: metadata
+      })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to connect');
+    }
+
+    showToast('Connected to Live-Mini server', 'success');
+    closeLiveEventModal();
+
+    // Refresh status
+    loadLiveStatus();
+  } catch (error) {
+    showError('liveEventModalError', error.message);
+  }
+}
+
+/**
+ * Disconnect from live
+ */
+async function disconnectLive() {
+  if (!confirm('Disconnect from Live-Mini server? This will stop all data push.')) {
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/live/disconnect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clearConfig: true })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to disconnect');
+    }
+
+    liveApiKeyValue = null;
+    liveImageData = null;
+    showToast('Disconnected from Live-Mini', 'success');
+    loadLiveStatus();
+  } catch (error) {
+    showToast('Failed to disconnect: ' + error.message, 'error');
+  }
+}
+
+/**
+ * Open Select Event modal (Browse Events)
+ */
+function openSelectEventModal() {
+  var modal = document.getElementById('liveSelectEventModal');
+  if (!modal) return;
+
+  // Pre-fill server inputs from previous values
+  var serverUrlInput = document.getElementById('liveBrowseServerUrl');
+  var masterKeyInput = document.getElementById('liveBrowseMasterKey');
+  if (serverUrlInput) serverUrlInput.value = liveServerUrl;
+  if (masterKeyInput) masterKeyInput.value = liveMasterKey;
+
+  // Reset list state
+  var loadingEl = document.getElementById('liveEventsLoading');
+  var emptyEl = document.getElementById('liveEventsEmpty');
+  var listEl = document.getElementById('liveEventsList');
+  if (loadingEl) loadingEl.style.display = 'none';
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (listEl) listEl.innerHTML = '';
+  hideError('liveSelectEventModalError');
+
+  modal.style.display = 'flex';
+  trapFocus(modal.querySelector('.modal-content'));
+}
+
+/**
+ * Load events list in Browse Events modal
+ */
+async function loadBrowseEvents() {
+  var serverUrlInput = document.getElementById('liveBrowseServerUrl');
+  var masterKeyInput = document.getElementById('liveBrowseMasterKey');
+  liveServerUrl = serverUrlInput ? serverUrlInput.value.trim() : '';
+  liveMasterKey = masterKeyInput ? masterKeyInput.value.trim() : '';
+
+  if (!liveServerUrl) {
+    showError('liveSelectEventModalError', 'Please enter a server URL');
+    return;
+  }
+  try { new URL(liveServerUrl); } catch (e) {
+    showError('liveSelectEventModalError', 'Invalid URL format');
+    return;
+  }
+
+  var loadingEl = document.getElementById('liveEventsLoading');
+  var emptyEl = document.getElementById('liveEventsEmpty');
+  var listEl = document.getElementById('liveEventsList');
+
+  if (loadingEl) loadingEl.style.display = 'block';
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (listEl) listEl.innerHTML = '';
+  hideError('liveSelectEventModalError');
+
+  try {
+    var res = await fetch('/api/live/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ serverUrl: liveServerUrl, masterKey: liveMasterKey || undefined })
+    });
+    var data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to fetch events');
+    }
+
+    if (loadingEl) loadingEl.style.display = 'none';
+
+    var events = data.events || [];
+    if (events.length === 0) {
+      if (emptyEl) emptyEl.style.display = 'block';
+      return;
+    }
+
+    var html = '';
+    for (var i = 0; i < events.length; i++) {
+      var ev = events[i];
+      var statusClass = {
+        'draft': 'badge-secondary',
+        'startlist': 'badge-info',
+        'running': 'badge-success',
+        'finished': 'badge-warning',
+        'official': 'badge-primary'
+      }[ev.status] || 'badge-secondary';
+
+      var maskedKey = ev.apiKey && ev.apiKey.length > 12
+        ? ev.apiKey.substring(0, 6) + '...' + ev.apiKey.substring(ev.apiKey.length - 4)
+        : (ev.apiKey || '-');
+
+      html += '<div class="live-event-row">'
+        + '<div class="live-event-row-info">'
+        + '<div class="live-event-row-title">' + escapeHtml(ev.mainTitle) + '</div>'
+        + '<div class="live-event-row-meta">'
+        + '<span>' + escapeHtml(ev.eventId) + '</span>'
+        + '<span class="badge ' + statusClass + '">' + escapeHtml(ev.status) + '</span>'
+        + '<span>' + escapeHtml(maskedKey) + '</span>'
+        + '</div>'
+        + '</div>'
+        + '<button class="btn btn-sm btn-primary" data-event-id="' + escapeHtml(ev.eventId) + '" data-api-key="' + escapeHtml(ev.apiKey) + '">Connect</button>'
+        + '</div>';
+    }
+    if (listEl) {
+      listEl.innerHTML = html;
+      // Event delegation for connect buttons (avoids inline JS / XSS)
+      listEl.querySelectorAll('button[data-event-id]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          selectAndConnectEvent(btn.dataset.eventId, btn.dataset.apiKey);
+        });
+      });
+    }
+  } catch (error) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    showError('liveSelectEventModalError', error.message);
+  }
+}
+
+/**
+ * Close Select Event modal
+ */
+function closeSelectEventModal() {
+  var modal = document.getElementById('liveSelectEventModal');
+  if (modal) {
+    modal.style.display = 'none';
+    releaseFocus();
+  }
+  hideError('liveSelectEventModalError');
+}
+
+/**
+ * Connect to a selected event from the list
+ */
+async function selectAndConnectEvent(eventId, apiKey) {
+  try {
+    var res = await fetch('/api/live/reconnect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ serverUrl: liveServerUrl, apiKey: apiKey, eventId: eventId })
+    });
+
+    var data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to connect');
+    }
+
+    liveApiKeyValue = apiKey;
+    showToast('Connected to event: ' + eventId, 'success');
+    closeSelectEventModal();
+    loadLiveStatus();
+  } catch (error) {
+    showError('liveSelectEventModalError', error.message);
+  }
+}
+
+/**
+ * Open Manual Connect modal
+ */
+function openManualConnectModal() {
+  var modal = document.getElementById('liveManualConnectModal');
+  if (!modal) return;
+
+  // Pre-fill server URL from previous values, clear other fields
+  var serverUrlInput = document.getElementById('liveManualServerUrl');
+  var apiKeyInput = document.getElementById('liveManualApiKey');
+  var eventIdInput = document.getElementById('liveManualEventId');
+  if (serverUrlInput) serverUrlInput.value = liveServerUrl;
+  if (apiKeyInput) apiKeyInput.value = '';
+  if (eventIdInput) eventIdInput.value = '';
+
+  modal.style.display = 'flex';
+  trapFocus(modal.querySelector('.modal-content'));
+  hideError('liveManualConnectModalError');
+}
+
+/**
+ * Close Manual Connect modal
+ */
+function closeManualConnectModal() {
+  var modal = document.getElementById('liveManualConnectModal');
+  if (modal) {
+    modal.style.display = 'none';
+    releaseFocus();
+  }
+  hideError('liveManualConnectModalError');
+}
+
+/**
+ * Connect manually to an existing event
+ */
+async function manualConnectLive() {
+  var serverUrl = document.getElementById('liveManualServerUrl').value.trim();
+  var apiKey = document.getElementById('liveManualApiKey').value.trim();
+  var eventId = document.getElementById('liveManualEventId').value.trim();
+
+  if (!serverUrl) {
+    showError('liveManualConnectModalError', 'Please enter a server URL');
+    return;
+  }
+
+  try {
+    new URL(serverUrl);
+  } catch (e) {
+    showError('liveManualConnectModalError', 'Invalid URL format');
+    return;
+  }
+
+  if (!apiKey) {
+    showError('liveManualConnectModalError', 'Please enter an API key');
+    return;
+  }
+
+  if (!eventId) {
+    showError('liveManualConnectModalError', 'Please enter an event ID');
+    return;
+  }
+
+  try {
+    var res = await fetch('/api/live/reconnect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ serverUrl: serverUrl, apiKey: apiKey, eventId: eventId })
+    });
+
+    var data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to connect');
+    }
+
+    liveServerUrl = serverUrl;
+    liveApiKeyValue = apiKey;
+    showToast('Connected to event: ' + eventId, 'success');
+    closeManualConnectModal();
+    loadLiveStatus();
+  } catch (error) {
+    showError('liveManualConnectModalError', error.message);
+  }
+}
+
+/**
+ * Copy API key to clipboard
+ */
+async function copyApiKey() {
+  if (!liveApiKeyValue) {
+    showToast('No API key to copy', 'warning');
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(liveApiKeyValue);
+    showToast('API key copied to clipboard', 'success');
+  } catch (e) {
+    // Fallback for older browsers
+    var textArea = document.createElement('textarea');
+    textArea.value = liveApiKeyValue;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-9999px';
+    document.body.appendChild(textArea);
+    textArea.select();
+    try {
+      document.execCommand('copy');
+      showToast('API key copied to clipboard', 'success');
+    } catch (err) {
+      showToast('Failed to copy API key', 'error');
+    }
+    document.body.removeChild(textArea);
+  }
+}
+
+/**
+ * Initialize live image upload handlers
+ */
+function initLiveImageUpload() {
+  var dropZone = document.getElementById('liveImageDropZone');
+  var fileInput = document.getElementById('liveImageInput');
+
+  if (!dropZone || !fileInput) return;
+
+  dropZone.addEventListener('click', function(e) {
+    if (e.target.tagName !== 'BUTTON') {
+      fileInput.click();
+    }
+  });
+
+  dropZone.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      fileInput.click();
+    }
+  });
+
+  fileInput.addEventListener('change', function(e) {
+    if (e.target.files && e.target.files[0]) {
+      processLiveImageFile(e.target.files[0]);
+    }
+  });
+
+  dropZone.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.add('drag-over');
+  });
+
+  dropZone.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.remove('drag-over');
+  });
+
+  dropZone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.remove('drag-over');
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      processLiveImageFile(e.dataTransfer.files[0]);
+    }
+  });
+}
+
+/**
+ * Process uploaded image file for live event
+ */
+function processLiveImageFile(file) {
+  if (!file.type.startsWith('image/')) {
+    showError('liveEventModalError', 'Please select an image file');
+    return;
+  }
+
+  if (file.size > 500 * 1024) {
+    showError('liveEventModalError', 'Image must be under 500KB');
+    return;
+  }
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    liveImageData = e.target.result;
+
+    var placeholder = document.getElementById('liveImagePlaceholder');
+    var preview = document.getElementById('liveImagePreview');
+    var previewImg = document.getElementById('liveImagePreviewImg');
+
+    if (placeholder) placeholder.style.display = 'none';
+    if (preview) {
+      preview.style.display = 'flex';
+      if (previewImg) previewImg.src = liveImageData;
+    }
+    hideError('liveEventModalError');
+  };
+  reader.readAsDataURL(file);
+}
+
+/**
+ * Clear live event image
+ */
+function clearLiveEventImage() {
+  liveImageData = null;
+
+  var placeholder = document.getElementById('liveImagePlaceholder');
+  var preview = document.getElementById('liveImagePreview');
+  var previewImg = document.getElementById('liveImagePreviewImg');
+  var fileInput = document.getElementById('liveImageInput');
+
+  if (placeholder) placeholder.style.display = '';
+  if (preview) preview.style.display = 'none';
+  if (previewImg) previewImg.src = '';
+  if (fileInput) fileInput.value = '';
+}
+
+/**
+ * Toggle pause/resume
+ */
+async function toggleLivePause() {
+  if (!liveStatus) return;
+
+  const isPaused = liveStatus.state === 'paused';
+
+  try {
+    const res = await fetch('/api/live/pause', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paused: !isPaused })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to toggle pause');
+    }
+
+    showToast(isPaused ? 'Push resumed' : 'Push paused', 'success');
+    loadLiveStatus();
+  } catch (error) {
+    showToast('Failed to toggle pause: ' + error.message, 'error');
+  }
+}
+
+/**
+ * Force push XML
+ */
+async function forcePushXml() {
+  try {
+    const res = await fetch('/api/live/force-push-xml', {
+      method: 'POST'
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to force push');
+    }
+
+    showToast('XML push triggered', 'success');
+  } catch (error) {
+    showToast('Failed to push XML: ' + error.message, 'error');
+  }
+}
+
+/**
+ * Toggle channel push
+ */
+async function toggleLiveChannel(channel) {
+  const checkbox = document.getElementById('liveToggle' + (channel === 'xml' ? 'Xml' : channel === 'oncourse' ? 'OnCourse' : 'Results'));
+  if (!checkbox) return;
+
+  const enabled = checkbox.checked;
+
+  try {
+    const body = {};
+    body['push' + (channel === 'xml' ? 'Xml' : channel === 'oncourse' ? 'OnCourse' : 'Results')] = enabled;
+
+    const res = await fetch('/api/live/config', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to update config');
+    }
+
+    showToast('Channel ' + (enabled ? 'enabled' : 'disabled'), 'success');
+  } catch (error) {
+    showToast('Failed to update channel: ' + error.message, 'error');
+    checkbox.checked = !enabled; // Revert
+  }
+}
+
+/**
+ * Open status transition modal
+ */
+function openTransitionModal() {
+  if (!liveStatus) return;
+
+  const select = document.getElementById('liveNewStatus');
+  if (select && liveStatus.eventStatus) {
+    select.value = liveStatus.eventStatus;
+  }
+
+  const modal = document.getElementById('liveTransitionModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    trapFocus(modal.querySelector('.modal-content'));
+  }
+}
+
+/**
+ * Close transition modal
+ */
+function closeLiveTransitionModal() {
+  const modal = document.getElementById('liveTransitionModal');
+  if (modal) {
+    modal.style.display = 'none';
+    releaseFocus();
+  }
+  hideError('liveTransitionModalError');
+}
+
+/**
+ * Transition event status
+ */
+async function transitionLiveStatus() {
+  if (!liveStatus || !liveStatus.eventId) return;
+
+  const newStatus = document.getElementById('liveNewStatus').value;
+
+  try {
+    const res = await fetch('/api/live/transition', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventId: liveStatus.eventId,
+        status: newStatus
+      })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to transition status');
+    }
+
+    showToast('Event status updated to ' + newStatus, 'success');
+    closeLiveTransitionModal();
+    loadLiveStatus();
+  } catch (error) {
+    showError('liveTransitionModalError', error.message);
+  }
+}
+
+/**
+ * Delete live event on remote server and disconnect
+ */
+async function deleteLiveEvent() {
+  if (!liveStatus || !liveStatus.eventId) return;
+
+  if (!confirm('Delete event "' + liveStatus.eventId + '" on the remote server? This cannot be undone.')) {
+    return;
+  }
+
+  try {
+    var res = await fetch('/api/live/delete-event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventId: liveStatus.eventId })
+    });
+
+    var data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to delete event');
+    }
+
+    liveApiKeyValue = null;
+    liveImageData = null;
+    showToast('Event deleted and disconnected', 'success');
+    closeLiveTransitionModal();
+    loadLiveStatus();
+  } catch (error) {
+    showError('liveTransitionModalError', error.message);
+  }
+}
+
+/**
+ * Load live status from API
+ */
+async function loadLiveStatus() {
+  try {
+    var res = await fetch('/api/live/status');
+    var data = await res.json();
+    liveApiKeyValue = data.apiKey || null;
+    renderLiveStatus(data.status);
+  } catch (error) {
+    console.error('Failed to load live status:', error);
+  }
 }
 
 // ===========================================
@@ -1751,16 +2666,60 @@ function init() {
   initXmlModeHandlers();
   initModalAssetHandlers();
   initAssetHandlers();
+  initLiveImageUpload();
 
   // Close modal when clicking outside
   document.getElementById('clientModal').addEventListener('click', function(e) {
     if (e.target === this) closeClientModal();
   });
 
+  const liveEventModal = document.getElementById('liveEventModal');
+  if (liveEventModal) {
+    liveEventModal.addEventListener('click', function(e) {
+      if (e.target === this) closeLiveEventModal();
+    });
+  }
+
+  const liveTransitionModal = document.getElementById('liveTransitionModal');
+  if (liveTransitionModal) {
+    liveTransitionModal.addEventListener('click', function(e) {
+      if (e.target === this) closeLiveTransitionModal();
+    });
+  }
+
+  var liveSelectEventModal = document.getElementById('liveSelectEventModal');
+  if (liveSelectEventModal) {
+    liveSelectEventModal.addEventListener('click', function(e) {
+      if (e.target === this) closeSelectEventModal();
+    });
+  }
+
+  var liveManualConnectModal = document.getElementById('liveManualConnectModal');
+  if (liveManualConnectModal) {
+    liveManualConnectModal.addEventListener('click', function(e) {
+      if (e.target === this) closeManualConnectModal();
+    });
+  }
+
   // Keyboard navigation for modal
   document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && document.getElementById('clientModal').style.display !== 'none') {
-      closeClientModal();
+    if (e.key === 'Escape') {
+      const clientModal = document.getElementById('clientModal');
+      if (clientModal && clientModal.style.display !== 'none') {
+        closeClientModal();
+      }
+      if (liveEventModal && liveEventModal.style.display !== 'none') {
+        closeLiveEventModal();
+      }
+      if (liveTransitionModal && liveTransitionModal.style.display !== 'none') {
+        closeLiveTransitionModal();
+      }
+      if (liveSelectEventModal && liveSelectEventModal.style.display !== 'none') {
+        closeSelectEventModal();
+      }
+      if (liveManualConnectModal && liveManualConnectModal.style.display !== 'none') {
+        closeManualConnectModal();
+      }
     }
   });
 
@@ -1772,6 +2731,7 @@ function init() {
   loadClients();
   loadAssets();
   loadMismatchStatus();
+  loadLiveStatus();
   connectLogWebSocket();
 
   // Periodic refresh
