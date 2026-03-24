@@ -2680,11 +2680,11 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         'draft',
       );
 
-      // Update channel settings — default all off so user explicitly enables what they need
+      // Update channel settings — default all on for new connections
       settings.setLiveChannels({
-        pushXml: pushXml ?? false,
-        pushOnCourse: pushOnCourse ?? false,
-        pushResults: pushResults ?? false,
+        pushXml: pushXml ?? true,
+        pushOnCourse: pushOnCourse ?? true,
+        pushResults: pushResults ?? true,
       });
 
       // Get updated config and connect pusher

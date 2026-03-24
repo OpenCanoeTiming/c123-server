@@ -575,6 +575,9 @@ export class AppSettingsManager {
       apiKey: null,
       eventId: null,
       eventStatus: null,
+      pushXml: true,
+      pushOnCourse: true,
+      pushResults: true,
     });
   }
 
