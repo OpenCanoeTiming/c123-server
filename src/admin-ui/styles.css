@@ -2487,28 +2487,18 @@ fieldset.modal-section > legend {
   margin-bottom: var(--space-4);
 }
 
-.live-header {
+.live-section .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-3);
 }
 
-.live-title {
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-  margin: 0;
+.live-section .card-title {
   display: flex;
   align-items: center;
-  border: none;
-  padding: 0;
-  text-transform: none;
-  letter-spacing: normal;
 }
 
 .live-title-icon {
-  vertical-align: text-bottom;
   margin-right: var(--space-2);
 }
 
@@ -2607,11 +2597,11 @@ fieldset.modal-section > legend {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: var(--space-3);
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--space-4);
 }
 
 .live-channel-card {
-  background: var(--bg-surface);
+  background: var(--bg-body);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-3);
