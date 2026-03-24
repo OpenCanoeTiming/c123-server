@@ -1214,7 +1214,7 @@ function renderLiveStatus(status) {
   if (apiKeyDisplay && liveApiKeyValue) {
     // Show masked key
     if (liveApiKeyValue.length > 12) {
-      apiKeyDisplay.textContent = liveApiKeyValue.substring(0, 6) + '...' + liveApiKeyValue.substring(liveApiKeyValue.length - 6);
+      apiKeyDisplay.textContent = liveApiKeyValue.substring(0, 6) + '...' + liveApiKeyValue.substring(liveApiKeyValue.length - 4);
     } else {
       apiKeyDisplay.textContent = liveApiKeyValue;
     }

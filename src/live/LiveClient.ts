@@ -123,7 +123,7 @@ export class LiveClient {
       '/api/v1/admin/events',
       request,
       false,
-      this.config.masterKey ? 'masterKey' : 'apiKey',
+      this.config.masterKey ? 'masterKey' : 'none',
     );
   }
 
