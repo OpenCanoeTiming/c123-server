@@ -8,6 +8,7 @@
 import type {
   CreateEventRequest,
   CreateEventResponse,
+  ListEventsResponse,
   PushXmlRequest,
   PushXmlResponse,
   PushOnCourseRequest,
@@ -27,6 +28,8 @@ export interface LiveClientConfig {
   serverUrl: string;
   /** API key for authentication (optional, required for authenticated endpoints) */
   apiKey?: string;
+  /** Master key for admin endpoints (optional) */
+  masterKey?: string;
   /** Request timeout in milliseconds (default: 10000) */
   timeout?: number;
 }
@@ -88,7 +91,7 @@ const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
  * Live-Mini HTTP Client
  */
 export class LiveClient {
-  private config: { serverUrl: string; apiKey?: string; timeout: number };
+  private config: { serverUrl: string; apiKey?: string; masterKey?: string; timeout: number };
   private retryConfig: Required<RetryConfig>;
 
   constructor(
@@ -101,6 +104,9 @@ export class LiveClient {
     };
     if (config.apiKey) {
       this.config.apiKey = config.apiKey;
+    }
+    if (config.masterKey) {
+      this.config.masterKey = config.masterKey;
     }
     this.retryConfig = {
       ...DEFAULT_RETRY_CONFIG,
@@ -116,7 +122,8 @@ export class LiveClient {
       'POST',
       '/api/v1/admin/events',
       request,
-      false, // Don't retry event creation (409 conflict if retry)
+      false,
+      'masterKey',
     );
   }
 
@@ -169,6 +176,19 @@ export class LiveClient {
   }
 
   /**
+   * List events on the live server (admin endpoint)
+   */
+  async listEvents(): Promise<ListEventsResponse> {
+    return this.request<undefined, ListEventsResponse>(
+      'GET',
+      '/api/v1/admin/events',
+      undefined,
+      false,
+      'masterKey',
+    );
+  }
+
+  /**
    * Make HTTP request with retry logic
    */
   private async request<TRequest, TResponse>(
@@ -176,6 +196,7 @@ export class LiveClient {
     path: string,
     body?: TRequest,
     enableRetry: boolean = true,
+    authMode: 'apiKey' | 'masterKey' | 'none' = 'apiKey',
   ): Promise<TResponse> {
     const url = `${this.config.serverUrl}${path}`;
     let lastError: Error | null = null;
@@ -191,8 +212,10 @@ export class LiveClient {
           'Content-Type': 'application/json',
         };
 
-        // Add API key header only if configured
-        if (this.config.apiKey) {
+        // Add auth header based on mode
+        if (authMode === 'masterKey' && this.config.masterKey) {
+          headers['X-Master-Key'] = this.config.masterKey;
+        } else if (authMode === 'apiKey' && this.config.apiKey) {
           headers['X-API-Key'] = this.config.apiKey;
         }
 

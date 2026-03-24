@@ -126,7 +126,7 @@ C123.exe ──TCP:27333──► c123-server ──HTTP/JSON──► c123-live
 
 ### Next step
 
-All blocks completed. Ready for merge.
+Live Admin UI improvements completed (#51, #52, #53). Ready for merge.
 
 ### Block 1: Types, HTTP Client, Settings ✅
 
@@ -227,6 +227,19 @@ Found during PR review (#22). Three breaking bugs + code quality.
 ---
 
 ## Remaining Work
+
+### Block 7: Live Admin UI Improvements (Issues #51, #52, #53) ✅
+
+- [x] **#51 X-Master-Key support** — `LiveClient` authMode refactor (apiKey/masterKey/none), `createEvent()` uses masterKey, `listEvents()` new method
+- [x] **#52 Event image upload** — `imageData` in `CreateEventRequest`, drag/drop upload in modal, 500KB limit, preview
+- [x] **#53 Event ID hint** — Updated hint text: "Live results identifier used in public URLs. Independent from C123 XML Event ID."
+- [x] **Admin UI restructure** — NOT_CONFIGURED: shared URL+masterKey inputs, 3 action buttons (Create/Browse/Manual)
+- [x] **Browse Events modal** — `GET /api/live/events` proxy endpoint, event list with status badges, one-click connect
+- [x] **Manual Connect modal** — Replaces old inline "Connect to Existing" tab
+- [x] **API Key display** — Masked key in connected state info grid with copy-to-clipboard button
+- [x] **Channel toggles** — Moved inside channel cards for cleaner layout
+- [x] **handleLiveStatus** — Now returns apiKey from settings
+- [x] All 540 tests pass, 0 lint errors
 
 ### Nice-to-have (Future)
 

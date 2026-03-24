@@ -131,41 +131,26 @@
         Publish live results to a remote c123-live server for public viewing.
       </p>
 
-      <!-- Mode tabs -->
-      <div class="live-tabs" role="tablist">
-        <button id="liveTabCreate" class="live-tab tab-active" role="tab" onclick="toggleLiveMode('create')">Create New Event</button>
-        <button id="liveTabReconnect" class="live-tab" role="tab" onclick="toggleLiveMode('reconnect')">Connect to Existing</button>
+      <!-- Shared server inputs -->
+      <div class="live-server-form" role="group" aria-label="Live server configuration">
+        <div class="form-row">
+          <label for="liveServerUrl">Server URL</label>
+          <input type="text" id="liveServerUrl" class="input" placeholder="https://live.example.com" aria-describedby="liveConnectError">
+        </div>
+        <div class="form-row">
+          <label for="liveMasterKey">Master Key <span class="text-muted">(optional)</span></label>
+          <input type="password" id="liveMasterKey" class="input" placeholder="Server master key for admin operations">
+        </div>
       </div>
 
-      <!-- Create new event mode -->
-      <div id="liveCreateSection">
-        <div class="config-form" role="group" aria-label="Live-Mini server configuration">
-          <label for="liveServerUrl" class="visually-hidden">Server URL</label>
-          <input type="text" id="liveServerUrl" class="input live-url-input" placeholder="https://live.example.com" aria-describedby="liveConnectError">
-          <button class="btn btn-primary" onclick="openEventCreationModal()">Connect & Create Event</button>
-        </div>
-        <div id="liveConnectError" class="error live-error" role="alert" style="display: none;"></div>
+      <!-- Action buttons -->
+      <div class="live-action-buttons">
+        <button class="btn btn-primary" onclick="openEventCreationModal()">Create New Event</button>
+        <button class="btn btn-secondary" onclick="openSelectEventModal()">Browse Events</button>
+        <button class="btn btn-text" onclick="openManualConnectModal()">Connect Manually</button>
       </div>
 
-      <!-- Connect to existing event mode -->
-      <div id="liveReconnectSection" style="display: none;">
-        <div class="config-form config-form-vertical" role="group" aria-label="Connect to existing event">
-          <div class="form-row">
-            <label for="liveReconnectServerUrl">Server URL</label>
-            <input type="text" id="liveReconnectServerUrl" class="input" placeholder="https://live.example.com">
-          </div>
-          <div class="form-row">
-            <label for="liveReconnectApiKey">API Key</label>
-            <input type="text" id="liveReconnectApiKey" class="input" placeholder="API key from event creation">
-          </div>
-          <div class="form-row">
-            <label for="liveReconnectEventId">Event ID</label>
-            <input type="text" id="liveReconnectEventId" class="input" placeholder="e.g. my-race-2026">
-          </div>
-          <button class="btn btn-primary" onclick="reconnectLive()">Connect to Event</button>
-        </div>
-        <div id="liveReconnectError" class="error live-error" role="alert" style="display: none;"></div>
-      </div>
+      <div id="liveConnectError" class="error live-error" role="alert" style="display: none;"></div>
     </div>
 
     <!-- CONNECTED / PAUSED / ERROR STATE -->
@@ -185,12 +170,24 @@
           <div id="liveEventStatusDisplay">-</div>
         </div>
         <div>
+          <div class="live-info-label">API Key</div>
+          <div class="live-api-key">
+            <code class="live-info-value text-mono" id="liveApiKeyDisplay">-</code>
+            <button class="btn btn-sm btn-secondary" onclick="copyApiKey()" title="Copy API Key" aria-label="Copy API key to clipboard">
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"/>
+                <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div>
           <div class="live-info-label">Connected</div>
           <div id="liveConnectedAtDisplay">-</div>
         </div>
       </div>
 
-      <!-- Push Status Cards (per-channel) -->
+      <!-- Push Status Cards (per-channel) with integrated toggles -->
       <div class="live-channels-grid">
         <div class="live-channel-card" id="liveChannelXml">
           <div class="live-channel-header">
@@ -202,6 +199,10 @@
             <div><span id="liveChannelXmlErrors">0</span> errors</div>
           </div>
           <div class="live-channel-last" id="liveChannelXmlLast">Never</div>
+          <label class="live-channel-toggle">
+            <input type="checkbox" id="liveToggleXml" onchange="toggleLiveChannel('xml')">
+            <span>Enabled</span>
+          </label>
         </div>
 
         <div class="live-channel-card" id="liveChannelOnCourse">
@@ -214,6 +215,10 @@
             <div><span id="liveChannelOnCourseErrors">0</span> errors</div>
           </div>
           <div class="live-channel-last" id="liveChannelOnCourseLast">Never</div>
+          <label class="live-channel-toggle">
+            <input type="checkbox" id="liveToggleOnCourse" onchange="toggleLiveChannel('oncourse')">
+            <span>Enabled</span>
+          </label>
         </div>
 
         <div class="live-channel-card" id="liveChannelResults">
@@ -226,6 +231,10 @@
             <div><span id="liveChannelResultsErrors">0</span> errors</div>
           </div>
           <div class="live-channel-last" id="liveChannelResultsLast">Never</div>
+          <label class="live-channel-toggle">
+            <input type="checkbox" id="liveToggleResults" onchange="toggleLiveChannel('results')">
+            <span>Enabled</span>
+          </label>
         </div>
       </div>
 
@@ -236,22 +245,6 @@
 
       <!-- Global Error Display -->
       <div id="liveErrorDisplay" class="error live-alert" role="alert" style="display: none;"></div>
-
-      <!-- Channel Toggles -->
-      <div class="live-toggles" role="group" aria-label="Channel toggles">
-        <label class="live-toggle">
-          <input type="checkbox" id="liveToggleXml" onchange="toggleLiveChannel('xml')">
-          <span>Push XML</span>
-        </label>
-        <label class="live-toggle">
-          <input type="checkbox" id="liveToggleOnCourse" onchange="toggleLiveChannel('oncourse')">
-          <span>Push OnCourse</span>
-        </label>
-        <label class="live-toggle">
-          <input type="checkbox" id="liveToggleResults" onchange="toggleLiveChannel('results')">
-          <span>Push Results</span>
-        </label>
-      </div>
 
       <!-- Action Buttons -->
       <div class="live-actions">
@@ -287,7 +280,7 @@
           <label class="modal-field-label" for="liveEventEventId">Event ID *</label>
           <input type="text" id="liveEventEventId" class="modal-input" placeholder="e.g., world-cup-prague-2024" required>
           <div class="live-field-hint">
-            URL-friendly identifier (lowercase, hyphens)
+            Live results identifier used in public URLs. Independent from C123 XML Event ID.
           </div>
         </div>
 
@@ -303,6 +296,23 @@
             <option value="Sprint">Sprint</option>
             <option value="WildWater">Wild Water</option>
           </select>
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label">Event Image <span class="text-muted">(optional, max 500KB)</span></label>
+          <div id="liveImageDropZone" class="modal-asset-drop-zone live-image-upload" tabindex="0" role="button" aria-label="Click or drag to upload event image">
+            <div id="liveImagePlaceholder" class="modal-asset-placeholder">
+              <svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/>
+              </svg>
+              <span>Click or drag image here</span>
+            </div>
+            <div id="liveImagePreview" class="modal-asset-preview" style="display: none;">
+              <img id="liveImagePreviewImg" alt="Event image preview">
+              <button class="modal-asset-clear" onclick="clearLiveEventImage()" type="button" aria-label="Remove image">&times;</button>
+            </div>
+          </div>
+          <input type="file" id="liveImageInput" accept="image/*" style="display: none;">
         </div>
       </div>
 
@@ -349,6 +359,66 @@
       </div>
 
       <div id="liveTransitionModalError" class="error live-modal-error" role="alert" style="display: none;"></div>
+    </div>
+  </div>
+
+  <!-- Select Event Modal -->
+  <div id="liveSelectEventModal" class="modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="liveSelectEventModalTitle">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="liveSelectEventModalTitle">Browse Events</h3>
+        <button class="modal-close" onclick="closeSelectEventModal()" aria-label="Close modal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div id="liveEventsLoading" class="live-events-loading" style="display: none;">
+          Loading events...
+        </div>
+        <div id="liveEventsEmpty" class="live-events-empty" style="display: none;">
+          No events on this server
+        </div>
+        <div id="liveEventsList" class="live-events-list"></div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeSelectEventModal()">Close</button>
+      </div>
+
+      <div id="liveSelectEventModalError" class="error live-modal-error" role="alert" style="display: none;"></div>
+    </div>
+  </div>
+
+  <!-- Manual Connect Modal -->
+  <div id="liveManualConnectModal" class="modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="liveManualConnectModalTitle">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="liveManualConnectModalTitle">Connect Manually</h3>
+        <button class="modal-close" onclick="closeManualConnectModal()" aria-label="Close modal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveManualServerUrl">Server URL</label>
+          <input type="text" id="liveManualServerUrl" class="modal-input" placeholder="https://live.example.com">
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveManualApiKey">API Key *</label>
+          <input type="text" id="liveManualApiKey" class="modal-input" placeholder="API key from event creation" required>
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveManualEventId">Event ID *</label>
+          <input type="text" id="liveManualEventId" class="modal-input" placeholder="e.g. my-race-2026" required>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="manualConnectLive()">Connect</button>
+        <button class="btn btn-secondary" onclick="closeManualConnectModal()">Cancel</button>
+      </div>
+
+      <div id="liveManualConnectModalError" class="error live-modal-error" role="alert" style="display: none;"></div>
     </div>
   </div>
 

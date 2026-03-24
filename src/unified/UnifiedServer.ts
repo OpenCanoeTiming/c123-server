@@ -1055,6 +1055,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     this.app.post('/api/live/force-push-xml', this.handleLiveForceXml.bind(this));
     this.app.post('/api/live/transition', this.handleLiveTransition.bind(this));
     this.app.patch('/api/live/config', this.handleLiveConfig.bind(this));
+    this.app.get('/api/live/events', this.handleLiveListEvents.bind(this));
 
     // Health check
     this.app.get('/health', (_req: Request, res: Response) => {
@@ -2565,7 +2566,39 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     }
 
     const status = this.livePusher.getStatus();
-    res.json({ status });
+    const settings = getAppSettings();
+    const liveConfig = settings.getLiveConfig();
+    res.json({ status, apiKey: liveConfig.apiKey || null });
+  }
+
+  /**
+   * GET /api/live/events - List events on a live server (proxy to avoid CORS)
+   *
+   * Query params: serverUrl, masterKey
+   */
+  private async handleLiveListEvents(req: Request, res: Response): Promise<void> {
+    const { serverUrl, masterKey } = req.query;
+
+    if (!serverUrl || typeof serverUrl !== 'string') {
+      res.status(400).json({ error: 'serverUrl query parameter is required' });
+      return;
+    }
+
+    try {
+      const clientConfig: import('../live/LiveClient.js').LiveClientConfig = { serverUrl };
+      if (typeof masterKey === 'string') {
+        clientConfig.masterKey = masterKey;
+      }
+      const client = new LiveClient(clientConfig);
+      const result = await client.listEvents();
+      res.json(result);
+    } catch (err) {
+      Logger.error('Unified', 'Live events list error', err);
+      const statusCode = (err as any)?.statusCode || 500;
+      res.status(statusCode).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
   }
 
   /**
@@ -2590,7 +2623,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       return;
     }
 
-    const { serverUrl, metadata, pushXml, pushOnCourse, pushResults } = req.body;
+    const { serverUrl, metadata, masterKey, pushXml, pushOnCourse, pushResults } = req.body;
 
     // Validate serverUrl
     if (!serverUrl || typeof serverUrl !== 'string') {
@@ -2605,6 +2638,10 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     }
 
     const eventMetadata = metadata as CreateEventRequest;
+    // Include imageData if provided
+    if (metadata.imageData) {
+      eventMetadata.imageData = metadata.imageData;
+    }
     if (!eventMetadata.eventId || !eventMetadata.mainTitle) {
       res.status(400).json({ error: 'metadata must include eventId and mainTitle' });
       return;
@@ -2613,7 +2650,11 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     try {
       // Create event on live server
       Logger.info('Unified', `Creating event on live: ${serverUrl}`);
-      const client = new LiveClient({ serverUrl });
+      const connectClientConfig: import('../live/LiveClient.js').LiveClientConfig = { serverUrl };
+      if (masterKey) {
+        connectClientConfig.masterKey = masterKey;
+      }
+      const client = new LiveClient(connectClientConfig);
       const createResponse = await client.createEvent(eventMetadata);
 
       Logger.info('Unified', `Event created: ${createResponse.eventId}, apiKey received`);

@@ -68,3 +68,38 @@ Přidáno odeslání Schedule z EventState při připojení nového klienta (po 
 ### Notes
 - `parseTimeToSeconds` was only used for OnCourse time/total, removed entirely after switching to centiseconds
 - `structuredClone()` is available in Node.js 17+ (our target), provides true deep copy
+
+---
+
+## 2026-03-24 - Block 7: Live Admin UI Improvements (#51, #52, #53)
+
+### Completed
+- [x] LiveClient authMode refactor — request() accepts 'apiKey' | 'masterKey' | 'none'
+- [x] createEvent() now sends X-Master-Key header instead of X-API-Key
+- [x] New listEvents() method — GET /api/v1/admin/events with master key auth
+- [x] imageData field added to CreateEventRequest for event image upload
+- [x] LiveEventSummary and ListEventsResponse types added
+- [x] GET /api/live/events proxy endpoint in UnifiedServer (avoids CORS)
+- [x] handleLiveConnect accepts masterKey, passes to LiveClient and imageData to createEvent
+- [x] handleLiveStatus returns apiKey from settings
+- [x] Admin UI NOT_CONFIGURED state restructured: shared URL+masterKey inputs, 3 action buttons
+- [x] Browse Events modal with event list, status badges, one-click connect
+- [x] Manual Connect modal replaces old inline "Connect to Existing" tab
+- [x] Event ID hint updated (issue #53)
+- [x] Image upload with drag/drop, preview, 500KB limit in event creation modal (issue #52)
+- [x] API Key display with copy-to-clipboard in connected state
+- [x] Channel toggles moved inside channel cards
+- [x] Updated LiveClient tests for authMode and masterKey header
+- [x] All 540 tests pass, 0 lint errors
+
+### Problems and solutions
+1. **Problem:** masterKey must not be persisted to settings.json (server-level password)
+   **Solution:** Stored only as JS variable in browser session (liveServerUrl, liveMasterKey)
+
+2. **Problem:** Channel toggles were a separate section, cluttering the UI
+   **Solution:** Moved toggles inside each channel card with border-top separator
+
+### Notes
+- Master key is session-only, never saved to AppSettings
+- Event image is sent as base64 data URL in createEvent request body
+- Browse Events uses server-side proxy to avoid CORS issues with direct browser fetch

@@ -1127,6 +1127,10 @@ function showClientMessage(msg, isError) {
 
 let liveStatus = null;
 let liveTimerInterval = null;
+let liveServerUrl = '';
+let liveMasterKey = '';
+let liveApiKeyValue = null;
+let liveImageData = null;
 
 /**
  * Periodically refresh relative time displays for Live-Mini channels.
@@ -1205,15 +1209,26 @@ function renderLiveStatus(status) {
     connectedAtDisplay.textContent = status.connectedAt ? formatRelativeTime(status.connectedAt) : '-';
   }
 
+  // Update API key display
+  const apiKeyDisplay = document.getElementById('liveApiKeyDisplay');
+  if (apiKeyDisplay && liveApiKeyValue) {
+    // Show masked key
+    if (liveApiKeyValue.length > 12) {
+      apiKeyDisplay.textContent = liveApiKeyValue.substring(0, 6) + '...' + liveApiKeyValue.substring(liveApiKeyValue.length - 6);
+    } else {
+      apiKeyDisplay.textContent = liveApiKeyValue;
+    }
+  }
+
   // Update channel cards
   updateLiveChannel('Xml', status.channels.xml);
   updateLiveChannel('OnCourse', status.channels.oncourse);
   updateLiveChannel('Results', status.channels.results);
 
-  // Update channel toggles
-  const toggleXml = document.getElementById('liveToggleXml');
-  const toggleOnCourse = document.getElementById('liveToggleOnCourse');
-  const toggleResults = document.getElementById('liveToggleResults');
+  // Update channel toggles (now inside channel cards)
+  var toggleXml = document.getElementById('liveToggleXml');
+  var toggleOnCourse = document.getElementById('liveToggleOnCourse');
+  var toggleResults = document.getElementById('liveToggleResults');
 
   if (toggleXml) toggleXml.checked = status.channels.xml.enabled;
   if (toggleOnCourse) toggleOnCourse.checked = status.channels.oncourse.enabled;
@@ -1306,15 +1321,20 @@ function formatRelativeTime(isoString) {
  * Open event creation modal
  */
 async function openEventCreationModal() {
-  const serverUrl = document.getElementById('liveServerUrl').value.trim();
-  if (!serverUrl) {
+  var serverUrlInput = document.getElementById('liveServerUrl');
+  var masterKeyInput = document.getElementById('liveMasterKey');
+
+  liveServerUrl = serverUrlInput ? serverUrlInput.value.trim() : '';
+  liveMasterKey = masterKeyInput ? masterKeyInput.value.trim() : '';
+
+  if (!liveServerUrl) {
     showError('liveConnectError', 'Please enter a server URL');
     return;
   }
 
   // Validate URL
   try {
-    new URL(serverUrl);
+    new URL(liveServerUrl);
   } catch (e) {
     showError('liveConnectError', 'Invalid URL format');
     return;
@@ -1364,41 +1384,48 @@ async function openEventCreationModal() {
  * Close event creation modal
  */
 function closeLiveEventModal() {
-  const modal = document.getElementById('liveEventModal');
+  var modal = document.getElementById('liveEventModal');
   if (modal) {
     modal.style.display = 'none';
     releaseFocus();
   }
   hideError('liveEventModalError');
+  clearLiveEventImage();
 }
 
 /**
  * Create live event and connect
  */
 async function createLiveEvent() {
-  const serverUrl = document.getElementById('liveServerUrl').value.trim();
-  const mainTitle = document.getElementById('liveEventMainTitle').value.trim();
-  const eventId = document.getElementById('liveEventEventId').value.trim();
-  const location = document.getElementById('liveEventLocation').value.trim();
-  const discipline = document.getElementById('liveEventDiscipline').value;
+  var mainTitle = document.getElementById('liveEventMainTitle').value.trim();
+  var eventId = document.getElementById('liveEventEventId').value.trim();
+  var location = document.getElementById('liveEventLocation').value.trim();
+  var discipline = document.getElementById('liveEventDiscipline').value;
 
   if (!mainTitle || !eventId) {
     showError('liveEventModalError', 'Event name and ID are required');
     return;
   }
 
+  var metadata = {
+    mainTitle: mainTitle,
+    eventId: eventId,
+    location: location || null,
+    discipline: discipline
+  };
+
+  if (liveImageData) {
+    metadata.imageData = liveImageData;
+  }
+
   try {
-    const res = await fetch('/api/live/connect', {
+    var res = await fetch('/api/live/connect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        serverUrl: serverUrl,
-        metadata: {
-          mainTitle: mainTitle,
-          eventId: eventId,
-          location: location || null,
-          discipline: discipline
-        }
+        serverUrl: liveServerUrl,
+        masterKey: liveMasterKey || undefined,
+        metadata: metadata
       })
     });
 
@@ -1448,78 +1475,357 @@ async function disconnectLive() {
 }
 
 /**
- * Toggle between "Create New" and "Connect to Existing" modes
+ * Read shared server URL and master key from inputs
  */
-function toggleLiveMode(mode) {
-  const createSection = document.getElementById('liveCreateSection');
-  const reconnectSection = document.getElementById('liveReconnectSection');
-  const createTab = document.getElementById('liveTabCreate');
-  const reconnectTab = document.getElementById('liveTabReconnect');
+function readLiveServerInputs() {
+  var serverUrlInput = document.getElementById('liveServerUrl');
+  var masterKeyInput = document.getElementById('liveMasterKey');
+  liveServerUrl = serverUrlInput ? serverUrlInput.value.trim() : '';
+  liveMasterKey = masterKeyInput ? masterKeyInput.value.trim() : '';
+}
 
-  if (!createSection || !reconnectSection || !createTab || !reconnectTab) return;
+/**
+ * Validate shared server URL
+ */
+function validateLiveServerUrl() {
+  readLiveServerInputs();
+  if (!liveServerUrl) {
+    showError('liveConnectError', 'Please enter a server URL');
+    return false;
+  }
+  try {
+    new URL(liveServerUrl);
+  } catch (e) {
+    showError('liveConnectError', 'Invalid URL format');
+    return false;
+  }
+  hideError('liveConnectError');
+  return true;
+}
 
-  if (mode === 'reconnect') {
-    createSection.style.display = 'none';
-    reconnectSection.style.display = 'block';
-    createTab.classList.remove('tab-active');
-    reconnectTab.classList.add('tab-active');
-  } else {
-    createSection.style.display = 'block';
-    reconnectSection.style.display = 'none';
-    createTab.classList.add('tab-active');
-    reconnectTab.classList.remove('tab-active');
+/**
+ * Open Select Event modal (Browse Events)
+ */
+async function openSelectEventModal() {
+  if (!validateLiveServerUrl()) return;
+
+  var modal = document.getElementById('liveSelectEventModal');
+  if (!modal) return;
+
+  modal.style.display = 'flex';
+  trapFocus(modal.querySelector('.modal-content'));
+
+  var loadingEl = document.getElementById('liveEventsLoading');
+  var emptyEl = document.getElementById('liveEventsEmpty');
+  var listEl = document.getElementById('liveEventsList');
+
+  if (loadingEl) loadingEl.style.display = 'block';
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (listEl) listEl.innerHTML = '';
+  hideError('liveSelectEventModalError');
+
+  try {
+    var params = new URLSearchParams({ serverUrl: liveServerUrl });
+    if (liveMasterKey) params.set('masterKey', liveMasterKey);
+
+    var res = await fetch('/api/live/events?' + params.toString());
+    var data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to fetch events');
+    }
+
+    if (loadingEl) loadingEl.style.display = 'none';
+
+    var events = data.events || [];
+    if (events.length === 0) {
+      if (emptyEl) emptyEl.style.display = 'block';
+      return;
+    }
+
+    var html = '';
+    for (var i = 0; i < events.length; i++) {
+      var ev = events[i];
+      var statusClass = {
+        'draft': 'badge-secondary',
+        'startlist': 'badge-info',
+        'running': 'badge-success',
+        'finished': 'badge-warning',
+        'official': 'badge-primary'
+      }[ev.status] || 'badge-secondary';
+
+      var maskedKey = ev.apiKey && ev.apiKey.length > 12
+        ? ev.apiKey.substring(0, 6) + '...' + ev.apiKey.substring(ev.apiKey.length - 4)
+        : (ev.apiKey || '-');
+
+      html += '<div class="live-event-row">'
+        + '<div class="live-event-row-info">'
+        + '<div class="live-event-row-title">' + escapeHtml(ev.mainTitle) + '</div>'
+        + '<div class="live-event-row-meta">'
+        + '<span>' + escapeHtml(ev.eventId) + '</span>'
+        + '<span class="badge ' + statusClass + '">' + escapeHtml(ev.status) + '</span>'
+        + '<span>' + escapeHtml(maskedKey) + '</span>'
+        + '</div>'
+        + '</div>'
+        + '<button class="btn btn-sm btn-primary" onclick="selectAndConnectEvent(\'' + escapeHtml(ev.eventId) + '\', \'' + escapeHtml(ev.apiKey) + '\')">Connect</button>'
+        + '</div>';
+    }
+    if (listEl) listEl.innerHTML = html;
+  } catch (error) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    showError('liveSelectEventModalError', error.message);
   }
 }
 
 /**
- * Connect to existing live event
+ * Close Select Event modal
  */
-async function reconnectLive() {
-  const serverUrl = document.getElementById('liveReconnectServerUrl').value.trim();
-  const apiKey = document.getElementById('liveReconnectApiKey').value.trim();
-  const eventId = document.getElementById('liveReconnectEventId').value.trim();
+function closeSelectEventModal() {
+  var modal = document.getElementById('liveSelectEventModal');
+  if (modal) {
+    modal.style.display = 'none';
+    releaseFocus();
+  }
+  hideError('liveSelectEventModalError');
+}
+
+/**
+ * Connect to a selected event from the list
+ */
+async function selectAndConnectEvent(eventId, apiKey) {
+  try {
+    var res = await fetch('/api/live/reconnect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ serverUrl: liveServerUrl, apiKey: apiKey, eventId: eventId })
+    });
+
+    var data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to connect');
+    }
+
+    liveApiKeyValue = apiKey;
+    showToast('Connected to event: ' + eventId, 'success');
+    closeSelectEventModal();
+    loadLiveStatus();
+  } catch (error) {
+    showError('liveSelectEventModalError', error.message);
+  }
+}
+
+/**
+ * Open Manual Connect modal
+ */
+function openManualConnectModal() {
+  readLiveServerInputs();
+
+  var modal = document.getElementById('liveManualConnectModal');
+  if (!modal) return;
+
+  // Pre-fill server URL
+  var serverUrlInput = document.getElementById('liveManualServerUrl');
+  if (serverUrlInput) serverUrlInput.value = liveServerUrl;
+
+  modal.style.display = 'flex';
+  trapFocus(modal.querySelector('.modal-content'));
+  hideError('liveManualConnectModalError');
+}
+
+/**
+ * Close Manual Connect modal
+ */
+function closeManualConnectModal() {
+  var modal = document.getElementById('liveManualConnectModal');
+  if (modal) {
+    modal.style.display = 'none';
+    releaseFocus();
+  }
+  hideError('liveManualConnectModalError');
+}
+
+/**
+ * Connect manually to an existing event
+ */
+async function manualConnectLive() {
+  var serverUrl = document.getElementById('liveManualServerUrl').value.trim();
+  var apiKey = document.getElementById('liveManualApiKey').value.trim();
+  var eventId = document.getElementById('liveManualEventId').value.trim();
 
   if (!serverUrl) {
-    showError('liveReconnectError', 'Please enter a server URL');
+    showError('liveManualConnectModalError', 'Please enter a server URL');
     return;
   }
 
   try {
     new URL(serverUrl);
   } catch (e) {
-    showError('liveReconnectError', 'Invalid URL format');
+    showError('liveManualConnectModalError', 'Invalid URL format');
     return;
   }
 
   if (!apiKey) {
-    showError('liveReconnectError', 'Please enter an API key');
+    showError('liveManualConnectModalError', 'Please enter an API key');
     return;
   }
 
   if (!eventId) {
-    showError('liveReconnectError', 'Please enter an event ID');
+    showError('liveManualConnectModalError', 'Please enter an event ID');
     return;
   }
 
   try {
-    const res = await fetch('/api/live/reconnect', {
+    var res = await fetch('/api/live/reconnect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ serverUrl, apiKey, eventId })
+      body: JSON.stringify({ serverUrl: serverUrl, apiKey: apiKey, eventId: eventId })
     });
 
-    const data = await res.json();
+    var data = await res.json();
 
     if (!res.ok) {
       throw new Error(data.error || 'Failed to connect');
     }
 
-    showToast('Connected to existing Live-Mini event', 'success');
-    hideError('liveReconnectError');
+    liveApiKeyValue = apiKey;
+    showToast('Connected to event: ' + eventId, 'success');
+    closeManualConnectModal();
+    hideError('liveConnectError');
     loadLiveStatus();
   } catch (error) {
-    showError('liveReconnectError', error.message);
+    showError('liveManualConnectModalError', error.message);
   }
+}
+
+/**
+ * Copy API key to clipboard
+ */
+async function copyApiKey() {
+  if (!liveApiKeyValue) {
+    showToast('No API key to copy', 'warning');
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(liveApiKeyValue);
+    showToast('API key copied to clipboard', 'success');
+  } catch (e) {
+    // Fallback for older browsers
+    var textArea = document.createElement('textarea');
+    textArea.value = liveApiKeyValue;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-9999px';
+    document.body.appendChild(textArea);
+    textArea.select();
+    try {
+      document.execCommand('copy');
+      showToast('API key copied to clipboard', 'success');
+    } catch (err) {
+      showToast('Failed to copy API key', 'error');
+    }
+    document.body.removeChild(textArea);
+  }
+}
+
+/**
+ * Initialize live image upload handlers
+ */
+function initLiveImageUpload() {
+  var dropZone = document.getElementById('liveImageDropZone');
+  var fileInput = document.getElementById('liveImageInput');
+
+  if (!dropZone || !fileInput) return;
+
+  dropZone.addEventListener('click', function(e) {
+    if (e.target.tagName !== 'BUTTON') {
+      fileInput.click();
+    }
+  });
+
+  dropZone.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      fileInput.click();
+    }
+  });
+
+  fileInput.addEventListener('change', function(e) {
+    if (e.target.files && e.target.files[0]) {
+      processLiveImageFile(e.target.files[0]);
+    }
+  });
+
+  dropZone.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.add('drag-over');
+  });
+
+  dropZone.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.remove('drag-over');
+  });
+
+  dropZone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.remove('drag-over');
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      processLiveImageFile(e.dataTransfer.files[0]);
+    }
+  });
+}
+
+/**
+ * Process uploaded image file for live event
+ */
+function processLiveImageFile(file) {
+  if (!file.type.startsWith('image/')) {
+    showError('liveEventModalError', 'Please select an image file');
+    return;
+  }
+
+  if (file.size > 500 * 1024) {
+    showError('liveEventModalError', 'Image must be under 500KB');
+    return;
+  }
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    liveImageData = e.target.result;
+
+    var placeholder = document.getElementById('liveImagePlaceholder');
+    var preview = document.getElementById('liveImagePreview');
+    var previewImg = document.getElementById('liveImagePreviewImg');
+
+    if (placeholder) placeholder.style.display = 'none';
+    if (preview) {
+      preview.style.display = 'flex';
+      if (previewImg) previewImg.src = liveImageData;
+    }
+    hideError('liveEventModalError');
+  };
+  reader.readAsDataURL(file);
+}
+
+/**
+ * Clear live event image
+ */
+function clearLiveEventImage() {
+  liveImageData = null;
+
+  var placeholder = document.getElementById('liveImagePlaceholder');
+  var preview = document.getElementById('liveImagePreview');
+  var previewImg = document.getElementById('liveImagePreviewImg');
+  var fileInput = document.getElementById('liveImageInput');
+
+  if (placeholder) placeholder.style.display = '';
+  if (preview) preview.style.display = 'none';
+  if (previewImg) previewImg.src = '';
+  if (fileInput) fileInput.value = '';
 }
 
 /**
@@ -1670,8 +1976,11 @@ async function transitionLiveStatus() {
  */
 async function loadLiveStatus() {
   try {
-    const res = await fetch('/api/live/status');
-    const data = await res.json();
+    var res = await fetch('/api/live/status');
+    var data = await res.json();
+    if (data.apiKey) {
+      liveApiKeyValue = data.apiKey;
+    }
     renderLiveStatus(data.status);
   } catch (error) {
     console.error('Failed to load live status:', error);
@@ -2327,6 +2636,7 @@ function init() {
   initXmlModeHandlers();
   initModalAssetHandlers();
   initAssetHandlers();
+  initLiveImageUpload();
 
   // Close modal when clicking outside
   document.getElementById('clientModal').addEventListener('click', function(e) {
@@ -2347,6 +2657,20 @@ function init() {
     });
   }
 
+  const liveSelectEventModal = document.getElementById('liveSelectEventModal');
+  if (liveSelectEventModal) {
+    liveSelectEventModal.addEventListener('click', function(e) {
+      if (e.target === this) closeSelectEventModal();
+    });
+  }
+
+  const liveManualConnectModal = document.getElementById('liveManualConnectModal');
+  if (liveManualConnectModal) {
+    liveManualConnectModal.addEventListener('click', function(e) {
+      if (e.target === this) closeManualConnectModal();
+    });
+  }
+
   // Keyboard navigation for modal
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
@@ -2359,6 +2683,12 @@ function init() {
       }
       if (liveTransitionModal && liveTransitionModal.style.display !== 'none') {
         closeLiveTransitionModal();
+      }
+      if (liveSelectEventModal && liveSelectEventModal.style.display !== 'none') {
+        closeSelectEventModal();
+      }
+      if (liveManualConnectModal && liveManualConnectModal.style.display !== 'none') {
+        closeManualConnectModal();
       }
     }
   });

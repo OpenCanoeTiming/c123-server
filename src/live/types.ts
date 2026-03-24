@@ -34,6 +34,7 @@ export interface CreateEventRequest {
   startDate?: string;
   endDate?: string;
   discipline?: Discipline;
+  imageData?: string;
 }
 
 /**
@@ -163,6 +164,26 @@ export interface ApiErrorResponse {
   currentStatus?: EventStatus;
   requestedStatus?: EventStatus;
   validTransitions?: EventStatus[];
+}
+
+/**
+ * Event summary for list response
+ */
+export interface LiveEventSummary {
+  eventId: string;
+  mainTitle: string;
+  location?: string;
+  discipline?: string;
+  status: EventStatus;
+  apiKey: string;
+  createdAt: string;
+}
+
+/**
+ * List events response (GET /api/v1/admin/events)
+ */
+export interface ListEventsResponse {
+  events: LiveEventSummary[];
 }
 
 // ============================================================================

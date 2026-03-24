@@ -14,10 +14,13 @@ describe('LiveClient', () => {
   // Store original fetch
   const originalFetch = global.fetch;
 
+  const mockMasterKey = 'test-master-key-456';
+
   beforeEach(() => {
     client = new LiveClient({
       serverUrl: mockServerUrl,
       apiKey: mockApiKey,
+      masterKey: mockMasterKey,
       timeout: 5000,
     });
   });
@@ -63,7 +66,7 @@ describe('LiveClient', () => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-API-Key': mockApiKey,
+            'X-Master-Key': mockMasterKey,
           },
           body: JSON.stringify(request),
         }),
