@@ -447,17 +447,17 @@
 
   <!-- Sources Panel -->
   <section class="tab-panel" id="panel-sources" role="tabpanel" aria-labelledby="tab-sources">
-    <div class="card">
+    <div class="card"><div class="card-body">
       <table id="sourcesTable" class="table table-hover" aria-label="Data sources">
         <thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Details</th></tr></thead>
         <tbody></tbody>
       </table>
-    </div>
+    </div></div>
   </section>
 
   <!-- XML Configuration Panel -->
   <section class="tab-panel" id="panel-xml" role="tabpanel" aria-labelledby="tab-xml">
-    <div class="card" id="xmlConfigCard">
+    <div class="card" id="xmlConfigCard"><div class="card-body">
       <div style="margin-bottom: 10px;">
         <strong id="xmlPathLabel">Current path:</strong> <span id="xmlPath" aria-labelledby="xmlPathLabel">-</span>
         <span id="xmlSource" style="margin-left: 10px; color: var(--text-secondary);"></span>
@@ -495,7 +495,7 @@
         <button class="btn btn-primary" onclick="setXmlPath()">Set Path</button>
       </div>
       <div id="xmlConfigError" class="error" role="alert" style="margin-top: 10px; display: none;"></div>
-    </div>
+    </div></div>
   </section>
 
   <!-- Client detail modal (E2: Enhanced design) -->
@@ -613,7 +613,7 @@
 
   <!-- Assets Panel (E3: Enhanced drag-and-drop UX) -->
   <section class="tab-panel" id="panel-assets" role="tabpanel" aria-labelledby="tab-assets">
-    <div class="card">
+    <div class="card"><div class="card-body">
       <p class="assets-intro">
         Configure default images for all scoreboards. Drag & drop, paste from clipboard, or click to upload.
         Per-client overrides can be set in the client configuration modal.
@@ -713,12 +713,12 @@
           <div class="asset-info" id="footerImageInfo" aria-live="polite"></div>
         </div>
       </div>
-    </div>
+    </div></div>
   </section>
 
   <!-- Logs Panel -->
   <section class="tab-panel active" id="panel-logs" role="tabpanel" aria-labelledby="tab-logs">
-    <div class="card">
+    <div class="card"><div class="card-body">
       <div class="log-toolbar" role="group" aria-label="Log filters">
         <fieldset class="log-filters">
           <legend class="visually-hidden">Log levels</legend>
@@ -749,7 +749,7 @@
       <div class="log-footer">
         <span id="logStats" role="status" aria-live="polite">0 entries</span>
       </div>
-    </div>
+    </div></div>
   </section>
 
     </div><!-- /.tab-panels -->
