@@ -1056,6 +1056,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     this.app.post('/api/live/transition', this.handleLiveTransition.bind(this));
     this.app.patch('/api/live/config', this.handleLiveConfig.bind(this));
     this.app.post('/api/live/events', this.handleLiveListEvents.bind(this));
+    this.app.post('/api/live/delete-event', this.handleLiveDeleteEvent.bind(this));
 
     // Health check
     this.app.get('/health', (_req: Request, res: Response) => {
@@ -2960,6 +2961,64 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     } catch (err) {
       Logger.error('Unified', 'Live-Mini transition error', err);
       res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * POST /api/live/delete-event - Delete event on remote server and disconnect
+   *
+   * Body: { eventId: string }
+   */
+  private async handleLiveDeleteEvent(req: Request, res: Response): Promise<void> {
+    if (!this.livePusher) {
+      res.status(503).json({ error: 'Live-Mini pusher not available' });
+      return;
+    }
+
+    const { eventId } = req.body;
+
+    if (!eventId || typeof eventId !== 'string') {
+      res.status(400).json({ error: 'eventId is required' });
+      return;
+    }
+
+    try {
+      // Get current status to find server URL and API key
+      const currentStatus = this.livePusher.getStatus();
+      if (currentStatus.state === 'not_configured') {
+        res.status(400).json({ error: 'Not connected to any live server' });
+        return;
+      }
+
+      // Get saved config for server URL and API key
+      const settings = getAppSettings();
+      const liveConfig = settings.getLiveConfig();
+      const clientConfig: LiveClientConfig = {
+        serverUrl: liveConfig.serverUrl || currentStatus.serverUrl!,
+      };
+      if (liveConfig.apiKey) {
+        clientConfig.apiKey = liveConfig.apiKey;
+      }
+
+      const client = new LiveClient(clientConfig);
+      await client.deleteEvent(eventId);
+      Logger.info('Unified', `Live event deleted: ${eventId}`);
+
+      // Disconnect and clear config
+      await this.livePusher.disconnect();
+      settings.clearLiveConnection();
+      this.livePusher.reset();
+
+      const status = this.livePusher.getStatus();
+      this.broadcastLiveStatus(status);
+
+      res.json({ success: true });
+    } catch (err) {
+      Logger.error('Unified', 'Live event delete error', err);
+      const statusCode = (err as any)?.statusCode || 500;
+      res.status(statusCode).json({
         error: err instanceof Error ? err.message : 'Unknown error',
       });
     }

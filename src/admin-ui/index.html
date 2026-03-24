@@ -127,61 +127,44 @@
 
     <!-- NOT CONFIGURED STATE -->
     <div id="liveNotConfigured" class="card" style="display: none;">
-      <p class="live-description">
-        Publish live results to a remote c123-live server for public viewing.
-      </p>
-
-      <!-- Shared server inputs -->
-      <div class="live-server-form" role="group" aria-label="Live server configuration">
-        <div class="form-row">
-          <label for="liveServerUrl">Server URL</label>
-          <input type="text" id="liveServerUrl" class="input" placeholder="https://live.example.com" aria-describedby="liveConnectError">
-        </div>
-        <div class="form-row">
-          <label for="liveMasterKey">Master Key <span class="text-muted">(optional)</span></label>
-          <input type="password" id="liveMasterKey" class="input" placeholder="Server master key for admin operations">
-        </div>
-      </div>
-
-      <!-- Action buttons -->
-      <div class="live-action-buttons">
-        <button class="btn btn-primary" onclick="openEventCreationModal()">Create New Event</button>
+      <div class="live-action-buttons-row">
+        <button class="btn btn-secondary" onclick="openEventCreationModal()">Create New Event</button>
         <button class="btn btn-secondary" onclick="openSelectEventModal()">Browse Events</button>
-        <button class="btn btn-text" onclick="openManualConnectModal()">Connect Manually</button>
+        <button class="btn btn-secondary" onclick="openManualConnectModal()">Connect Manually</button>
       </div>
-
-      <div id="liveConnectError" class="error live-error" role="alert" style="display: none;"></div>
     </div>
 
     <!-- CONNECTED / PAUSED / ERROR STATE -->
     <div id="liveConnected" class="card" style="display: none;">
       <!-- Server & Event Info -->
       <div class="live-info-grid">
-        <div>
-          <div class="live-info-label">Server</div>
-          <div class="live-info-value text-mono" id="liveServerDisplay">-</div>
-        </div>
-        <div>
-          <div class="live-info-label">Event ID</div>
-          <div class="live-info-value text-mono" id="liveEventIdDisplay">-</div>
-        </div>
-        <div>
-          <div class="live-info-label">Status</div>
-          <div id="liveEventStatusDisplay">-</div>
-        </div>
-        <div>
-          <div class="live-info-label">API Key</div>
-          <div class="live-api-key">
-            <code class="live-info-value text-mono" id="liveApiKeyDisplay">-</code>
-            <button class="btn btn-sm btn-secondary" onclick="copyApiKey()" title="Copy API Key" aria-label="Copy API key to clipboard">
-              <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"/>
-                <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"/>
-              </svg>
-            </button>
+        <div class="live-info-main">
+          <div>
+            <div class="live-info-label">Server</div>
+            <div class="live-info-value text-mono" id="liveServerDisplay">-</div>
+          </div>
+          <div>
+            <div class="live-info-label">Event ID</div>
+            <div class="live-info-value text-mono" id="liveEventIdDisplay">-</div>
+          </div>
+          <div>
+            <div class="live-info-label">Status</div>
+            <div id="liveEventStatusDisplay">-</div>
+          </div>
+          <div>
+            <div class="live-info-label">API Key</div>
+            <div class="live-api-key">
+              <code class="live-info-value text-mono" id="liveApiKeyDisplay">-</code>
+              <button class="btn btn-sm btn-secondary" onclick="copyApiKey()" title="Copy API Key" aria-label="Copy API key to clipboard">
+                <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"/>
+                  <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"/>
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
-        <div>
+        <div class="live-info-connected">
           <div class="live-info-label">Connected</div>
           <div id="liveConnectedAtDisplay">-</div>
         </div>
@@ -267,6 +250,18 @@
       </div>
 
       <div class="modal-body">
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveEventServerUrl">Server URL *</label>
+          <input type="text" id="liveEventServerUrl" class="modal-input" placeholder="https://live.example.com" required>
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveEventMasterKey">Master Key <span class="text-muted">(optional)</span></label>
+          <input type="password" id="liveEventMasterKey" class="modal-input" placeholder="Server master key for admin operations">
+        </div>
+
+        <hr class="modal-separator">
+
         <p class="live-description">
           Event metadata will be sent to the live server. Fields are pre-filled from XML data.
         </p>
@@ -356,6 +351,7 @@
       <div class="modal-actions">
         <button class="btn btn-primary" onclick="transitionLiveStatus()">Update Status</button>
         <button class="btn btn-secondary" onclick="closeLiveTransitionModal()">Cancel</button>
+        <button class="btn btn-danger-outline modal-action-right" onclick="deleteLiveEvent()">Delete Event</button>
       </div>
 
       <div id="liveTransitionModalError" class="error live-modal-error" role="alert" style="display: none;"></div>
@@ -371,6 +367,20 @@
       </div>
 
       <div class="modal-body">
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveBrowseServerUrl">Server URL *</label>
+          <input type="text" id="liveBrowseServerUrl" class="modal-input" placeholder="https://live.example.com" required>
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-field-label" for="liveBrowseMasterKey">Master Key <span class="text-muted">(optional)</span></label>
+          <input type="password" id="liveBrowseMasterKey" class="modal-input" placeholder="Server master key for admin operations">
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="loadBrowseEvents()">Load Events</button>
+        </div>
+
         <div id="liveEventsLoading" class="live-events-loading" style="display: none;">
           Loading events...
         </div>
@@ -398,8 +408,8 @@
 
       <div class="modal-body">
         <div class="modal-field">
-          <label class="modal-field-label" for="liveManualServerUrl">Server URL</label>
-          <input type="text" id="liveManualServerUrl" class="modal-input" placeholder="https://live.example.com">
+          <label class="modal-field-label" for="liveManualServerUrl">Server URL *</label>
+          <input type="text" id="liveManualServerUrl" class="modal-input" placeholder="https://live.example.com" required>
         </div>
 
         <div class="modal-field">

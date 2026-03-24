@@ -1209,15 +1209,10 @@ function renderLiveStatus(status) {
     connectedAtDisplay.textContent = status.connectedAt ? formatRelativeTime(status.connectedAt) : '-';
   }
 
-  // Update API key display
-  const apiKeyDisplay = document.getElementById('liveApiKeyDisplay');
-  if (apiKeyDisplay && liveApiKeyValue) {
-    // Show masked key
-    if (liveApiKeyValue.length > 12) {
-      apiKeyDisplay.textContent = liveApiKeyValue.substring(0, 6) + '...' + liveApiKeyValue.substring(liveApiKeyValue.length - 4);
-    } else {
-      apiKeyDisplay.textContent = liveApiKeyValue;
-    }
+  // Update API key display (show full key — user can copy it)
+  var apiKeyDisplay = document.getElementById('liveApiKeyDisplay');
+  if (apiKeyDisplay) {
+    apiKeyDisplay.textContent = liveApiKeyValue || '-';
   }
 
   // Update channel cards
@@ -1321,47 +1316,26 @@ function formatRelativeTime(isoString) {
  * Open event creation modal
  */
 async function openEventCreationModal() {
-  var serverUrlInput = document.getElementById('liveServerUrl');
-  var masterKeyInput = document.getElementById('liveMasterKey');
+  var modal = document.getElementById('liveEventModal');
+  if (!modal) return;
 
-  liveServerUrl = serverUrlInput ? serverUrlInput.value.trim() : '';
-  liveMasterKey = masterKeyInput ? masterKeyInput.value.trim() : '';
+  // Pre-fill server URL + master key from previous values
+  var serverUrlInput = document.getElementById('liveEventServerUrl');
+  var masterKeyInput = document.getElementById('liveEventMasterKey');
+  if (serverUrlInput) serverUrlInput.value = liveServerUrl;
+  if (masterKeyInput) masterKeyInput.value = liveMasterKey;
 
-  if (!liveServerUrl) {
-    showError('liveConnectError', 'Please enter a server URL');
-    return;
-  }
+  // Pre-fill event metadata from XML
+  var mainTitleInput = document.getElementById('liveEventMainTitle');
+  var eventIdInput = document.getElementById('liveEventEventId');
+  var locationInput = document.getElementById('liveEventLocation');
+  var disciplineSelect = document.getElementById('liveEventDiscipline');
 
-  // Validate URL
-  try {
-    new URL(liveServerUrl);
-  } catch (e) {
-    showError('liveConnectError', 'Invalid URL format');
-    return;
-  }
-
-  // Fetch event metadata from XML
-  try {
-    const res = await fetch('/api/live/status');
-    const data = await res.json();
-    // Pre-fill from server (will be extracted from XML)
-  } catch (e) {
-    // Ignore, use defaults
-  }
-
-  // Pre-fill modal (these would ideally come from XML metadata endpoint)
-  const mainTitleInput = document.getElementById('liveEventMainTitle');
-  const eventIdInput = document.getElementById('liveEventEventId');
-  const locationInput = document.getElementById('liveEventLocation');
-  const disciplineSelect = document.getElementById('liveEventDiscipline');
-
-  // For now, use event name from header if available
-  const eventNameEl = document.getElementById('eventName');
+  var eventNameEl = document.getElementById('eventName');
   if (mainTitleInput && eventNameEl) {
     mainTitleInput.value = eventNameEl.textContent.trim();
   }
 
-  // Generate eventId from mainTitle
   if (eventIdInput && mainTitleInput && mainTitleInput.value) {
     eventIdInput.value = mainTitleInput.value
       .toLowerCase()
@@ -1372,12 +1346,8 @@ async function openEventCreationModal() {
   if (locationInput) locationInput.value = '';
   if (disciplineSelect) disciplineSelect.value = 'Slalom';
 
-  // Show modal
-  const modal = document.getElementById('liveEventModal');
-  if (modal) {
-    modal.style.display = 'flex';
-    trapFocus(modal.querySelector('.modal-content'));
-  }
+  modal.style.display = 'flex';
+  trapFocus(modal.querySelector('.modal-content'));
 }
 
 /**
@@ -1397,6 +1367,20 @@ function closeLiveEventModal() {
  * Create live event and connect
  */
 async function createLiveEvent() {
+  var serverUrlInput = document.getElementById('liveEventServerUrl');
+  var masterKeyInput = document.getElementById('liveEventMasterKey');
+  liveServerUrl = serverUrlInput ? serverUrlInput.value.trim() : '';
+  liveMasterKey = masterKeyInput ? masterKeyInput.value.trim() : '';
+
+  if (!liveServerUrl) {
+    showError('liveEventModalError', 'Please enter a server URL');
+    return;
+  }
+  try { new URL(liveServerUrl); } catch (e) {
+    showError('liveEventModalError', 'Invalid URL format');
+    return;
+  }
+
   var mainTitle = document.getElementById('liveEventMainTitle').value.trim();
   var eventId = document.getElementById('liveEventEventId').value.trim();
   var location = document.getElementById('liveEventLocation').value.trim();
@@ -1437,7 +1421,6 @@ async function createLiveEvent() {
 
     showToast('Connected to Live-Mini server', 'success');
     closeLiveEventModal();
-    hideError('liveConnectError');
 
     // Refresh status
     loadLiveStatus();
@@ -1477,45 +1460,48 @@ async function disconnectLive() {
 }
 
 /**
- * Read shared server URL and master key from inputs
- */
-function readLiveServerInputs() {
-  var serverUrlInput = document.getElementById('liveServerUrl');
-  var masterKeyInput = document.getElementById('liveMasterKey');
-  liveServerUrl = serverUrlInput ? serverUrlInput.value.trim() : '';
-  liveMasterKey = masterKeyInput ? masterKeyInput.value.trim() : '';
-}
-
-/**
- * Validate shared server URL
- */
-function validateLiveServerUrl() {
-  readLiveServerInputs();
-  if (!liveServerUrl) {
-    showError('liveConnectError', 'Please enter a server URL');
-    return false;
-  }
-  try {
-    new URL(liveServerUrl);
-  } catch (e) {
-    showError('liveConnectError', 'Invalid URL format');
-    return false;
-  }
-  hideError('liveConnectError');
-  return true;
-}
-
-/**
  * Open Select Event modal (Browse Events)
  */
-async function openSelectEventModal() {
-  if (!validateLiveServerUrl()) return;
-
+function openSelectEventModal() {
   var modal = document.getElementById('liveSelectEventModal');
   if (!modal) return;
 
+  // Pre-fill server inputs from previous values
+  var serverUrlInput = document.getElementById('liveBrowseServerUrl');
+  var masterKeyInput = document.getElementById('liveBrowseMasterKey');
+  if (serverUrlInput) serverUrlInput.value = liveServerUrl;
+  if (masterKeyInput) masterKeyInput.value = liveMasterKey;
+
+  // Reset list state
+  var loadingEl = document.getElementById('liveEventsLoading');
+  var emptyEl = document.getElementById('liveEventsEmpty');
+  var listEl = document.getElementById('liveEventsList');
+  if (loadingEl) loadingEl.style.display = 'none';
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (listEl) listEl.innerHTML = '';
+  hideError('liveSelectEventModalError');
+
   modal.style.display = 'flex';
   trapFocus(modal.querySelector('.modal-content'));
+}
+
+/**
+ * Load events list in Browse Events modal
+ */
+async function loadBrowseEvents() {
+  var serverUrlInput = document.getElementById('liveBrowseServerUrl');
+  var masterKeyInput = document.getElementById('liveBrowseMasterKey');
+  liveServerUrl = serverUrlInput ? serverUrlInput.value.trim() : '';
+  liveMasterKey = masterKeyInput ? masterKeyInput.value.trim() : '';
+
+  if (!liveServerUrl) {
+    showError('liveSelectEventModalError', 'Please enter a server URL');
+    return;
+  }
+  try { new URL(liveServerUrl); } catch (e) {
+    showError('liveSelectEventModalError', 'Invalid URL format');
+    return;
+  }
 
   var loadingEl = document.getElementById('liveEventsLoading');
   var emptyEl = document.getElementById('liveEventsEmpty');
@@ -1630,12 +1616,10 @@ async function selectAndConnectEvent(eventId, apiKey) {
  * Open Manual Connect modal
  */
 function openManualConnectModal() {
-  readLiveServerInputs();
-
   var modal = document.getElementById('liveManualConnectModal');
   if (!modal) return;
 
-  // Pre-fill server URL, clear other fields
+  // Pre-fill server URL from previous values, clear other fields
   var serverUrlInput = document.getElementById('liveManualServerUrl');
   var apiKeyInput = document.getElementById('liveManualApiKey');
   var eventIdInput = document.getElementById('liveManualEventId');
@@ -1703,10 +1687,10 @@ async function manualConnectLive() {
       throw new Error(data.error || 'Failed to connect');
     }
 
+    liveServerUrl = serverUrl;
     liveApiKeyValue = apiKey;
     showToast('Connected to event: ' + eventId, 'success');
     closeManualConnectModal();
-    hideError('liveConnectError');
     loadLiveStatus();
   } catch (error) {
     showError('liveManualConnectModalError', error.message);
@@ -1979,6 +1963,39 @@ async function transitionLiveStatus() {
     }
 
     showToast('Event status updated to ' + newStatus, 'success');
+    closeLiveTransitionModal();
+    loadLiveStatus();
+  } catch (error) {
+    showError('liveTransitionModalError', error.message);
+  }
+}
+
+/**
+ * Delete live event on remote server and disconnect
+ */
+async function deleteLiveEvent() {
+  if (!liveStatus || !liveStatus.eventId) return;
+
+  if (!confirm('Delete event "' + liveStatus.eventId + '" on the remote server? This cannot be undone.')) {
+    return;
+  }
+
+  try {
+    var res = await fetch('/api/live/delete-event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventId: liveStatus.eventId })
+    });
+
+    var data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to delete event');
+    }
+
+    liveApiKeyValue = null;
+    liveImageData = null;
+    showToast('Event deleted and disconnected', 'success');
     closeLiveTransitionModal();
     loadLiveStatus();
   } catch (error) {

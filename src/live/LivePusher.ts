@@ -255,10 +255,6 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
       throw new Error('Not connected');
     }
 
-    if (!this.status.channels.xml.enabled) {
-      throw new Error('XML push is disabled');
-    }
-
     Logger.info('LivePusher', 'Force pushing XML');
     await this.pushXml();
   }

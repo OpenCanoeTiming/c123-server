@@ -176,6 +176,19 @@ export class LiveClient {
   }
 
   /**
+   * Delete an event on the live server (admin endpoint)
+   */
+  async deleteEvent(eventId: string): Promise<void> {
+    await this.request<undefined, void>(
+      'DELETE',
+      `/api/v1/admin/events/${eventId}`,
+      undefined,
+      false,
+      this.config.masterKey ? 'masterKey' : 'apiKey',
+    );
+  }
+
+  /**
    * List events on the live server (admin endpoint)
    */
   async listEvents(): Promise<ListEventsResponse> {
