@@ -2638,9 +2638,10 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     }
 
     const eventMetadata = metadata as CreateEventRequest;
-    // Include imageData if provided
-    if (metadata.imageData) {
-      eventMetadata.imageData = metadata.imageData;
+    // Validate imageData size (max ~700KB base64 ≈ 500KB binary)
+    if (eventMetadata.imageData && eventMetadata.imageData.length > 700 * 1024) {
+      res.status(400).json({ error: 'imageData exceeds maximum size (500KB)' });
+      return;
     }
     if (!eventMetadata.eventId || !eventMetadata.mainTitle) {
       res.status(400).json({ error: 'metadata must include eventId and mainTitle' });

@@ -1467,6 +1467,8 @@ async function disconnectLive() {
       throw new Error(data.error || 'Failed to disconnect');
     }
 
+    liveApiKeyValue = null;
+    liveImageData = null;
     showToast('Disconnected from Live-Mini', 'success');
     loadLiveStatus();
   } catch (error) {
@@ -1567,10 +1569,18 @@ async function openSelectEventModal() {
         + '<span>' + escapeHtml(maskedKey) + '</span>'
         + '</div>'
         + '</div>'
-        + '<button class="btn btn-sm btn-primary" onclick="selectAndConnectEvent(\'' + escapeHtml(ev.eventId) + '\', \'' + escapeHtml(ev.apiKey) + '\')">Connect</button>'
+        + '<button class="btn btn-sm btn-primary" data-event-id="' + escapeHtml(ev.eventId) + '" data-api-key="' + escapeHtml(ev.apiKey) + '">Connect</button>'
         + '</div>';
     }
-    if (listEl) listEl.innerHTML = html;
+    if (listEl) {
+      listEl.innerHTML = html;
+      // Event delegation for connect buttons (avoids inline JS / XSS)
+      listEl.querySelectorAll('button[data-event-id]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          selectAndConnectEvent(btn.dataset.eventId, btn.dataset.apiKey);
+        });
+      });
+    }
   } catch (error) {
     if (loadingEl) loadingEl.style.display = 'none';
     showError('liveSelectEventModalError', error.message);
@@ -1624,9 +1634,13 @@ function openManualConnectModal() {
   var modal = document.getElementById('liveManualConnectModal');
   if (!modal) return;
 
-  // Pre-fill server URL
+  // Pre-fill server URL, clear other fields
   var serverUrlInput = document.getElementById('liveManualServerUrl');
+  var apiKeyInput = document.getElementById('liveManualApiKey');
+  var eventIdInput = document.getElementById('liveManualEventId');
   if (serverUrlInput) serverUrlInput.value = liveServerUrl;
+  if (apiKeyInput) apiKeyInput.value = '';
+  if (eventIdInput) eventIdInput.value = '';
 
   modal.style.display = 'flex';
   trapFocus(modal.querySelector('.modal-content'));
@@ -1978,9 +1992,7 @@ async function loadLiveStatus() {
   try {
     var res = await fetch('/api/live/status');
     var data = await res.json();
-    if (data.apiKey) {
-      liveApiKeyValue = data.apiKey;
-    }
+    liveApiKeyValue = data.apiKey || null;
     renderLiveStatus(data.status);
   } catch (error) {
     console.error('Failed to load live status:', error);
