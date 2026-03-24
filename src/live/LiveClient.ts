@@ -221,9 +221,11 @@ export class LiveClient {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
 
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-        };
+        const headers: Record<string, string> = {};
+
+        if (body) {
+          headers['Content-Type'] = 'application/json';
+        }
 
         // Add auth header based on mode
         if (authMode === 'masterKey' && this.config.masterKey) {
