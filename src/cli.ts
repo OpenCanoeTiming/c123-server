@@ -170,16 +170,20 @@ async function runServer(config: ServerConfig, debug: boolean, noTray: boolean):
     if (config.autoDiscovery !== false && !config.tcpHost) {
       Logger.info('CLI', 'Waiting for C123 discovery...');
     }
-
-    // Start tray icon (optional, fails silently if systray2 not available)
-    if (!noTray) {
-      const { TrayManager } = await import('./tray/TrayManager.js');
-      tray = new TrayManager({ port, onQuit: shutdown });
-      await tray.start();
-    }
   } catch (err) {
     Logger.error('CLI', 'Failed to start server', err);
     process.exit(1);
+  }
+
+  // Start tray icon outside server try/catch — tray failure must not kill the server
+  if (!noTray) {
+    try {
+      const { TrayManager } = await import('./tray/TrayManager.js');
+      tray = new TrayManager({ port: server.getPort(), onQuit: shutdown });
+      await tray.start();
+    } catch (err) {
+      Logger.debug('CLI', `Tray icon not available: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 }
 

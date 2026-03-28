@@ -1,4 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import * as childProcess from 'node:child_process';
+
+// Mock child_process for openDashboard tests
+vi.mock('node:child_process', () => ({
+  exec: vi.fn(),
+}));
 
 // Mock systray2 before importing TrayManager
 const mockOnClick = vi.fn();
@@ -11,7 +17,6 @@ class MockSysTray {
   sendAction = mockSendAction;
   ready = mockReady;
   kill = mockKill;
-  constructorArgs: unknown;
 
   constructor(options: unknown) {
     MockSysTray.instances.push(this);
@@ -41,6 +46,7 @@ describe('TrayManager', () => {
     mockSendAction.mockClear();
     mockReady.mockClear().mockResolvedValue(undefined);
     mockKill.mockClear();
+    vi.mocked(childProcess.exec).mockClear();
     MockSysTray.reset();
 
     onQuit = vi.fn();
@@ -83,6 +89,14 @@ describe('TrayManager', () => {
       const config = MockSysTray.lastOptions as { menu: { icon: string } };
       expect(config.menu.icon).toBeTruthy();
       expect(typeof config.menu.icon).toBe('string');
+    });
+
+    it('should be idempotent — second call returns true without creating new instance', async () => {
+      await tray.start();
+      const result = await tray.start();
+
+      expect(result).toBe(true);
+      expect(MockSysTray.instances).toHaveLength(1);
     });
   });
 
@@ -144,6 +158,18 @@ describe('TrayManager', () => {
       clickHandler({ type: 'clicked', seq_id: 3, item: { title: 'Quit', tooltip: '' } });
 
       expect(onQuit).toHaveBeenCalledOnce();
+    });
+
+    it('should open dashboard when Open Dashboard is clicked', async () => {
+      await tray.start();
+
+      const clickHandler = mockOnClick.mock.calls[0][0];
+      clickHandler({ type: 'clicked', seq_id: 2, item: { title: 'Open Dashboard', tooltip: '' } });
+
+      const execMock = vi.mocked(childProcess.exec);
+      expect(execMock).toHaveBeenCalledOnce();
+      const execCall = execMock.mock.calls[0][0] as string;
+      expect(execCall).toContain('http://localhost:27123');
     });
 
     it('should not call onQuit for other menu items', async () => {
