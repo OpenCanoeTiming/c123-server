@@ -37,12 +37,16 @@ export class TrayManager {
    * @returns true if tray was created, false if systray2 is not available
    */
   async start(): Promise<boolean> {
+    if (this.systray) {
+      return true; // Already started
+    }
+
     try {
       const SysTray = (await import('systray2')).default;
 
       const icon = getIcon(this.currentStatus);
 
-      this.systray = new SysTray({
+      const instance = new SysTray({
         menu: {
           icon,
           title: '',
@@ -73,7 +77,7 @@ export class TrayManager {
         debug: false,
       });
 
-      this.systray.onClick((action) => {
+      instance.onClick((action) => {
         switch (action.seq_id) {
           case SEQ.OPEN_DASHBOARD:
             this.openDashboard();
@@ -84,11 +88,13 @@ export class TrayManager {
         }
       });
 
-      await this.systray.ready();
+      await instance.ready();
+      // Assign only after ready() resolves to prevent premature sendAction calls
+      this.systray = instance;
       Logger.info('Tray', 'System tray icon active');
       return true;
-    } catch {
-      Logger.debug('Tray', 'System tray not available (systray2 not installed or no display)');
+    } catch (err) {
+      Logger.debug('Tray', `System tray not available: ${err instanceof Error ? err.message : String(err)}`);
       return false;
     }
   }
@@ -120,7 +126,7 @@ export class TrayManager {
   }
 
   /**
-   * Get current status (for testing).
+   * Get current tray status and message.
    */
   getStatus(): { status: TrayStatus; message: string } {
     return { status: this.currentStatus, message: this.statusMessage };
