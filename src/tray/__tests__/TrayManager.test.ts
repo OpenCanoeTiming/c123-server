@@ -8,7 +8,7 @@ vi.mock('node:child_process', () => ({
 
 // Mock systray2 before importing TrayManager
 const mockOnClick = vi.fn();
-const mockSendAction = vi.fn();
+const mockSendAction = vi.fn().mockResolvedValue(undefined);
 const mockReady = vi.fn().mockResolvedValue(undefined);
 const mockKill = vi.fn();
 
@@ -43,7 +43,7 @@ describe('TrayManager', () => {
 
   beforeEach(() => {
     mockOnClick.mockClear();
-    mockSendAction.mockClear();
+    mockSendAction.mockClear().mockResolvedValue(undefined);
     mockReady.mockClear().mockResolvedValue(undefined);
     mockKill.mockClear();
     vi.mocked(childProcess.exec).mockClear();
@@ -123,16 +123,23 @@ describe('TrayManager', () => {
 
       tray.setStatus('ok', 'Connected to C123 at 192.168.1.5');
 
+      // Uses two separate sendAction calls (update-item + update-menu)
+      // instead of update-menu-and-item which has bugs in systray2.
       expect(mockSendAction).toHaveBeenCalledWith({
-        type: 'update-menu-and-item',
-        menu: {
-          icon: expect.any(String),
-          tooltip: 'C123 Server - Connected to C123 at 192.168.1.5',
-        },
+        type: 'update-item',
         item: {
           title: 'Status: Connected to C123 at 192.168.1.5',
         },
         seq_id: 1,
+      });
+      expect(mockSendAction).toHaveBeenCalledWith({
+        type: 'update-menu',
+        menu: {
+          icon: expect.any(String),
+          title: '',
+          tooltip: 'C123 Server - Connected to C123 at 192.168.1.5',
+          items: [],
+        },
       });
     });
 
@@ -145,8 +152,12 @@ describe('TrayManager', () => {
 
       tray.setStatus('error', 'Error occurred');
 
-      const action = mockSendAction.mock.calls[0][0] as { menu: { icon: string } };
-      expect(action.menu.icon).toBeTruthy();
+      // update-menu call is the second sendAction call
+      const menuAction = mockSendAction.mock.calls.find(
+        (call) => (call[0] as { type: string }).type === 'update-menu',
+      );
+      expect(menuAction).toBeDefined();
+      expect((menuAction![0] as { menu: { icon: string } }).menu.icon).toBeTruthy();
     });
   });
 

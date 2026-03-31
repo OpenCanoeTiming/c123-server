@@ -129,8 +129,16 @@ async function runServer(config: ServerConfig, debug: boolean, noTray: boolean):
   // Initialize from saved settings (unless overridden by CLI args)
   server.initFromSettings();
 
-  // Handle shutdown signals
+  // Initialize tray early so event handlers can buffer status before start()
   let tray: import('./tray/TrayManager.js').TrayManager | null = null;
+  if (!noTray) {
+    try {
+      const { TrayManager } = await import('./tray/TrayManager.js');
+      tray = new TrayManager({ port: server.getPort(), onQuit: () => shutdown() });
+    } catch {
+      // TrayManager import failed — continue without tray
+    }
+  }
   const { NotificationManager } = await import('./tray/NotificationManager.js');
   const notifications = new NotificationManager();
 
@@ -196,11 +204,11 @@ async function runServer(config: ServerConfig, debug: boolean, noTray: boolean):
     process.exit(1);
   }
 
-  // Start tray icon outside server try/catch — tray failure must not kill the server
-  if (!noTray) {
+  // Start tray icon outside server try/catch — tray failure must not kill the server.
+  // TrayManager was created early (above) so event handlers could buffer status.
+  // start() reads the buffered status when creating the icon.
+  if (tray) {
     try {
-      const { TrayManager } = await import('./tray/TrayManager.js');
-      tray = new TrayManager({ port: server.getPort(), onQuit: shutdown });
       await tray.start();
     } catch (err) {
       Logger.debug('CLI', `Tray icon not available: ${err instanceof Error ? err.message : String(err)}`);

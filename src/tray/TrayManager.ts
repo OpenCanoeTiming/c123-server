@@ -118,16 +118,31 @@ export class TrayManager {
 
     const icon = getIcon(status);
 
-    this.systray.sendAction({
-      type: 'update-menu-and-item',
-      menu: {
-        icon,
-        tooltip: `C123 Server - ${message}`,
-      },
+    Logger.debug('Tray', `setStatus: ${status} "${message}"`);
+
+    // Use separate update-item + update-menu actions instead of the combined
+    // update-menu-and-item which has bugs in systray2 with empty items arrays.
+    // sendAction is typed as void but returns a Promise at runtime — cast to catch errors.
+    (this.systray.sendAction({
+      type: 'update-item',
       item: {
         title: `Status: ${message}`,
       },
       seq_id: SEQ.STATUS,
+    }) as unknown as Promise<unknown>).catch((err: unknown) => {
+      Logger.warn('Tray', `sendAction (item) failed: ${err instanceof Error ? err.message : String(err)}`);
+    });
+
+    (this.systray.sendAction({
+      type: 'update-menu',
+      menu: {
+        icon,
+        title: '',
+        tooltip: `C123 Server - ${message}`,
+        items: [],
+      },
+    }) as unknown as Promise<unknown>).catch((err: unknown) => {
+      Logger.warn('Tray', `sendAction (menu) failed: ${err instanceof Error ? err.message : String(err)}`);
     });
   }
 
