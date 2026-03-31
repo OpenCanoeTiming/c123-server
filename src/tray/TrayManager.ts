@@ -42,7 +42,13 @@ export class TrayManager {
     }
 
     try {
-      const SysTray = (await import('systray2')).default;
+      // systray2 is a CJS module — handle both ESM interop shapes:
+      // tsx/ts-node: mod.default → constructor function
+      // compiled ESM (node): mod.default → { default: constructor }
+      const mod = await import('systray2');
+      const SysTray = typeof mod.default === 'function'
+        ? mod.default
+        : (mod as unknown as { default: { default: typeof mod.default } }).default.default;
 
       const icon = getIcon(this.currentStatus);
 
