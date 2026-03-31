@@ -70,6 +70,9 @@ export interface ServerEvents {
   error: [Error];
   tcpConnected: [string];
   tcpDisconnected: [];
+  clientConnected: [sessionId: string];
+  clientDisconnected: [sessionId: string];
+  liveError: [message: string];
 }
 
 const DEFAULT_CONFIG: Required<ServerConfig> = {
@@ -579,6 +582,22 @@ export class Server extends EventEmitter<ServerEvents> {
     // Log errors
     this.unifiedServer.on('error', (err) => {
       this.emit('error', err);
+    });
+
+    // Forward client connect/disconnect events
+    this.unifiedServer.on('connection', (sessionId) => {
+      this.emit('clientConnected', sessionId);
+    });
+
+    this.unifiedServer.on('disconnection', (sessionId) => {
+      this.emit('clientDisconnected', sessionId);
+    });
+
+    // Forward live push errors (circuit breaker open)
+    this.livePusher.on('statusChange', (status) => {
+      if (status.circuitBreaker.isOpen && status.lastError) {
+        this.emit('liveError', status.lastError);
+      }
     });
   }
 

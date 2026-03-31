@@ -131,6 +131,8 @@ async function runServer(config: ServerConfig, debug: boolean, noTray: boolean):
 
   // Handle shutdown signals
   let tray: import('./tray/TrayManager.js').TrayManager | null = null;
+  const { NotificationManager } = await import('./tray/NotificationManager.js');
+  const notifications = new NotificationManager();
 
   const shutdown = async () => {
     Logger.info('CLI', 'Shutting down...');
@@ -146,16 +148,27 @@ async function runServer(config: ServerConfig, debug: boolean, noTray: boolean):
   server.on('error', (err) => {
     Logger.error('Server', err.message, err);
     tray?.setStatus('error', err.message);
+    notifications.notify({ title: 'C123 Server', message: err.message, type: 'error' });
   });
 
   server.on('tcpConnected', (host) => {
     Logger.info('Server', `Connected to C123 at ${host}`);
     tray?.setStatus('ok', `Connected to C123 at ${host}`);
+    notifications.notify({ title: 'C123 Server', message: `Connected to C123 at ${host}`, type: 'info' });
   });
 
   server.on('tcpDisconnected', () => {
     Logger.warn('Server', 'Disconnected from C123, reconnecting...');
     tray?.setStatus('warning', 'Disconnected from C123');
+    notifications.notify({ title: 'C123 Server', message: 'Disconnected from C123', type: 'warning' });
+  });
+
+  server.on('clientDisconnected', (sessionId) => {
+    notifications.notify({ title: 'C123 Server', message: `Client disconnected: ${sessionId}`, type: 'warning' });
+  });
+
+  server.on('liveError', (message) => {
+    notifications.notify({ title: 'C123 Server — Live', message, type: 'error' });
   });
 
   // Start
