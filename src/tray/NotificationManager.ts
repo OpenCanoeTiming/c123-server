@@ -10,13 +10,10 @@ interface NotificationOptions {
 }
 
 /**
- * Cross-platform system notification manager.
+ * Windows system notification manager using PowerShell WinRT toasts.
  *
- * Uses native OS notification mechanisms — no extra dependencies:
- * - Windows: PowerShell with WinRT ToastNotification
- * - macOS: osascript
- * - Linux: notify-send
- *
+ * No extra dependencies — uses built-in PowerShell on Windows 10+.
+ * Silently does nothing on non-Windows platforms.
  * Includes rate limiting to prevent notification spam.
  */
 export class NotificationManager {
@@ -31,10 +28,11 @@ export class NotificationManager {
   }
 
   /**
-   * Show a system notification if rate limit allows.
+   * Show a Windows toast notification if rate limit allows.
+   * Does nothing on non-Windows platforms.
    */
   notify(options: NotificationOptions): void {
-    if (!this.enabled) {
+    if (!this.enabled || process.platform !== 'win32') {
       return;
     }
 
@@ -45,14 +43,10 @@ export class NotificationManager {
     }
     this.lastNotification = now;
 
-    const title = options.title;
-    const message = options.message;
-    const type = options.type ?? 'info';
+    const safeTitle = this.sanitize(options.title);
+    const safeMessage = this.sanitize(options.message);
 
-    const command = this.buildCommand(title, message, type);
-    if (!command) {
-      return;
-    }
+    const command = this.buildCommand(safeTitle, safeMessage);
 
     exec(command, (err) => {
       if (err) {
@@ -76,28 +70,9 @@ export class NotificationManager {
   }
 
   /**
-   * Build platform-specific notification command.
+   * Build PowerShell command for Windows WinRT toast notification.
    */
-  private buildCommand(title: string, message: string, type: NotificationType): string | null {
-    // Sanitize inputs to prevent command injection
-    const safeTitle = this.sanitize(title);
-    const safeMessage = this.sanitize(message);
-
-    switch (process.platform) {
-      case 'win32':
-        return this.buildWindowsCommand(safeTitle, safeMessage);
-      case 'darwin':
-        return this.buildMacCommand(safeTitle, safeMessage, type);
-      case 'linux':
-        return this.buildLinuxCommand(safeTitle, safeMessage, type);
-      default:
-        Logger.debug('Notify', `Unsupported platform: ${process.platform}`);
-        return null;
-    }
-  }
-
-  private buildWindowsCommand(title: string, message: string): string {
-    // PowerShell with WinRT toast notifications (Windows 10+)
+  private buildCommand(title: string, message: string): string {
     const ps = [
       '[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null',
       '[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] > $null',
@@ -120,18 +95,8 @@ export class NotificationManager {
     return `powershell -NoProfile -NonInteractive -Command "${ps}"`;
   }
 
-  private buildMacCommand(title: string, message: string, type: NotificationType): string {
-    const sound = type === 'error' ? ' sound name "Basso"' : '';
-    return `osascript -e 'display notification "${message}" with title "${title}"${sound}'`;
-  }
-
-  private buildLinuxCommand(title: string, message: string, type: NotificationType): string {
-    const urgency = type === 'error' ? 'critical' : type === 'warning' ? 'normal' : 'low';
-    return `notify-send -u ${urgency} "${title}" "${message}"`;
-  }
-
   /**
-   * Sanitize string for safe use in shell commands.
+   * Sanitize string for safe use in PowerShell commands.
    * Removes characters that could break command structure.
    */
   private sanitize(input: string): string {

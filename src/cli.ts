@@ -171,6 +171,14 @@ async function runServer(config: ServerConfig, debug: boolean, noTray: boolean):
     notifications.notify({ title: 'C123 Server — Live', message, type: 'error' });
   });
 
+  server.on('xmlMismatch', (message) => {
+    notifications.notify({ title: 'C123 Server — XML', message, type: 'warning' });
+  });
+
+  server.on('xmlMismatchResolved', () => {
+    notifications.notify({ title: 'C123 Server — XML', message: 'XML mismatch resolved', type: 'info' });
+  });
+
   // Start
   try {
     await server.start();

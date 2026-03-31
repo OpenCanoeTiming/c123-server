@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as childProcess from 'node:child_process';
 
 vi.mock('node:child_process', () => ({
@@ -10,19 +10,27 @@ import { NotificationManager } from '../NotificationManager.js';
 describe('NotificationManager', () => {
   let manager: NotificationManager;
   const execMock = vi.mocked(childProcess.exec);
+  let platformSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     execMock.mockClear();
+    // Simulate Windows for all tests (since notifications are Windows-only)
+    platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
     manager = new NotificationManager(0); // No rate limiting for tests
   });
 
+  afterEach(() => {
+    platformSpy.mockRestore();
+  });
+
   describe('notify()', () => {
-    it('should call exec with platform-specific command', () => {
+    it('should call exec with PowerShell command on Windows', () => {
       manager.notify({ title: 'Test', message: 'Hello' });
 
       expect(execMock).toHaveBeenCalledOnce();
       const command = execMock.mock.calls[0][0] as string;
-      expect(command).toBeTruthy();
+      expect(command).toContain('powershell');
+      expect(command).toContain('ToastNotification');
     });
 
     it('should include title and message in command', () => {
@@ -40,6 +48,13 @@ describe('NotificationManager', () => {
       expect(execMock).not.toHaveBeenCalled();
     });
 
+    it('should not call exec on non-Windows platforms', () => {
+      platformSpy.mockReturnValue('linux');
+      manager.notify({ title: 'Test', message: 'Hello' });
+
+      expect(execMock).not.toHaveBeenCalled();
+    });
+
     it('should re-enable after setEnabled(true)', () => {
       manager.setEnabled(false);
       manager.setEnabled(true);
@@ -51,7 +66,7 @@ describe('NotificationManager', () => {
 
   describe('rate limiting', () => {
     it('should rate limit notifications', () => {
-      const limited = new NotificationManager(60_000); // 60s interval
+      const limited = new NotificationManager(60_000);
 
       limited.notify({ title: 'Test', message: 'First' });
       limited.notify({ title: 'Test', message: 'Second' });
