@@ -70,29 +70,29 @@ export class NotificationManager {
   }
 
   /**
-   * Build PowerShell command for Windows WinRT toast notification.
+   * Build PowerShell command for a Windows balloon tooltip notification.
+   *
+   * Uses System.Windows.Forms.NotifyIcon (balloon tooltip) instead of
+   * WinRT ToastNotificationManager — WinRT requires a registered AUMID
+   * and silently drops toasts from unregistered apps. Balloon tooltips
+   * work without registration on all Windows 10+ machines.
+   *
+   * Uses -EncodedCommand (Base64 UTF-16LE) to avoid cmd.exe escaping issues.
    */
   private buildCommand(title: string, message: string): string {
-    const ps = [
-      '[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null',
-      '[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] > $null',
-      `$template = @"`,
-      `<toast>`,
-      `  <visual>`,
-      `    <binding template="ToastGeneric">`,
-      `      <text>${title}</text>`,
-      `      <text>${message}</text>`,
-      `    </binding>`,
-      `  </visual>`,
-      `</toast>`,
-      `"@`,
-      '$xml = New-Object Windows.Data.Xml.Dom.XmlDocument',
-      '$xml.LoadXml($template)',
-      '$toast = New-Object Windows.UI.Notifications.ToastNotification $xml',
-      "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('C123 Server').Show($toast)",
-    ].join('; ');
+    const script = [
+      'Add-Type -AssemblyName System.Windows.Forms',
+      '$n = New-Object System.Windows.Forms.NotifyIcon',
+      '$n.Icon = [System.Drawing.SystemIcons]::Information',
+      '$n.Visible = $true',
+      `$n.ShowBalloonTip(5000, "${title}", "${message}", [System.Windows.Forms.ToolTipIcon]::Info)`,
+      'Start-Sleep 4',
+      '$n.Dispose()',
+    ].join('\n');
 
-    return `powershell -NoProfile -NonInteractive -Command "${ps}"`;
+    // PowerShell -EncodedCommand expects Base64-encoded UTF-16LE
+    const encoded = Buffer.from(script, 'utf16le').toString('base64');
+    return `powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`;
   }
 
   /**

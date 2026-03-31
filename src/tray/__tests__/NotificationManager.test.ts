@@ -7,6 +7,16 @@ vi.mock('node:child_process', () => ({
 
 import { NotificationManager } from '../NotificationManager.js';
 
+/**
+ * Decode the PowerShell -EncodedCommand back to readable script.
+ * EncodedCommand is Base64-encoded UTF-16LE.
+ */
+function decodeCommand(execArg: string): string {
+  const match = execArg.match(/-EncodedCommand\s+(\S+)/);
+  if (!match) return execArg;
+  return Buffer.from(match[1], 'base64').toString('utf16le');
+}
+
 describe('NotificationManager', () => {
   let manager: NotificationManager;
   const execMock = vi.mocked(childProcess.exec);
@@ -24,21 +34,25 @@ describe('NotificationManager', () => {
   });
 
   describe('notify()', () => {
-    it('should call exec with PowerShell command on Windows', () => {
+    it('should call exec with PowerShell EncodedCommand on Windows', () => {
       manager.notify({ title: 'Test', message: 'Hello' });
 
       expect(execMock).toHaveBeenCalledOnce();
       const command = execMock.mock.calls[0][0] as string;
       expect(command).toContain('powershell');
-      expect(command).toContain('ToastNotification');
+      expect(command).toContain('-EncodedCommand');
+
+      const script = decodeCommand(command);
+      expect(script).toContain('ShowBalloonTip');
     });
 
-    it('should include title and message in command', () => {
+    it('should include title and message in encoded script', () => {
       manager.notify({ title: 'C123 Server', message: 'Connected' });
 
       const command = execMock.mock.calls[0][0] as string;
-      expect(command).toContain('C123 Server');
-      expect(command).toContain('Connected');
+      const script = decodeCommand(command);
+      expect(script).toContain('C123 Server');
+      expect(script).toContain('Connected');
     });
 
     it('should not call exec when disabled', () => {
@@ -93,16 +107,18 @@ describe('NotificationManager', () => {
       manager.notify({ title: 'Test `$(rm -rf /)`', message: 'Safe' });
 
       const command = execMock.mock.calls[0][0] as string;
-      expect(command).not.toContain('$(');
-      expect(command).not.toContain('`');
+      const script = decodeCommand(command);
+      expect(script).not.toContain('$(');
+      expect(script).not.toContain('`');
     });
 
     it('should remove dangerous characters from message', () => {
       manager.notify({ title: 'Test', message: 'Hello "world" $PATH' });
 
       const command = execMock.mock.calls[0][0] as string;
-      expect(command).not.toContain('"world"');
-      expect(command).not.toContain('$PATH');
+      const script = decodeCommand(command);
+      expect(script).not.toContain('"world"');
+      expect(script).not.toContain('$PATH');
     });
 
     it('should truncate long messages', () => {
@@ -110,7 +126,8 @@ describe('NotificationManager', () => {
       manager.notify({ title: 'Test', message: longMessage });
 
       const command = execMock.mock.calls[0][0] as string;
-      expect(command).not.toContain('A'.repeat(500));
+      const script = decodeCommand(command);
+      expect(script).not.toContain('A'.repeat(500));
     });
   });
 
