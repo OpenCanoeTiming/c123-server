@@ -172,7 +172,7 @@ export class TrayManager {
       // Cast through unknown because sendAction is typed as void
       // but actually returns a Promise at runtime in systray2
       const result: unknown = this.systray!.sendAction(action);
-      if (result && typeof (result as { catch?: Function }).catch === 'function') {
+      if (result && typeof (result as { catch?: (...args: unknown[]) => unknown }).catch === 'function') {
         (result as Promise<unknown>).catch((err: unknown) => {
           Logger.warn('Tray', `sendAction failed: ${err instanceof Error ? err.message : String(err)}`);
         });
