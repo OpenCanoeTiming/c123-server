@@ -55,6 +55,30 @@ describe('NotificationManager', () => {
       expect(script).toContain('Connected');
     });
 
+    it('should use Warning ToolTipIcon for warning type', () => {
+      manager.notify({ title: 'Test', message: 'Warn', type: 'warning' });
+
+      const command = execMock.mock.calls[0][0] as string;
+      const script = decodeCommand(command);
+      expect(script).toContain('ToolTipIcon]::Warning');
+    });
+
+    it('should use Error ToolTipIcon for error type', () => {
+      manager.notify({ title: 'Test', message: 'Err', type: 'error' });
+
+      const command = execMock.mock.calls[0][0] as string;
+      const script = decodeCommand(command);
+      expect(script).toContain('ToolTipIcon]::Error');
+    });
+
+    it('should default to Info ToolTipIcon when type is omitted', () => {
+      manager.notify({ title: 'Test', message: 'Hello' });
+
+      const command = execMock.mock.calls[0][0] as string;
+      const script = decodeCommand(command);
+      expect(script).toContain('ToolTipIcon]::Info');
+    });
+
     it('should not call exec when disabled', () => {
       manager.setEnabled(false);
       manager.notify({ title: 'Test', message: 'Hello' });

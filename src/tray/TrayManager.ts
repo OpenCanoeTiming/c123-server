@@ -117,32 +117,28 @@ export class TrayManager {
     }
 
     const icon = getIcon(status);
+    const truncated = message.length > 80 ? message.substring(0, 77) + '...' : message;
 
     Logger.debug('Tray', `setStatus: ${status} "${message}"`);
 
     // Use separate update-item + update-menu actions instead of the combined
     // update-menu-and-item which has bugs in systray2 with empty items arrays.
-    // sendAction is typed as void but returns a Promise at runtime — cast to catch errors.
-    (this.systray.sendAction({
+    this.safeSendAction({
       type: 'update-item',
       item: {
-        title: `Status: ${message}`,
+        title: `Status: ${truncated}`,
       },
       seq_id: SEQ.STATUS,
-    }) as unknown as Promise<unknown>).catch((err: unknown) => {
-      Logger.warn('Tray', `sendAction (item) failed: ${err instanceof Error ? err.message : String(err)}`);
     });
 
-    (this.systray.sendAction({
+    this.safeSendAction({
       type: 'update-menu',
       menu: {
         icon,
         title: '',
-        tooltip: `C123 Server - ${message}`,
+        tooltip: `C123 Server - ${truncated}`,
         items: [],
       },
-    }) as unknown as Promise<unknown>).catch((err: unknown) => {
-      Logger.warn('Tray', `sendAction (menu) failed: ${err instanceof Error ? err.message : String(err)}`);
     });
   }
 
@@ -164,6 +160,25 @@ export class TrayManager {
         // Ignore errors during cleanup
       }
       this.systray = null;
+    }
+  }
+
+  /**
+   * Send an action to systray2, catching any errors.
+   * sendAction is typed as void but may return a Promise at runtime.
+   */
+  private safeSendAction(action: Parameters<import('systray2').default['sendAction']>[0]): void {
+    try {
+      // Cast through unknown because sendAction is typed as void
+      // but actually returns a Promise at runtime in systray2
+      const result: unknown = this.systray!.sendAction(action);
+      if (result && typeof (result as { catch?: Function }).catch === 'function') {
+        (result as Promise<unknown>).catch((err: unknown) => {
+          Logger.warn('Tray', `sendAction failed: ${err instanceof Error ? err.message : String(err)}`);
+        });
+      }
+    } catch (err) {
+      Logger.warn('Tray', `sendAction threw: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

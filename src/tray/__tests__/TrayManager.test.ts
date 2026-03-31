@@ -143,6 +143,20 @@ describe('TrayManager', () => {
       });
     });
 
+    it('should truncate long status messages in menu', async () => {
+      await tray.start();
+
+      const longMessage = 'A'.repeat(100);
+      tray.setStatus('ok', longMessage);
+
+      const itemAction = mockSendAction.mock.calls.find(
+        (call) => (call[0] as { type: string }).type === 'update-item',
+      );
+      const title = (itemAction![0] as { item: { title: string } }).item.title;
+      expect(title.length).toBeLessThanOrEqual(88); // "Status: " + 77 + "..."
+      expect(title).toContain('...');
+    });
+
     it('should not throw when tray is not active', () => {
       expect(() => tray.setStatus('error', 'Something broke')).not.toThrow();
     });

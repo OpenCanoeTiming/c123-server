@@ -10,7 +10,7 @@ interface NotificationOptions {
 }
 
 /**
- * Windows system notification manager using PowerShell WinRT toasts.
+ * Windows system notification manager using balloon tooltip notifications.
  *
  * No extra dependencies — uses built-in PowerShell on Windows 10+.
  * Silently does nothing on non-Windows platforms.
@@ -46,7 +46,7 @@ export class NotificationManager {
     const safeTitle = this.sanitize(options.title);
     const safeMessage = this.sanitize(options.message);
 
-    const command = this.buildCommand(safeTitle, safeMessage);
+    const command = this.buildCommand(safeTitle, safeMessage, options.type ?? 'info');
 
     exec(command, (err) => {
       if (err) {
@@ -79,13 +79,20 @@ export class NotificationManager {
    *
    * Uses -EncodedCommand (Base64 UTF-16LE) to avoid cmd.exe escaping issues.
    */
-  private buildCommand(title: string, message: string): string {
+  private buildCommand(title: string, message: string, type: NotificationType): string {
+    const iconMap: Record<NotificationType, string> = {
+      info: 'Info',
+      warning: 'Warning',
+      error: 'Error',
+    };
+    const tipIcon = iconMap[type];
+
     const script = [
       'Add-Type -AssemblyName System.Windows.Forms',
       '$n = New-Object System.Windows.Forms.NotifyIcon',
       '$n.Icon = [System.Drawing.SystemIcons]::Information',
       '$n.Visible = $true',
-      `$n.ShowBalloonTip(5000, "${title}", "${message}", [System.Windows.Forms.ToolTipIcon]::Info)`,
+      `$n.ShowBalloonTip(5000, "${title}", "${message}", [System.Windows.Forms.ToolTipIcon]::${tipIcon})`,
       'Start-Sleep 4',
       '$n.Dispose()',
     ].join('\n');

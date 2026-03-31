@@ -129,7 +129,7 @@ async function runServer(config: ServerConfig, debug: boolean, noTray: boolean):
   // Initialize from saved settings (unless overridden by CLI args)
   server.initFromSettings();
 
-  // Initialize tray early so event handlers can buffer status before start()
+  // Initialize tray early so the initial menu uses the latest status when start() is called
   let tray: import('./tray/TrayManager.js').TrayManager | null = null;
   if (!noTray) {
     try {
@@ -205,8 +205,8 @@ async function runServer(config: ServerConfig, debug: boolean, noTray: boolean):
   }
 
   // Start tray icon outside server try/catch — tray failure must not kill the server.
-  // TrayManager was created early (above) so event handlers could buffer status.
-  // start() reads the buffered status when creating the icon.
+  // TrayManager was created early (above) so setStatus() calls update internal fields.
+  // start() then uses the latest status when creating the icon.
   if (tray) {
     try {
       await tray.start();
