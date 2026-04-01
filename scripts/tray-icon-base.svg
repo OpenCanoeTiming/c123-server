@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Outer circle -->
+  <circle cx="32" cy="32" r="28" stroke-width="3.2" />
+  <!-- Arm reaching from upper right -->
+  <path d="M46 16 C42 20, 37 25, 30 29 C26 31, 21 32, 17 31" stroke-width="3" />
+  <!-- Fingers fanning out -->
+  <path d="M30 29 C27 26, 24 24, 21 23" stroke-width="2.5" />
+  <path d="M30 29 C26 28, 23 27, 20 27" stroke-width="2.5" />
+  <!-- Infinity wave (water) -->
+  <path d="M13 42 C17 35, 24 35, 32 42 C40 49, 47 49, 51 42" stroke-width="3" />
+  <path d="M13 42 C17 49, 24 49, 32 42 C40 35, 47 35, 51 42" stroke-width="3" />
+</svg>
