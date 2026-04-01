@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Outer circle -->
+  <circle cx="32" cy="32" r="28" stroke-width="3.2" />
+  <!-- Paddle shaft (diagonal, upper-right into waves) -->
+  <path d="M46 12 L26 36" stroke-width="3" />
+  <!-- Paddle blade -->
+  <path d="M26 36 C22 33, 18 32, 16 34 C14 36, 16 39, 20 40 C24 41, 27 39, 26 36Z" fill="#ffffff" stroke-width="1.5" />
+  <!-- Infinity wave (water) -->
+  <path d="M13 42 C17 35, 24 35, 32 42 C40 49, 47 49, 51 42" stroke-width="3" />
+  <path d="M13 42 C17 49, 24 49, 32 42 C40 35, 47 35, 51 42" stroke-width="3" />
+  <!-- Status indicator dot (color replaced per status) -->
+  <circle cx="52" cy="52" r="12" fill="#111111" stroke="none" />
+  <circle cx="52" cy="52" r="10.5" fill="STATUS_COLOR" stroke="none" />
+</svg>

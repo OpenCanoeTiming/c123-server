@@ -70,6 +70,11 @@ export interface ServerEvents {
   error: [Error];
   tcpConnected: [string];
   tcpDisconnected: [];
+  clientConnected: [sessionId: string];
+  clientDisconnected: [sessionId: string];
+  liveError: [message: string];
+  xmlMismatch: [message: string];
+  xmlMismatchResolved: [];
 }
 
 const DEFAULT_CONFIG: Required<ServerConfig> = {
@@ -580,6 +585,22 @@ export class Server extends EventEmitter<ServerEvents> {
     this.unifiedServer.on('error', (err) => {
       this.emit('error', err);
     });
+
+    // Forward client connect/disconnect events
+    this.unifiedServer.on('connection', (sessionId) => {
+      this.emit('clientConnected', sessionId);
+    });
+
+    this.unifiedServer.on('disconnection', (sessionId) => {
+      this.emit('clientDisconnected', sessionId);
+    });
+
+    // Forward live push errors (circuit breaker open)
+    this.livePusher.on('statusChange', (status) => {
+      if (status.circuitBreaker.isOpen && status.lastError) {
+        this.emit('liveError', status.lastError);
+      }
+    });
   }
 
   private startUdpDiscovery(): void {
@@ -702,11 +723,13 @@ export class Server extends EventEmitter<ServerEvents> {
     this.xmlMismatchDetector.on('mismatch', (state) => {
       Logger.warn('Server', `XML mismatch: ${state.message}`);
       this.unifiedServer.broadcastXmlMismatch(state);
+      this.emit('xmlMismatch', state.message ?? 'XML file does not match C123 data');
     });
 
     this.xmlMismatchDetector.on('resolved', () => {
       Logger.info('Server', 'XML mismatch resolved');
       this.unifiedServer.broadcastXmlMismatch({ detected: false });
+      this.emit('xmlMismatchResolved');
     });
 
     this.xmlMismatchDetector.on('error', (err) => {

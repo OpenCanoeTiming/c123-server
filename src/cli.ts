@@ -5,10 +5,11 @@ import { Logger } from './utils/logger.js';
 /**
  * Parse command line arguments
  */
-function parseArgs(): { command: string; config: ServerConfig; debug: boolean } {
+function parseArgs(): { command: string; config: ServerConfig; debug: boolean; noTray: boolean } {
   const args = process.argv.slice(2);
   let command = 'run';
   let debug = false;
+  let noTray = false;
   const config: ServerConfig = {};
 
   // Environment variables for port (C123_SERVER_PORT takes precedence over PORT)
@@ -66,9 +67,13 @@ function parseArgs(): { command: string; config: ServerConfig; debug: boolean } 
     if (arg === '--debug' || arg === '-d') {
       debug = true;
     }
+
+    if (arg === '--no-tray') {
+      noTray = true;
+    }
   }
 
-  return { command, config, debug };
+  return { command, config, debug, noTray };
 }
 
 /**
@@ -94,6 +99,7 @@ Options:
   --xml <path>        XML file path for results data
   --no-discovery      Disable UDP auto-discovery
   --no-autodetect     Disable Canoe123 XML autodetection (Windows)
+  --no-tray           Disable system tray icon
   -d, --debug         Enable verbose debug logging
   -h, --help          Show this help message
   -v, --version       Show version
@@ -112,7 +118,7 @@ Examples:
 /**
  * Run the server
  */
-async function runServer(config: ServerConfig, debug: boolean): Promise<void> {
+async function runServer(config: ServerConfig, debug: boolean, noTray: boolean): Promise<void> {
   // Configure log level based on debug flag
   if (debug) {
     Logger.setLevel('debug');
@@ -123,9 +129,22 @@ async function runServer(config: ServerConfig, debug: boolean): Promise<void> {
   // Initialize from saved settings (unless overridden by CLI args)
   server.initFromSettings();
 
-  // Handle shutdown signals
+  // Initialize tray early so the initial menu uses the latest status when start() is called
+  let tray: import('./tray/TrayManager.js').TrayManager | null = null;
+  if (!noTray) {
+    try {
+      const { TrayManager } = await import('./tray/TrayManager.js');
+      tray = new TrayManager({ port: server.getPort(), onQuit: () => shutdown() });
+    } catch {
+      // TrayManager import failed — continue without tray
+    }
+  }
+  const { NotificationManager } = await import('./tray/NotificationManager.js');
+  const notifications = new NotificationManager();
+
   const shutdown = async () => {
     Logger.info('CLI', 'Shutting down...');
+    tray?.stop();
     await server.stop();
     process.exit(0);
   };
@@ -136,14 +155,36 @@ async function runServer(config: ServerConfig, debug: boolean): Promise<void> {
   // Error handling
   server.on('error', (err) => {
     Logger.error('Server', err.message, err);
+    tray?.setStatus('error', err.message);
+    notifications.notify({ title: 'C123 Server', message: err.message, type: 'error' });
   });
 
   server.on('tcpConnected', (host) => {
     Logger.info('Server', `Connected to C123 at ${host}`);
+    tray?.setStatus('ok', `Connected to C123 at ${host}`);
+    notifications.notify({ title: 'C123 Server', message: `Connected to C123 at ${host}`, type: 'info' });
   });
 
   server.on('tcpDisconnected', () => {
     Logger.warn('Server', 'Disconnected from C123, reconnecting...');
+    tray?.setStatus('warning', 'Disconnected from C123');
+    notifications.notify({ title: 'C123 Server', message: 'Disconnected from C123', type: 'warning' });
+  });
+
+  server.on('clientDisconnected', (sessionId) => {
+    notifications.notify({ title: 'C123 Server', message: `Client disconnected: ${sessionId}`, type: 'warning' });
+  });
+
+  server.on('liveError', (message) => {
+    notifications.notify({ title: 'C123 Server — Live', message, type: 'error' });
+  });
+
+  server.on('xmlMismatch', (message) => {
+    notifications.notify({ title: 'C123 Server — XML', message, type: 'warning' });
+  });
+
+  server.on('xmlMismatchResolved', () => {
+    notifications.notify({ title: 'C123 Server — XML', message: 'XML mismatch resolved', type: 'info' });
   });
 
   // Start
@@ -161,6 +202,17 @@ async function runServer(config: ServerConfig, debug: boolean): Promise<void> {
   } catch (err) {
     Logger.error('CLI', 'Failed to start server', err);
     process.exit(1);
+  }
+
+  // Start tray icon outside server try/catch — tray failure must not kill the server.
+  // TrayManager was created early (above) so setStatus() calls update internal fields.
+  // start() then uses the latest status when creating the icon.
+  if (tray) {
+    try {
+      await tray.start();
+    } catch (err) {
+      Logger.debug('CLI', `Tray icon not available: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 }
 
@@ -207,10 +259,10 @@ async function handleServiceCommand(command: string): Promise<void> {
  * Main entry point
  */
 async function main(): Promise<void> {
-  const { command, config, debug } = parseArgs();
+  const { command, config, debug, noTray } = parseArgs();
 
   if (command === 'run') {
-    await runServer(config, debug);
+    await runServer(config, debug, noTray);
   } else {
     await handleServiceCommand(command);
   }
