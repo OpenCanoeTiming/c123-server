@@ -1,5 +1,6 @@
 #!/bin/bash
-# Generate tray icons with status indicators from the OCT logo SVG.
+# Generate tray icons from the OCT logo SVG with status-colored backgrounds.
+# The entire circle is filled with the status color, internal elements stay white.
 # Outputs base64 strings for icons.ts
 #
 # Requires: ImageMagick (convert)
@@ -10,22 +11,20 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORK_DIR=$(mktemp -d)
 trap "rm -rf $WORK_DIR" EXIT
 
-# Status dot colors
-GREEN="#00d26a"
-YELLOW="#f5a623"
-RED="#ff3b30"
-DOT_OUTLINE="#1a1a1a"
+# Status colors
+declare -A COLORS=(
+  [ok]="#00a858"       # Strong green (slightly darker for better contrast)
+  [warning]="#e6940a"  # Amber/orange (better visibility than pure yellow)
+  [error]="#dc2626"    # Red
+)
 
-# Base SVG (logo without status dot)
 BASE_SVG="$SCRIPT_DIR/tray-icon-base.svg"
 
-# Create SVG variants with status dot overlays
+# Create SVG with status color filled into the circle
 create_status_svg() {
   local color="$1"
   local output="$2"
-  # Take the base SVG and add a status dot in bottom-right
-  # The dot is a filled circle with a dark outline
-  sed 's|</svg>|  <!-- Status indicator dot -->\n  <circle cx="52" cy="52" r="9" fill="'"$DOT_OUTLINE"'" stroke="none" />\n  <circle cx="52" cy="52" r="7.5" fill="'"$color"'" stroke="none" />\n</svg>|' "$BASE_SVG" > "$output"
+  sed "s/STATUS_COLOR/${color}/" "$BASE_SVG" > "$output"
 }
 
 # Render SVG to PNG at a given size
@@ -44,33 +43,24 @@ create_ico() {
   convert "$png16" "$png32" "$output"
 }
 
-echo "Generating tray icons..."
+echo "Generating tray icons..." >&2
 
-# Generate for each status
 for status in ok warning error; do
-  case $status in
-    ok)      color="$GREEN" ;;
-    warning) color="$YELLOW" ;;
-    error)   color="$RED" ;;
-  esac
+  color="${COLORS[$status]}"
 
   svg="$WORK_DIR/${status}.svg"
   create_status_svg "$color" "$svg"
 
-  # Render PNGs
   render_png "$svg" 16 "$WORK_DIR/${status}_16.png"
   render_png "$svg" 32 "$WORK_DIR/${status}_32.png"
 
-  # Create ICO (16+32)
   create_ico "$WORK_DIR/${status}_16.png" "$WORK_DIR/${status}_32.png" "$WORK_DIR/${status}.ico"
 
-  # Also render a single 32x32 PNG for macOS/Linux
   cp "$WORK_DIR/${status}_32.png" "$WORK_DIR/${status}_tray.png"
 done
 
-echo ""
-echo "=== BASE64 OUTPUT FOR icons.ts ==="
-echo ""
+echo "" >&2
+echo "=== BASE64 OUTPUT ===" >&2
 
 echo "// ICO format (Windows) - 16x16 + 32x32"
 echo "const ICO_ICONS = {"
@@ -89,14 +79,12 @@ for status in ok warning error; do
 done
 echo "};"
 
-echo ""
-echo "=== PREVIEW FILES ==="
-# Copy preview files for inspection
+# Copy preview files
 for status in ok warning error; do
   cp "$WORK_DIR/${status}_32.png" "/tmp/tray_${status}_32.png"
   cp "$WORK_DIR/${status}_16.png" "/tmp/tray_${status}_16.png"
-  echo "/tmp/tray_${status}_32.png  /tmp/tray_${status}_16.png"
 done
 
-echo ""
-echo "Done!"
+echo "" >&2
+echo "Preview files in /tmp/tray_{ok,warning,error}_{16,32}.png" >&2
+echo "Done!" >&2
