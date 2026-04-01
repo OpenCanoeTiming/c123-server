@@ -1,16 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Filled circle background (color replaced per status) -->
-  <circle cx="32" cy="32" r="30" fill="STATUS_COLOR" />
-  <!-- Thin dark outline for definition on light taskbars -->
-  <circle cx="32" cy="32" r="30" fill="none" stroke="#00000033" stroke-width="1" />
-  <!-- Paddle and waves in white -->
-  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">
-    <!-- Paddle shaft (diagonal, upper-right to lower-left into waves) -->
-    <path d="M46 12 L26 36" stroke-width="3" />
-    <!-- Paddle blade (wider part at the bottom end) -->
-    <path d="M26 36 C22 33, 18 32, 16 34 C14 36, 16 39, 20 40 C24 41, 27 39, 26 36Z" fill="#ffffff" stroke-width="1.5" />
-    <!-- Infinity wave (water surface) -->
-    <path d="M12 44 C16 37, 23 37, 32 44 C41 51, 48 51, 52 44" stroke-width="3" />
-    <path d="M12 44 C16 51, 23 51, 32 44 C41 37, 48 37, 52 44" stroke-width="3" />
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Outer circle -->
+  <circle cx="32" cy="32" r="28" stroke-width="3.2" />
+  <!-- Paddle shaft (diagonal, upper-right into waves) -->
+  <path d="M46 12 L26 36" stroke-width="3" />
+  <!-- Paddle blade -->
+  <path d="M26 36 C22 33, 18 32, 16 34 C14 36, 16 39, 20 40 C24 41, 27 39, 26 36Z" fill="#ffffff" stroke-width="1.5" />
+  <!-- Infinity wave (water) -->
+  <path d="M13 42 C17 35, 24 35, 32 42 C40 49, 47 49, 51 42" stroke-width="3" />
+  <path d="M13 42 C17 49, 24 49, 32 42 C40 35, 47 35, 51 42" stroke-width="3" />
+  <!-- Status indicator dot (color replaced per status) -->
+  <circle cx="52" cy="52" r="12" fill="#111111" stroke="none" />
+  <circle cx="52" cy="52" r="10.5" fill="STATUS_COLOR" stroke="none" />
 </svg>
