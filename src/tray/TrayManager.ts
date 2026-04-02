@@ -51,34 +51,12 @@ export class TrayManager {
         : (mod as unknown as { default: { default: typeof mod.default } }).default.default;
 
       const icon = getIcon(this.currentStatus);
-
       const instance = new SysTray({
         menu: {
           icon,
           title: '',
           tooltip: 'C123 Server',
-          items: [
-            {
-              title: 'C123 Server',
-              tooltip: '',
-              enabled: false,
-            },
-            {
-              title: `Status: ${this.statusMessage}`,
-              tooltip: '',
-              enabled: false,
-            },
-            {
-              title: 'Open Dashboard',
-              tooltip: `Open http://localhost:${this.config.port}`,
-              enabled: true,
-            },
-            {
-              title: 'Quit',
-              tooltip: 'Stop C123 Server',
-              enabled: true,
-            },
-          ],
+          items: this.buildMenuItems(),
         },
         debug: false,
       });
@@ -106,6 +84,22 @@ export class TrayManager {
   }
 
   /**
+   * Build the full menu items array for the current state.
+   */
+  private buildMenuItems(): Array<{ title: string; tooltip: string; enabled: boolean }> {
+    const truncated = this.statusMessage.length > 80
+      ? this.statusMessage.substring(0, 77) + '...'
+      : this.statusMessage;
+
+    return [
+      { title: 'C123 Server', tooltip: '', enabled: false },
+      { title: `Status: ${truncated}`, tooltip: '', enabled: false },
+      { title: 'Open Dashboard', tooltip: `Open http://localhost:${this.config.port}`, enabled: true },
+      { title: 'Quit', tooltip: 'Stop C123 Server', enabled: true },
+    ];
+  }
+
+  /**
    * Update tray icon and status message.
    */
   setStatus(status: TrayStatus, message: string): void {
@@ -121,23 +115,15 @@ export class TrayManager {
 
     Logger.debug('Tray', `setStatus: ${status} "${message}"`);
 
-    // Use separate update-item + update-menu actions instead of the combined
-    // update-menu-and-item which has bugs in systray2 with empty items arrays.
-    this.safeSendAction({
-      type: 'update-item',
-      item: {
-        title: `Status: ${truncated}`,
-      },
-      seq_id: SEQ.STATUS,
-    });
-
+    // Send full menu update with all items — systray2 Go binary ignores
+    // icon changes when items array is empty.
     this.safeSendAction({
       type: 'update-menu',
       menu: {
         icon,
         title: '',
         tooltip: `C123 Server - ${truncated}`,
-        items: [],
+        items: this.buildMenuItems(),
       },
     });
   }

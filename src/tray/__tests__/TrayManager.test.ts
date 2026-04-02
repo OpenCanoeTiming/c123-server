@@ -123,22 +123,20 @@ describe('TrayManager', () => {
 
       tray.setStatus('ok', 'Connected to C123 at 192.168.1.5');
 
-      // Uses two separate sendAction calls (update-item + update-menu)
-      // instead of update-menu-and-item which has bugs in systray2.
-      expect(mockSendAction).toHaveBeenCalledWith({
-        type: 'update-item',
-        item: {
-          title: 'Status: Connected to C123 at 192.168.1.5',
-        },
-        seq_id: 1,
-      });
+      // Single update-menu with full items array — systray2 Go binary
+      // ignores icon changes when items array is empty.
       expect(mockSendAction).toHaveBeenCalledWith({
         type: 'update-menu',
         menu: {
           icon: expect.any(String),
           title: '',
           tooltip: 'C123 Server - Connected to C123 at 192.168.1.5',
-          items: [],
+          items: expect.arrayContaining([
+            expect.objectContaining({ title: 'C123 Server' }),
+            expect.objectContaining({ title: 'Status: Connected to C123 at 192.168.1.5' }),
+            expect.objectContaining({ title: 'Open Dashboard' }),
+            expect.objectContaining({ title: 'Quit' }),
+          ]),
         },
       });
     });
@@ -149,12 +147,13 @@ describe('TrayManager', () => {
       const longMessage = 'A'.repeat(100);
       tray.setStatus('ok', longMessage);
 
-      const itemAction = mockSendAction.mock.calls.find(
-        (call) => (call[0] as { type: string }).type === 'update-item',
+      const menuAction = mockSendAction.mock.calls.find(
+        (call) => (call[0] as { type: string }).type === 'update-menu',
       );
-      const title = (itemAction![0] as { item: { title: string } }).item.title;
-      expect(title.length).toBeLessThanOrEqual(88); // "Status: " + 77 + "..."
-      expect(title).toContain('...');
+      const items = (menuAction![0] as { menu: { items: Array<{ title: string }> } }).menu.items;
+      const statusItem = items.find((i) => i.title.startsWith('Status:'));
+      expect(statusItem!.title.length).toBeLessThanOrEqual(88); // "Status: " + 77 + "..."
+      expect(statusItem!.title).toContain('...');
     });
 
     it('should not throw when tray is not active', () => {
