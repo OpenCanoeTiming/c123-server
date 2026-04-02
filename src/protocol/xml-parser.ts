@@ -259,7 +259,9 @@ export function parseResults(element: unknown): ResultsMessage | null {
       const betterRunRaw = resultT?.['@_BetterRunNr'];
 
       // Parse IRM (Invalid Result Mark) status
+      // C123 sends DNS/DNF/DSQ in IRM, but sends investigation star (*) in PP attribute
       const irm = String(resultT?.['@_IRM'] ?? '').toUpperCase();
+      const pp = String(resultT?.['@_PP'] ?? '');
 
       const resultRow: ResultRow = {
         rank,
@@ -278,9 +280,14 @@ export function parseResults(element: unknown): ResultsMessage | null {
         behind: String(resultT?.['@_Behind'] ?? ''),
       };
 
-      // Add IRM status if present (DNS, DNF, DSQ, * = under investigation)
-      if (irm === 'DNS' || irm === 'DNF' || irm === 'DSQ' || irm === '*') {
+      // Add IRM status if present (DNS, DNF, DSQ)
+      if (irm === 'DNS' || irm === 'DNF' || irm === 'DSQ') {
         resultRow.status = irm;
+      }
+
+      // Check PP attribute for investigation star (C123 sends * in PP, not IRM)
+      if (!resultRow.status && pp === '*') {
+        resultRow.status = '*';
       }
 
       // Add optional BR1/BR2 fields
