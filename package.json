@@ -11,6 +11,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc && node scripts/copy-admin-ui.js",
     "start": "node dist/cli.js",
+    "build:installer": "node scripts/prepare-installer-payload.js",
+    "build:installer:local": "node scripts/prepare-installer-payload.js && iscc installer/c123-server.iss",
     "test": "vitest",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",

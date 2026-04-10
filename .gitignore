@@ -10,5 +10,10 @@ core
 # Test config files (reference only)
 user.config
 
-# Downloaded test fixtures cache
+# Downloaded test fixtures cache + installer runtime cache
 .cache/
+
+# Installer build artefacts
+build-output/
+installer/Output/
+installer/iss-defines.iss
