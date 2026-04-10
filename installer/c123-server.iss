@@ -23,7 +23,14 @@
 #define AppName       "C123 Server"
 #define AppPublisher  "Open Canoe Timing"
 #define AppURL        "https://github.com/OpenCanoeTiming/c123-server"
+; ServiceName is the DISPLAY name visible in services.msc.
+; ServiceId is the ACTUAL service identifier used by sc.exe, the registry,
+; and Get-Service. node-windows derives the id from the name as:
+;   name.replace(/[^\w]/gi, '').toLowerCase() + '.exe'
+; So "C123Server" → "c123server.exe". If ServiceName ever changes in
+; src/service/windows-service.ts, update ServiceId here accordingly.
 #define ServiceName   "C123Server"
+#define ServiceId     "c123server.exe"
 #define ServerPort    "27123"
 #define FirewallRule  "C123 Server"
 
@@ -128,14 +135,44 @@ Filename: "{sys}\netsh.exe"; \
   RunOnceId: "DelFirewallRule"
 
 [Code]
-// Helper: check if a Windows service exists and is queryable via sc.exe.
-// Returns True if `sc query <name>` exits with code 0.
-function IsServiceInstalled(ServiceName: string): Boolean;
-var
-  ResultCode: Integer;
+// Helper: check if a Windows service is registered.
+//
+// We query the registry directly at HKLM\SYSTEM\CurrentControlSet\Services\<Id>
+// rather than shelling out to sc.exe, because:
+//   1. Registry writes by Windows SCM are atomic — no timing windows.
+//   2. No process spawn — immediate, can't time out.
+//   3. No WoW64 redirection issues — HKLM\SYSTEM is shared across views.
+//   4. Reliable regardless of Inno Setup install mode (64-bit vs 32-bit).
+//
+// Important: ServiceId must be the actual service name (as seen by sc.exe),
+// NOT the display name. For c123-server that is "c123server.exe", not
+// "C123Server" — see the ServiceId define at the top of this script.
+//
+// Prior version used "sc query C123Server" which always failed because
+// node-windows registers the service as "c123server.exe" (with id-mangling)
+// while "C123Server" is only the display name.
+function IsServiceInstalled(ServiceId: string): Boolean;
 begin
-  Result := Exec(ExpandConstant('{sys}\sc.exe'), 'query ' + ServiceName,
-    '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+  Result := RegKeyExists(HKEY_LOCAL_MACHINE,
+    'SYSTEM\CurrentControlSet\Services\' + ServiceId);
+end;
+
+// Wait up to TimeoutMs for the service to appear in the registry.
+// node-windows emits its 'install' event slightly before the registry key
+// is fully committed in some scenarios, so a short retry loop removes
+// any remaining race condition between [Run] and CurStepChanged.
+function WaitForServiceInstalled(ServiceId: string; TimeoutMs: Integer): Boolean;
+var
+  Elapsed: Integer;
+begin
+  Result := IsServiceInstalled(ServiceId);
+  Elapsed := 0;
+  while (not Result) and (Elapsed < TimeoutMs) do
+  begin
+    Sleep(500);
+    Elapsed := Elapsed + 500;
+    Result := IsServiceInstalled(ServiceId);
+  end;
 end;
 
 // Before installing, if an older C123 Server is already installed as a service,
@@ -149,23 +186,24 @@ begin
   Result := '';
   NeedsRestart := False;
 
-  if IsServiceInstalled('{#ServiceName}') then
+  if IsServiceInstalled('{#ServiceId}') then
   begin
     Log('Stopping existing {#ServiceName} service before upgrade...');
-    Exec(ExpandConstant('{sys}\sc.exe'), 'stop {#ServiceName}',
+    Exec(ExpandConstant('{sys}\sc.exe'), 'stop {#ServiceId}',
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Sleep(2000);
   end;
 end;
 
 // After the post-install [Run] step has completed, verify the service is
-// actually registered. If not, warn the user — typically means node-windows
-// or sc.exe failed for some reason (see Event Viewer > Application logs).
+// actually registered. If not (after a short wait), warn the user — this
+// means node-windows or sc.exe failed for some reason and they will need
+// to register manually. See docs/DEPLOYMENT.md for troubleshooting.
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
-    if not IsServiceInstalled('{#ServiceName}') then
+    if not WaitForServiceInstalled('{#ServiceId}', 5000) then
     begin
       MsgBox('Warning: The ' + '{#ServiceName}' +
         ' Windows service could not be registered automatically.'#13#10#13#10 +
