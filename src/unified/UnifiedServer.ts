@@ -20,6 +20,7 @@ import type { CreateEventRequest, EventStatus } from '../live/types.js';
 import type { XmlChangeNotifier } from '../xml/XmlChangeNotifier.js';
 import { getAppSettings, WindowsConfigDetector } from '../config/index.js';
 import type { ClientConfig } from '../config/types.js';
+import { APP_VERSION, compareVersions } from '../utils/appVersion.js';
 
 // Get admin-ui directory path (works for both dev and dist)
 const __filename = fileURLToPath(import.meta.url);
@@ -110,6 +111,19 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   // Live-Mini status broadcast throttling (max 2/s = 500ms)
   private liveStatusLastBroadcast: number = 0;
   private readonly LIVE_STATUS_THROTTLE_MS = 500;
+
+  // Update-check cache (GitHub Releases API response, 1 hour TTL)
+  private updateCheckCache: {
+    current: string;
+    latest: string | null;
+    url: string | null;
+    isNewer: boolean;
+    checkedAt: number;
+    enabled: boolean;
+    error?: string;
+  } | null = null;
+  private readonly UPDATE_CHECK_TTL_MS = 60 * 60 * 1000; // 1 hour
+  private readonly UPDATE_CHECK_TIMEOUT_MS = 3000;
 
   // Registered components
   private eventState: EventState | null = null;
@@ -992,6 +1006,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
 
     // API routes
     this.app.get('/api/status', this.handleStatus.bind(this));
+    this.app.get('/api/update-check', this.handleUpdateCheck.bind(this));
     this.app.get('/api/sources', this.handleSources.bind(this));
     this.app.get('/api/scoreboards', this.handleScoreboards.bind(this));
     this.app.post('/api/scoreboards/:id/config', this.handleScoreboardConfig.bind(this));
@@ -1122,6 +1137,104 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     };
 
     res.json(response);
+  }
+
+  /**
+   * GET /api/update-check - Check GitHub Releases for a newer version.
+   *
+   * Fail-safe by design: any error (network, timeout, parse, disabled) returns
+   * a 200 response with { latest: null, isNewer: false, error? } so the admin
+   * UI never breaks. Result is cached for 1 hour to avoid hitting the GitHub
+   * API on every dashboard load.
+   *
+   * Disable via settings.json { "updateCheck": false } for closed networks.
+   */
+  private async handleUpdateCheck(_req: Request, res: Response): Promise<void> {
+    const now = Date.now();
+
+    // Serve from cache if fresh
+    if (this.updateCheckCache && now - this.updateCheckCache.checkedAt < this.UPDATE_CHECK_TTL_MS) {
+      res.json(this.updateCheckCache);
+      return;
+    }
+
+    const settings = getAppSettings().get();
+    const enabled = settings.updateCheck !== false;
+
+    // Disabled via settings — return current version only, cache briefly.
+    if (!enabled) {
+      const result = {
+        current: APP_VERSION,
+        latest: null,
+        url: null,
+        isNewer: false,
+        checkedAt: now,
+        enabled: false,
+      };
+      this.updateCheckCache = result;
+      res.json(result);
+      return;
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.UPDATE_CHECK_TIMEOUT_MS);
+
+      const response = await fetch(
+        'https://api.github.com/repos/OpenCanoeTiming/c123-server/releases/latest',
+        {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': `c123-server/${APP_VERSION}`,
+            Accept: 'application/vnd.github+json',
+          },
+        },
+      );
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        throw new Error(`GitHub API returned HTTP ${response.status}`);
+      }
+
+      const data = (await response.json()) as {
+        tag_name?: string;
+        html_url?: string;
+        prerelease?: boolean;
+      };
+
+      // Ignore preview/prerelease builds — the banner only promotes stable releases.
+      if (data.prerelease) {
+        throw new Error('Latest release is a prerelease, skipping');
+      }
+
+      const latest = (data.tag_name ?? '').replace(/^v/i, '');
+      const isNewer = latest.length > 0 && compareVersions(latest, APP_VERSION) > 0;
+
+      const result = {
+        current: APP_VERSION,
+        latest: latest.length > 0 ? latest : null,
+        url: data.html_url ?? null,
+        isNewer,
+        checkedAt: now,
+        enabled: true,
+      };
+
+      this.updateCheckCache = result;
+      res.json(result);
+    } catch (err) {
+      // Fail-safe: cache the error briefly so we don't hammer GitHub on retry.
+      const result = {
+        current: APP_VERSION,
+        latest: null,
+        url: null,
+        isNewer: false,
+        checkedAt: now,
+        enabled: true,
+        error: err instanceof Error ? err.message : 'unknown error',
+      };
+      this.updateCheckCache = result;
+      res.json(result);
+    }
   }
 
   /**
