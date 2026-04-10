@@ -21,6 +21,10 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: read
+      # Needed to pull @opencanoetiming/timing-design-system from GitHub
+      # Packages. Setting any explicit permission turns all others off, so
+      # we must enumerate both here instead of relying on repo defaults.
+      packages: read
     outputs:
       version: ${{ steps.version.outputs.version }}
       installer-name: ${{ steps.version.outputs.installer-name }}
