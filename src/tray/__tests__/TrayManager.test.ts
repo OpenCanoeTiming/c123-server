@@ -234,4 +234,101 @@ describe('TrayManager', () => {
       expect(state.message).toBe('Starting...');
     });
   });
+
+  describe('monitor-mode config overrides', () => {
+    afterEach(() => {
+      // Each test in this block constructs its own tray — stop it individually
+      // so we don't leak between tests. The outer afterEach also runs against
+      // the top-level `tray`, which is harmless (stop is idempotent).
+    });
+
+    it('uses titleText override in the menu header and tray tooltip', async () => {
+      const monitorTray = new TrayManager({
+        port: 27123,
+        titleText: 'C123 Server Monitor',
+        onQuit,
+      });
+      await monitorTray.start();
+
+      const config = MockSysTray.lastOptions as {
+        menu: { tooltip: string; items: Array<{ title: string }> };
+      };
+      expect(config.menu.tooltip).toBe('C123 Server Monitor');
+      expect(config.menu.items[0].title).toBe('C123 Server Monitor');
+      monitorTray.stop();
+    });
+
+    it('uses quitTooltip override on the Quit menu item', async () => {
+      const monitorTray = new TrayManager({
+        port: 27123,
+        quitTooltip: 'Close the monitor (server keeps running)',
+        onQuit,
+      });
+      await monitorTray.start();
+
+      const config = MockSysTray.lastOptions as {
+        menu: { items: Array<{ title: string; tooltip: string }> };
+      };
+      const quitItem = config.menu.items.find((i) => i.title === 'Quit')!;
+      expect(quitItem.tooltip).toBe('Close the monitor (server keeps running)');
+      monitorTray.stop();
+    });
+
+    it('uses dashboardUrl override in the Open Dashboard tooltip and browser launch', async () => {
+      const monitorTray = new TrayManager({
+        port: 27123,
+        dashboardUrl: 'http://192.168.1.50:28000',
+        onQuit,
+      });
+      await monitorTray.start();
+
+      const config = MockSysTray.lastOptions as {
+        menu: { items: Array<{ title: string; tooltip: string }> };
+      };
+      const dashItem = config.menu.items.find((i) => i.title === 'Open Dashboard')!;
+      expect(dashItem.tooltip).toBe('Open http://192.168.1.50:28000');
+
+      // Clicking the menu item should open the override URL, not localhost
+      const clickHandler = mockOnClick.mock.calls[0][0];
+      clickHandler({
+        type: 'clicked',
+        seq_id: 2,
+        item: { title: 'Open Dashboard', tooltip: '' },
+      });
+
+      const execMock = vi.mocked(childProcess.exec);
+      const execCall = execMock.mock.calls[0][0] as string;
+      expect(execCall).toContain('http://192.168.1.50:28000');
+      expect(execCall).not.toContain('localhost');
+      monitorTray.stop();
+    });
+
+    it('falls back to localhost:port when dashboardUrl is not provided', async () => {
+      const defaultTray = new TrayManager({ port: 28000, onQuit });
+      await defaultTray.start();
+
+      const config = MockSysTray.lastOptions as {
+        menu: { items: Array<{ title: string; tooltip: string }> };
+      };
+      const dashItem = config.menu.items.find((i) => i.title === 'Open Dashboard')!;
+      expect(dashItem.tooltip).toBe('Open http://localhost:28000');
+      defaultTray.stop();
+    });
+
+    it('falls back to defaults when no overrides are provided (backward compat)', async () => {
+      // Plain port-only config should still render exactly as before so the
+      // in-process tray (runServer) is unaffected by the refactor.
+      const config = MockSysTray.lastOptions as null;
+      expect(config).toBeNull(); // Not started yet in this test — just sanity
+
+      await tray.start(); // The top-level tray uses the old-style config
+      const startedConfig = MockSysTray.lastOptions as {
+        menu: { tooltip: string; items: Array<{ title: string; tooltip: string }> };
+      };
+      expect(startedConfig.menu.tooltip).toBe('C123 Server');
+      expect(startedConfig.menu.items[0].title).toBe('C123 Server');
+      const quitItem = startedConfig.menu.items.find((i) => i.title === 'Quit')!;
+      expect(quitItem.tooltip).toBe('Stop C123 Server');
+    });
+  });
 });

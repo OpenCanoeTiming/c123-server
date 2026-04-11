@@ -1,6 +1,11 @@
 #!/usr/bin/env node
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { format } from 'node:util';
 import { Server, ServerConfig } from './server.js';
 import { Logger } from './utils/logger.js';
+import { mapStatusResponse, type MinimalStatusResponse } from './tray/statusMapping.js';
 
 /**
  * Parse command line arguments
@@ -256,6 +261,96 @@ async function runServer(config: ServerConfig, debug: boolean, noTray: boolean):
 }
 
 /**
+ * Return the C123 Server user-settings directory for the current platform.
+ * Matches AppSettingsManager.getSettingsPath() so both live in the same dir.
+ *   Windows: %APPDATA%\c123-server
+ *   Linux/macOS: ~/.c123-server
+ */
+function getAppDataDir(): string {
+  if (process.platform === 'win32') {
+    const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+    return path.join(appData, 'c123-server');
+  }
+  return path.join(os.homedir(), '.c123-server');
+}
+
+/**
+ * Tee console.{log,error,warn,debug} to a log file in the app-data dir.
+ *
+ * Why: under `wscript.exe tray-launcher.vbs` stdout/stderr are discarded, so
+ * a silently crashing tray at login leaves zero diagnostic trail. This patch
+ * intercepts at the console level (rather than replacing Logger) because
+ * Logger already writes through console.*, so we catch all log output with
+ * minimal surface area.
+ *
+ * Rotation: on startup, if the existing log is larger than LOG_ROTATE_SIZE
+ * bytes, rename it to `.old` (overwriting any prior `.old`). This is a
+ * single-generation rotation — good enough for a human operator debugging a
+ * startup failure, and never grows unbounded.
+ *
+ * @returns the log file path, or null if setup failed (directory not writable etc.)
+ */
+function setupTrayFileLog(): string | null {
+  const LOG_ROTATE_SIZE = 512 * 1024; // 512 KB
+  try {
+    const dir = getAppDataDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const logPath = path.join(dir, 'tray.log');
+
+    try {
+      if (fs.statSync(logPath).size > LOG_ROTATE_SIZE) {
+        fs.renameSync(logPath, logPath + '.old');
+      }
+    } catch {
+      // File doesn't exist yet — nothing to rotate.
+    }
+
+    const origLog = console.log.bind(console);
+    const origError = console.error.bind(console);
+    const origWarn = console.warn.bind(console);
+    const origDebug = console.debug.bind(console);
+
+    // Strip ANSI escape codes so the file stays readable in Notepad/less.
+    // Colors should already be off under wscript (no TTY), but users may
+    // also run `node cli.js tray` from cmd where colors ARE on — keep
+    // the file consistent in both cases. The control char in the regex
+    // is intentional, hence the eslint disable.
+    // eslint-disable-next-line no-control-regex
+    const ansiEscapeRegex = /\x1b\[[0-9;]*m/g;
+
+    const writeToFile = (...args: unknown[]): void => {
+      try {
+        const line = format(...args).replace(ansiEscapeRegex, '');
+        fs.appendFileSync(logPath, line + '\n');
+      } catch {
+        // Logging itself failed — nothing useful we can do.
+      }
+    };
+
+    console.log = (...args: unknown[]) => {
+      origLog(...args);
+      writeToFile(...args);
+    };
+    console.error = (...args: unknown[]) => {
+      origError(...args);
+      writeToFile(...args);
+    };
+    console.warn = (...args: unknown[]) => {
+      origWarn(...args);
+      writeToFile(...args);
+    };
+    console.debug = (...args: unknown[]) => {
+      origDebug(...args);
+      writeToFile(...args);
+    };
+
+    return logPath;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Run the standalone tray monitor.
  *
  * This is a user-session process that polls a running c123-server over HTTP
@@ -269,29 +364,50 @@ async function runServer(config: ServerConfig, debug: boolean, noTray: boolean):
  * - Survives the server being unreachable (goes red, stays red, explicit Quit is the only exit).
  * - Uses AbortController with a 2 s timeout so a filtered/hung socket can't stall the poll loop.
  * - Uses recursive setTimeout instead of setInterval so a slow poll cannot overlap the next one.
+ * - Parameterizes TrayManager labels so "Quit" and the menu title make clear
+ *   it's the MONITOR being stopped, not the underlying service.
+ * - Tees all log output to `${APPDATA}/c123-server/tray.log` so a silent
+ *   crash under `wscript.exe` still leaves a diagnostic trail.
  */
 async function runTray(options: TrayOptions, debug: boolean): Promise<void> {
+  // Set up file logging BEFORE anything else so startup errors are captured.
+  const logPath = setupTrayFileLog();
+
   if (debug) {
     Logger.setLevel('debug');
   }
 
-  const { TrayManager } = await import('./tray/TrayManager.js');
-
-  // Derive the port used for the "Open Dashboard" menu item from the poll URL
-  // so --target-url http://localhost:28000 also opens the right dashboard.
-  let port = 27123;
+  // Parse & normalize the target URL up front.
+  // - `origin` gives us a clean scheme+host+port string for both the dashboard
+  //   URL and the status endpoint (handles trailing slashes, no-port cases, etc.).
+  // - If the user passes an invalid URL, fail cleanly with a helpful message
+  //   rather than hitting the generic fetch() failure path every 3 s.
+  let parsedUrl: URL;
   try {
-    const parsed = new URL(options.targetUrl);
-    if (parsed.port) {
-      port = parseInt(parsed.port, 10);
-    }
+    parsedUrl = new URL(options.targetUrl);
   } catch {
-    // Ignore — fall back to default 27123
+    Logger.error('Tray', `Invalid --target-url: "${options.targetUrl}"`);
+    process.exit(1);
   }
+  const dashboardUrl = parsedUrl.origin; // e.g. "http://localhost:27123"
+  const statusUrl = new URL('/api/status', parsedUrl).toString();
+
+  // Still keep a numeric port for the existing TrayManagerConfig.port field
+  // (dashboardUrl overrides it in practice). Fall back to 80/443/27123 in that
+  // order if the URL has no explicit port.
+  const port = parsedUrl.port
+    ? parseInt(parsedUrl.port, 10)
+    : parsedUrl.protocol === 'https:'
+      ? 443
+      : parsedUrl.protocol === 'http:'
+        ? 80
+        : 27123;
+
+  const { TrayManager } = await import('./tray/TrayManager.js');
 
   let stopped = false;
 
-  const shutdown = () => {
+  const shutdown = (): void => {
     if (stopped) return;
     stopped = true;
     Logger.info('Tray', 'Shutting down tray monitor');
@@ -299,7 +415,13 @@ async function runTray(options: TrayOptions, debug: boolean): Promise<void> {
     process.exit(0);
   };
 
-  const tray = new TrayManager({ port, onQuit: shutdown });
+  const tray = new TrayManager({
+    port,
+    dashboardUrl,
+    titleText: 'C123 Server Monitor',
+    quitTooltip: 'Close the monitor (server keeps running)',
+    onQuit: shutdown,
+  });
 
   const started = await tray.start();
   if (!started) {
@@ -310,11 +432,12 @@ async function runTray(options: TrayOptions, debug: boolean): Promise<void> {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  Logger.info('Tray', `Tray monitor started — polling ${options.targetUrl}/api/status every ${options.pollIntervalMs} ms`);
-
-  interface StatusResponse {
-    sources?: Array<{ name: string; status: string }>;
-    event?: { raceName?: string | null };
+  Logger.info(
+    'Tray',
+    `Tray monitor started — polling ${statusUrl} every ${options.pollIntervalMs} ms`,
+  );
+  if (logPath) {
+    Logger.info('Tray', `Log file: ${logPath}`);
   }
 
   const poll = async (): Promise<void> => {
@@ -324,30 +447,21 @@ async function runTray(options: TrayOptions, debug: boolean): Promise<void> {
     const timeoutId = setTimeout(() => controller.abort(), 2000);
 
     try {
-      const res = await fetch(`${options.targetUrl}/api/status`, {
-        signal: controller.signal,
-      });
+      const res = await fetch(statusUrl, { signal: controller.signal });
 
       if (!res.ok) {
-        tray.setStatus('error', `Server returned HTTP ${res.status}`);
+        const { status, message } = mapStatusResponse(null, `Server returned HTTP ${res.status}`);
+        tray.setStatus(status, message);
       } else {
-        const data = (await res.json()) as StatusResponse;
-        const sources = data.sources ?? [];
-        const bad = sources.filter((s) => s.status !== 'connected');
-
-        if (sources.length === 0) {
-          tray.setStatus('warning', 'No data sources configured');
-        } else if (bad.length === 0) {
-          tray.setStatus('ok', data.event?.raceName ?? 'C123 Server running');
-        } else {
-          const names = bad.map((s) => s.name).join(', ');
-          tray.setStatus('warning', `${bad.length} source(s) reconnecting: ${names}`);
-        }
+        const data = (await res.json()) as MinimalStatusResponse;
+        const { status, message } = mapStatusResponse(data);
+        tray.setStatus(status, message);
       }
     } catch {
       // Either AbortError (timeout), network error, or JSON parse error —
       // all mean "can't talk to server", which is a single user-facing state.
-      tray.setStatus('error', 'Server unreachable');
+      const { status, message } = mapStatusResponse(null);
+      tray.setStatus(status, message);
     } finally {
       clearTimeout(timeoutId);
     }
