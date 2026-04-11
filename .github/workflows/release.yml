@@ -54,6 +54,12 @@ jobs:
 
       - name: Stage installer payload
         run: npm run build:installer
+        env:
+          # prepare-installer-payload.js runs `npm ci --omit=dev` inside
+          # build-output/app/, which still needs to authenticate against
+          # npm.pkg.github.com to pull @opencanoetiming/timing-design-system
+          # (a regular — not dev — dependency).
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify Inno Setup is available
         shell: pwsh

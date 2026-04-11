@@ -43,6 +43,14 @@ import { pipeline } from 'node:stream/promises';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, '..');
 
+// Hard-fail early on non-Windows — the script uses PowerShell Expand-Archive
+// and downloads node.exe. Running it on Linux/macOS would fail opaquely
+// somewhere in the middle.
+if (process.platform !== 'win32') {
+  console.error('[payload] FAILED: This script is Windows-only (runs on Windows or GitHub Actions windows-latest).');
+  process.exit(1);
+}
+
 // Pin Node.js LTS version. Keep in sync with engines.node in package.json.
 const NODE_VERSION = process.env.C123_NODE_RUNTIME_VERSION ?? '20.19.1';
 const NODE_ARCH = 'win-x64';
