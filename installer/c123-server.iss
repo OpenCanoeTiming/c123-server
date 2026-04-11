@@ -94,11 +94,27 @@ Source: "..\build-output\runtime\*"; DestDir: "{app}\runtime"; Flags: ignorevers
 Source: "..\build-output\app\*";     DestDir: "{app}\app";     Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\build-output\LICENSE";   DestDir: "{app}";         Flags: ignoreversion
 Source: "..\build-output\README.txt"; DestDir: "{app}";        Flags: ignoreversion
+; Tray monitor launcher (see docs/DEPLOYMENT.md "System tray icon" section).
+; Shipped from installer/ directly — not part of the build-output payload
+; because it's a small hand-maintained script, not a build artefact.
+Source: "tray-launcher.vbs";          DestDir: "{app}";         Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#AppName} Dashboard"; Filename: "http://localhost:{#ServerPort}"
 Name: "{group}\{#AppName} README"; Filename: "{app}\README.txt"
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
+; User-session tray monitor: Inno Setup drops a shortcut in the current
+; user's Startup folder so the tray icon auto-starts at each login in the
+; operator's interactive session (Session 0 services cannot show tray icons,
+; see issue #69).
+;
+; Target is wscript.exe + tray-launcher.vbs — NOT node.exe directly — to
+; avoid a console-window flash every time Windows runs the shortcut.
+Name: "{userstartup}\{#AppName} Tray"; Filename: "{sys}\wscript.exe"; \
+  Parameters: """{app}\tray-launcher.vbs"""; \
+  WorkingDir: "{app}"; \
+  IconFilename: "{app}\runtime\node.exe"; \
+  Comment: "C123 Server tray monitor (polls the installed service)"
 
 [Run]
 ; 1. Delete any stale firewall rule with the same name. `netsh add rule` is

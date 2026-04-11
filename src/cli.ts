@@ -5,12 +5,27 @@ import { Logger } from './utils/logger.js';
 /**
  * Parse command line arguments
  */
-function parseArgs(): { command: string; config: ServerConfig; debug: boolean; noTray: boolean } {
+interface TrayOptions {
+  targetUrl: string;
+  pollIntervalMs: number;
+}
+
+function parseArgs(): {
+  command: string;
+  config: ServerConfig;
+  debug: boolean;
+  noTray: boolean;
+  tray: TrayOptions;
+} {
   const args = process.argv.slice(2);
   let command = 'run';
   let debug = false;
   let noTray = false;
   const config: ServerConfig = {};
+  const tray: TrayOptions = {
+    targetUrl: 'http://localhost:27123',
+    pollIntervalMs: 3000,
+  };
 
   // Environment variables for port (C123_SERVER_PORT takes precedence over PORT)
   const envPort = process.env.C123_SERVER_PORT || process.env.PORT;
@@ -24,7 +39,14 @@ function parseArgs(): { command: string; config: ServerConfig; debug: boolean; n
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
 
-    if (arg === 'install' || arg === 'uninstall' || arg === 'start' || arg === 'stop' || arg === 'run') {
+    if (
+      arg === 'install' ||
+      arg === 'uninstall' ||
+      arg === 'start' ||
+      arg === 'stop' ||
+      arg === 'run' ||
+      arg === 'tray'
+    ) {
       command = arg;
       continue;
     }
@@ -71,9 +93,20 @@ function parseArgs(): { command: string; config: ServerConfig; debug: boolean; n
     if (arg === '--no-tray') {
       noTray = true;
     }
+
+    if (arg === '--target-url' && args[i + 1]) {
+      tray.targetUrl = args[++i];
+    }
+
+    if (arg === '--poll-interval' && args[i + 1]) {
+      const parsed = parseInt(args[++i], 10);
+      if (!isNaN(parsed) && parsed >= 500) {
+        tray.pollIntervalMs = parsed;
+      }
+    }
   }
 
-  return { command, config, debug, noTray };
+  return { command, config, debug, noTray, tray };
 }
 
 /**
@@ -87,6 +120,7 @@ Usage: c123-server [command] [options]
 
 Commands:
   run         Run the server (default)
+  tray        Run the standalone tray monitor (polls a running server over HTTP)
   install     Install as Windows service
   uninstall   Uninstall Windows service
   start       Start the Windows service
@@ -104,6 +138,10 @@ Options:
   -h, --help          Show this help message
   -v, --version       Show version
 
+Tray-only options (use with \`tray\` command):
+  --target-url <url>   Server URL to poll (default: http://localhost:27123)
+  --poll-interval <ms> Poll interval in milliseconds, min 500 (default: 3000)
+
 Environment variables:
   C123_SERVER_PORT    Server port (overrides default, overridden by --server-port)
   PORT                Fallback for server port (if C123_SERVER_PORT not set)
@@ -112,6 +150,7 @@ Examples:
   c123-server                     # Run with auto-discovery
   c123-server --host 192.168.1.5  # Connect to specific C123
   c123-server install             # Install as Windows service
+  c123-server tray                # Run standalone tray monitor (user session)
 `);
 }
 
@@ -217,6 +256,116 @@ async function runServer(config: ServerConfig, debug: boolean, noTray: boolean):
 }
 
 /**
+ * Run the standalone tray monitor.
+ *
+ * This is a user-session process that polls a running c123-server over HTTP
+ * and reflects its state in a system tray icon. It exists because when
+ * c123-server is installed as a Windows service it runs in Session 0 and
+ * cannot display tray icons itself (architectural limit since Windows Vista).
+ *
+ * The monitor:
+ * - Does NOT start its own server — it only polls an existing one.
+ * - Uses the existing TrayManager driven purely by HTTP polling (no event-bus coupling).
+ * - Survives the server being unreachable (goes red, stays red, explicit Quit is the only exit).
+ * - Uses AbortController with a 2 s timeout so a filtered/hung socket can't stall the poll loop.
+ * - Uses recursive setTimeout instead of setInterval so a slow poll cannot overlap the next one.
+ */
+async function runTray(options: TrayOptions, debug: boolean): Promise<void> {
+  if (debug) {
+    Logger.setLevel('debug');
+  }
+
+  const { TrayManager } = await import('./tray/TrayManager.js');
+
+  // Derive the port used for the "Open Dashboard" menu item from the poll URL
+  // so --target-url http://localhost:28000 also opens the right dashboard.
+  let port = 27123;
+  try {
+    const parsed = new URL(options.targetUrl);
+    if (parsed.port) {
+      port = parseInt(parsed.port, 10);
+    }
+  } catch {
+    // Ignore — fall back to default 27123
+  }
+
+  let stopped = false;
+
+  const shutdown = () => {
+    if (stopped) return;
+    stopped = true;
+    Logger.info('Tray', 'Shutting down tray monitor');
+    tray.stop();
+    process.exit(0);
+  };
+
+  const tray = new TrayManager({ port, onQuit: shutdown });
+
+  const started = await tray.start();
+  if (!started) {
+    Logger.error('Tray', 'Failed to start system tray (systray2 not available or incompatible)');
+    process.exit(1);
+  }
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+
+  Logger.info('Tray', `Tray monitor started — polling ${options.targetUrl}/api/status every ${options.pollIntervalMs} ms`);
+
+  interface StatusResponse {
+    sources?: Array<{ name: string; status: string }>;
+    event?: { raceName?: string | null };
+  }
+
+  const poll = async (): Promise<void> => {
+    if (stopped) return;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+    try {
+      const res = await fetch(`${options.targetUrl}/api/status`, {
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        tray.setStatus('error', `Server returned HTTP ${res.status}`);
+      } else {
+        const data = (await res.json()) as StatusResponse;
+        const sources = data.sources ?? [];
+        const bad = sources.filter((s) => s.status !== 'connected');
+
+        if (sources.length === 0) {
+          tray.setStatus('warning', 'No data sources configured');
+        } else if (bad.length === 0) {
+          tray.setStatus('ok', data.event?.raceName ?? 'C123 Server running');
+        } else {
+          const names = bad.map((s) => s.name).join(', ');
+          tray.setStatus('warning', `${bad.length} source(s) reconnecting: ${names}`);
+        }
+      }
+    } catch {
+      // Either AbortError (timeout), network error, or JSON parse error —
+      // all mean "can't talk to server", which is a single user-facing state.
+      tray.setStatus('error', 'Server unreachable');
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    if (!stopped) {
+      setTimeout(() => {
+        void poll();
+      }, options.pollIntervalMs);
+    }
+  };
+
+  // Kick off first poll immediately — initial tray state comes from the
+  // TrayManager default ("warning" + "Starting..."), which will be overwritten
+  // by the first poll result a fraction of a second later.
+  void poll();
+}
+
+/**
  * Windows service management
  */
 async function handleServiceCommand(command: string): Promise<void> {
@@ -259,10 +408,12 @@ async function handleServiceCommand(command: string): Promise<void> {
  * Main entry point
  */
 async function main(): Promise<void> {
-  const { command, config, debug, noTray } = parseArgs();
+  const { command, config, debug, noTray, tray } = parseArgs();
 
   if (command === 'run') {
     await runServer(config, debug, noTray);
+  } else if (command === 'tray') {
+    await runTray(tray, debug);
   } else {
     await handleServiceCommand(command);
   }
