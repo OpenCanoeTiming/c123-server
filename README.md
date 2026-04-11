@@ -55,7 +55,24 @@ The server reads Canoe123's `user.config` file to find XML paths:
 
 The offline copy is recommended because it's updated atomically and safer to read.
 
-## Installation
+## Installation (Windows)
+
+Recommended for race organizers — no Node.js required.
+
+1. Download the latest installer from [Releases](https://github.com/OpenCanoeTiming/c123-server/releases/latest):
+   `c123-server-setup-x.y.z.exe`
+2. Double-click to run — UAC will prompt for admin privileges.
+3. The admin dashboard opens at http://localhost:27123.
+4. The `C123Server` Windows service is registered and started automatically. It starts with Windows and restarts on crash.
+
+To uninstall: Settings → Apps → **C123 Server** → Uninstall.
+User settings in `%APPDATA%\c123-server\` are preserved across upgrades and uninstall.
+
+Preview builds from the latest `main` commit are published at [`releases/tag/preview`](https://github.com/OpenCanoeTiming/c123-server/releases/tag/preview) — use these for testing bleeding-edge changes.
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for troubleshooting, service management, and advanced scenarios.
+
+## Installation (from source, for developers)
 
 ```bash
 npm install

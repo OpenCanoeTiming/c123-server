@@ -47,6 +47,17 @@
     <button class="btn btn-sm" onclick="redetectXmlPath()" style="background: var(--warning); color: var(--bg-body); white-space: nowrap;">Re-detect XML</button>
   </div>
 
+  <!-- Update Available Banner (populated by /api/update-check) -->
+  <div id="updateBanner" class="mismatch-banner mismatch-banner--info" style="display: none;" role="status" aria-live="polite">
+    <div class="mismatch-banner-content">
+      <svg class="mismatch-banner-icon" width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-11.25a.75.75 0 00-1.5 0v4.59L7.3 9.24a.75.75 0 00-1.1 1.02l3.25 3.5a.75.75 0 001.1 0l3.25-3.5a.75.75 0 10-1.1-1.02l-1.95 2.1V6.75z" clip-rule="evenodd"/>
+      </svg>
+      <span id="updateMessage">A new version is available</span>
+    </div>
+    <a id="updateLink" href="https://github.com/OpenCanoeTiming/c123-server/releases/latest" target="_blank" rel="noopener" class="btn btn-sm" style="background: var(--info, var(--accent)); color: var(--bg-body); white-space: nowrap; text-decoration: none;">Download</a>
+  </div>
+
   <main class="main-content" id="main-content">
 
   <!-- Event Info Bar (prominent position) -->

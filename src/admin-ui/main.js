@@ -2732,6 +2732,7 @@ function init() {
   loadAssets();
   loadMismatchStatus();
   loadLiveStatus();
+  loadUpdateCheck();
   connectLogWebSocket();
 
   // Periodic refresh
@@ -2739,6 +2740,39 @@ function init() {
   setInterval(loadXmlConfig, 5000);
   setInterval(loadEventName, 5000);
   setInterval(loadClients, 3000);
+  // Update check is hourly — the server caches responses for 1 hour so
+  // more frequent polling would just return the same payload.
+  setInterval(loadUpdateCheck, 60 * 60 * 1000);
+}
+
+/**
+ * Query /api/update-check and show the "new version available" banner if
+ * a newer stable release is published on GitHub. Fail-safe: any error is
+ * silently ignored so the banner stays hidden.
+ */
+async function loadUpdateCheck() {
+  const banner = document.getElementById('updateBanner');
+  const message = document.getElementById('updateMessage');
+  const link = document.getElementById('updateLink');
+  if (!banner || !message || !link) return;
+
+  try {
+    const response = await fetch('/api/update-check');
+    if (!response.ok) return;
+    const data = await response.json();
+
+    if (data && data.isNewer && data.latest) {
+      message.textContent =
+        'A new version is available: v' + data.latest + ' (you have v' + data.current + ')';
+      if (data.url) link.href = data.url;
+      banner.style.display = '';
+    } else {
+      banner.style.display = 'none';
+    }
+  } catch (_err) {
+    // Never break the admin UI because of a failed update check.
+    banner.style.display = 'none';
+  }
 }
 
 // Run initialization when DOM is ready

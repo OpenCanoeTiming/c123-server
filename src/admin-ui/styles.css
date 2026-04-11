@@ -2840,3 +2840,10 @@ fieldset.modal-section > legend {
 .mismatch-banner-icon {
   flex-shrink: 0;
 }
+
+/* Info variant — used for the update-available banner */
+.mismatch-banner--info {
+  background: color-mix(in srgb, var(--info, var(--accent)) 15%, transparent);
+  border-color: var(--info, var(--accent));
+  color: var(--info, var(--accent));
+}

@@ -205,6 +205,14 @@ export interface AppSettings {
   eventNameOverride?: string;
   /** TTL in ms for XML data cache — skips file re-read within this window (default: 5000) */
   xmlCacheTtlMs?: number;
+  /**
+   * Enable GitHub release update checks.
+   * When true (default), the admin UI periodically calls /api/update-check
+   * which queries the GitHub Releases API and shows a banner if a newer
+   * version is available. Set to false on closed networks where outbound
+   * HTTPS to api.github.com is not desired.
+   */
+  updateCheck?: boolean;
   /** Timestamp of settings last update */
   lastUpdated?: string;
 
@@ -240,6 +248,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   xmlAutoDetect: true, // deprecated, kept for backwards compatibility
   xmlAutoDetectInterval: 30000, // 30 seconds
   xmlCacheTtlMs: 5000, // 5 seconds
+  updateCheck: true, // opt-out via settings.json for closed networks
   live: {
     enabled: false,
     serverUrl: null,
