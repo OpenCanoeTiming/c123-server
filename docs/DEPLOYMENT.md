@@ -128,15 +128,59 @@ Shown as a popup at the end of installation. The installer copied files successf
 
 If that works, you're done. If it still fails, open an issue with the output.
 
-### No system tray icon after installing
+### System tray icon
 
-Expected. The installer registers c123-server as a **Windows service**, which runs in *Session 0* — an isolated, non-interactive session that cannot show tray icons (since Windows Vista introduced Session 0 isolation). `systray2` calls `Shell_NotifyIcon`, which silently fails there.
+The installer ships a **tray monitor** — a lightweight user-session process (`C123 Server Monitor`) that polls the installed service over HTTP and reflects its state in the tray icon:
 
-If you previously ran c123-server via `npm start` from a logged-in shell, that process lived in your interactive session and the tray icon worked. The installer-managed service runs in a different security context by design, trading visual feedback for robustness (auto-start on boot, restart on crash, no need to keep a user logged in).
+| Icon | Meaning | Typical cause |
+|------|---------|---------------|
+| 🟢 Green | All data sources `connected`, server healthy | Normal |
+| 🟡 Yellow | A source is `connecting` (transient backoff) **or** no sources configured | Race not started, scoreboard in reconnect |
+| 🔴 Red | A source is terminally `disconnected` **or** the server itself is unreachable | Wrong XML path, service stopped, port filtered |
 
-Use the **admin dashboard** (<http://localhost:27123>) for live status, connection counts, event info, and logs. There is a Start Menu shortcut to open it.
+Right-click gives you "Open Dashboard" and "Quit". The menu title reads "C123 Server Monitor" so you can tell it apart from a locally-run `npm start` tray, and the Quit tooltip makes clear that **Quit only closes the monitor — it does NOT stop the underlying service**.
 
-A lightweight tray monitor (a separate user-session process polling `/api/status`) is tracked in [issue #69](https://github.com/OpenCanoeTiming/c123-server/issues/69).
+The monitor is installed as a shortcut in your user Startup folder (`shell:startup`) and auto-starts at every login. The shortcut target is `wscript.exe %ProgramFiles%\C123 Server\tray-launcher.vbs`, which in turn spawns `node.exe cli.js tray` with no console window.
+
+#### Why a separate process?
+
+The service itself runs in *Session 0* — an isolated, non-interactive session that cannot show tray icons (a Windows Vista-era security boundary). `systray2` would silently fail there. The monitor is a second process that lives in *your* interactive session and talks to the service only over `http://localhost:27123/api/status`. No IPC, no event-bus coupling, just HTTP polling every 3 seconds.
+
+#### Install-account gotcha (UAC)
+
+The `{userstartup}` shortcut lands in the Startup folder of **whoever runs the installer**. If you install by right-clicking the `.exe` → *Run as administrator* and typing a different admin password at the UAC prompt, the shortcut ends up in the **administrator's** Startup folder — the operator who logs in day-to-day never sees the tray icon.
+
+**Recommendation:** log in as the operator account first, then double-click the installer (UAC will still prompt for admin credentials, but the shortcut is created for the already-logged-in user). If you installed under the wrong account, copy the shortcut manually from `C:\Users\<admin>\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup` into the operator's equivalent folder — or run the installer again while logged in as the operator.
+
+#### Disabling or moving the tray
+
+- **Disable for one user:** delete the `C123 Server Tray` shortcut from `shell:startup` (press <kbd>Win</kbd>+<kbd>R</kbd>, type `shell:startup`, delete the shortcut).
+- **Disable for all users:** not installed for all users by default — the shortcut is per-user only.
+- **Stop the running tray:** right-click the icon → *Quit*. It will come back at the next login unless you also delete the shortcut.
+
+#### Debugging a missing tray icon
+
+The tray writes all log output to `%APPDATA%\c123-server\tray.log` (rotated at 512 KB to `tray.log.old`). If the icon doesn't appear, **check that file first** — it captures startup errors even when running under `wscript.exe` with no console.
+
+If the log file is empty or missing, the most common causes are (a) `wscript.exe` is blocked by a security policy, (b) `systray2`'s bundled Go binary is missing or quarantined by AV, or (c) the service on port 27123 is unreachable. To see live output while debugging, run the tray manually from a command prompt so its stderr is visible:
+
+```cmd
+"C:\Program Files\C123 Server\runtime\node.exe" "C:\Program Files\C123 Server\app\dist\cli.js" tray
+```
+
+Add `--debug` for verbose logging. If the tray launches but immediately turns red, the service is the problem — check `sc.exe query c123server.exe`.
+
+**If you see two tray icons:** the Startup copy is already running and you launched another manually. Right-click one and Quit, or kill the duplicate `node.exe` from Task Manager. The monitor has no mutex against double-launch.
+
+#### Running the tray manually against a non-default port
+
+If you changed the server port in `%APPDATA%\c123-server\settings.json`, the bundled Startup shortcut still polls the default `27123` and will go red. Either (a) revert the port, or (b) replace the shortcut target with:
+
+```cmd
+"C:\Program Files\C123 Server\runtime\node.exe" "C:\Program Files\C123 Server\app\dist\cli.js" tray --target-url http://localhost:28000
+```
+
+— substituting your actual port. The "Open Dashboard" menu item will honour `--target-url`, so the monitor and the dashboard link stay in sync.
 
 ### Scoreboards on the LAN cannot connect
 

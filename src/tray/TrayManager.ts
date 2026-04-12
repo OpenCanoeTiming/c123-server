@@ -5,8 +5,27 @@ import { getIcon, type TrayStatus } from './icons.js';
 export type { TrayStatus } from './icons.js';
 
 export interface TrayManagerConfig {
-  /** Server port for dashboard URL */
+  /** Server port — used to build `http://localhost:${port}` if dashboardUrl is not given */
   port: number;
+  /**
+   * Full dashboard URL. Overrides the default `http://localhost:${port}`.
+   * Set this in the standalone tray monitor so "Open Dashboard" opens the
+   * actual polled server (not a hardcoded localhost) when --target-url points
+   * at a non-default host or port.
+   */
+  dashboardUrl?: string;
+  /**
+   * Title shown as the menu header and in the tray tooltip prefix.
+   * Default: "C123 Server". The standalone tray monitor overrides this to
+   * "C123 Server Monitor" so users can tell the processes apart.
+   */
+  titleText?: string;
+  /**
+   * Tooltip on the Quit menu item. Default: "Stop C123 Server".
+   * The standalone tray monitor overrides this to make clear that Quit only
+   * closes the monitor, not the underlying service.
+   */
+  quitTooltip?: string;
   /** Called when user clicks Quit in the tray menu */
   onQuit: () => void;
 }
@@ -55,7 +74,7 @@ export class TrayManager {
         menu: {
           icon,
           title: '',
-          tooltip: 'C123 Server',
+          tooltip: this.getTitleText(),
           items: this.buildMenuItems(),
         },
         debug: false,
@@ -84,6 +103,20 @@ export class TrayManager {
   }
 
   /**
+   * Get the configured title text (falls back to "C123 Server").
+   */
+  private getTitleText(): string {
+    return this.config.titleText ?? 'C123 Server';
+  }
+
+  /**
+   * Get the configured dashboard URL (falls back to localhost:port).
+   */
+  private getDashboardUrl(): string {
+    return this.config.dashboardUrl ?? `http://localhost:${this.config.port}`;
+  }
+
+  /**
    * Build the full menu items array for the current state.
    */
   private buildMenuItems(): Array<{ title: string; tooltip: string; enabled: boolean }> {
@@ -91,11 +124,14 @@ export class TrayManager {
       ? this.statusMessage.substring(0, 77) + '...'
       : this.statusMessage;
 
+    const dashboardUrl = this.getDashboardUrl();
+    const quitTooltip = this.config.quitTooltip ?? 'Stop C123 Server';
+
     return [
-      { title: 'C123 Server', tooltip: '', enabled: false },
+      { title: this.getTitleText(), tooltip: '', enabled: false },
       { title: `Status: ${truncated}`, tooltip: '', enabled: false },
-      { title: 'Open Dashboard', tooltip: `Open http://localhost:${this.config.port}`, enabled: true },
-      { title: 'Quit', tooltip: 'Stop C123 Server', enabled: true },
+      { title: 'Open Dashboard', tooltip: `Open ${dashboardUrl}`, enabled: true },
+      { title: 'Quit', tooltip: quitTooltip, enabled: true },
     ];
   }
 
@@ -122,7 +158,7 @@ export class TrayManager {
       menu: {
         icon,
         title: '',
-        tooltip: `C123 Server - ${truncated}`,
+        tooltip: `${this.getTitleText()} - ${truncated}`,
         items: this.buildMenuItems(),
       },
     });
@@ -172,7 +208,7 @@ export class TrayManager {
    * Open the admin dashboard in the default browser.
    */
   private openDashboard(): void {
-    const url = `http://localhost:${this.config.port}`;
+    const url = this.getDashboardUrl();
 
     let command: string;
     switch (process.platform) {

@@ -1,5 +1,23 @@
 # C123 Server - Development Log
 
+## 2026-04-11 — Second-opinion review caught three bugs my own review missed (tray monitor, #69)
+
+**Problem:** After writing what I thought was a thorough review of PR #71 (standalone tray monitor), a `/second-opinion` sweep across Gemini 3 Pro and Claude Code (fresh session) independently flagged three user-facing bugs I had missed or waved off as polish.
+
+**Bugs missed in the primary review:**
+1. `TrayManager.openDashboard()` hardcoded `http://localhost:${port}` — so `--target-url http://remote:27123` polled remote but opened localhost. I had praised "port derivation from --target-url" as a *strength* because I only checked that the port was threaded through, not that the URL it was used in was also parameterized.
+2. The `disconnected` source status was rendered as yellow "reconnecting" — conflating a terminal failure (wrong XML path, dead host) with a transient backoff. Operators would see yellow when they should see red.
+3. The `Quit` menu item tooltip hardcoded `'Stop C123 Server'` — in monitor mode, Quit only closes the tray process, but the label implied it stops the service.
+
+**Attempted:** My original review treated all three as minor polish or noted only tangentially. Gemini caught #1 immediately; Claude Code caught all three and connected #2 to an existing convention in `runServer()` that I hadn't cross-referenced.
+
+**Solution:**
+- `TrayManagerConfig` now takes optional `dashboardUrl`, `titleText`, `quitTooltip` overrides. `runTray` threads the full URL through, labels as "C123 Server Monitor", and makes Quit's tooltip explicit about scope.
+- Extracted `src/tray/statusMapping.ts` as a pure function with full unit test coverage. `disconnected` → red (wins over everything else); `connecting` → yellow; empty `raceName` falls through to default via `||` not `??`.
+- Added `%APPDATA%\c123-server\tray.log` so silent `wscript.exe`-launched crashes leave a diagnostic trail (the original PR's "run manually from cmd" advice is fine for known problems but useless when operators don't know anything is wrong).
+
+**Lesson:** A self-review after reading the TrayManager implementation still missed that `openDashboard()` used a hardcoded localhost URL — I had the evidence in my context and wrote it off. Running second-opinion reviewers on non-trivial PRs is cheap and catches the specific class of bug where "I verified X was passed through but not what X was actually used for". Especially valuable when the review is flattering toward the PR (my bias was "this is a clean PR, probably nothing wrong"). Also: **when two independent reviewers flag the same issue on the first pass, treat it as a must-fix, not a suggestion** — both Gemini and Claude Code caught the localhost hardcoding without prompting.
+
 ## 2026-04-10 — Windows installer (Inno Setup + bundled Node.js)
 
 **Problem:** End users (race organizers) had to clone the repo, install Node.js, run `npm install` + `npm run build`, and only then `npm start -- install`. Too many steps for non-technical users; see issue #9.

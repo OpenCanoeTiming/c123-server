@@ -1,16 +1,36 @@
 #!/usr/bin/env node
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { format } from 'node:util';
 import { Server, ServerConfig } from './server.js';
 import { Logger } from './utils/logger.js';
+import { mapStatusResponse, type MinimalStatusResponse } from './tray/statusMapping.js';
 
 /**
  * Parse command line arguments
  */
-function parseArgs(): { command: string; config: ServerConfig; debug: boolean; noTray: boolean } {
+interface TrayOptions {
+  targetUrl: string;
+  pollIntervalMs: number;
+}
+
+function parseArgs(): {
+  command: string;
+  config: ServerConfig;
+  debug: boolean;
+  noTray: boolean;
+  tray: TrayOptions;
+} {
   const args = process.argv.slice(2);
   let command = 'run';
   let debug = false;
   let noTray = false;
   const config: ServerConfig = {};
+  const tray: TrayOptions = {
+    targetUrl: 'http://localhost:27123',
+    pollIntervalMs: 3000,
+  };
 
   // Environment variables for port (C123_SERVER_PORT takes precedence over PORT)
   const envPort = process.env.C123_SERVER_PORT || process.env.PORT;
@@ -24,7 +44,14 @@ function parseArgs(): { command: string; config: ServerConfig; debug: boolean; n
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
 
-    if (arg === 'install' || arg === 'uninstall' || arg === 'start' || arg === 'stop' || arg === 'run') {
+    if (
+      arg === 'install' ||
+      arg === 'uninstall' ||
+      arg === 'start' ||
+      arg === 'stop' ||
+      arg === 'run' ||
+      arg === 'tray'
+    ) {
       command = arg;
       continue;
     }
@@ -71,9 +98,20 @@ function parseArgs(): { command: string; config: ServerConfig; debug: boolean; n
     if (arg === '--no-tray') {
       noTray = true;
     }
+
+    if (arg === '--target-url' && args[i + 1]) {
+      tray.targetUrl = args[++i];
+    }
+
+    if (arg === '--poll-interval' && args[i + 1]) {
+      const parsed = parseInt(args[++i], 10);
+      if (!isNaN(parsed) && parsed >= 500) {
+        tray.pollIntervalMs = parsed;
+      }
+    }
   }
 
-  return { command, config, debug, noTray };
+  return { command, config, debug, noTray, tray };
 }
 
 /**
@@ -87,6 +125,7 @@ Usage: c123-server [command] [options]
 
 Commands:
   run         Run the server (default)
+  tray        Run the standalone tray monitor (polls a running server over HTTP)
   install     Install as Windows service
   uninstall   Uninstall Windows service
   start       Start the Windows service
@@ -104,6 +143,10 @@ Options:
   -h, --help          Show this help message
   -v, --version       Show version
 
+Tray-only options (use with \`tray\` command):
+  --target-url <url>   Server URL to poll (default: http://localhost:27123)
+  --poll-interval <ms> Poll interval in milliseconds, min 500 (default: 3000)
+
 Environment variables:
   C123_SERVER_PORT    Server port (overrides default, overridden by --server-port)
   PORT                Fallback for server port (if C123_SERVER_PORT not set)
@@ -112,6 +155,7 @@ Examples:
   c123-server                     # Run with auto-discovery
   c123-server --host 192.168.1.5  # Connect to specific C123
   c123-server install             # Install as Windows service
+  c123-server tray                # Run standalone tray monitor (user session)
 `);
 }
 
@@ -217,6 +261,225 @@ async function runServer(config: ServerConfig, debug: boolean, noTray: boolean):
 }
 
 /**
+ * Return the C123 Server user-settings directory for the current platform.
+ * Matches AppSettingsManager.getSettingsPath() so both live in the same dir.
+ *   Windows: %APPDATA%\c123-server
+ *   Linux/macOS: ~/.c123-server
+ */
+function getAppDataDir(): string {
+  if (process.platform === 'win32') {
+    const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+    return path.join(appData, 'c123-server');
+  }
+  return path.join(os.homedir(), '.c123-server');
+}
+
+/**
+ * Tee console.{log,error,warn,debug} to a log file in the app-data dir.
+ *
+ * Why: under `wscript.exe tray-launcher.vbs` stdout/stderr are discarded, so
+ * a silently crashing tray at login leaves zero diagnostic trail. This patch
+ * intercepts at the console level (rather than replacing Logger) because
+ * Logger already writes through console.*, so we catch all log output with
+ * minimal surface area.
+ *
+ * Rotation: on startup, if the existing log is larger than LOG_ROTATE_SIZE
+ * bytes, rename it to `.old` (overwriting any prior `.old`). This is a
+ * single-generation rotation — good enough for a human operator debugging a
+ * startup failure, and never grows unbounded.
+ *
+ * @returns the log file path, or null if setup failed (directory not writable etc.)
+ */
+function setupTrayFileLog(): string | null {
+  const LOG_ROTATE_SIZE = 512 * 1024; // 512 KB
+  try {
+    const dir = getAppDataDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const logPath = path.join(dir, 'tray.log');
+
+    try {
+      if (fs.statSync(logPath).size > LOG_ROTATE_SIZE) {
+        fs.renameSync(logPath, logPath + '.old');
+      }
+    } catch {
+      // File doesn't exist yet — nothing to rotate.
+    }
+
+    const origLog = console.log.bind(console);
+    const origError = console.error.bind(console);
+    const origWarn = console.warn.bind(console);
+    const origDebug = console.debug.bind(console);
+
+    // Strip ANSI escape codes so the file stays readable in Notepad/less.
+    // Colors should already be off under wscript (no TTY), but users may
+    // also run `node cli.js tray` from cmd where colors ARE on — keep
+    // the file consistent in both cases. The control char in the regex
+    // is intentional, hence the eslint disable.
+    // eslint-disable-next-line no-control-regex
+    const ansiEscapeRegex = /\x1b\[[0-9;]*m/g;
+
+    const writeToFile = (...args: unknown[]): void => {
+      try {
+        const line = format(...args).replace(ansiEscapeRegex, '');
+        fs.appendFileSync(logPath, line + '\n');
+      } catch {
+        // Logging itself failed — nothing useful we can do.
+      }
+    };
+
+    console.log = (...args: unknown[]) => {
+      origLog(...args);
+      writeToFile(...args);
+    };
+    console.error = (...args: unknown[]) => {
+      origError(...args);
+      writeToFile(...args);
+    };
+    console.warn = (...args: unknown[]) => {
+      origWarn(...args);
+      writeToFile(...args);
+    };
+    console.debug = (...args: unknown[]) => {
+      origDebug(...args);
+      writeToFile(...args);
+    };
+
+    return logPath;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Run the standalone tray monitor.
+ *
+ * This is a user-session process that polls a running c123-server over HTTP
+ * and reflects its state in a system tray icon. It exists because when
+ * c123-server is installed as a Windows service it runs in Session 0 and
+ * cannot display tray icons itself (architectural limit since Windows Vista).
+ *
+ * The monitor:
+ * - Does NOT start its own server — it only polls an existing one.
+ * - Uses the existing TrayManager driven purely by HTTP polling (no event-bus coupling).
+ * - Survives the server being unreachable (goes red, stays red, explicit Quit is the only exit).
+ * - Uses AbortController with a 2 s timeout so a filtered/hung socket can't stall the poll loop.
+ * - Uses recursive setTimeout instead of setInterval so a slow poll cannot overlap the next one.
+ * - Parameterizes TrayManager labels so "Quit" and the menu title make clear
+ *   it's the MONITOR being stopped, not the underlying service.
+ * - Tees all log output to `${APPDATA}/c123-server/tray.log` so a silent
+ *   crash under `wscript.exe` still leaves a diagnostic trail.
+ */
+async function runTray(options: TrayOptions, debug: boolean): Promise<void> {
+  // Set up file logging BEFORE anything else so startup errors are captured.
+  const logPath = setupTrayFileLog();
+
+  if (debug) {
+    Logger.setLevel('debug');
+  }
+
+  // Parse & normalize the target URL up front.
+  // - `origin` gives us a clean scheme+host+port string for both the dashboard
+  //   URL and the status endpoint (handles trailing slashes, no-port cases, etc.).
+  // - If the user passes an invalid URL, fail cleanly with a helpful message
+  //   rather than hitting the generic fetch() failure path every 3 s.
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(options.targetUrl);
+  } catch {
+    Logger.error('Tray', `Invalid --target-url: "${options.targetUrl}"`);
+    process.exit(1);
+  }
+  const dashboardUrl = parsedUrl.origin; // e.g. "http://localhost:27123"
+  const statusUrl = new URL('/api/status', parsedUrl).toString();
+
+  // Still keep a numeric port for the existing TrayManagerConfig.port field
+  // (dashboardUrl overrides it in practice). Fall back to 80/443/27123 in that
+  // order if the URL has no explicit port.
+  const port = parsedUrl.port
+    ? parseInt(parsedUrl.port, 10)
+    : parsedUrl.protocol === 'https:'
+      ? 443
+      : parsedUrl.protocol === 'http:'
+        ? 80
+        : 27123;
+
+  const { TrayManager } = await import('./tray/TrayManager.js');
+
+  let stopped = false;
+
+  const shutdown = (): void => {
+    if (stopped) return;
+    stopped = true;
+    Logger.info('Tray', 'Shutting down tray monitor');
+    tray.stop();
+    process.exit(0);
+  };
+
+  const tray = new TrayManager({
+    port,
+    dashboardUrl,
+    titleText: 'C123 Server Monitor',
+    quitTooltip: 'Close the monitor (server keeps running)',
+    onQuit: shutdown,
+  });
+
+  const started = await tray.start();
+  if (!started) {
+    Logger.error('Tray', 'Failed to start system tray (systray2 not available or incompatible)');
+    process.exit(1);
+  }
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+
+  Logger.info(
+    'Tray',
+    `Tray monitor started — polling ${statusUrl} every ${options.pollIntervalMs} ms`,
+  );
+  if (logPath) {
+    Logger.info('Tray', `Log file: ${logPath}`);
+  }
+
+  const poll = async (): Promise<void> => {
+    if (stopped) return;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+    try {
+      const res = await fetch(statusUrl, { signal: controller.signal });
+
+      if (!res.ok) {
+        const { status, message } = mapStatusResponse(null, `Server returned HTTP ${res.status}`);
+        tray.setStatus(status, message);
+      } else {
+        const data = (await res.json()) as MinimalStatusResponse;
+        const { status, message } = mapStatusResponse(data);
+        tray.setStatus(status, message);
+      }
+    } catch {
+      // Either AbortError (timeout), network error, or JSON parse error —
+      // all mean "can't talk to server", which is a single user-facing state.
+      const { status, message } = mapStatusResponse(null);
+      tray.setStatus(status, message);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    if (!stopped) {
+      setTimeout(() => {
+        void poll();
+      }, options.pollIntervalMs);
+    }
+  };
+
+  // Kick off first poll immediately — initial tray state comes from the
+  // TrayManager default ("warning" + "Starting..."), which will be overwritten
+  // by the first poll result a fraction of a second later.
+  void poll();
+}
+
+/**
  * Windows service management
  */
 async function handleServiceCommand(command: string): Promise<void> {
@@ -259,10 +522,12 @@ async function handleServiceCommand(command: string): Promise<void> {
  * Main entry point
  */
 async function main(): Promise<void> {
-  const { command, config, debug, noTray } = parseArgs();
+  const { command, config, debug, noTray, tray } = parseArgs();
 
   if (command === 'run') {
     await runServer(config, debug, noTray);
+  } else if (command === 'tray') {
+    await runTray(tray, debug);
   } else {
     await handleServiceCommand(command);
   }
