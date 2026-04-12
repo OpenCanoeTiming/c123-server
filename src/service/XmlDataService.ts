@@ -171,7 +171,7 @@ export class XmlDataService {
       attributeNamePrefix: '@_',
       allowBooleanAttributes: true,
       parseTagValue: true,
-      trimValues: true,
+      trimValues: false,
     });
   }
 

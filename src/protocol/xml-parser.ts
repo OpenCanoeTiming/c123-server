@@ -16,7 +16,7 @@ const parser = new XMLParser({
   attributeNamePrefix: '@_',
   textNodeName: '#text',
   parseAttributeValue: false,
-  trimValues: true,
+  trimValues: false,
 });
 
 /**
