@@ -75,7 +75,7 @@ InfoAfterFile=..\build-output\README.txt
 
 ; Uninstaller polish
 UninstallDisplayName={#AppName} {#AppVersion}
-UninstallDisplayIcon={app}\runtime\node.exe
+UninstallDisplayIcon={app}\c123-server.ico
 
 [Languages]
 Name: "en"; MessagesFile: "compiler:Default.isl"
@@ -86,6 +86,7 @@ Source: "..\build-output\app\*";     DestDir: "{app}\app";     Flags: ignorevers
 Source: "..\build-output\LICENSE";   DestDir: "{app}";         Flags: ignoreversion
 Source: "..\build-output\README.txt"; DestDir: "{app}";        Flags: ignoreversion
 Source: "launcher.vbs";               DestDir: "{app}";        Flags: ignoreversion
+Source: "c123-server.ico";            DestDir: "{app}";        Flags: ignoreversion
 
 [InstallDelete]
 ; Migration: remove old files from the service-based architecture
@@ -98,7 +99,7 @@ Type: files; Name: "{userstartup}\{#AppName} Tray.lnk"
 Name: "{group}\{#AppName}"; Filename: "{sys}\wscript.exe"; \
   Parameters: """{app}\launcher.vbs"""; \
   WorkingDir: "{app}"; \
-  IconFilename: "{app}\runtime\node.exe"; \
+  IconFilename: "{app}\c123-server.ico"; \
   Comment: "Start C123 Server"
 Name: "{group}\{#AppName} Dashboard"; Filename: "http://localhost:{#ServerPort}"
 Name: "{group}\{#AppName} README"; Filename: "{app}\README.txt"
@@ -207,13 +208,15 @@ begin
 end;
 
 // Kill any running C123 Server process launched via launcher.vbs.
-// Uses wmic to target only our specific process, not all node.exe instances.
+// Uses PowerShell Get-CimInstance to target only our specific process,
+// not all node.exe instances. Avoids deprecated wmic.exe (removed in
+// Windows 11 24H2).
 procedure KillRunningServer;
 var
   ResultCode: Integer;
 begin
-  Exec(ExpandConstant('{cmd}'),
-    '/c wmic process where "CommandLine like ''%cli.js%'' and CommandLine like ''%c123%''" call terminate >nul 2>&1',
+  Exec('powershell.exe',
+    '-NoProfile -NonInteractive -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like ''*cli.js*'' -and $_.CommandLine -like ''*c123*'' } | Invoke-CimMethod -MethodName Terminate | Out-Null"',
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 

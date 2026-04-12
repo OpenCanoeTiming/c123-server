@@ -200,6 +200,16 @@ describe('NotificationManager', () => {
       expect(script).not.toContain('$PATH');
     });
 
+    it('should XML-escape special characters in toast notifications', () => {
+      manager.notify({ title: 'C123 & Server', message: 'Value <100>' });
+
+      const command = execMock.mock.calls[0][0] as string;
+      const script = decodeCommand(command);
+      expect(script).toContain('C123 &amp; Server');
+      expect(script).toContain('Value &lt;100&gt;');
+      expect(script).not.toContain('<100>');
+    });
+
     it('should truncate long messages', () => {
       const longMessage = 'A'.repeat(500);
       manager.notify({ title: 'Test', message: longMessage });

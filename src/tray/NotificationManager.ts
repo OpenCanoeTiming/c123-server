@@ -107,7 +107,7 @@ export class NotificationManager {
     const script = [
       '[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null',
       '[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom, ContentType = WindowsRuntime] | Out-Null',
-      `$xml = "<toast><visual><binding template='ToastGeneric'><text>${title}</text><text>${message}</text></binding></visual></toast>"`,
+      `$xml = "<toast><visual><binding template='ToastGeneric'><text>${this.xmlEscape(title)}</text><text>${this.xmlEscape(message)}</text></binding></visual></toast>"`,
       '$doc = New-Object Windows.Data.Xml.Dom.XmlDocument',
       '$doc.LoadXml($xml)',
       `[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('${AUMID}').Show([Windows.UI.Notifications.ToastNotification]::new($doc))`,
@@ -153,6 +153,16 @@ export class NotificationManager {
         Logger.debug('Notify', `Notification failed: ${err.message}`);
       }
     });
+  }
+
+  /**
+   * Escape XML special characters for safe embedding in toast XML.
+   */
+  private xmlEscape(input: string): string {
+    return input
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
   }
 
   /**
