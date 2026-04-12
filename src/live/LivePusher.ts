@@ -768,7 +768,9 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
     try {
       await this.transitionStatus(desired);
     } catch (error) {
-      Logger.warn('LivePusher', 'Auto-status: transition failed', error);
+      // Clear cached statuses so the next state update re-triggers evaluation
+      this.previousRaceStatuses.clear();
+      Logger.warn('LivePusher', 'Auto-status: transition failed, will retry on next change', error);
     }
   }
 
