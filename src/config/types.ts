@@ -258,5 +258,6 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     pushXml: true,
     pushOnCourse: true,
     pushResults: true,
+    autoStatus: true,
   },
 };

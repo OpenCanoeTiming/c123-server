@@ -182,6 +182,15 @@
         </div>
       </div>
 
+      <!-- Auto Status Toggle -->
+      <div class="live-auto-status-row">
+        <label class="live-channel-toggle">
+          <input type="checkbox" id="liveToggleAutoStatus" onchange="toggleAutoStatus()">
+          <span>Auto Status</span>
+        </label>
+        <span class="text-muted small">Automatically transitions event status based on race progress</span>
+      </div>
+
       <!-- Push Status Cards (per-channel) with integrated toggles -->
       <div class="live-channels-grid">
         <div class="live-channel-card" id="liveChannelXml">

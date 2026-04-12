@@ -210,6 +210,8 @@ export interface LiveConfig {
   pushOnCourse: boolean;
   /** Push Results data */
   pushResults: boolean;
+  /** Automatically transition event status based on C123 race statuses */
+  autoStatus: boolean;
 }
 
 /**
@@ -224,6 +226,7 @@ export const DEFAULT_LIVE_CONFIG: LiveConfig = {
   pushXml: true,
   pushOnCourse: true,
   pushResults: true,
+  autoStatus: true,
 };
 
 // ============================================================================
@@ -289,4 +292,6 @@ export interface LiveStatus {
   lastError: string | null;
   /** Connected timestamp */
   connectedAt: string | null;
+  /** Auto-status enabled */
+  autoStatus: boolean;
 }
