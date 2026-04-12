@@ -97,6 +97,7 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
   // Auto-status
   private autoStatusEnabled = false;
   private previousRaceStatuses: Map<string, number> = new Map();
+  private isTransitioning = false;
 
   constructor(xmlDataService: XmlDataService) {
     super();
@@ -155,20 +156,20 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
       Logger.warn('LivePusher', 'Failed to refresh participant mapping', error);
     }
 
-    // Setup event listeners
-    this.setupEventListeners();
-
     // Initial push of current state (in case state arrived before connect)
     const currentState = eventState.state;
     if (config.pushResults && currentState.results) {
       this.scheduleResultsPush(currentState.results);
     }
 
-    // Auto-status: evaluate current schedule state (catch-up on reconnect)
+    // Auto-status: init baseline BEFORE listeners to avoid false change detection
     if (this.autoStatusEnabled && currentState.schedule.length > 0) {
       this.initRaceStatuses(currentState.schedule);
       this.evaluateAutoStatus();
     }
+
+    // Setup event listeners (after init so race status baseline is set)
+    this.setupEventListeners();
 
     // Reset circuit breaker
     this.consecutiveFailures = 0;
@@ -754,6 +755,7 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
    * Only transitions forward (never backwards).
    */
   private async evaluateAutoStatus(): Promise<void> {
+    if (this.isTransitioning) return;
     if (!this.eventState || !this.client) return;
     if (this.status.state !== 'connected') return;
 
@@ -765,12 +767,15 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
     if (!isForwardTransition(current, desired)) return;
 
     Logger.info('LivePusher', `Auto-status: transitioning ${current} → ${desired}`);
+    this.isTransitioning = true;
     try {
       await this.transitionStatus(desired);
     } catch (error) {
       // Clear cached statuses so the next state update re-triggers evaluation
       this.previousRaceStatuses.clear();
       Logger.warn('LivePusher', 'Auto-status: transition failed, will retry on next change', error);
+    } finally {
+      this.isTransitioning = false;
     }
   }
 
