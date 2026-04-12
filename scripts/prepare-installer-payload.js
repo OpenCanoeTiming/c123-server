@@ -196,6 +196,27 @@ function stageDocs() {
   writeFileSync(join(BUILD_OUTPUT, 'README.txt'), readmeText);
 }
 
+function compileStampAumid() {
+  const cscExe = join(
+    process.env.SystemRoot ?? 'C:\\Windows',
+    'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe',
+  );
+  if (!existsSync(cscExe)) {
+    throw new Error(`csc.exe not found at ${cscExe} — .NET Framework 4.x is required`);
+  }
+
+  const srcFile = join(projectRoot, 'installer', 'stamp-aumid.cs');
+  const outFile = join(BUILD_OUTPUT, 'stamp-aumid.exe');
+  log('Compiling stamp-aumid.exe');
+  execSync(
+    `"${cscExe}" /nologo /optimize /platform:anycpu /out:"${outFile}" "${srcFile}"`,
+    { cwd: projectRoot, stdio: 'inherit' },
+  );
+  if (!existsSync(outFile)) {
+    throw new Error('stamp-aumid.exe compilation produced no output');
+  }
+}
+
 function writeIssDefines() {
   const pkg = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf-8'));
   const version = pkg.version ?? '0.0.0';
@@ -230,6 +251,7 @@ async function main() {
     await ensureNodeRuntime();
     stageRuntime();
     stageDocs();
+    compileStampAumid();
     writeIssDefines();
     log(`Payload ready at: ${BUILD_OUTPUT}`);
   } catch (err) {

@@ -87,6 +87,7 @@ Source: "..\build-output\LICENSE";   DestDir: "{app}";         Flags: ignorevers
 Source: "..\build-output\README.txt"; DestDir: "{app}";        Flags: ignoreversion
 Source: "launcher.vbs";               DestDir: "{app}";        Flags: ignoreversion
 Source: "c123-server.ico";            DestDir: "{app}";        Flags: ignoreversion
+Source: "..\build-output\stamp-aumid.exe"; DestDir: "{app}";   Flags: ignoreversion
 
 [InstallDelete]
 ; Migration: remove old files from the service-based architecture
@@ -270,48 +271,39 @@ begin
   Log('Legacy service removed successfully.');
 end;
 
-// After files are copied, set the AUMID on the Start Menu shortcut
+// After files are copied, create a Start Menu shortcut with the AUMID
 // so WinRT toast notifications show under the correct app identity.
+// Uses stamp-aumid.exe (compiled C# helper) instead of inline PowerShell
+// to avoid escaping/marshalling issues with Add-Type COM interop.
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
-  LnkPath: string;
-  PsCmd: string;
+  LnkPath, StampExe, Params: string;
 begin
   if CurStep <> ssPostInstall then
     Exit;
 
   WizardForm.StatusLabel.Caption := 'Configuring notifications...';
 
-  // The shortcut was created by [Icons] as "{group}\C123 Server.lnk".
   LnkPath := ExpandConstant('{group}\{#AppName}.lnk');
+  StampExe := ExpandConstant('{app}\stamp-aumid.exe');
 
-  // Set System.AppUserModel.ID via PowerShell IPropertyStore COM interop.
-  // This is the standard way to stamp an AUMID on an existing .lnk file.
-  PsCmd := '-NoProfile -NonInteractive -Command "' +
-    'try { ' +
-    '$source = @''' + #13#10 +
-    'using System; using System.Runtime.InteropServices; using System.Runtime.InteropServices.ComTypes;' + #13#10 +
-    '[ComImport, Guid(""""00021401-0000-0000-C000-000000000046"""")] class ShellLink {}' + #13#10 +
-    '[ComImport, Guid(""""886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99""""), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)] interface IPropertyStore {' + #13#10 +
-    '  int GetCount(out uint c); int GetAt(uint i, out Guid k);' + #13#10 +
-    '  int GetValue(ref Guid key, out PropVariant v); int SetValue(ref Guid key, ref PropVariant v); int Commit(); }' + #13#10 +
-    '[StructLayout(LayoutKind.Sequential)] struct PropVariant { public ushort vt; ushort r1,r2,r3; public IntPtr data; }' + #13#10 +
-    '''@' + #13#10 +
-    'Add-Type -TypeDefinition $source -PassThru | Out-Null;' +
-    '$lnk = New-Object ShellLink;' +
-    '($lnk -as [IPersistFile]).Load(''''' + LnkPath + ''''', 0);' +
-    '$ps = $lnk -as [IPropertyStore];' +
-    '$k = New-Object Guid ''''9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3'''';' +
-    '$v = New-Object PropVariant; $v.vt = 31;' +
-    '$v.data = [Marshal]::StringToCoTaskMemUni(''''OpenCanoeTiming.C123Server'''');' +
-    '$ps.SetValue([ref]$k, [ref]$v); $ps.Commit();' +
-    '($lnk -as [IPersistFile]).Save(''''' + LnkPath + ''''', $true);' +
-    '[Marshal]::FreeCoTaskMem($v.data);' +
-    '} catch { exit 0 }"';
+  // stamp-aumid.exe <lnk> <aumid> [target] [args] [icon] [workdir]
+  Params := '"' + LnkPath + '"'
+    + ' "' + '{#AUMID}' + '"'
+    + ' "' + ExpandConstant('{sys}\wscript.exe') + '"'
+    + ' """' + ExpandConstant('{app}\launcher.vbs') + '"""'
+    + ' "' + ExpandConstant('{app}\c123-server.ico') + '"'
+    + ' "' + ExpandConstant('{app}') + '"';
 
-  Exec('powershell.exe', PsCmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  if not Exec(StampExe, Params, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    Log('stamp-aumid.exe failed to launch — toast notifications will use balloon fallback.');
+    Exit;
+  end;
+
   // Non-fatal: if AUMID stamping fails, notifications fall back to balloon tooltips.
   if ResultCode <> 0 then
-    Log('AUMID stamping returned exit code ' + IntToStr(ResultCode) + ' — toast notifications will use balloon fallback.');
+    Log('stamp-aumid.exe returned exit code ' + IntToStr(ResultCode)
+      + ' — toast notifications will use balloon fallback.');
 end;
