@@ -10,7 +10,20 @@ interface NotificationOptions {
 }
 
 /**
- * Windows system notification manager using balloon tooltip notifications.
+ * Application User Model ID — must match the AUMID registered on the
+ * Start Menu shortcut by the installer (c123-server.iss).
+ * WinRT toast notifications require a registered AUMID to show.
+ */
+export const AUMID = 'OpenCanoeTiming.C123Server';
+
+/**
+ * Windows notification manager with WinRT toast and balloon fallback.
+ *
+ * Primary path: WinRT ToastNotificationManager (modern, shows in Action Center).
+ * Requires AUMID registered on a Start Menu shortcut (installer does this).
+ *
+ * Fallback: legacy balloon tooltip via System.Windows.Forms.NotifyIcon.
+ * Used when toast fails (dev mode without installer, or older Windows).
  *
  * No extra dependencies — uses built-in PowerShell on Windows 10+.
  * Silently does nothing on non-Windows platforms.
@@ -20,6 +33,9 @@ export class NotificationManager {
   private enabled = true;
   private lastNotification = 0;
 
+  /** null = not probed yet, true/false = cached result */
+  private toastAvailable: boolean | null = null;
+
   /** Minimum interval between notifications in ms */
   private readonly minIntervalMs: number;
 
@@ -28,7 +44,8 @@ export class NotificationManager {
   }
 
   /**
-   * Show a Windows toast notification if rate limit allows.
+   * Show a Windows notification if rate limit allows.
+   * Tries WinRT toast first, falls back to balloon on failure.
    * Does nothing on non-Windows platforms.
    */
   notify(options: NotificationOptions): void {
@@ -46,11 +63,23 @@ export class NotificationManager {
     const safeTitle = this.sanitize(options.title);
     const safeMessage = this.sanitize(options.message);
 
-    const command = this.buildCommand(safeTitle, safeMessage, options.type ?? 'info');
+    // If toast already failed, go straight to balloon
+    if (this.toastAvailable === false) {
+      this.execCommand(this.buildBalloonCommand(safeTitle, safeMessage, options.type ?? 'info'));
+      return;
+    }
 
-    exec(command, (err) => {
+    // Try toast first
+    const toastCmd = this.buildToastCommand(safeTitle, safeMessage);
+    exec(toastCmd, (err) => {
       if (err) {
-        Logger.debug('Notify', `Notification failed: ${err.message}`);
+        Logger.debug('Notify', `Toast failed, falling back to balloon: ${err.message}`);
+        this.toastAvailable = false;
+        // Retry with balloon
+        this.execCommand(this.buildBalloonCommand(safeTitle, safeMessage, options.type ?? 'info'));
+      } else if (this.toastAvailable === null) {
+        this.toastAvailable = true;
+        Logger.debug('Notify', 'WinRT toast notifications available');
       }
     });
   }
@@ -70,16 +99,30 @@ export class NotificationManager {
   }
 
   /**
-   * Build PowerShell command for a Windows balloon tooltip notification.
-   *
-   * Uses System.Windows.Forms.NotifyIcon (balloon tooltip) instead of
-   * WinRT ToastNotificationManager — WinRT requires a registered AUMID
-   * and silently drops toasts from unregistered apps. Balloon tooltips
-   * work without registration on all Windows 10+ machines.
-   *
+   * Build PowerShell command for WinRT toast notification.
+   * Requires a registered AUMID on a Start Menu shortcut.
    * Uses -EncodedCommand (Base64 UTF-16LE) to avoid cmd.exe escaping issues.
    */
-  private buildCommand(title: string, message: string, type: NotificationType): string {
+  private buildToastCommand(title: string, message: string): string {
+    const script = [
+      '[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null',
+      '[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom, ContentType = WindowsRuntime] | Out-Null',
+      `$xml = "<toast><visual><binding template='ToastGeneric'><text>${title}</text><text>${message}</text></binding></visual></toast>"`,
+      '$doc = New-Object Windows.Data.Xml.Dom.XmlDocument',
+      '$doc.LoadXml($xml)',
+      `[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('${AUMID}').Show([Windows.UI.Notifications.ToastNotification]::new($doc))`,
+    ].join('\n');
+
+    const encoded = Buffer.from(script, 'utf16le').toString('base64');
+    return `powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`;
+  }
+
+  /**
+   * Build PowerShell command for a legacy balloon tooltip notification.
+   * Uses System.Windows.Forms.NotifyIcon — works without AUMID registration.
+   * Uses -EncodedCommand (Base64 UTF-16LE) to avoid cmd.exe escaping issues.
+   */
+  private buildBalloonCommand(title: string, message: string, type: NotificationType): string {
     const iconMap: Record<NotificationType, string> = {
       info: 'Info',
       warning: 'Warning',
@@ -97,9 +140,19 @@ export class NotificationManager {
       '$n.Dispose()',
     ].join('\n');
 
-    // PowerShell -EncodedCommand expects Base64-encoded UTF-16LE
     const encoded = Buffer.from(script, 'utf16le').toString('base64');
     return `powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`;
+  }
+
+  /**
+   * Execute a command, logging errors at debug level.
+   */
+  private execCommand(command: string): void {
+    exec(command, (err) => {
+      if (err) {
+        Logger.debug('Notify', `Notification failed: ${err.message}`);
+      }
+    });
   }
 
   /**

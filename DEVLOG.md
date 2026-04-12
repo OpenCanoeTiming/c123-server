@@ -1,5 +1,13 @@
 # C123 Server - Development Log
 
+## 2026-04-12 ��� Service → tray app: Gemini caught three missing concerns (#72)
+
+**Problem:** Plan to replace Windows service with user-launched tray app looked complete, but /second-opinion (Gemini) flagged three user-facing gaps: (1) no single-instance guard — user could accidentally launch twice from Start Menu and get a confusing EADDRINUSE error, (2) no process termination during upgrade/uninstall — Inno Setup had `CloseApplications=no` for the service model but now the running node.exe holds file locks, (3) removing `setupTrayFileLog()` left the wscript.exe-launched server with zero diagnostics on crash.
+
+**Solution:** Added single-instance HTTP probe (`checkSingleInstance()`), switched to `CloseApplications=yes` + targeted `wmic` kill in `PrepareToInstall`, and repurposed file logging into `runServer()` with TTY detection (`!process.stdout.isTTY`).
+
+**Lesson:** Architecture changes that look like "just delete code" can silently drop behaviors that the old architecture provided implicitly (service auto-prevents double-start, SCM handles process lifecycle, VBS wrapper needed its own logging). External review catches these because fresh eyes evaluate the *target* state, not just the diff.
+
 ## 2026-04-11 — Second-opinion review caught three bugs my own review missed (tray monitor, #69)
 
 **Problem:** After writing what I thought was a thorough review of PR #71 (standalone tray monitor), a `/second-opinion` sweep across Gemini 3 Pro and Claude Code (fresh session) independently flagged three user-facing bugs I had missed or waved off as polish.
