@@ -257,6 +257,92 @@ describe('parseXmlMessage', () => {
     expect(results).toHaveLength(1);
     expect(results[0].type).toBe('unknown');
   });
+
+  it('preserves OnCourse gates with trailing commas (issue #75)', () => {
+    // OnCourse uses comma-separated format from Result Type="C"
+    // Trailing commas represent unscored gates and must not be trimmed
+    const xml =
+      '<Canoe123 System="Main">' +
+      '<OnCourse Total="1" Position="1">' +
+      '<Participant Bib="42" Name="TEST" Club="" Nat="" Race="" RaceId="TEST" Warning="" />' +
+      '<Result Type="C" Gates="0,0,0,2,,,,,,,,,,,,,,,,,,,,,,,,,,," Completed="N" dtStart="10:00:00.000" />' +
+      '<Result Type="T" Pen="6" Time="5000" Rank="1" />' +
+      '</OnCourse>' +
+      '</Canoe123>';
+
+    const results = parseXmlMessage(xml);
+    const data = results[0].data;
+    expect(data).not.toBeNull();
+    if (data && 'competitors' in data) {
+      const comp = data.competitors[0];
+      expect(comp.pen).toBe(6);
+      // Comma-separated gates must preserve trailing commas (unscored gates)
+      expect(comp.gates).toBe('0,0,0,2,,,,,,,,,,,,,,,,,,,,,,,,,,,');
+      expect(comp.gates.endsWith(',')).toBe(true);
+    }
+  });
+
+  it('preserves fixed-width Results gates with sparse scoring (issue #75)', () => {
+    // Gate 5 = touch (2), rest unscored
+    // Fixed-width: 3 chars per gate, right-aligned, spaces = unscored
+    // Build a precise 90-char gates string (30 gates × 3 chars)
+    const gateBlocks = Array.from({ length: 30 }, (_, i) => (i === 4 ? '  2' : '   '));
+    const sparseGates = gateBlocks.join('');
+    expect(sparseGates.length).toBe(90); // sanity check
+
+    const xml =
+      '<Canoe123 System="Main">' +
+      '<Results RaceId="TEST" Current="Y" MainTitle="Test" SubTitle="">' +
+      '<Row Number="1">' +
+      '<Participant Bib="42" Name="TEST" GivenName="T" FamilyName="TEST" Club="" StartOrder="1" StartTime="" />' +
+      `<Result Type="T" Pen="2" Gates="${sparseGates}" Time="80.00" Total="82.00" Rank="1" Behind="" />` +
+      '</Row>' +
+      '</Results>' +
+      '</Canoe123>';
+
+    const results = parseXmlMessage(xml);
+    const data = results[0].data;
+    expect(data).not.toBeNull();
+    if (data && 'rows' in data) {
+      const row = data.rows[0];
+
+      // Gates must preserve the full fixed-width string
+      expect(row.gates).toBe(sparseGates);
+      expect(row.gates.length).toBe(90);
+
+      // Verify gate 5 position (chars 12-14, 0-indexed)
+      const gate5 = row.gates.substring(12, 15);
+      expect(gate5.trim()).toBe('2');
+
+      // Verify gates 1-4 are unscored (spaces)
+      const gate1 = row.gates.substring(0, 3);
+      expect(gate1.trim()).toBe('');
+
+      // Fixed-width detection: must contain double-spaces
+      expect(row.gates.includes('  ')).toBe(true);
+    }
+  });
+
+  it('preserves fully-scored gates without trimming (issue #75)', () => {
+    const fullGates = '  0  0  0  0  2  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  2';
+    const xml =
+      '<Canoe123 System="Main">' +
+      '<Results RaceId="TEST" Current="Y" MainTitle="Test" SubTitle="">' +
+      '<Row Number="1">' +
+      '<Participant Bib="1" Name="TEST" GivenName="T" FamilyName="TEST" Club="" StartOrder="1" StartTime="" />' +
+      `<Result Type="T" Pen="4" Gates="${fullGates}" Time="80.00" Total="84.00" Rank="1" Behind="" />` +
+      '</Row>' +
+      '</Results>' +
+      '</Canoe123>';
+
+    const results = parseXmlMessage(xml);
+    const data = results[0].data;
+    if (data && 'rows' in data) {
+      // Full gates string must include leading spaces for fixed-width detection
+      expect(data.rows[0].gates).toBe(fullGates);
+      expect(data.rows[0].gates.includes('  ')).toBe(true);
+    }
+  });
 });
 
 describe('parseOnCourse', () => {

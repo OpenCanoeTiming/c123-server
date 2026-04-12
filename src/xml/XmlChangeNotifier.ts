@@ -73,7 +73,7 @@ export class XmlChangeNotifier extends EventEmitter<XmlChangeNotifierEvents> {
       attributeNamePrefix: '@_',
       allowBooleanAttributes: true,
       parseTagValue: false, // Keep as strings for consistent hashing
-      trimValues: true,
+      trimValues: false,
     });
   }
 
