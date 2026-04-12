@@ -12,9 +12,10 @@ import type { XmlDataService } from '../service/XmlDataService.js';
 import type { EventState } from '../state/EventState.js';
 import type { XmlChangeNotifier } from '../xml/XmlChangeNotifier.js';
 import type { EventStateData } from '../state/types.js';
-import type { XmlSection } from '../protocol/types.js';
+import type { XmlSection, ScheduleRace } from '../protocol/types.js';
 import { LiveClient } from './LiveClient.js';
 import { LiveTransformer } from './LiveTransformer.js';
+import { deriveEventStatus, isForwardTransition } from './deriveEventStatus.js';
 import type {
   LiveStatus,
   ChannelStatus,
@@ -43,6 +44,7 @@ export interface LivePusherConfig {
   pushXml: boolean;
   pushOnCourse: boolean;
   pushResults: boolean;
+  autoStatus: boolean;
 }
 
 /**
@@ -92,6 +94,10 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
   private xmlChangeListener: ((sections: XmlSection[]) => void) | null = null;
   private eventStateListener: ((state: EventStateData) => void) | null = null;
 
+  // Auto-status
+  private autoStatusEnabled = false;
+  private previousRaceStatuses: Map<string, number> = new Map();
+
   constructor(xmlDataService: XmlDataService) {
     super();
     this.xmlDataService = xmlDataService;
@@ -132,6 +138,11 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
     this.status.channels.oncourse.enabled = config.pushOnCourse;
     this.status.channels.results.enabled = config.pushResults;
 
+    // Auto-status
+    this.autoStatusEnabled = config.autoStatus;
+    this.status.autoStatus = config.autoStatus;
+    this.previousRaceStatuses.clear();
+
     // Store references
     this.xmlChangeNotifier = xmlChangeNotifier;
     this.eventState = eventState;
@@ -151,6 +162,12 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
     const currentState = eventState.state;
     if (config.pushResults && currentState.results) {
       this.scheduleResultsPush(currentState.results);
+    }
+
+    // Auto-status: evaluate current schedule state (catch-up on reconnect)
+    if (this.autoStatusEnabled && currentState.schedule.length > 0) {
+      this.initRaceStatuses(currentState.schedule);
+      this.evaluateAutoStatus();
     }
 
     // Reset circuit breaker
@@ -201,6 +218,9 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
     // Clear buffers
     this.onCourseLastPush = null;
     this.pendingOnCourse = null;
+
+    // Clear auto-status state
+    this.previousRaceStatuses.clear();
 
     // Clear references
     this.client = null;
@@ -306,6 +326,23 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
   }
 
   /**
+   * Update auto-status toggle
+   */
+  updateAutoStatus(enabled: boolean): void {
+    this.autoStatusEnabled = enabled;
+    this.status.autoStatus = enabled;
+
+    if (enabled && this.eventState) {
+      // Re-evaluate immediately when toggled on
+      this.initRaceStatuses(this.eventState.state.schedule);
+      this.evaluateAutoStatus();
+    }
+
+    Logger.info('LivePusher', `Auto-status ${enabled ? 'enabled' : 'disabled'}`);
+    this.emitStatusChange();
+  }
+
+  /**
    * Get current status
    */
   getStatus(): LiveStatus {
@@ -391,6 +428,11 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
     // Handle Results push (debounce 1s per raceId)
     if (this.status.channels.results.enabled && state.results) {
       this.scheduleResultsPush(state.results);
+    }
+
+    // Auto-status: check for race status changes in schedule
+    if (this.autoStatusEnabled && this.haveRaceStatusesChanged(state.schedule)) {
+      this.evaluateAutoStatus();
     }
   }
 
@@ -672,6 +714,65 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
   }
 
   /**
+   * Initialize race status map without triggering evaluation.
+   * Used on connect to set baseline before first change detection.
+   */
+  private initRaceStatuses(races: ScheduleRace[]): void {
+    this.previousRaceStatuses.clear();
+    for (const race of races) {
+      this.previousRaceStatuses.set(race.raceId, race.raceStatus);
+    }
+  }
+
+  /**
+   * Check if any race status has changed since last check.
+   * Updates the stored map and returns true if a change was detected.
+   */
+  private haveRaceStatusesChanged(races: ScheduleRace[]): boolean {
+    let changed = false;
+    const newMap = new Map<string, number>();
+
+    for (const race of races) {
+      newMap.set(race.raceId, race.raceStatus);
+      const prev = this.previousRaceStatuses.get(race.raceId);
+      if (prev !== race.raceStatus) {
+        changed = true;
+      }
+    }
+
+    // Also detect if race set changed (new/removed races)
+    if (newMap.size !== this.previousRaceStatuses.size) {
+      changed = true;
+    }
+
+    this.previousRaceStatuses = newMap;
+    return changed;
+  }
+
+  /**
+   * Evaluate current schedule and auto-transition if needed.
+   * Only transitions forward (never backwards).
+   */
+  private async evaluateAutoStatus(): Promise<void> {
+    if (!this.eventState || !this.client) return;
+    if (this.status.state !== 'connected') return;
+
+    const desired = deriveEventStatus(this.eventState.state.schedule);
+    if (!desired) return;
+
+    const current = this.status.eventStatus;
+    if (!current) return;
+    if (!isForwardTransition(current, desired)) return;
+
+    Logger.info('LivePusher', `Auto-status: transitioning ${current} → ${desired}`);
+    try {
+      await this.transitionStatus(desired);
+    } catch (error) {
+      Logger.warn('LivePusher', 'Auto-status: transition failed', error);
+    }
+  }
+
+  /**
    * Create initial status
    */
   private createInitialStatus(): LiveStatus {
@@ -701,6 +802,7 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
       },
       lastError: null,
       connectedAt: null,
+      autoStatus: false,
     };
   }
 }

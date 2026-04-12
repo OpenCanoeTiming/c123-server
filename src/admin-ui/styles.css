@@ -2602,6 +2602,21 @@ fieldset.modal-section > legend {
   font-size: var(--text-sm);
 }
 
+.live-auto-status-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-body);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.live-auto-status-row .live-channel-toggle {
+  margin-left: 0;
+}
+
 .live-channels-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

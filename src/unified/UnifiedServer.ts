@@ -193,6 +193,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
           pushXml: config.pushXml,
           pushOnCourse: config.pushOnCourse,
           pushResults: config.pushResults,
+          autoStatus: config.autoStatus ?? true,
         },
         xmlChangeNotifier,
         eventState,
@@ -2819,6 +2820,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
           pushXml: liveConfig.pushXml,
           pushOnCourse: liveConfig.pushOnCourse,
           pushResults: liveConfig.pushResults,
+          autoStatus: liveConfig.autoStatus ?? true,
         },
         xmlChangeNotifier,
         eventState,
@@ -2939,6 +2941,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
           pushXml: liveConfig.pushXml,
           pushOnCourse: liveConfig.pushOnCourse,
           pushResults: liveConfig.pushResults,
+          autoStatus: liveConfig.autoStatus ?? true,
         },
         xmlChangeNotifier,
         eventState,
@@ -3138,9 +3141,9 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
-   * PATCH /api/live/config - Update push channel configuration
+   * PATCH /api/live/config - Update push channel and auto-status configuration
    *
-   * Body: { pushXml?: boolean, pushOnCourse?: boolean, pushResults?: boolean }
+   * Body: { pushXml?: boolean, pushOnCourse?: boolean, pushResults?: boolean, autoStatus?: boolean }
    */
   private handleLiveConfig(req: Request, res: Response): void {
     if (!this.livePusher) {
@@ -3148,11 +3151,11 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       return;
     }
 
-    const { pushXml, pushOnCourse, pushResults } = req.body;
+    const { pushXml, pushOnCourse, pushResults, autoStatus } = req.body;
 
     // Validate that at least one field is provided
-    if (pushXml === undefined && pushOnCourse === undefined && pushResults === undefined) {
-      res.status(400).json({ error: 'At least one channel must be specified' });
+    if (pushXml === undefined && pushOnCourse === undefined && pushResults === undefined && autoStatus === undefined) {
+      res.status(400).json({ error: 'At least one field must be specified' });
       return;
     }
 
@@ -3169,16 +3172,29 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       res.status(400).json({ error: 'pushResults must be a boolean' });
       return;
     }
+    if (autoStatus !== undefined && typeof autoStatus !== 'boolean') {
+      res.status(400).json({ error: 'autoStatus must be a boolean' });
+      return;
+    }
 
     try {
-      // Update pusher
-      this.livePusher.updateChannels({ pushXml, pushOnCourse, pushResults });
+      // Update channel config
+      if (pushXml !== undefined || pushOnCourse !== undefined || pushResults !== undefined) {
+        this.livePusher.updateChannels({ pushXml, pushOnCourse, pushResults });
 
-      // Save to settings
-      const settings = getAppSettings();
-      settings.setLiveChannels({ pushXml, pushOnCourse, pushResults });
+        const settings = getAppSettings();
+        settings.setLiveChannels({ pushXml, pushOnCourse, pushResults });
+      }
 
-      Logger.info('Unified', `Live-Mini channels updated: ${JSON.stringify({ pushXml, pushOnCourse, pushResults })}`);
+      // Update auto-status
+      if (autoStatus !== undefined) {
+        this.livePusher.updateAutoStatus(autoStatus);
+
+        const settings = getAppSettings();
+        settings.updateLiveConfig({ autoStatus });
+      }
+
+      Logger.info('Unified', `Live-Mini config updated: ${JSON.stringify({ pushXml, pushOnCourse, pushResults, autoStatus })}`);
 
       const status = this.livePusher.getStatus();
       this.broadcastLiveStatus(status);
@@ -3190,6 +3206,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
           oncourse: status.channels.oncourse.enabled,
           results: status.channels.results.enabled,
         },
+        autoStatus: status.autoStatus,
         status,
       });
     } catch (err) {

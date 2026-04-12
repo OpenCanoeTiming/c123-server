@@ -1229,6 +1229,10 @@ function renderLiveStatus(status) {
   if (toggleOnCourse) toggleOnCourse.checked = status.channels.oncourse.enabled;
   if (toggleResults) toggleResults.checked = status.channels.results.enabled;
 
+  // Update auto-status toggle
+  var toggleAutoStatus = document.getElementById('liveToggleAutoStatus');
+  if (toggleAutoStatus) toggleAutoStatus.checked = status.autoStatus;
+
   // Update pause button
   const pauseBtn = document.getElementById('livePauseBtn');
   const pauseBtnText = document.getElementById('livePauseBtnText');
@@ -1904,6 +1908,35 @@ async function toggleLiveChannel(channel) {
     showToast('Channel ' + (enabled ? 'enabled' : 'disabled'), 'success');
   } catch (error) {
     showToast('Failed to update channel: ' + error.message, 'error');
+    checkbox.checked = !enabled; // Revert
+  }
+}
+
+/**
+ * Toggle auto-status
+ */
+async function toggleAutoStatus() {
+  const checkbox = document.getElementById('liveToggleAutoStatus');
+  if (!checkbox) return;
+
+  const enabled = checkbox.checked;
+
+  try {
+    const res = await fetch('/api/live/config', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autoStatus: enabled })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to update config');
+    }
+
+    showToast('Auto-status ' + (enabled ? 'enabled' : 'disabled'), 'success');
+  } catch (error) {
+    showToast('Failed to update auto-status: ' + error.message, 'error');
     checkbox.checked = !enabled; // Revert
   }
 }
