@@ -5,7 +5,7 @@ vi.mock('node:child_process', () => ({
   exec: vi.fn(),
 }));
 
-import { NotificationManager } from '../NotificationManager.js';
+import { NotificationManager, AUMID } from '../NotificationManager.js';
 
 /**
  * Decode the PowerShell -EncodedCommand back to readable script.
@@ -33,8 +33,8 @@ describe('NotificationManager', () => {
     platformSpy.mockRestore();
   });
 
-  describe('notify()', () => {
-    it('should call exec with PowerShell EncodedCommand on Windows', () => {
+  describe('notify() — toast primary path', () => {
+    it('should try WinRT toast first on Windows', () => {
       manager.notify({ title: 'Test', message: 'Hello' });
 
       expect(execMock).toHaveBeenCalledOnce();
@@ -43,10 +43,19 @@ describe('NotificationManager', () => {
       expect(command).toContain('-EncodedCommand');
 
       const script = decodeCommand(command);
-      expect(script).toContain('ShowBalloonTip');
+      expect(script).toContain('ToastNotificationManager');
+      expect(script).toContain('ToastGeneric');
     });
 
-    it('should include title and message in encoded script', () => {
+    it('should include AUMID in toast script', () => {
+      manager.notify({ title: 'Test', message: 'Hello' });
+
+      const command = execMock.mock.calls[0][0] as string;
+      const script = decodeCommand(command);
+      expect(script).toContain(AUMID);
+    });
+
+    it('should include title and message in toast script', () => {
       manager.notify({ title: 'C123 Server', message: 'Connected' });
 
       const command = execMock.mock.calls[0][0] as string;
@@ -54,8 +63,48 @@ describe('NotificationManager', () => {
       expect(script).toContain('C123 Server');
       expect(script).toContain('Connected');
     });
+  });
 
-    it('should use Warning ToolTipIcon for warning type', () => {
+  describe('notify() — balloon fallback', () => {
+    it('should fall back to balloon when toast exec fails', () => {
+      // First call: toast fails
+      execMock.mockImplementationOnce((_cmd, callback) => {
+        (callback as (err: Error | null) => void)(new Error('WinRT not available'));
+        return {} as ReturnType<typeof childProcess.exec>;
+      });
+
+      manager.notify({ title: 'Test', message: 'Hello' });
+
+      // Should have been called twice: toast attempt + balloon fallback
+      expect(execMock).toHaveBeenCalledTimes(2);
+
+      const balloonScript = decodeCommand(execMock.mock.calls[1][0] as string);
+      expect(balloonScript).toContain('ShowBalloonTip');
+    });
+
+    it('should use balloon directly after first toast failure', () => {
+      // First call: toast fails
+      execMock.mockImplementationOnce((_cmd, callback) => {
+        (callback as (err: Error | null) => void)(new Error('WinRT not available'));
+        return {} as ReturnType<typeof childProcess.exec>;
+      });
+
+      manager.notify({ title: 'Test', message: 'First' });
+      execMock.mockClear();
+
+      // Second call: should go straight to balloon
+      manager.notify({ title: 'Test', message: 'Second' });
+
+      expect(execMock).toHaveBeenCalledOnce();
+      const script = decodeCommand(execMock.mock.calls[0][0] as string);
+      expect(script).toContain('ShowBalloonTip');
+      expect(script).not.toContain('ToastNotificationManager');
+    });
+
+    it('should use Warning ToolTipIcon for warning type in balloon', () => {
+      // Force balloon mode
+      (manager as unknown as { toastAvailable: boolean }).toastAvailable = false;
+
       manager.notify({ title: 'Test', message: 'Warn', type: 'warning' });
 
       const command = execMock.mock.calls[0][0] as string;
@@ -63,7 +112,9 @@ describe('NotificationManager', () => {
       expect(script).toContain('ToolTipIcon]::Warning');
     });
 
-    it('should use Error ToolTipIcon for error type', () => {
+    it('should use Error ToolTipIcon for error type in balloon', () => {
+      (manager as unknown as { toastAvailable: boolean }).toastAvailable = false;
+
       manager.notify({ title: 'Test', message: 'Err', type: 'error' });
 
       const command = execMock.mock.calls[0][0] as string;
@@ -71,14 +122,18 @@ describe('NotificationManager', () => {
       expect(script).toContain('ToolTipIcon]::Error');
     });
 
-    it('should default to Info ToolTipIcon when type is omitted', () => {
+    it('should use Info ToolTipIcon when type is omitted in balloon', () => {
+      (manager as unknown as { toastAvailable: boolean }).toastAvailable = false;
+
       manager.notify({ title: 'Test', message: 'Hello' });
 
       const command = execMock.mock.calls[0][0] as string;
       const script = decodeCommand(command);
       expect(script).toContain('ToolTipIcon]::Info');
     });
+  });
 
+  describe('enabled/disabled', () => {
     it('should not call exec when disabled', () => {
       manager.setEnabled(false);
       manager.notify({ title: 'Test', message: 'Hello' });
@@ -143,6 +198,16 @@ describe('NotificationManager', () => {
       const script = decodeCommand(command);
       expect(script).not.toContain('"world"');
       expect(script).not.toContain('$PATH');
+    });
+
+    it('should XML-escape special characters in toast notifications', () => {
+      manager.notify({ title: 'C123 & Server', message: 'Value <100>' });
+
+      const command = execMock.mock.calls[0][0] as string;
+      const script = decodeCommand(command);
+      expect(script).toContain('C123 &amp; Server');
+      expect(script).toContain('Value &lt;100&gt;');
+      expect(script).not.toContain('<100>');
     });
 
     it('should truncate long messages', () => {

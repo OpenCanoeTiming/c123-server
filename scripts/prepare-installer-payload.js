@@ -173,15 +173,15 @@ function stageDocs() {
     'C123 Server',
     '===========',
     '',
-    'C123 Server has been installed as a Windows service named "C123Server".',
-    'The service starts automatically when Windows boots and restarts on crash.',
+    'C123 Server runs as a tray application — start it from the Start Menu.',
+    'A system tray icon shows the server status (green/yellow/red).',
     '',
     'Admin dashboard:',
     '  http://localhost:27123',
     '',
-    'Service management:',
-    '  services.msc  -> find "C123Server"',
-    '  or run:  sc query C123Server',
+    'Stop the server:',
+    '  Right-click the tray icon -> Quit',
+    '  or press Ctrl+C if running from a command prompt',
     '',
     'Uninstall:',
     '  Settings -> Apps -> "C123 Server" -> Uninstall',
@@ -194,6 +194,27 @@ function stageDocs() {
     '',
   ].join('\r\n');
   writeFileSync(join(BUILD_OUTPUT, 'README.txt'), readmeText);
+}
+
+function compileStampAumid() {
+  const cscExe = join(
+    process.env.SystemRoot ?? 'C:\\Windows',
+    'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe',
+  );
+  if (!existsSync(cscExe)) {
+    throw new Error(`csc.exe not found at ${cscExe} — .NET Framework 4.x is required`);
+  }
+
+  const srcFile = join(projectRoot, 'installer', 'stamp-aumid.cs');
+  const outFile = join(BUILD_OUTPUT, 'stamp-aumid.exe');
+  log('Compiling stamp-aumid.exe');
+  execSync(
+    `"${cscExe}" /nologo /optimize /platform:anycpu /out:"${outFile}" "${srcFile}"`,
+    { cwd: projectRoot, stdio: 'inherit' },
+  );
+  if (!existsSync(outFile)) {
+    throw new Error('stamp-aumid.exe compilation produced no output');
+  }
 }
 
 function writeIssDefines() {
@@ -230,6 +251,7 @@ async function main() {
     await ensureNodeRuntime();
     stageRuntime();
     stageDocs();
+    compileStampAumid();
     writeIssDefines();
     log(`Payload ready at: ${BUILD_OUTPUT}`);
   } catch (err) {

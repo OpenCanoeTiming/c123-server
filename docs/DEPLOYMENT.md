@@ -14,8 +14,7 @@ The installer does the following automatically:
 
 - Copies files to `C:\Program Files\C123 Server\` (portable Node.js runtime + compiled app + production dependencies).
 - Adds a Windows Firewall rule for incoming TCP connections on port 27123 so scoreboards on the local network can connect.
-- Registers the Windows service `C123Server` (starts automatically on boot, restarts on crash).
-- Creates Start Menu shortcuts.
+- Creates a Start Menu shortcut with a system tray icon.
 
 ## What gets installed where
 
@@ -23,45 +22,58 @@ The installer does the following automatically:
 |---|---|
 | `C:\Program Files\C123 Server\runtime\node.exe` | Portable Node.js 20 runtime. Bundled with the installer so the app never depends on the user's own Node.js installation. |
 | `C:\Program Files\C123 Server\app\` | Compiled c123-server application + production `node_modules`. |
+| `C:\Program Files\C123 Server\launcher.vbs` | Hidden launcher — starts the server without a console window. |
 | `C:\Program Files\C123 Server\unins000.exe` | Uninstaller. |
 | `%APPDATA%\c123-server\settings.json` | Your settings (XML path, event name override, client configs, Live-Mini connection). **Preserved across upgrades and uninstall.** |
 
-## Service management
+## Running and stopping
 
-The Windows service is the main process. It runs in the background without any visible window, even when no user is logged in.
+C123 Server runs as a **tray application** in the user's session — like Canoe123 itself, you start it before a race and close it when done.
 
-> **Note on naming:** The service has **two names**.
-> * **Display name:** `C123Server` — what you see in `services.msc` and `Get-Service`.
-> * **Service ID:** `c123server.exe` — what `sc.exe` and the registry use.
->
-> This split comes from `node-windows`, which derives the service id from the display name by stripping non-word characters, lowercasing, and appending `.exe`. Both names refer to the same service — use the service id with `sc.exe` commands.
+### Starting
 
-```powershell
-# Check status
-sc.exe query c123server.exe
+- **Start Menu:** Click **C123 Server** in the Start Menu. A tray icon appears in the system tray (notification area).
+- **Command line:** `"C:\Program Files\C123 Server\runtime\node.exe" "C:\Program Files\C123 Server\app\dist\cli.js"`
+- **Headless (no tray):** Add `--no-tray` for servers or CI environments.
 
-# Start / stop manually
-sc.exe start c123server.exe
-sc.exe stop c123server.exe
+The server does **not** auto-start at boot. If you want it to start at login, copy the Start Menu shortcut into `shell:startup`.
 
-# Services MMC snap-in
-services.msc
-# → find "C123Server" in the list
-```
+### Stopping
 
-The service runs as `Local System` by default. Startup type is **Automatic**.
+- **Tray icon:** Right-click the tray icon → **Quit**.
+- **Command line:** Press <kbd>Ctrl</kbd>+<kbd>C</kbd>.
 
-On crash, Windows Service Control Manager restarts the service automatically (3 attempts with exponential backoff — configured by `node-windows`).
+### System tray icon
+
+The tray icon shows the server status at a glance:
+
+| Icon | Meaning | Typical cause |
+|------|---------|---------------|
+| 🟢 Green | All data sources `connected`, server healthy | Normal |
+| 🟡 Yellow | A source is `connecting` (transient backoff) **or** no sources configured | Race not started, scoreboard in reconnect |
+| 🔴 Red | A source is terminally `disconnected` **or** an error occurred | Wrong XML path, C123 not running |
+
+Right-click gives you **Open Dashboard** and **Quit**.
+
+### Notifications
+
+The server sends Windows toast notifications for important events (connection changes, errors, XML mismatches). These appear in the Action Center and require the installed version — when running from source (`npm start`), notifications fall back to legacy balloon tooltips.
+
+### Single instance
+
+Only one instance can run on a given port. If you try to start a second instance, it will detect the running server and exit with a clear error message.
 
 ## Upgrading
 
 To install a newer version over an existing installation:
 
-1. Download the new installer.
-2. Run it. The installer automatically stops the running `C123Server` service before overwriting files, then re-registers it.
+1. **Quit** the running server (right-click tray icon → Quit).
+2. Run the new installer. It will overwrite the old files.
 3. Your settings in `%APPDATA%\c123-server\settings.json` are untouched.
 
 No need to uninstall first. The admin UI shows a banner when a new version is published on GitHub (the check runs hourly against the GitHub Releases API).
+
+> **Upgrading from the service-based version (pre-v0.2):** The installer automatically detects and removes the old Windows service. No manual steps needed.
 
 ### Disabling the update check
 
@@ -80,34 +92,26 @@ On closed networks without outbound access to `api.github.com`, add `"updateChec
 
 The uninstaller:
 
-1. Stops the `C123Server` service.
-2. Unregisters the service.
-3. Removes the Windows Firewall rule.
-4. Deletes `C:\Program Files\C123 Server\`.
+1. Removes the Windows Firewall rule.
+2. Deletes `C:\Program Files\C123 Server\`.
 
 **Your settings in `%APPDATA%\c123-server\` are NOT deleted.** If you really want a clean wipe, remove that folder manually after uninstall.
+
+> **Tip:** Quit the server before uninstalling. The installer will try to close it automatically, but quitting first avoids any file-in-use prompts.
 
 ## Troubleshooting
 
 ### Admin dashboard does not open / `http://localhost:27123` returns connection refused
 
-Check that the service is running:
+Make sure C123 Server is running:
 
-```powershell
-sc.exe query c123server.exe
-```
+- Look for the tray icon in the system tray (notification area). If it's not there, start it from the Start Menu.
+- If the tray icon is red, hover over it for the error message.
 
-If `STATE` is not `RUNNING`:
-
-```powershell
-sc.exe start c123server.exe
-```
-
-If that fails, check the Event Viewer: **Windows Logs → Application**, filter for source `C123Server`. Common causes:
+Common causes:
 
 - Port 27123 already in use by another process (`netstat -ano | findstr :27123`).
 - Firewall or antivirus blocking `node.exe`.
-- XML source path unreachable (should only affect data, not the service).
 
 ### SmartScreen warning "Windows protected your PC"
 
@@ -118,107 +122,34 @@ The installer is not code-signed yet. This is a known limitation and we'll look 
 
 The installer source is open, so you can audit it at [github.com/OpenCanoeTiming/c123-server/tree/main/installer](https://github.com/OpenCanoeTiming/c123-server/tree/main/installer) if you want to verify before running.
 
-### "The C123Server service could not be registered automatically"
-
-Shown as a popup at the end of installation. The installer copied files successfully but the post-install service registration step failed. You can register the service manually from an **elevated** command prompt:
-
-```cmd
-"C:\Program Files\C123 Server\runtime\node.exe" "C:\Program Files\C123 Server\app\dist\cli.js" install
-```
-
-If that works, you're done. If it still fails, open an issue with the output.
-
-### System tray icon
-
-The installer ships a **tray monitor** — a lightweight user-session process (`C123 Server Monitor`) that polls the installed service over HTTP and reflects its state in the tray icon:
-
-| Icon | Meaning | Typical cause |
-|------|---------|---------------|
-| 🟢 Green | All data sources `connected`, server healthy | Normal |
-| 🟡 Yellow | A source is `connecting` (transient backoff) **or** no sources configured | Race not started, scoreboard in reconnect |
-| 🔴 Red | A source is terminally `disconnected` **or** the server itself is unreachable | Wrong XML path, service stopped, port filtered |
-
-Right-click gives you "Open Dashboard" and "Quit". The menu title reads "C123 Server Monitor" so you can tell it apart from a locally-run `npm start` tray, and the Quit tooltip makes clear that **Quit only closes the monitor — it does NOT stop the underlying service**.
-
-The monitor is installed as a shortcut in your user Startup folder (`shell:startup`) and auto-starts at every login. The shortcut target is `wscript.exe %ProgramFiles%\C123 Server\tray-launcher.vbs`, which in turn spawns `node.exe cli.js tray` with no console window.
-
-#### Why a separate process?
-
-The service itself runs in *Session 0* — an isolated, non-interactive session that cannot show tray icons (a Windows Vista-era security boundary). `systray2` would silently fail there. The monitor is a second process that lives in *your* interactive session and talks to the service only over `http://localhost:27123/api/status`. No IPC, no event-bus coupling, just HTTP polling every 3 seconds.
-
-#### Install-account gotcha (UAC)
-
-The `{userstartup}` shortcut lands in the Startup folder of **whoever runs the installer**. If you install by right-clicking the `.exe` → *Run as administrator* and typing a different admin password at the UAC prompt, the shortcut ends up in the **administrator's** Startup folder — the operator who logs in day-to-day never sees the tray icon.
-
-**Recommendation:** log in as the operator account first, then double-click the installer (UAC will still prompt for admin credentials, but the shortcut is created for the already-logged-in user). If you installed under the wrong account, copy the shortcut manually from `C:\Users\<admin>\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup` into the operator's equivalent folder — or run the installer again while logged in as the operator.
-
-#### Disabling or moving the tray
-
-- **Disable for one user:** delete the `C123 Server Tray` shortcut from `shell:startup` (press <kbd>Win</kbd>+<kbd>R</kbd>, type `shell:startup`, delete the shortcut).
-- **Disable for all users:** not installed for all users by default — the shortcut is per-user only.
-- **Stop the running tray:** right-click the icon → *Quit*. It will come back at the next login unless you also delete the shortcut.
-
-#### Debugging a missing tray icon
-
-The tray writes all log output to `%APPDATA%\c123-server\tray.log` (rotated at 512 KB to `tray.log.old`). If the icon doesn't appear, **check that file first** — it captures startup errors even when running under `wscript.exe` with no console.
-
-If the log file is empty or missing, the most common causes are (a) `wscript.exe` is blocked by a security policy, (b) `systray2`'s bundled Go binary is missing or quarantined by AV, or (c) the service on port 27123 is unreachable. To see live output while debugging, run the tray manually from a command prompt so its stderr is visible:
-
-```cmd
-"C:\Program Files\C123 Server\runtime\node.exe" "C:\Program Files\C123 Server\app\dist\cli.js" tray
-```
-
-Add `--debug` for verbose logging. If the tray launches but immediately turns red, the service is the problem — check `sc.exe query c123server.exe`.
-
-**If you see two tray icons:** the Startup copy is already running and you launched another manually. Right-click one and Quit, or kill the duplicate `node.exe` from Task Manager. The monitor has no mutex against double-launch.
-
-#### Running the tray manually against a non-default port
-
-If you changed the server port in `%APPDATA%\c123-server\settings.json`, the bundled Startup shortcut still polls the default `27123` and will go red. Either (a) revert the port, or (b) replace the shortcut target with:
-
-```cmd
-"C:\Program Files\C123 Server\runtime\node.exe" "C:\Program Files\C123 Server\app\dist\cli.js" tray --target-url http://localhost:28000
-```
-
-— substituting your actual port. The "Open Dashboard" menu item will honour `--target-url`, so the monitor and the dashboard link stay in sync.
-
 ### Scoreboards on the LAN cannot connect
 
 The installer adds a firewall rule, but some third-party firewalls / endpoint protection suites ignore Windows Firewall rules and add their own. Check your security software and allow inbound TCP/27123 for `node.exe`.
 
-### Upgrade failed, service stuck in "stopping" state
+### Debugging with log files
 
-Rare, but can happen if a scoreboard client holds the WebSocket open during the stop. Hard-kill the service and retry:
+When launched via the Start Menu shortcut (wscript.exe), console output is not visible. The server automatically logs to `%APPDATA%\c123-server\server.log` when running without a terminal. Check this file for startup errors or crash diagnostics.
 
-```powershell
-sc.exe queryex c123server.exe | findstr PID
-# Note the PID, then:
-taskkill /F /PID <pid>
-sc.exe start c123server.exe
+The log file is rotated at 512 KB (`server.log.old`).
+
+To see live output, run the server from a command prompt instead:
+
+```cmd
+"C:\Program Files\C123 Server\runtime\node.exe" "C:\Program Files\C123 Server\app\dist\cli.js"
 ```
 
-### Uninstalling leaves a stale `C123Server` service
-
-If the uninstaller fails mid-way (e.g. because the service is locked), remove the service manually:
-
-```powershell
-sc.exe stop c123server.exe
-sc.exe delete c123server.exe
-```
-
-Then delete `C:\Program Files\C123 Server\` by hand.
+Add `--debug` for verbose logging.
 
 ## Running without the installer (advanced)
 
 Developers can skip the installer and run from source — see the main [README.md](../README.md#installation-from-source-for-developers).
 
-The bundled installer is Windows-only. For Linux or macOS deployments, build from source and run `npm start` or `node dist/cli.js run` directly. The Windows service commands (`install` / `uninstall` / `start` / `stop`) require `node-windows` which only works on Windows.
+The bundled installer is Windows-only. For Linux or macOS deployments, build from source and run `npm start` or `node dist/cli.js` directly. Toast notifications require the installer (AUMID registration); without it, notifications fall back to balloon tooltips.
 
 ## Reporting issues
 
 - Issues: <https://github.com/OpenCanoeTiming/c123-server/issues>
 - When reporting installer problems, include:
   - Installer version (visible in the filename)
-  - Output of `sc.exe query c123server.exe`
-  - Relevant Event Viewer entries (Application log, filter by source `C123Server`)
+  - Content of `%APPDATA%\c123-server\server.log` (recent entries)
   - Content of `%APPDATA%\c123-server\settings.json` (redact any API keys first)
