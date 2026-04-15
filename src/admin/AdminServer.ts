@@ -15,7 +15,7 @@ import { Logger } from '../utils/logger.js';
 import { getAppSettings, WindowsConfigDetector } from '../config/index.js';
 
 const DEFAULT_PORT = 8084;
-const VERSION = '0.1.0';
+const VERSION = '0.9.0';
 
 interface RegisteredSource {
   name: string;

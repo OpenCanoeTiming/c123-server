@@ -71,7 +71,7 @@ Get overall server status including uptime, connected scoreboards, and current e
 
 ```json
 {
-  "version": "0.1.0",
+  "version": "0.9.0",
   "uptime": 3600,
   "sources": [
     {

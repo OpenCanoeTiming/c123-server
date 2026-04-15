@@ -1,6 +1,6 @@
 {
   "name": "@canoe-scoreboard/c123-server",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "description": "C123 to Scoreboard bridge - smart middleware for canoe slalom timing",
   "type": "module",
   "main": "dist/index.js",

@@ -37,7 +37,7 @@ function parseArgs(): {
     }
 
     if (arg === '--version' || arg === '-v') {
-      console.log('c123-server v0.1.0');
+      console.log('c123-server v0.9.0');
       process.exit(0);
     }
 
