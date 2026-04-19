@@ -519,7 +519,7 @@ describe('XmlDataService', () => {
       await fsPromises.writeFile(xmlPath, xmlWithBothRuns);
       service.setPath(xmlPath);
 
-      const merged = await service.getMergedResults('K1M_ST');
+      const merged = await service.getMergedResults('K1M_ST_BR2_6');
 
       expect(merged).toHaveLength(2);
 
@@ -571,7 +571,7 @@ describe('XmlDataService', () => {
       await fsPromises.writeFile(xmlPath, xmlOneRun);
       service.setPath(xmlPath);
 
-      const merged = await service.getMergedResults('K1M_ST');
+      const merged = await service.getMergedResults('K1M_ST_BR1_6');
 
       expect(merged).toHaveLength(1);
       expect(merged[0].run1?.total).toBe(80000);
@@ -580,11 +580,95 @@ describe('XmlDataService', () => {
       expect(merged[0].bestRank).toBe(1);
     });
 
-    it('returns empty array for non-existent class', async () => {
+    it('returns empty array for non-existent race', async () => {
       service.setPath(xmlPath);
-      const merged = await service.getMergedResults('NONEXISTENT');
+      const merged = await service.getMergedResults('NONEXISTENT_BR1_1');
 
       expect(merged).toHaveLength(0);
+    });
+
+    it('pairs runs by version when multiple versions of the same class exist', async () => {
+      // Regression test for #81: with a two-day event, merged must use the
+      // BR1/BR2 pair from the same version (_19) instead of the first match (_18).
+      const xmlTwoDays = `<?xml version="1.0"?>
+<Canoe123Data>
+  <Participants>
+    <Id>12054.K1M_ST</Id>
+    <ClassId>K1M_ST</ClassId>
+    <EventBib>1</EventBib>
+    <FamilyName>PRSKAVEC</FamilyName>
+    <GivenName>Jiří</GivenName>
+    <Club>USK Praha</Club>
+    <IsTeam>false</IsTeam>
+  </Participants>
+  <Schedule>
+    <RaceId>K1M_ST_BR1_18</RaceId>
+    <ClassId>K1M_ST</ClassId>
+    <DisId>BR1</DisId>
+  </Schedule>
+  <Schedule>
+    <RaceId>K1M_ST_BR2_18</RaceId>
+    <ClassId>K1M_ST</ClassId>
+    <DisId>BR2</DisId>
+  </Schedule>
+  <Schedule>
+    <RaceId>K1M_ST_BR1_19</RaceId>
+    <ClassId>K1M_ST</ClassId>
+    <DisId>BR1</DisId>
+  </Schedule>
+  <Schedule>
+    <RaceId>K1M_ST_BR2_19</RaceId>
+    <ClassId>K1M_ST</ClassId>
+    <DisId>BR2</DisId>
+  </Schedule>
+  <Results>
+    <RaceId>K1M_ST_BR1_18</RaceId>
+    <Id>12054.K1M_ST</Id>
+    <Bib>1</Bib>
+    <Total>80000</Total>
+    <Rnk>1</Rnk>
+  </Results>
+  <Results>
+    <RaceId>K1M_ST_BR2_18</RaceId>
+    <Id>12054.K1M_ST</Id>
+    <Bib>1</Bib>
+    <Total>81000</Total>
+    <Rnk>1</Rnk>
+  </Results>
+  <Results>
+    <RaceId>K1M_ST_BR1_19</RaceId>
+    <Id>12054.K1M_ST</Id>
+    <Bib>1</Bib>
+    <Total>70000</Total>
+    <Rnk>1</Rnk>
+  </Results>
+  <Results>
+    <RaceId>K1M_ST_BR2_19</RaceId>
+    <Id>12054.K1M_ST</Id>
+    <Bib>1</Bib>
+    <Total>71000</Total>
+    <Rnk>1</Rnk>
+  </Results>
+</Canoe123Data>`;
+
+      await fsPromises.writeFile(xmlPath, xmlTwoDays);
+      service.setPath(xmlPath);
+
+      // Request merged for day 19 via BR2 raceId — must get day 19's BR1 paired in
+      const mergedDay19 = await service.getMergedResults('K1M_ST_BR2_19');
+      expect(mergedDay19).toHaveLength(1);
+      expect(mergedDay19[0].run1?.total).toBe(70000);
+      expect(mergedDay19[0].run2?.total).toBe(71000);
+
+      // Request via BR1 raceId must also return the same pair
+      const mergedDay19Br1 = await service.getMergedResults('K1M_ST_BR1_19');
+      expect(mergedDay19Br1[0].run1?.total).toBe(70000);
+      expect(mergedDay19Br1[0].run2?.total).toBe(71000);
+
+      // Day 18 must be returned intact when requested explicitly
+      const mergedDay18 = await service.getMergedResults('K1M_ST_BR2_18');
+      expect(mergedDay18[0].run1?.total).toBe(80000);
+      expect(mergedDay18[0].run2?.total).toBe(81000);
     });
   });
 });

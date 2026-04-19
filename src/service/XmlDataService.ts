@@ -455,20 +455,30 @@ export class XmlDataService {
   }
 
   /**
-   * Get merged results for both runs of a class
+   * Get merged results for both runs of a Best Run pair.
+   *
+   * Accepts any raceId belonging to the pair (BR1 or BR2) and derives
+   * the sibling raceId by swapping the run suffix. The version/day
+   * component is preserved, so when the XML contains multiple versions
+   * of the same class (e.g. a multi-day event), the matching pair is
+   * returned instead of the first one the schedule happened to list.
+   *
+   * @param raceId - Any raceId from the pair, e.g. "K1M_BR2_19".
    */
-  async getMergedResults(classId: string): Promise<XmlMergedResult[]> {
+  async getMergedResults(raceId: string): Promise<XmlMergedResult[]> {
     await this.loadIfNeeded();
-    const schedule = this.getScheduleFromCache();
     const results = this.getResultsFromCache();
     const participants = this.getParticipantsFromCache();
 
-    // Find BR1 and BR2 races for this class
-    const br1Race = schedule.find((s) => s.classId === classId && s.disId === 'BR1');
-    const br2Race = schedule.find((s) => s.classId === classId && s.disId === 'BR2');
+    // RaceId format: {CLASS}[_{COURSE}]_BR{1|2}_{VERSION}
+    // Note: if raceId doesn't contain _BR1_ or _BR2_, the replace is a no-op
+    // and both variables will equal the original raceId, returning empty results.
+    // This is intentional — merged results only make sense for BR disciplines.
+    const br1RaceId = raceId.replace(/_BR[12]_/, '_BR1_');
+    const br2RaceId = raceId.replace(/_BR[12]_/, '_BR2_');
 
-    const br1Results = br1Race ? results.get(br1Race.raceId) ?? [] : [];
-    const br2Results = br2Race ? results.get(br2Race.raceId) ?? [] : [];
+    const br1Results = results.get(br1RaceId) ?? [];
+    const br2Results = results.get(br2RaceId) ?? [];
 
     // Build participant map
     const participantMap = new Map(participants.map((p) => [p.id, p]));

@@ -1470,7 +1470,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
           return;
         }
 
-        const results = await this.xmlDataService.getMergedResults(race.classId);
+        const results = await this.xmlDataService.getMergedResults(id);
         res.json({ results, merged: true, classId: race.classId });
         return;
       }
