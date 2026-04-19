@@ -471,6 +471,9 @@ export class XmlDataService {
     const participants = this.getParticipantsFromCache();
 
     // RaceId format: {CLASS}[_{COURSE}]_BR{1|2}_{VERSION}
+    // Note: if raceId doesn't contain _BR1_ or _BR2_, the replace is a no-op
+    // and both variables will equal the original raceId, returning empty results.
+    // This is intentional — merged results only make sense for BR disciplines.
     const br1RaceId = raceId.replace(/_BR[12]_/, '_BR1_');
     const br2RaceId = raceId.replace(/_BR[12]_/, '_BR2_');
 
