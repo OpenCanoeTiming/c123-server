@@ -673,6 +673,7 @@ interface ConfigPushData {
   showOnCourse?: boolean;
   showResults?: boolean;
   scrollToFinished?: boolean;  // Whether to scroll to finished competitor (default: true)
+  browseAfterHighlight?: boolean;  // Browse results after highlight (default: false)
   custom?: Record<string, string | number | boolean>;
   label?: string;
 }
@@ -692,6 +693,7 @@ function applyConfig(config: ConfigPushData) {
   if (config.customTitle) setTitle(config.customTitle);
   // scrollToFinished: default true, only apply if explicitly set to false
   if (config.scrollToFinished === false) disableScrollToFinished();
+  if (config.browseAfterHighlight) enableBrowseAfterHighlight();
 
   // Handle custom parameters
   if (config.custom) {

@@ -940,6 +940,7 @@ function openClientModal(configKey) {
   document.getElementById('modalClientId').value = cfg.clientId || '';
   // scrollToFinished: default true if not set
   document.getElementById('modalScrollToFinished').checked = cfg.scrollToFinished !== false;
+  document.getElementById('modalBrowseAfterHighlight').checked = cfg.browseAfterHighlight === true;
 
   // Load assets into modal
   loadModalAssets(cfg.assets);
@@ -1007,6 +1008,7 @@ async function saveClientConfig() {
   // Send clientId if set (allows server to assign/rename client identity)
   if (clientId) config.clientId = clientId;
   config.scrollToFinished = document.getElementById('modalScrollToFinished').checked;
+  config.browseAfterHighlight = document.getElementById('modalBrowseAfterHighlight').checked;
 
   // Include asset overrides if any have been modified
   if (Object.keys(modalAssets).length > 0) {

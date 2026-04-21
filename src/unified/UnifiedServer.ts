@@ -2008,6 +2008,11 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       return;
     }
 
+    if (config.browseAfterHighlight !== undefined && typeof config.browseAfterHighlight !== 'boolean') {
+      res.status(400).json({ error: 'browseAfterHighlight must be a boolean' });
+      return;
+    }
+
     if (config.clientId !== undefined) {
       if (typeof config.clientId !== 'string' || config.clientId.trim() === '') {
         res.status(400).json({ error: 'clientId must be a non-empty string' });
