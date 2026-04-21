@@ -1006,9 +1006,7 @@ async function saveClientConfig() {
   config.customTitle = title || null;
   // Send clientId if set (allows server to assign/rename client identity)
   if (clientId) config.clientId = clientId;
-  // scrollToFinished: only send if unchecked (false), otherwise don't send (uses default true)
-  const scrollToFinished = document.getElementById('modalScrollToFinished').checked;
-  if (!scrollToFinished) config.scrollToFinished = false;
+  config.scrollToFinished = document.getElementById('modalScrollToFinished').checked;
 
   // Include asset overrides if any have been modified
   if (Object.keys(modalAssets).length > 0) {
