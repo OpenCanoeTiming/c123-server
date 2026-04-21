@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { LivePusher } from '../LivePusher.js';
-import { LiveClient } from '../LiveClient.js';
+import { LiveClient, LiveApiError } from '../LiveClient.js';
 import type { XmlDataService } from '../../service/XmlDataService.js';
 import type { EventState } from '../../state/EventState.js';
 import type { XmlChangeNotifier } from '../../xml/XmlChangeNotifier.js';
@@ -13,8 +13,11 @@ import type { EventStateData } from '../../state/types.js';
 import type { XmlSection } from '../../protocol/types.js';
 
 // Mock LiveClient (use regular function, not arrow, for constructor compatibility)
-vi.mock('../LiveClient.js', () => {
+// Preserve real LiveApiError for instanceof checks in auto-status recovery
+vi.mock('../LiveClient.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../LiveClient.js')>();
   return {
+    LiveApiError: original.LiveApiError,
     LiveClient: vi.fn().mockImplementation(function () {
       return {
         pushXml: vi.fn().mockResolvedValue({ imported: { classes: 1, categories: 1, races: 2, participants: 10 } }),
@@ -462,6 +465,83 @@ describe('LivePusher', () => {
       const status = pusher.getStatus();
       expect(status.state).toBe('not_configured');
       expect(statusHandler).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('auto-status recovery from server error', () => {
+    it('should sync local status from server error response with currentStatus', async () => {
+      // Setup schedule with races in progress so deriveEventStatus returns 'running'
+      const scheduleWithRunningRace = [
+        { raceId: 'K1M_1', raceStatus: 3, raceName: 'K1M Heat 1', startTime: '10:00' },
+      ];
+      (mockEventState as any).state.schedule = scheduleWithRunningRace;
+
+      await pusher.connect(
+        {
+          serverUrl: 'https://live.example.com',
+          apiKey: 'test-key',
+          eventId: 'event-123',
+          eventStatus: 'draft',
+          pushXml: false,
+          pushOnCourse: false,
+          pushResults: false,
+          autoStatus: true,
+        },
+        mockXmlChangeNotifier,
+        mockEventState,
+      );
+
+      // At connect, evaluateAutoStatus ran with the schedule.
+      // The default mock resolves successfully, so status should be 'running'.
+      expect(pusher.getStatus().eventStatus).toBe('running');
+    });
+
+    it('should recover status from LiveApiError.currentStatus on transition failure', async () => {
+      // Start with empty schedule so auto-status doesn't fire during connect
+      (mockEventState as any).state.schedule = [];
+
+      await pusher.connect(
+        {
+          serverUrl: 'https://live.example.com',
+          apiKey: 'test-key',
+          eventId: 'event-123',
+          eventStatus: 'draft',
+          pushXml: false,
+          pushOnCourse: false,
+          pushResults: false,
+          autoStatus: true,
+        },
+        mockXmlChangeNotifier,
+        mockEventState,
+      );
+
+      expect(pusher.getStatus().eventStatus).toBe('draft');
+
+      // Now make transitionStatus reject with LiveApiError containing currentStatus
+      const mockClient = (LiveClient as unknown as ReturnType<typeof vi.fn>).mock.results[0].value;
+      mockClient.transitionStatus.mockRejectedValueOnce(
+        new LiveApiError('Invalid transition', 400, {
+          error: 'INVALID_TRANSITION',
+          message: 'Cannot transition from running to running',
+          currentStatus: 'running',
+        }),
+      );
+
+      // Emit schedule change with races in progress → triggers evaluateAutoStatus
+      const newState = {
+        ...(mockEventState as any).state,
+        schedule: [
+          { raceId: 'K1M_1', raceStatus: 3, raceName: 'K1M Heat 1', startTime: '10:00' },
+        ],
+      };
+      (mockEventState as any).state = newState;
+      mockEventState.emit('change', newState);
+
+      // Wait for async evaluation
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Local status should be synced from the server's currentStatus
+      expect(pusher.getStatus().eventStatus).toBe('running');
     });
   });
 });

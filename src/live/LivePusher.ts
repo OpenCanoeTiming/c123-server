@@ -13,9 +13,9 @@ import type { EventState } from '../state/EventState.js';
 import type { XmlChangeNotifier } from '../xml/XmlChangeNotifier.js';
 import type { EventStateData } from '../state/types.js';
 import type { XmlSection, ScheduleRace } from '../protocol/types.js';
-import { LiveClient } from './LiveClient.js';
+import { LiveClient, LiveApiError } from './LiveClient.js';
 import { LiveTransformer } from './LiveTransformer.js';
-import { deriveEventStatus, isForwardTransition } from './deriveEventStatus.js';
+import { deriveEventStatus, isForwardTransition, STATUS_ORDER } from './deriveEventStatus.js';
 import type {
   LiveStatus,
   ChannelStatus,
@@ -771,6 +771,19 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
     try {
       await this.transitionStatus(desired);
     } catch (error) {
+      // If the server reports its current status, sync our local state.
+      // This handles the case where we reconnected to an event that was
+      // already ahead of our local status (e.g., server at 'running',
+      // local at 'draft') — the server rejects the no-op transition but
+      // tells us where it actually is.
+      if (error instanceof LiveApiError && error.response?.currentStatus) {
+        const serverStatus = error.response.currentStatus as EventStatus;
+        if (serverStatus in STATUS_ORDER) {
+          Logger.info('LivePusher', `Auto-status: synced local status from server: ${serverStatus}`);
+          this.status.eventStatus = serverStatus;
+          this.emitStatusChange();
+        }
+      }
       // Clear cached statuses so the next state update re-triggers evaluation
       this.previousRaceStatuses.clear();
       Logger.warn('LivePusher', 'Auto-status: transition failed, will retry on next change', error);
