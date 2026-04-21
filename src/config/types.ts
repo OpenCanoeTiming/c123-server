@@ -76,6 +76,8 @@ export interface ClientConfig {
 
   /** Whether to scroll to finished competitor (default: true). When false, only highlights without scrolling. */
   scrollToFinished?: boolean;
+  /** Whether to slowly browse through results after highlighting finished competitor (default: false). */
+  browseAfterHighlight?: boolean;
 
   // === Custom parameters (key-value for additional/future parameters) ===
 
