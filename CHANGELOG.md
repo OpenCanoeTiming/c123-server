@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/OpenCanoeTiming/c123-server/compare/v0.9.3...v0.10.0) (2026-04-21)
+
+
+### Features
+
+* add gates and courseNr fields to REST API results and schedule ([#87](https://github.com/OpenCanoeTiming/c123-server/issues/87)) ([c3d6a90](https://github.com/OpenCanoeTiming/c123-server/commit/c3d6a90f44f9349430c5badcace5e566bf452a3d))
+
 ## [0.9.3](https://github.com/OpenCanoeTiming/c123-server/compare/v0.9.2...v0.9.3) (2026-04-21)
 
 
