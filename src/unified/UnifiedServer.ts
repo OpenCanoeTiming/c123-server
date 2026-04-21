@@ -2902,7 +2902,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       return;
     }
 
-    const { serverUrl, apiKey, eventId } = req.body;
+    const { serverUrl, apiKey, eventId, eventStatus } = req.body;
 
     if (!serverUrl || typeof serverUrl !== 'string') {
       res.status(400).json({ error: 'serverUrl is required' });
@@ -2917,10 +2917,16 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       return;
     }
 
+    // Use provided event status (from browse events list) or default to 'draft'
+    const validStatuses: EventStatus[] = ['draft', 'startlist', 'running', 'finished', 'official'];
+    const initialStatus: EventStatus = (eventStatus && validStatuses.includes(eventStatus))
+      ? eventStatus
+      : 'draft';
+
     try {
       // Save connection to settings
       const settings = getAppSettings();
-      settings.setLiveConnection(serverUrl, apiKey, eventId, 'draft');
+      settings.setLiveConnection(serverUrl, apiKey, eventId, initialStatus);
 
       // Get updated config and connect pusher
       const liveConfig = settings.getLiveConfig();
@@ -2937,7 +2943,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
           serverUrl,
           apiKey,
           eventId,
-          eventStatus: 'draft',
+          eventStatus: initialStatus,
           pushXml: liveConfig.pushXml,
           pushOnCourse: liveConfig.pushOnCourse,
           pushResults: liveConfig.pushResults,

@@ -1560,7 +1560,7 @@ async function loadBrowseEvents() {
         + '<span>' + escapeHtml(maskedKey) + '</span>'
         + '</div>'
         + '</div>'
-        + '<button class="btn btn-sm btn-primary" data-event-id="' + escapeHtml(ev.eventId) + '" data-api-key="' + escapeHtml(ev.apiKey) + '">Connect</button>'
+        + '<button class="btn btn-sm btn-primary" data-event-id="' + escapeHtml(ev.eventId) + '" data-api-key="' + escapeHtml(ev.apiKey) + '" data-event-status="' + escapeHtml(ev.status) + '">Connect</button>'
         + '</div>';
     }
     if (listEl) {
@@ -1568,7 +1568,7 @@ async function loadBrowseEvents() {
       // Event delegation for connect buttons (avoids inline JS / XSS)
       listEl.querySelectorAll('button[data-event-id]').forEach(function(btn) {
         btn.addEventListener('click', function() {
-          selectAndConnectEvent(btn.dataset.eventId, btn.dataset.apiKey);
+          selectAndConnectEvent(btn.dataset.eventId, btn.dataset.apiKey, btn.dataset.eventStatus);
         });
       });
     }
@@ -1593,12 +1593,14 @@ function closeSelectEventModal() {
 /**
  * Connect to a selected event from the list
  */
-async function selectAndConnectEvent(eventId, apiKey) {
+async function selectAndConnectEvent(eventId, apiKey, eventStatus) {
   try {
+    var body = { serverUrl: liveServerUrl, apiKey: apiKey, eventId: eventId };
+    if (eventStatus) body.eventStatus = eventStatus;
     var res = await fetch('/api/live/reconnect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ serverUrl: liveServerUrl, apiKey: apiKey, eventId: eventId })
+      body: JSON.stringify(body)
     });
 
     var data = await res.json();
