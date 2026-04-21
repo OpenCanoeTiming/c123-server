@@ -13,7 +13,7 @@ import type { EventState } from '../state/EventState.js';
 import type { XmlChangeNotifier } from '../xml/XmlChangeNotifier.js';
 import type { EventStateData } from '../state/types.js';
 import type { XmlSection, ScheduleRace } from '../protocol/types.js';
-import { LiveClient, LiveApiError } from './LiveClient.js';
+import { LiveClient, LiveApiError, LiveTimeoutError } from './LiveClient.js';
 import { LiveTransformer } from './LiveTransformer.js';
 import { deriveEventStatus, isForwardTransition, STATUS_ORDER } from './deriveEventStatus.js';
 import type {
@@ -51,7 +51,7 @@ export interface LivePusherConfig {
  * Constants
  */
 const XML_DEBOUNCE_MS = 2000; // 2s debounce for XML changes
-const ONCOURSE_THROTTLE_MS = 500; // 2/s max for OnCourse (500ms between pushes)
+const ONCOURSE_THROTTLE_MS = 100; // 10/s max for OnCourse — payload is tiny, match source cadence (#150)
 const RESULTS_DEBOUNCE_MS = 1000; // 1s debounce per raceId for Results
 const CIRCUIT_BREAKER_THRESHOLD = 5; // Consecutive failures before circuit opens
 const CIRCUIT_BREAKER_TIMEOUT_MS = 30000; // 30s pause when circuit opens
@@ -78,6 +78,7 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
   // Buffers
   private onCourseLastPush: Date | null = null;
   private pendingOnCourse: EventStateData['onCourse'] | null = null;
+  private lastPushedOnCourseFingerprint: string | null = null;
   private resultsDebounceTimers: Map<string, NodeJS.Timeout> = new Map();
   // Two-level dedup for results push:
   // - lastScheduledResultsRef: set when debounce timer is created, prevents oncourse/timeOfDay
@@ -85,6 +86,15 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
   // - lastPushedResultsRef: set after successful push, prevents re-pushing same data
   private lastScheduledResultsRef: object | null = null;
   private lastPushedResultsRef: object | null = null;
+
+  // In-flight guards (#157): prevent stacking pushes on the Node fetch pool
+  // for channels where the next push fully replaces the previous data —
+  // safe for OnCourse (we always push the latest snapshot) and for XML
+  // (next file read is always the freshest). NOT used for Results: dropping
+  // a results push could lose a final batch if the race is ending and no
+  // further EventState change happens after the current push stalls.
+  private onCoursePushInFlight = false;
+  private xmlPushInFlight = false;
 
   // Timers
   private xmlDebounceTimer: NodeJS.Timeout | null = null;
@@ -219,6 +229,9 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
     // Clear buffers
     this.onCourseLastPush = null;
     this.pendingOnCourse = null;
+    this.lastPushedOnCourseFingerprint = null;
+    this.onCoursePushInFlight = false;
+    this.xmlPushInFlight = false;
 
     // Clear auto-status state
     this.previousRaceStatuses.clear();
@@ -438,13 +451,20 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
   }
 
   /**
-   * Schedule OnCourse push with throttling (max 2/s)
+   * Schedule OnCourse push with throttling (max 10/s).
+   *
+   * Fixes (#150):
+   * - `onCourseLastPush` is marked synchronously *before* firing the async push,
+   *   so concurrent change events during the HTTP round-trip get throttled
+   *   instead of racing into duplicate concurrent POSTs.
+   * - If the pending snapshot is byte-identical to the last one pushed, skip —
+   *   avoids broadcasting the same frame to WS clients multiple times.
    */
   private scheduleOnCoursePush(onCourse: EventStateData['onCourse']): void {
     // Always keep latest snapshot so the throttled push uses fresh data
     this.pendingOnCourse = onCourse;
 
-    // Check throttle: don't push if last push was < 500ms ago
+    // Check throttle: don't push if last push was < ONCOURSE_THROTTLE_MS ago
     const now = Date.now();
     if (this.onCourseLastPush && now - this.onCourseLastPush.getTime() < ONCOURSE_THROTTLE_MS) {
       // Still throttled, schedule for later if not already scheduled
@@ -453,8 +473,9 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
         this.onCourseThrottleTimer = setTimeout(() => {
           this.onCourseThrottleTimer = null;
           if (this.pendingOnCourse) {
-            this.pushOnCourse(this.pendingOnCourse);
+            const snap = this.pendingOnCourse;
             this.pendingOnCourse = null;
+            this.firePushOnCourse(snap);
           }
         }, delay);
       }
@@ -463,7 +484,65 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
 
     // Not throttled, push immediately
     this.pendingOnCourse = null;
-    this.pushOnCourse(onCourse);
+    this.firePushOnCourse(onCourse);
+  }
+
+  /**
+   * Fire an OnCourse push: update throttle marker synchronously, skip if
+   * content is unchanged from last push or a previous push is still in
+   * flight, then kick the async request.
+   *
+   * In-flight guard (#157): oncourse data is ephemeral — we always push the
+   * latest snapshot next time, so dropping one while another is pending is
+   * fine and prevents fetch-pool saturation when Railway hangs.
+   */
+  private firePushOnCourse(onCourse: EventStateData['onCourse']): void {
+    // Reserve the throttle slot *before* awaiting HTTP so that change events
+    // during the round-trip don't stampede into duplicate concurrent pushes.
+    this.onCourseLastPush = new Date();
+
+    if (this.onCoursePushInFlight) {
+      return;
+    }
+
+    const fingerprint = this.fingerprintOnCourse(onCourse);
+    if (fingerprint !== null && fingerprint === this.lastPushedOnCourseFingerprint) {
+      return;
+    }
+    this.lastPushedOnCourseFingerprint = fingerprint;
+
+    this.onCoursePushInFlight = true;
+    this.pushOnCourse(onCourse).finally(() => {
+      this.onCoursePushInFlight = false;
+    });
+  }
+
+  /**
+   * Compact fingerprint of an OnCourse snapshot used to skip identical pushes.
+   * Returns null if an entry shape is unexpected (play it safe → always push).
+   */
+  private fingerprintOnCourse(onCourse: EventStateData['onCourse']): string | null {
+    try {
+      return onCourse
+        .map((c) => {
+          const gates = Array.isArray(c.gates) ? c.gates.join(',') : '';
+          return [
+            c.bib ?? '',
+            c.raceId ?? '',
+            c.position ?? '',
+            c.time ?? '',
+            c.pen ?? '',
+            c.total ?? '',
+            c.dtStart ?? '',
+            c.dtFinish ?? '',
+            c.rank ?? '',
+            gates,
+          ].join('|');
+        })
+        .join(';');
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -512,6 +591,13 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
       return;
     }
 
+    // In-flight guard: if a previous XML push is still outstanding, skip
+    // this one. Next XML change will schedule another push.
+    if (this.xmlPushInFlight) {
+      Logger.warn('LivePusher', 'XML push already in flight, skipping');
+      return;
+    }
+
     try {
       // Get full XML export
       const xmlPath = this.xmlDataService.getPath();
@@ -522,9 +608,13 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
 
       // Read XML file
       const xml = await readFile(xmlPath, 'utf-8');
+      const sizeBytes = Buffer.byteLength(xml, 'utf8');
 
-      Logger.info('LivePusher', 'Pushing XML');
+      Logger.info('LivePusher', `Pushing XML (${sizeBytes}B)`);
+      const t0 = Date.now();
+      this.xmlPushInFlight = true;
       const response = await this.client.pushXml(xml);
+      Logger.info('LivePusher', `XML push OK in ${Date.now() - t0}ms`);
 
       // Success
       this.handleSuccess('xml', response);
@@ -538,6 +628,8 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
       }
     } catch (error) {
       this.handleError(error as Error, 'xml');
+    } finally {
+      this.xmlPushInFlight = false;
     }
   }
 
@@ -567,12 +659,17 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
         .map((comp) => this.transformer.transformOnCourse(comp))
         .filter((t): t is NonNullable<typeof t> => t !== null);
 
-      Logger.debug('LivePusher', `Pushing ${transformed.length} OnCourse competitors`);
-      const response = await this.client.pushOnCourse({ oncourse: transformed });
+      const payload = { oncourse: transformed };
+      const sizeBytes = Buffer.byteLength(JSON.stringify(payload), 'utf8');
+      Logger.debug(
+        'LivePusher',
+        `Pushing ${transformed.length} OnCourse competitors (${sizeBytes}B)`,
+      );
+      const response = await this.client.pushOnCourse(payload);
 
-      // Success
+      // Success. NOTE: onCourseLastPush is already set synchronously in
+      // firePushOnCourse() to block concurrent pushes during the round-trip.
       this.handleSuccess('oncourse', response);
-      this.onCourseLastPush = new Date();
     } catch (error) {
       this.handleError(error as Error, 'oncourse');
     }
@@ -598,6 +695,11 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
       return;
     }
 
+    // NOTE: no in-flight guard here. Results are critical — the last
+    // results push of a race might be the only one carrying the final
+    // scoreboard, and skipping it would leave spectators on stale data.
+    // We rely on the server-side transaction (#157) to make each push
+    // complete quickly enough that concurrency isn't a real problem.
     try {
       const transformed = await this.transformer.transformResults(results);
 
@@ -606,11 +708,15 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
         return;
       }
 
+      const payload = { results: transformed };
+      const sizeBytes = Buffer.byteLength(JSON.stringify(payload), 'utf8');
       Logger.info(
         'LivePusher',
-        `Pushing ${transformed.length} results for ${results.raceId}`,
+        `Pushing ${transformed.length} results for ${results.raceId} (${sizeBytes}B)`,
       );
-      const response = await this.client.pushResults({ results: transformed });
+      const t0 = Date.now();
+      const response = await this.client.pushResults(payload);
+      Logger.info('LivePusher', `Results push OK in ${Date.now() - t0}ms`);
 
       // Only mark as pushed on success - failed pushes will be retried
       // on next EventState change
@@ -622,7 +728,12 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
   }
 
   /**
-   * Handle successful push
+   * Handle successful push.
+   *
+   * Clears per-channel error AND global error/state so the UI stops showing
+   * a stale red badge once traffic recovers. Previously the global
+   * `status.lastError` and `status.state='error'` were left set after CB
+   * opened, requiring a manual Force-push XML to clear them (#157 UX).
    */
   private handleSuccess(
     channel: 'xml' | 'oncourse' | 'results',
@@ -630,13 +741,21 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
     _response: any,
   ): void {
     // Reset circuit breaker
+    const wasOpen = this.status.circuitBreaker.isOpen;
     this.consecutiveFailures = 0;
-    if (this.status.circuitBreaker.isOpen) {
+    if (wasOpen) {
       this.status.circuitBreaker.isOpen = false;
       this.status.circuitBreaker.openedAt = null;
-      Logger.info('LivePusher', 'Circuit breaker closed');
+      this.circuitBreakerOpenAt = null;
+      Logger.info('LivePusher', `Circuit breaker closed after successful ${channel} push`);
     }
     this.status.circuitBreaker.consecutiveFailures = 0;
+
+    // Restore healthy global state if we were in 'error' due to prior failures.
+    if (this.status.state === 'error') {
+      this.status.state = 'connected';
+    }
+    this.status.lastError = null;
 
     // Update channel status
     const channelStatus = this.status.channels[channel];
@@ -648,7 +767,13 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
   }
 
   /**
-   * Handle push error
+   * Handle push error.
+   *
+   * #157: Transient errors (5xx, network, timeout) are logged and surfaced to
+   * status, but do NOT count toward the circuit breaker — Railway's edge proxy
+   * periodically returns empty 503s during LB rotation and those shouldn't
+   * trip the CB and stall pushes for 30s. Only persistent app-level errors
+   * (4xx that aren't 429, non-HTTP failures) count toward the CB.
    */
   private handleError(error: Error, channel: 'xml' | 'oncourse' | 'results'): void {
     Logger.error('LivePusher', `${channel} push failed`, error);
@@ -661,7 +786,23 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
     // Update global error
     this.status.lastError = `${channel}: ${error.message}`;
 
-    // Increment circuit breaker
+    // Is this a transient infra error we should tolerate without opening CB?
+    const isTransient =
+      error instanceof LiveTimeoutError ||
+      (error instanceof LiveApiError &&
+        ((error.statusCode >= 500 && error.statusCode <= 599) ||
+          error.statusCode === 429));
+
+    if (isTransient) {
+      // Don't touch CB. Next push will try again (LiveClient already retried
+      // 5xx/429 internally before throwing; the retries were also exhausted,
+      // but the next scheduled push has a fresh retry budget).
+      this.emitStatusChange();
+      this.emit('error', error);
+      return;
+    }
+
+    // Real app-level failure — count toward CB.
     this.consecutiveFailures++;
     this.status.circuitBreaker.consecutiveFailures = this.consecutiveFailures;
 

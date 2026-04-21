@@ -5,6 +5,7 @@
  * Uses native fetch with exponential backoff retry logic.
  */
 
+import { Logger } from '../utils/logger.js';
 import type {
   CreateEventRequest,
   CreateEventResponse,
@@ -254,19 +255,32 @@ export class LiveClient {
             | ApiErrorResponse
             | null;
 
-          // Handle 429 Too Many Requests specially
-          if (response.status === 429) {
+          // Retry on 429 (rate limited) and 5xx (transient edge/infra errors like
+          // Railway proxy 502/503/504 during LB rotation) — these are not app errors.
+          // #157: Railway proxy returns empty 503 for ~10-30s windows periodically,
+          // and without retry those push attempts land in the circuit breaker.
+          const isRetriableStatus =
+            response.status === 429 ||
+            (response.status >= 500 && response.status <= 599);
+          if (isRetriableStatus && enableRetry && attempt < this.retryConfig.maxRetries) {
             const retryAfter = response.headers.get('Retry-After');
             const delayMs = retryAfter
               ? parseInt(retryAfter, 10) * 1000
               : this.calculateBackoff(attempt);
+            Logger.warn(
+              'LiveClient',
+              `${method} ${path}: HTTP ${response.status} — retry ${attempt + 1}/${this.retryConfig.maxRetries} in ${delayMs}ms`,
+            );
+            await this.delay(delayMs);
+            attempt++;
+            continue;
+          }
 
-            // If we haven't exceeded max retries, wait and retry
-            if (attempt < this.retryConfig.maxRetries) {
-              await this.delay(delayMs);
-              attempt++;
-              continue;
-            }
+          if (isRetriableStatus && attempt >= this.retryConfig.maxRetries) {
+            Logger.error(
+              'LiveClient',
+              `${method} ${path}: HTTP ${response.status} — retries exhausted (${this.retryConfig.maxRetries})`,
+            );
           }
 
           throw new LiveApiError(
@@ -288,7 +302,9 @@ export class LiveClient {
           );
         }
 
-        // Don't retry on API errors (4xx, 5xx except 429 handled above)
+        // Don't retry on app-level 4xx errors (auth, validation, state conflicts).
+        // 5xx / 429 were already retried above before the throw; if we're here
+        // it means we exhausted retries and should surface the last error.
         if (error instanceof LiveApiError) {
           throw error;
         }
@@ -296,6 +312,10 @@ export class LiveClient {
         // Network error - retry if enabled
         if (enableRetry && attempt < this.retryConfig.maxRetries) {
           const delayMs = this.calculateBackoff(attempt);
+          Logger.warn(
+            'LiveClient',
+            `${method} ${path}: network error (${(error as Error).message}) — retry ${attempt + 1}/${this.retryConfig.maxRetries} in ${delayMs}ms`,
+          );
           await this.delay(delayMs);
           attempt++;
           continue;

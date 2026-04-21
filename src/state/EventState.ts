@@ -30,6 +30,16 @@ export class EventState extends EventEmitter<EventStateEvents> {
 
   private highlightTimer: NodeJS.Timeout | null = null;
   private previousOnCourse: Map<string, OnCourseCompetitor> = new Map();
+  // #150: C123 broadcasts OnCourse one competitor per TCP message. If we just
+  // replace the onCourse array with each message we end up pushing a single
+  // rider per push downstream, and any push that gets dropped (fetch pool,
+  // in-flight guard, network blip) silently loses that one rider's update
+  // until the next time C123 rebroadcasts them — visible downstream as
+  // per-rider "jumps". Instead we keep a per-bib map and merge, so the
+  // on-course snapshot always reflects every rider seen in the last
+  // ONCOURSE_TTL_MS window.
+  private onCourseByBib: Map<string, { comp: OnCourseCompetitor; seenAt: number }> = new Map();
+  private static readonly ONCOURSE_TTL_MS = 10_000;
 
   /**
    * Get the current state (readonly snapshot)
@@ -106,16 +116,21 @@ export class EventState extends EventEmitter<EventStateEvents> {
   }
 
   /**
-   * Update on-course competitors and detect finishes
+   * Update on-course competitors and detect finishes.
+   *
+   * #150: C123 sends ONE competitor per TCP OnCourse message (`<OnCourse
+   * Total="3" Position="1"><Participant Bib=".../></OnCourse>`), cycling
+   * through everyone currently on course. We merge each message into a
+   * per-bib map and rebuild the onCourse array from the map, so the
+   * snapshot state.onCourse always carries the freshest data for every
+   * rider. Before this merge, the array was overwritten per-message, which
+   * meant each outgoing push to live-mini contained only one rider — if
+   * any push was dropped, that rider "froze" until C123 rebroadcasted them.
    */
   private updateOnCourse(competitors: OnCourseCompetitor[]): void {
-    // Build map of current competitors
-    const currentMap = new Map<string, OnCourseCompetitor>();
-    for (const comp of competitors) {
-      currentMap.set(comp.bib, comp);
-    }
+    const now = Date.now();
 
-    // Detect finishes: competitor had no dtFinish before, now has one
+    // Detect finishes on incoming competitors (compare with previous state)
     for (const comp of competitors) {
       const prev = this.previousOnCourse.get(comp.bib);
       if (prev && !prev.dtFinish && comp.dtFinish) {
@@ -123,19 +138,42 @@ export class EventState extends EventEmitter<EventStateEvents> {
       }
     }
 
-    // Update previous state for next comparison
-    this.previousOnCourse = currentMap;
+    // Merge incoming competitors into the per-bib map
+    for (const comp of competitors) {
+      this.onCourseByBib.set(comp.bib, { comp, seenAt: now });
+    }
 
-    // Update current race from first competitor
-    if (competitors.length > 0 && competitors[0].raceId) {
-      const newRaceId = competitors[0].raceId;
-      if (this._state.currentRaceId !== newRaceId) {
-        this._state.currentRaceId = newRaceId;
-        this.emit('raceChange', newRaceId);
+    // Expire riders we haven't heard about for TTL
+    for (const [bib, entry] of this.onCourseByBib) {
+      if (now - entry.seenAt > EventState.ONCOURSE_TTL_MS) {
+        this.onCourseByBib.delete(bib);
       }
     }
 
-    this._state.onCourse = competitors;
+    // Rebuild onCourse array from the map, preserving race position order
+    const merged = Array.from(this.onCourseByBib.values())
+      .map((e) => e.comp)
+      .sort((a, b) => {
+        const pa = typeof a.position === 'number' ? a.position : Number.MAX_SAFE_INTEGER;
+        const pb = typeof b.position === 'number' ? b.position : Number.MAX_SAFE_INTEGER;
+        return pa - pb;
+      });
+
+    this._state.onCourse = merged;
+
+    // Update current race from merged competitors (prefer incoming, else first in map)
+    const source = competitors[0] ?? merged[0];
+    if (source?.raceId && this._state.currentRaceId !== source.raceId) {
+      this._state.currentRaceId = source.raceId;
+      this.emit('raceChange', source.raceId);
+    }
+
+    // Remember this snapshot for next finish-detection call
+    const newPrev = new Map<string, OnCourseCompetitor>();
+    for (const comp of merged) {
+      newPrev.set(comp.bib, comp);
+    }
+    this.previousOnCourse = newPrev;
   }
 
   /**
@@ -234,6 +272,7 @@ export class EventState extends EventEmitter<EventStateEvents> {
     }
 
     this.previousOnCourse.clear();
+    this.onCourseByBib.clear();
 
     this._state = {
       timeOfDay: null,
