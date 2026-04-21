@@ -281,7 +281,8 @@ Get race schedule (list of all races with times).
       "firstBib": "1",
       "startInterval": "60",
       "raceStatus": 5,
-      "customTitle": "K1m - short track - 1st run"
+      "customTitle": "K1m - short track - 1st run",
+      "courseNr": 1
     }
   ]
 }
@@ -295,6 +296,7 @@ Get race schedule (list of all races with times).
 | `raceStatus` | number | 3=Running, 5=Finished |
 | `startTime` | string | Scheduled start time (HH:MM:SS) |
 | `startInterval` | string | Interval between starts in seconds |
+| `courseNr` | number | Course number (1-based), maps to /api/xml/courses |
 
 ---
 
@@ -459,6 +461,7 @@ Get results for a specific race.
       "pen": 2,
       "total": 7899,
       "rank": 1,
+      "gates": "  0  0  2  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0",
       "participant": {
         "id": "12054.K1M_ST",
         "classId": "K1M_ST",
@@ -480,6 +483,7 @@ Get results for a specific race.
 | `total` | number | Total time in centiseconds |
 | `rank` | number | Position in results |
 | `status` | string | Empty for valid, `DSQ`, `DNS`, `DNF` for invalid |
+| `gates` | string | Space-separated per-gate penalties (0, 2, or 50) |
 
 **Response (merged=true):**
 
