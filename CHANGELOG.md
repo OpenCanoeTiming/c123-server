@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/OpenCanoeTiming/c123-server/compare/v0.10.0...v0.11.0) (2026-04-21)
+
+
+### Features
+
+* add browseAfterHighlight param to admin UI and client config ([#90](https://github.com/OpenCanoeTiming/c123-server/issues/90)) ([310635b](https://github.com/OpenCanoeTiming/c123-server/commit/310635bcf452ab4a9515eede9114821ed060d434))
+
 ## [0.10.0](https://github.com/OpenCanoeTiming/c123-server/compare/v0.9.3...v0.10.0) (2026-04-21)
 
 
