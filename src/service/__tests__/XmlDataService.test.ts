@@ -48,6 +48,7 @@ describe('XmlDataService', () => {
     <StartInterval>0:45</StartInterval>
     <RaceStatus>5</RaceStatus>
     <CustomTitle>K1m - střední trať - 1. jízda</CustomTitle>
+    <CourseNr>1</CourseNr>
   </Schedule>
   <Schedule>
     <RaceId>K1M_ST_BR2_6</RaceId>
@@ -72,6 +73,7 @@ describe('XmlDataService', () => {
     <Total>78990</Total>
     <Rnk>1</Rnk>
     <CatRnk>1</CatRnk>
+    <Gates>  0  2  0  50  0  0</Gates>
   </Results>
   <Results>
     <RaceId>K1M_ST_BR1_6</RaceId>
@@ -173,6 +175,7 @@ describe('XmlDataService', () => {
         disId: 'BR1',
         raceStatus: 5,
         customTitle: 'K1m - střední trať - 1. jízda',
+        courseNr: 1,
       });
 
       expect(schedule[1]).toMatchObject({
@@ -181,6 +184,15 @@ describe('XmlDataService', () => {
         disId: 'BR2',
         raceStatus: 3,
       });
+    });
+
+    it('parses courseNr as a number', async () => {
+      service.setPath(xmlPath);
+      const schedule = await service.getSchedule();
+
+      expect(typeof schedule[0].courseNr).toBe('number');
+      expect(schedule[0].courseNr).toBe(1);
+      expect(schedule[1].courseNr).toBeUndefined();
     });
   });
 
@@ -204,6 +216,16 @@ describe('XmlDataService', () => {
         total: 78990,
         rank: 1,
       });
+    });
+
+    it('returns gates as a string when present', async () => {
+      service.setPath(xmlPath);
+      const results = await service.getAllResults();
+
+      const raceResults = results.get('K1M_ST_BR1_6')!;
+      expect(typeof raceResults[0].gates).toBe('string');
+      expect(raceResults[0].gates).toBe('  0  2  0  50  0  0');
+      expect(raceResults[1].gates).toBeUndefined();
     });
   });
 

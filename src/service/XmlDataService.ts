@@ -35,6 +35,7 @@ export interface XmlScheduleItem {
   startInterval?: string | undefined;
   raceStatus?: number | undefined;
   customTitle?: string | undefined;
+  courseNr?: number | undefined;
 }
 
 /**
@@ -56,6 +57,7 @@ export interface XmlResultRow {
   prevPen?: number | undefined;
   prevTotal?: number | undefined;
   prevRank?: number | undefined;
+  gates?: string | undefined;
 }
 
 /**
@@ -660,6 +662,7 @@ export class XmlDataService {
         startInterval: s.StartInterval ? String(s.StartInterval) : undefined,
         raceStatus: s.RaceStatus !== undefined ? Number(s.RaceStatus) : undefined,
         customTitle: s.CustomTitle ? String(s.CustomTitle) : undefined,
+        courseNr: s.CourseNr !== undefined ? Number(s.CourseNr) : undefined,
       }));
   }
 
@@ -697,6 +700,7 @@ export class XmlDataService {
         prevPen: r.PrevPen !== undefined ? Number(r.PrevPen) : undefined,
         prevTotal: r.PrevTotal !== undefined ? Number(r.PrevTotal) : undefined,
         prevRank: r.PrevRnk !== undefined ? Number(r.PrevRnk) : undefined,
+        gates: r.Gates ? String(r.Gates) : undefined,
       };
 
       if (!resultsMap.has(raceId)) {
@@ -797,6 +801,7 @@ interface RawSchedule {
   StartInterval?: string;
   RaceStatus?: string | number;
   CustomTitle?: string;
+  CourseNr?: string | number;
 }
 
 interface RawResult {
@@ -815,6 +820,7 @@ interface RawResult {
   PrevPen?: string | number;
   PrevTotal?: string | number;
   PrevRnk?: string | number;
+  Gates?: string | number;
 }
 
 interface RawCourseData {
