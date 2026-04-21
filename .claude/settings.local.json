@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh issue:*)",
+      "Bash(git:*)",
+      "Bash(npm run build)",
+      "Bash(npm test)",
+      "Bash(gh pr:*)",
+      "Bash(for pr in 36 35 34 32 31 29 16)",
+      "Bash(do echo \"=== PR #$pr ===\")",
+      "Bash(done)",
+      "Bash(npm install @typescript-eslint/eslint-plugin@8.56.1 --save-dev)"
+    ]
+  }
+}
