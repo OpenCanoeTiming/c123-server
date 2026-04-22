@@ -13,7 +13,7 @@ import type { EventState } from '../state/EventState.js';
 import type { XmlChangeNotifier } from '../xml/XmlChangeNotifier.js';
 import type { EventStateData } from '../state/types.js';
 import type { XmlSection, ScheduleRace } from '../protocol/types.js';
-import { LiveClient, LiveApiError, LiveTimeoutError } from './LiveClient.js';
+import { LiveClient, LiveApiError } from './LiveClient.js';
 import { LiveTransformer } from './LiveTransformer.js';
 import { deriveEventStatus, isForwardTransition, STATUS_ORDER } from './deriveEventStatus.js';
 import type {
@@ -53,8 +53,13 @@ export interface LivePusherConfig {
 const XML_DEBOUNCE_MS = 2000; // 2s debounce for XML changes
 const ONCOURSE_THROTTLE_MS = 100; // 10/s max for OnCourse — payload is tiny, match source cadence (#150)
 const RESULTS_DEBOUNCE_MS = 1000; // 1s debounce per raceId for Results
-const CIRCUIT_BREAKER_THRESHOLD = 5; // Consecutive failures before circuit opens
-const CIRCUIT_BREAKER_TIMEOUT_MS = 30000; // 30s pause when circuit opens
+// #157: "Pulse" circuit breaker — fast open, fast close. Calibrated for
+// high-frequency live sports data where a 30s lockout after a brief Railway
+// edge-proxy blip costs an entire heat's worth of spectator data. With 3s
+// timeout the CB probes for recovery almost immediately after a transient
+// infra hiccup, and the first successful push closes it.
+const CIRCUIT_BREAKER_THRESHOLD = 3; // Consecutive failures before circuit opens
+const CIRCUIT_BREAKER_TIMEOUT_MS = 3000; // Pulse CB — 3s probe interval
 
 /**
  * Live-Mini Pusher
@@ -88,13 +93,20 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
   private lastPushedResultsRef: object | null = null;
 
   // In-flight guards (#157): prevent stacking pushes on the Node fetch pool
-  // for channels where the next push fully replaces the previous data —
-  // safe for OnCourse (we always push the latest snapshot) and for XML
-  // (next file read is always the freshest). NOT used for Results: dropping
-  // a results push could lose a final batch if the race is ending and no
-  // further EventState change happens after the current push stalls.
+  // for OnCourse and XML, where the next push fully replaces the previous
+  // data (safe to drop when a push is in flight — next snapshot will carry
+  // everything).
   private onCoursePushInFlight = false;
   private xmlPushInFlight = false;
+  // Results needs a smarter guard. Dropping a push could lose the final
+  // results batch of a race if no further state change follows. So we
+  // queue at most one latest-wins pending push: while a push is running,
+  // a new one just overwrites the pending slot, and when the in-flight
+  // push finishes we fire the pending one. This keeps concurrency at 1
+  // per channel even during a Railway outage (preventing socket stacking)
+  // without ever losing the final data.
+  private resultsPushInFlight = false;
+  private resultsPushPending: NonNullable<EventStateData['results']> | null = null;
 
   // Timers
   private xmlDebounceTimer: NodeJS.Timeout | null = null;
@@ -232,6 +244,8 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
     this.lastPushedOnCourseFingerprint = null;
     this.onCoursePushInFlight = false;
     this.xmlPushInFlight = false;
+    this.resultsPushInFlight = false;
+    this.resultsPushPending = null;
 
     // Clear auto-status state
     this.previousRaceStatuses.clear();
@@ -695,11 +709,23 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
       return;
     }
 
-    // NOTE: no in-flight guard here. Results are critical — the last
-    // results push of a race might be the only one carrying the final
-    // scoreboard, and skipping it would leave spectators on stale data.
-    // We rely on the server-side transaction (#157) to make each push
-    // complete quickly enough that concurrency isn't a real problem.
+    // Latest-wins in-flight guard (#157). If a previous push is still running
+    // we save the new data as "pending" and return — when the in-flight push
+    // finishes it drains the pending slot and fires once with the freshest
+    // data. This prevents request stacking during a Railway outage (where a
+    // single push can hang 60s in retry loop) while still guaranteeing the
+    // final results of a race land even if no further EventState change
+    // happens.
+    if (this.resultsPushInFlight) {
+      this.resultsPushPending = results;
+      Logger.debug(
+        'LivePusher',
+        `Results push in flight, queued latest for ${results.raceId}`,
+      );
+      return;
+    }
+    this.resultsPushInFlight = true;
+
     try {
       const transformed = await this.transformer.transformResults(results);
 
@@ -724,6 +750,16 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
       this.handleSuccess('results', response);
     } catch (error) {
       this.handleError(error as Error, 'results');
+    } finally {
+      this.resultsPushInFlight = false;
+      // Drain the latest-wins queue on next tick so the stack unwinds cleanly
+      if (this.resultsPushPending) {
+        const next = this.resultsPushPending;
+        this.resultsPushPending = null;
+        setImmediate(() => {
+          this.pushResults(next).catch(() => {/* handleError logged */});
+        });
+      }
     }
   }
 
@@ -769,11 +805,18 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
   /**
    * Handle push error.
    *
-   * #157: Transient errors (5xx, network, timeout) are logged and surfaced to
-   * status, but do NOT count toward the circuit breaker — Railway's edge proxy
-   * periodically returns empty 503s during LB rotation and those shouldn't
-   * trip the CB and stall pushes for 30s. Only persistent app-level errors
-   * (4xx that aren't 429, non-HTTP failures) count toward the CB.
+   * #157: All failures — transient (5xx / timeout) AND app-level (4xx) — count
+   * toward the circuit breaker. The CB is tuned to be a fast-open/fast-close
+   * pulse (3 consecutive failures → 3s lockout), so a brief Railway proxy
+   * blip trips it but recovery arrives in 3s, not 30s. `handleSuccess`
+   * already clears `status.lastError` and resets `state='connected'`, so the
+   * admin UI's red badge goes away on its own once traffic recovers.
+   *
+   * An earlier iteration exempted transient errors entirely — that was
+   * "lying to the architecture": the CB stayed closed even during real
+   * outages, and nothing rate-limited stacked Results pushes. The pulse CB
+   * gives us the right backpressure without the 30s lockout problem the
+   * original constants had.
    */
   private handleError(error: Error, channel: 'xml' | 'oncourse' | 'results'): void {
     Logger.error('LivePusher', `${channel} push failed`, error);
@@ -786,23 +829,7 @@ export class LivePusher extends EventEmitter<LivePusherEvents> {
     // Update global error
     this.status.lastError = `${channel}: ${error.message}`;
 
-    // Is this a transient infra error we should tolerate without opening CB?
-    const isTransient =
-      error instanceof LiveTimeoutError ||
-      (error instanceof LiveApiError &&
-        ((error.statusCode >= 500 && error.statusCode <= 599) ||
-          error.statusCode === 429));
-
-    if (isTransient) {
-      // Don't touch CB. Next push will try again (LiveClient already retried
-      // 5xx/429 internally before throwing; the retries were also exhausted,
-      // but the next scheduled push has a fresh retry budget).
-      this.emitStatusChange();
-      this.emit('error', error);
-      return;
-    }
-
-    // Real app-level failure — count toward CB.
+    // Increment circuit breaker
     this.consecutiveFailures++;
     this.status.circuitBreaker.consecutiveFailures = this.consecutiveFailures;
 
