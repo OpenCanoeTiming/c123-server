@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.2](https://github.com/OpenCanoeTiming/c123-server/compare/v0.11.1...v0.11.2) (2026-04-29)
+
+
+### Bug Fixes
+
+* trim bib at XML extraction boundary ([#94](https://github.com/OpenCanoeTiming/c123-server/issues/94)) ([8a4a0d9](https://github.com/OpenCanoeTiming/c123-server/commit/8a4a0d9bbf90f9ec98b6d8e492efa809ee1f6723))
+
 ## [0.11.1](https://github.com/OpenCanoeTiming/c123-server/compare/v0.11.0...v0.11.1) (2026-04-22)
 
 
