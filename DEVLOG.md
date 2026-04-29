@@ -1,5 +1,15 @@
 # C123 Server - Development Log
 
+## 2026-04-29 — Bib whitespace audit after trimValues: false (issue #80)
+
+**Problem:** PR #77 set `trimValues: false` globally on all XML parsers to preserve fixed-width `@_Gates` strings. Side effect: `@_Bib` (right-aligned 4-char field like `"  44"`) was emitted untrimmed via WebSocket while REST API trimmed it. Downstream scoreboard cache keyed by REST bibs couldn't look up WS bibs — 100% miss rate during Jarni slalomy 2026-04-18 BR2 race.
+
+**Attempted:** Scoreboard patched defensively (f000c07). But server was the source of asymmetry.
+
+**Solution:** Trim `@_Bib` at the two extraction sites in `xml-parser.ts` (parseOnCourseEntry, parseResults). Documented the `trimValues: false` convention with comments on all three parser instances. Audit confirmed only `@_Bib` and `@_Ranking` (already trimmed in XmlDataService) had real XML padding — other attributes (Name, Club, Nat, RaceId, etc.) are clean in source XML.
+
+**Lesson:** Global parser config changes are not local fixes. Every attribute must be analyzed for impact. The fix belongs at the extraction boundary, not at the parser flag level.
+
 ## 2026-04-12 ��� Service → tray app: Gemini caught three missing concerns (#72)
 
 **Problem:** Plan to replace Windows service with user-launched tray app looked complete, but /second-opinion (Gemini) flagged three user-facing gaps: (1) no single-instance guard — user could accidentally launch twice from Start Menu and get a confusing EADDRINUSE error, (2) no process termination during upgrade/uninstall — Inno Setup had `CloseApplications=no` for the service model but now the running node.exe holds file locks, (3) removing `setupTrayFileLog()` left the wscript.exe-launched server with zero diagnostics on crash.
