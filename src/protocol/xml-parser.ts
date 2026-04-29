@@ -155,7 +155,7 @@ function parseOnCourseEntry(entry: unknown, position: number): OnCourseCompetito
     return null;
   }
 
-  const bib = String(participant['@_Bib'] ?? '');
+  const bib = String(participant['@_Bib'] ?? '').trim();
   if (!bib) {
     return null;
   }
@@ -229,7 +229,7 @@ export function parseResults(element: unknown): ResultsMessage | null {
 
       if (!participant) continue;
 
-      const bib = String(participant['@_Bib'] ?? '');
+      const bib = String(participant['@_Bib'] ?? '').trim();
       if (!bib) continue;
 
       // Find Result Type="T"
