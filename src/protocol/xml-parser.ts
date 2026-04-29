@@ -11,6 +11,10 @@ import type {
   ScheduleRace,
 } from './parser-types.js';
 
+// trimValues: false preserves whitespace in XML attribute values.
+// Required for @_Gates which uses fixed-width positional encoding (issue #75).
+// All other attributes that need clean values are trimmed explicitly at
+// extraction (e.g. bib.trim()). Do not re-enable trimValues.
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',

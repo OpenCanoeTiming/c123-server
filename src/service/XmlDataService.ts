@@ -168,6 +168,9 @@ export class XmlDataService {
   private readonly parser: XMLParser;
 
   constructor() {
+    // trimValues: false — must match protocol parser.
+    // See xml-parser.ts for rationale (issue #75).
+    // String fields trimmed at extraction (e.g. bib, ranking).
     this.parser = new XMLParser({
       ignoreAttributes: false,
       attributeNamePrefix: '@_',

@@ -68,6 +68,8 @@ export class XmlChangeNotifier extends EventEmitter<XmlChangeNotifierEvents> {
     this.pollInterval = config.pollInterval ?? 1000;
     this.debounceMs = config.debounceMs ?? 100;
 
+    // trimValues: false — must match protocol parser for consistent hashing.
+    // See xml-parser.ts for rationale (issue #75).
     this.parser = new XMLParser({
       ignoreAttributes: false,
       attributeNamePrefix: '@_',
