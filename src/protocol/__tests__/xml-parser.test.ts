@@ -323,6 +323,46 @@ describe('parseXmlMessage', () => {
     }
   });
 
+  it('trims right-aligned bib padding in OnCourse (issue #80)', () => {
+    // C123 emits Bib as right-aligned 4-char field: "  44", " 128"
+    // trimValues: false preserves this padding, but bib must be trimmed
+    // at extraction to avoid WS/REST asymmetry (scoreboard cache miss)
+    const xml =
+      '<Canoe123 System="Main">' +
+      '<OnCourse Total="1" Position="1">' +
+      '<Participant Bib="  44" Name="TEST" Club="" Nat="" Race="" RaceId="TEST" Warning="" />' +
+      '<Result Type="C" Gates="0,0,0,2,," Completed="N" dtStart="10:00:00.000" />' +
+      '<Result Type="T" Pen="6" Time="5000" Rank="1" />' +
+      '</OnCourse>' +
+      '</Canoe123>';
+
+    const results = parseXmlMessage(xml);
+    const data = results[0].data;
+    expect(data).not.toBeNull();
+    if (data && 'competitors' in data) {
+      expect(data.competitors[0].bib).toBe('44');
+    }
+  });
+
+  it('trims right-aligned bib padding in Results (issue #80)', () => {
+    const xml =
+      '<Canoe123 System="Main">' +
+      '<Results RaceId="TEST" Current="Y" MainTitle="Test" SubTitle="">' +
+      '<Row Number="1">' +
+      '<Participant Bib=" 128" Name="TEST" GivenName="T" FamilyName="TEST" Club="" StartOrder="1" StartTime="" />' +
+      '<Result Type="T" Pen="0" Time="80.00" Total="80.00" Rank="1" Behind="" />' +
+      '</Row>' +
+      '</Results>' +
+      '</Canoe123>';
+
+    const results = parseXmlMessage(xml);
+    const data = results[0].data;
+    expect(data).not.toBeNull();
+    if (data && 'rows' in data) {
+      expect(data.rows[0].bib).toBe('128');
+    }
+  });
+
   it('preserves fully-scored gates without trimming (issue #75)', () => {
     const fullGates = '  0  0  0  0  2  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  2';
     const xml =
