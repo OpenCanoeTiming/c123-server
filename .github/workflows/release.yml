@@ -85,7 +85,7 @@ jobs:
           Write-Host "Installer: $installerName"
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: c123-server-setup-${{ steps.version.outputs.version }}
           path: installer/Output/c123-server-setup-*.exe
