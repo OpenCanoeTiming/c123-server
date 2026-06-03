@@ -39,7 +39,7 @@
     "eslint": "^10.3.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
-    "typescript-eslint": "^8.59.1",
+    "typescript-eslint": "^8.60.0",
     "vitest": "^4.1.5"
   },
   "engines": {
