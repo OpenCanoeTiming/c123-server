@@ -24,7 +24,7 @@
     "chokidar": "^5.0.0",
     "express": "^5.2.1",
     "fast-xml-parser": "^5.8.0",
-    "ws": "^8.20.0"
+    "ws": "^8.21.0"
   },
   "optionalDependencies": {
     "systray2": "^2.1.4"
