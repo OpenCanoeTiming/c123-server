@@ -1,5 +1,15 @@
 # C123 Server - Development Log
 
+## 2026-01-02 — Finish highlight not triggering via server (archived investigation)
+
+**Problem:** When a scoreboard ran against c123-server (vs the legacy CLI), the highlight + scroll-to-result on competitor finish did not fire.
+
+**Attempted:** Aligned many WebSocket message details to the CLI shape — `Rank`/`Pen` as strings, 4-char padded `Bib`, lowercase `dtStart`/`dtFinish`, `TotalTime`→`Total`, added `Nat`/`RaceId`/`TTBDiff`/`TTBName`. Root cause was the scoreboard's own finish detection in `ScoreboardContext.tsx`: it sets `pendingHighlightBib` on the `dtFinish` null→timestamp transition, then only triggers the highlight when `result.total === pendingHighlightTotal` exactly. The `total` values from OnCourse vs the Results table never matched exactly (format/timing), so the highlight never armed.
+
+**Solution:** Still open at the time; later superseded by the current finish-handling path (scoreboard-side `dtFinish` detection plus the `scrollToFinished` / `browseAfterHighlight` client config flags). Original note referenced the pre-`unified/` layout (`src/output/`, `src/state/`) and is no longer accurate.
+
+**Lesson:** Matching the wire format field-by-field isn't enough when the consumer gates behavior on an exact value equality (`total`) across two independently-formatted message streams. Prefer an explicit highlight signal over inferring it from coincidental value matches.
+
 ## 2026-04-29 — Bib whitespace audit after trimValues: false (issue #80)
 
 **Problem:** PR #77 set `trimValues: false` globally on all XML parsers to preserve fixed-width `@_Gates` strings. Side effect: `@_Bib` (right-aligned 4-char field like `"  44"`) was emitted untrimmed via WebSocket while REST API trimmed it. Downstream scoreboard cache keyed by REST bibs couldn't look up WS bibs — 100% miss rate during Jarni slalomy 2026-04-18 BR2 race.
