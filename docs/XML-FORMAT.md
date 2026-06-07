@@ -2,7 +2,7 @@
 
 This document describes the XML export format from Canoe123 (Siwidata) that C123 Server can read and serve via REST API.
 
-> **Complete documentation:** For exhaustive XML format documentation, see `analysis/c123-xml-format.md` in the analysis repository.
+> **Complete documentation:** For exhaustive XML format documentation, see `../c123-protocol-docs/c123-xml-format.md`.
 
 ---
 

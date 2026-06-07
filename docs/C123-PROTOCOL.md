@@ -3,8 +3,8 @@
 This document describes the WebSocket protocol provided by C123 Server for scoreboard clients.
 
 > **Note:** For documentation of the native Canoe123 TCP/UDP protocol (XML format, network architecture), see:
-> - `analysis/c123-protocol.md` - Native network protocol
-> - `analysis/c123-xml-format.md` - XML file export format
+> - `../c123-protocol-docs/c123-protocol.md` - Native network protocol
+> - `../c123-protocol-docs/c123-xml-format.md` - XML file export format
 
 ---
 
@@ -12,8 +12,13 @@ This document describes the WebSocket protocol provided by C123 Server for score
 
 C123 Server connects to Canoe123 via TCP:27333 and transforms XML messages to JSON, providing:
 
-- **WebSocket API** at `ws://server:3001/ws` for real-time data
-- **REST API** at `http://server:3001/api` for static data and XML access
+- **WebSocket API** at `ws://server:27123/ws` for real-time data
+- **REST API** at `http://server:27123/api` for static data and XML access
+
+Everything runs on a single port (**27123**). Two kinds of WebSocket connection exist:
+
+- **Scoreboard** — `ws://server:27123/ws` (optionally `?clientId=<id>`): receives C123 data, `Connected`, `ConfigPush`, `ForceRefresh`, `XmlChange`, and `XmlMismatch`.
+- **Admin dashboard** — `ws://server:27123/ws?admin=1`: additionally receives monitoring messages (`LogEntry`, `ScoringEvent`, `LiveStatus`, `ClientsUpdate`).
 
 ---
 
@@ -233,6 +238,26 @@ Sent when XML file changes:
 }
 ```
 
+Possible `sections` values: `Participants`, `Schedule`, `Results`, `Classes`.
+
+### XmlMismatch
+
+Sent when the loaded XML file does not match the live C123 schedule (wrong file selected), and again with `detected: false` when resolved. Also available via `GET /api/xml/mismatch`.
+
+```json
+{
+  "type": "XmlMismatch",
+  "timestamp": "2025-01-02T10:31:00.000Z",
+  "data": {
+    "detected": true,
+    "tcpFingerprint": "K1M_ST_BR1|K1W_ST_BR1|...",
+    "xmlFingerprint": "C1M_ST_BR1|C1W_ST_BR1|...",
+    "unmatchedRaceIds": ["K1M_ST_BR1_6"],
+    "message": "XML file does not match C123 live data"
+  }
+}
+```
+
 ### ForceRefresh
 
 Admin-triggered refresh command:
@@ -272,7 +297,7 @@ See [CLIENT-CONFIG.md](CLIENT-CONFIG.md) for complete configuration documentatio
 
 ### LogEntry
 
-Real-time log for admin dashboard:
+Real-time log for admin dashboard. **Admin connections only** (`?admin=1`).
 
 ```json
 {
@@ -283,6 +308,54 @@ Real-time log for admin dashboard:
     "component": "TcpSource",
     "message": "Connected to C123"
   }
+}
+```
+
+### ScoringEvent
+
+Broadcast when a C123 write command (penalty, remove, timing) is successfully sent. **Admin connections only.**
+
+```json
+{
+  "type": "ScoringEvent",
+  "timestamp": "2025-01-16T12:30:00.000Z",
+  "data": {
+    "eventType": "penalty",
+    "bib": "10",
+    "details": { "gate": 5, "value": 2 }
+  }
+}
+```
+
+| eventType | details |
+|-----------|---------|
+| `penalty` | `{ gate, value, raceId? }` (`raceId` for finished-competitor corrections) |
+| `remove` | `{ reason: "DNS" \| "DNF" \| "CAP", position }` |
+| `timing` | `{ channelPosition: "Start" \| "Finish" \| "Split1" \| "Split2" }` |
+
+See [REST-API.md](REST-API.md#c123-write-api) for the originating endpoints.
+
+### LiveStatus
+
+Status of the Live-Mini pusher (push to a remote `c123-live` server). Sent on every state change, throttled to max 2/s. **Admin connections only.** The `data` payload matches the `status` object from `GET /api/live/status`.
+
+```json
+{
+  "type": "LiveStatus",
+  "timestamp": "2025-01-02T10:31:00.000Z",
+  "data": { "state": "connected", "eventId": "czech-cup-2025", "...": "..." }
+}
+```
+
+### ClientsUpdate
+
+The current list of connected/known scoreboard clients, sent on connect, disconnect, or session update. **Admin connections only.** The `data.clients` array matches `GET /api/clients`.
+
+```json
+{
+  "type": "ClientsUpdate",
+  "timestamp": "2025-01-05T10:30:00.000Z",
+  "data": { "clients": [ { "ip": "192.168.1.50", "online": true, "...": "..." } ] }
 }
 ```
 
@@ -357,4 +430,4 @@ See [INTEGRATION.md](INTEGRATION.md#br1br2-merge-strategy) for details.
 - [XML-FORMAT.md](XML-FORMAT.md) - XML file format with examples
 - [CLIENT-CONFIG.md](CLIENT-CONFIG.md) - Remote client configuration
 - [INTEGRATION.md](INTEGRATION.md) - Scoreboard integration guide
-- `analysis/c123-protocol.md` - Native C123 TCP/UDP protocol (detailed)
+- `../c123-protocol-docs/c123-protocol.md` - Native C123 TCP/UDP protocol (detailed)
