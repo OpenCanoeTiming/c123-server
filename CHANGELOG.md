@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.3](https://github.com/OpenCanoeTiming/c123-server/compare/v0.11.2...v0.11.3) (2026-06-07)
+
+
+### Bug Fixes
+
+* remove deprecated baseUrl from tsconfig (TS 6.0 compat) ([ee0b0e2](https://github.com/OpenCanoeTiming/c123-server/commit/ee0b0e2bfb6945a250791cee9a75a986dd122d50))
+
 ## [0.11.2](https://github.com/OpenCanoeTiming/c123-server/compare/v0.11.1...v0.11.2) (2026-04-29)
 
 
