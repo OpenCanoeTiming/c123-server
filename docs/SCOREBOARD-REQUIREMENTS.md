@@ -479,14 +479,14 @@ async function syncFromRestApi(): Promise<void> {
 
 ### OnCourse Time
 
-Running time in OnCourse is in **centiseconds** (1/100th of a second):
+Running time in OnCourse is a **formatted second string**, same as Results —
+C123 sends whole seconds while the competitor is on course and a two-decimal
+value once the run is timed:
 
 ```typescript
-// OnCourse time: "8115" = 81.15 seconds
-function formatRunningTime(centiseconds: string): string {
-  const cs = parseInt(centiseconds, 10);
-  const seconds = cs / 100;
-  return seconds.toFixed(2); // "81.15"
+// OnCourse time: "53" while running, "81.15" once finished
+function formatRunningTime(time: string): string {
+  return parseFloat(time).toFixed(2); // "53.00" / "81.15"
 }
 ```
 

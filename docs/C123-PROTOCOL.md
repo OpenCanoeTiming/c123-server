@@ -99,12 +99,12 @@ Competitors currently on course (~2/second during racing).
 | `name` | string | Full name |
 | `club` | string | Club name |
 | `raceId` | string | Race identifier |
-| `gates` | string | Penalties per gate: `0`=clean, `2`=touch, `50`=miss |
+| `gates` | string | Penalties per gate, three space-padded characters each: `0`=clean, `2`=touch, `50`=miss |
 | `dtStart` | string | Start timestamp |
 | `dtFinish` | string\|null | Finish timestamp (null until finish) |
 | `pen` | number | Total penalty seconds |
-| `time` | string | Running time in centiseconds |
-| `total` | string | Total time (time + penalties) |
+| `time` | string | Running time in seconds, formatted (`"53"` while running, `"75.09"` once timed) |
+| `total` | string | Total time in seconds, formatted (time + penalties) |
 | `ttbDiff` | string | Difference to leader |
 | `rank` | number | Current rank |
 | `position` | number | Position on course (1 = closest to finish) |
