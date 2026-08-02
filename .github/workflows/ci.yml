@@ -39,6 +39,5 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Tests disabled until test files are added
-      # - name: Test
-      #   run: npm run test -- --run
+      - name: Test
+        run: npm run test -- --run
