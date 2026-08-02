@@ -183,3 +183,19 @@ Přidáno odeslání Schedule z EventState při připojení nového klienta (po 
 - Master key is session-only, never saved to AppSettings
 - Event image is sent as base64 data URL in createEvent request body
 - Browse Events uses server-side proxy to avoid CORS issues with direct browser fetch
+
+## 2026-08-02 — CI test step re-enabled: two failures, neither where issue #142 pointed
+
+**Problem:** `.github/workflows/ci.yml` had the `Test` step commented out since the first CI commit ("until test files are added"). With 34 files / 628 tests today, issue #142 asked to re-enable it, reporting two blockers: a dashboard 404 blamed on `ADMIN_UI_DIR` path resolution under Express 5, and an `e2e-recording` hook timeout blamed on a slow recording download.
+
+**Attempted:** Both diagnoses were wrong; reproducing them properly changed the fix entirely.
+
+1. *Dashboard 404.* `src/admin-ui/index.html` was always found — the path resolved fine. The real trigger is `res.sendFile()` called with one absolute path and no `root`: `send` then applies its `dotfiles: 'ignore'` rule to **every segment of the whole path**, so any dot-directory anywhere above the install 404s. Isolated by cloning the same commit twice: `/home/node/.claude/jobs/.../clean142` → 2 failed, `/home/node/clean142-nodot` → 62 passed. The issue's repro had run from a worktree under `.claude/` (its 618 passed + 2 failed matches exactly). CI checks out to `/home/runner/work/...`, so this never failed in CI at all — but it does break real `npm i -g` installs under `~/.nvm`, `~/.local`, `~/.volta`.
+
+2. *Hook timeout.* It is `afterAll`, not `beforeAll`, and the download is not slow — it 404s instantly. When the recording is unavailable `beforeAll` returns early, so `mockTcpServer` stays `undefined`; `mockTcpServer?.close(() => resolve())` short-circuits the call **together with its callback**, leaving the promise forever pending until the 10s `hookTimeout`.
+
+**Solution:** `res.sendFile('index.html', { root: ADMIN_UI_DIR })`, and an `if (mockTcpServer)` guard around the close promise. Then uncommented the `Test` step. Full suite: 34 files / 620 passed / 8 skipped, green from both dotted and plain paths.
+
+**Lesson:** Optional chaining on a callback-style API silently drops the callback, which turns "cleanup skipped" into "promise never settles" — `?.` is unsafe wherever the call is the only thing that will resolve a promise. And a bug reproduced only inside a tooling worktree may be reproducing the *worktree path*, not the code: confirm by relocating an identical checkout before trusting the diagnosis.
+
+**Follow-up:** The e2e recording fixture is permanently dead — `rec-2025-12-28T09-34-10.jsonl` no longer exists in c123-protocol-docs (recordings were restructured into dated folders), so those 5 tests silently skip. Adding `GITHUB_TOKEN` would not help. Tracked separately.
