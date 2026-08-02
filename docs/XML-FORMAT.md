@@ -18,12 +18,16 @@ Canoe123 exports race data to an XML file that is continuously updated during th
 
 | Section | Description | REST Endpoint |
 |---------|-------------|---------------|
-| `Events` | Competition metadata (title, location, dates) | `/api/xml/events` |
+| `Events` | Competition metadata (title, location, dates) | *not exposed directly* — event name via `/api/event` |
 | `Participants` | Competitors and teams | `/api/xml/participants` |
-| `Classes` | Race categories | `/api/xml/classes` |
+| `Classes` | Race categories | *not exposed directly* — `classId` appears in `/api/xml/schedule` and `/api/xml/races` |
 | `Schedule` | Race schedule | `/api/xml/schedule` |
-| `Results` | Race results | `/api/xml/races/:raceId/results` |
-| `CourseData` | Course configuration (gates) | `/api/xml/course` |
+| `Results` | Race results | `/api/xml/races/:id/results` |
+| `CourseData` | Course configuration (gates) | `/api/xml/courses` |
+
+> The endpoint list above is a convenience index, not the API reference.
+> [REST-API.md](REST-API.md) is authoritative for routes, parameters and
+> response shapes.
 
 ---
 
