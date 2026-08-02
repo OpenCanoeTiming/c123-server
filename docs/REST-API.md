@@ -636,9 +636,26 @@ Get course configuration data including gate setup and split positions.
 
 | Character | Meaning |
 |-----------|---------|
-| `N` | Normal gate (downstream) |
-| `R` | Reverse gate (upstream) |
-| `S` | Split point (timing checkpoint) |
+| `N` | Downstream gate ("normal", green) |
+| `R` | Upstream gate ("reverse", red) |
+| `I` | Split timing ("insert split") |
+| `S` | Sector delimiter ("gate section") |
+| `E` | Roll zone |
+| `D` | Kayak cross start |
+
+Only `N` and `R` are gates. `I`, `S`, `E` and `D` are markers between them, so
+a course string is longer than its gate count — `NNRNSNRNSRNNSNRNSNRNSRNSNRNSNRNS`
+is 32 characters but 24 gates. See
+`../c123-protocol-docs/c123-xml-format.md` for the source-verified list.
+
+> **Known defect:** the `splits` array above is derived from `S` and reports
+> the raw character index, not the gate number, so its values are wrong on any
+> course containing markers (32-character example above → `[5, 9, 13, ...]`
+> instead of `[4, 7, 10, ...]`). The example payload in this section predates
+> the current implementation and matches neither. Tracked in
+> [#148](https://github.com/OpenCanoeTiming/c123-server/issues/148); the field
+> will change once it is decided whether it should express sectors (`S`) or
+> split timing (`I`).
 
 **Use cases:**
 - c123-scoring uses splits for automatic gate grouping

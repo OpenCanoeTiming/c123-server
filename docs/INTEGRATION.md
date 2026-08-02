@@ -1087,16 +1087,27 @@ if (message.type === 'Results' && message.data.isCurrent) {
 
 ### 4. Handle Time Formats
 
-Times are in centiseconds (1/100s). Convert for display:
+WebSocket times are **formatted second strings**, passed through from C123
+unchanged — not centiseconds, and not the milliseconds the REST API returns:
 
 ```typescript
-function formatTime(centiseconds: number): string {
-  const seconds = centiseconds / 100;
-  return seconds.toFixed(2);
+function formatTime(time: string): string {
+  return parseFloat(time).toFixed(2)
 }
 
-// 7899 -> "78.99"
+// "75.09" -> "75.09"   (finished run, two decimals)
+// "53"    -> "53.00"   (still running, C123 sends whole seconds)
 ```
+
+Watch the two data paths — they do not agree, and mixing them up has already
+caused a display bug:
+
+| Path | `time` / `total` | Example |
+|------|------------------|---------|
+| WebSocket (`OnCourse`, `Results`) | string, seconds | `"75.09"` |
+| REST (`/api/xml/races/:id/results`) | number, milliseconds | `76990` |
+
+See [REST-API.md](REST-API.md#time-format) for the REST side.
 
 ---
 
