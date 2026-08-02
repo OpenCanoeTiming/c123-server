@@ -491,9 +491,9 @@ Get results for a specific race.
       "bib": "1",
       "startTime": "10:00:00",
       "status": "",
-      "time": 7899,
+      "time": 76990,
       "pen": 2,
-      "total": 7899,
+      "total": 78990,
       "rank": 1,
       "gates": "  0  0  2  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0",
       "participant": {
@@ -512,9 +512,9 @@ Get results for a specific race.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `time` | number | Run time in centiseconds (7899 = 78.99s) |
+| `time` | number | Run time in milliseconds (76990 = 76.99s) |
 | `pen` | number | Penalty in seconds |
-| `total` | number | Total time in centiseconds |
+| `total` | number | Total time in milliseconds (`time` + `pen` × 1000) |
 | `rank` | number | Position in results |
 | `status` | string | Empty for valid, `DSQ`, `DNS`, `DNF` for invalid |
 | `gates` | string | Space-separated per-gate penalties (0, 2, or 50) |
@@ -531,18 +531,18 @@ Get results for a specific race.
       "givenName": "Jakub",
       "club": "TJ DUKLA Praha",
       "run1": {
-        "time": 7899,
+        "time": 76990,
         "pen": 2,
-        "total": 7899,
+        "total": 78990,
         "rank": 1
       },
       "run2": {
-        "time": 7756,
+        "time": 77560,
         "pen": 0,
-        "total": 7756,
+        "total": 77560,
         "rank": 2
       },
-      "bestTotal": 7756,
+      "bestTotal": 77560,
       "bestRank": 1
     }
   ],
@@ -557,9 +557,9 @@ Get results for a specific race.
    ```json
    {
      "bib": "5",
-     "run1": { "time": 8156, "pen": 4, "total": 8196, "rank": 3 },
+     "run1": { "time": 81560, "pen": 4, "total": 85560, "rank": 3 },
      "run2": {},  // Not undefined!
-     "bestTotal": 8196,
+     "bestTotal": 85560,
      "bestRank": 3
    }
    ```
@@ -2181,21 +2181,32 @@ All endpoints return consistent error responses:
 
 ## Time Format
 
-Times in results are stored as **centiseconds** (1/100th of a second):
+The `time` and `total` fields in results are **milliseconds** — the raw value
+from the Canoe123 XML, passed through without conversion:
 
 | Value | Meaning |
 |-------|---------|
-| `7899` | 78.99 seconds |
-| `8156` | 81.56 seconds |
+| `76990` | 76.99 seconds |
+| `81560` | 81.56 seconds |
+
+`pen` is different: it is a penalty in **whole seconds**, so
+`total = time + pen × 1000`.
 
 To convert to display format:
 
 ```javascript
-function formatTime(centiseconds) {
-  const seconds = centiseconds / 100;
+function formatTime(milliseconds) {
+  const seconds = milliseconds / 1000;
   return seconds.toFixed(2);
 }
 ```
+
+> **Historical note:** this section previously claimed centiseconds. It was
+> wrong, and the mistake propagated — c123-penalty-check divided by 100 and
+> displayed every time 10× too large
+> ([#98](https://github.com/OpenCanoeTiming/c123-penalty-check/issues/98)).
+> Verify against real data before trusting a unit: in the XML samples a 76.99s
+> run is `<Time>76990</Time>` with `<Total>78990</Total>` and `<Pen>2</Pen>`.
 
 ---
 

@@ -127,14 +127,14 @@ Canoe123 exports race data to an XML file that is continuously updated during th
   <Rank>1</Rank>
   <Bib>42</Bib>
   <Pen>2</Pen>
-  <Time>8532</Time>
-  <TotalTime>8732</TotalTime>
+  <Time>85320</Time>
+  <TotalTime>87320</TotalTime>
   <Gates>0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0</Gates>
   <Status>0</Status>
 </Results>
 ```
 
-**Time Values:** All times are in centiseconds (1/100 second).
+**Time Values:** Run times are in milliseconds (85320 = 85.32 seconds).
 - `Time`: Run time without penalties
 - `TotalTime`: Run time + penalty seconds (each gate touch = 2s, miss = 50s)
 - `Pen`: Total penalty seconds
