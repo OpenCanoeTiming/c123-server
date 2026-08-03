@@ -80,6 +80,13 @@ export interface ServerEvents {
   xmlMismatchResolved: [];
 }
 
+/**
+ * How long to wait before re-reading the XML to confirm a suspected event
+ * change. Long enough for an in-progress Canoe123 rewrite to finish, short
+ * enough that a real event switch archives promptly.
+ */
+const MISMATCH_CONFIRM_DELAY_MS = 1500;
+
 const DEFAULT_CONFIG: Required<ServerConfig> = {
   tcpHost: '',
   tcpPort: 27333,
@@ -116,6 +123,7 @@ export class Server extends EventEmitter<ServerEvents> {
   private windowsConfigDetector: WindowsConfigDetector | null = null;
   private livePusher: LivePusher;
   private checksStore: ChecksStore;
+  private mismatchConfirmTimer: NodeJS.Timeout | null = null;
 
   private isRunning = false;
   private discoveredHost: string | null = null;
@@ -208,6 +216,11 @@ export class Server extends EventEmitter<ServerEvents> {
     await this.xmlChangeNotifier?.stop();
     this.xmlMismatchDetector?.stop();
     this.stopAutoDetection();
+
+    if (this.mismatchConfirmTimer) {
+      clearTimeout(this.mismatchConfirmTimer);
+      this.mismatchConfirmTimer = null;
+    }
 
     // Flush and cleanup checks
     this.checksStore.destroy();
@@ -764,13 +777,43 @@ export class Server extends EventEmitter<ServerEvents> {
   private async refreshScheduleFingerprint(): Promise<void> {
     try {
       const schedule = await this.xmlDataService.getSchedule();
-      this.checksStore.setScheduleFingerprint(computeScheduleFingerprint(schedule));
+      const outcome = this.checksStore.setScheduleFingerprint(computeScheduleFingerprint(schedule));
+
+      if (outcome === 'pending-confirmation') {
+        this.confirmScheduleMismatch();
+      }
     } catch (err) {
       Logger.warn(
         'Server',
         `Could not compute schedule fingerprint: ${err instanceof Error ? err.message : String(err)}`
       );
     }
+  }
+
+  /**
+   * Re-read the XML once to confirm a suspected event change.
+   *
+   * Archiving is destructive, so the store refuses to act on a single sighting
+   * — Canoe123 rewrites the multi-megabyte XML constantly and a read can catch
+   * it mid-write. The confirmation cannot wait for the next 'change' event: a
+   * file that is not being rewritten (an offline copy of another event) would
+   * never produce one, and the stale checks would linger forever. So we force
+   * a fresh read ourselves after a short delay.
+   */
+  private confirmScheduleMismatch(): void {
+    if (this.mismatchConfirmTimer) {
+      return;
+    }
+
+    this.mismatchConfirmTimer = setTimeout(() => {
+      this.mismatchConfirmTimer = null;
+      // Bypass the read cache so this is a genuinely independent read.
+      this.xmlDataService.clearCache();
+      void this.refreshScheduleFingerprint();
+    }, MISMATCH_CONFIRM_DELAY_MS);
+
+    // Never hold the process open for this.
+    this.mismatchConfirmTimer.unref?.();
   }
 
   private startXmlMismatchDetector(): void {

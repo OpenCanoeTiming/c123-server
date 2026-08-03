@@ -714,6 +714,8 @@ describe('ChecksStore', () => {
       store.setScheduleFingerprint('A@2026-04-19|B@2026-04-19');
       store.setCheck('A', '1', 1, 2);
 
+      // Twice: a single sighting is treated as a possibly torn read.
+      store.setScheduleFingerprint('X@2026-05-01|Y@2026-05-01');
       store.setScheduleFingerprint('X@2026-05-01|Y@2026-05-01');
 
       expect(store.getChecks('A').checks['1:1']).toBeUndefined();
@@ -723,6 +725,53 @@ describe('ChecksStore', () => {
         f.includes('archived')
       );
       expect(archived).toHaveLength(1);
+    });
+
+    it('does not archive on a single sighting of a different schedule', () => {
+      const filename = getUniqueTestFile();
+      store.loadForFile(filename);
+      store.setScheduleFingerprint('A@2026-04-19|B@2026-04-19|C@2026-04-19|D@2026-04-19');
+      store.setCheck('A', '1', 1, 2);
+
+      // One truncated read of the live XML: well-formed, but only the first
+      // race made it into the buffer.
+      store.setScheduleFingerprint('A@2026-04-19');
+
+      expect(store.getChecks('A').checks['1:1']).toBeDefined();
+      expect(store.getAllChecks()?.fingerprint).toBe(
+        'A@2026-04-19|B@2026-04-19|C@2026-04-19|D@2026-04-19'
+      );
+    });
+
+    it('recovers when a torn read is followed by the real schedule', () => {
+      const filename = getUniqueTestFile();
+      const full = 'A@2026-04-19|B@2026-04-19|C@2026-04-19|D@2026-04-19';
+      store.loadForFile(filename);
+      store.setScheduleFingerprint(full);
+      store.setCheck('A', '1', 1, 2);
+
+      store.setScheduleFingerprint('A@2026-04-19'); // torn read
+      store.setScheduleFingerprint(full); // next poll gets the whole file
+
+      expect(store.getChecks('A').checks['1:1']).toBeDefined();
+
+      const archived = readdirSync(join(tempDir, '.c123-server', 'checks')).filter((f) =>
+        f.includes('archived')
+      );
+      expect(archived).toHaveLength(0);
+    });
+
+    it('requires the same schedule twice, not just two mismatches', () => {
+      const filename = getUniqueTestFile();
+      store.loadForFile(filename);
+      store.setScheduleFingerprint('A@2026-04-19|B@2026-04-19');
+      store.setCheck('A', '1', 1, 2);
+
+      // Two different torn reads in a row must not add up to a confirmation.
+      store.setScheduleFingerprint('X@2026-05-01');
+      store.setScheduleFingerprint('Y@2026-05-01');
+
+      expect(store.getChecks('A').checks['1:1']).toBeDefined();
     });
 
     it('archives the discarded checks even inside the flush debounce window', () => {
@@ -735,6 +784,7 @@ describe('ChecksStore', () => {
       // would be if a schedule change landed within FLUSH_DEBOUNCE_MS.
       store.setCheck('A', '1', 1, 2);
 
+      store.setScheduleFingerprint('X@2026-05-01|Y@2026-05-01');
       store.setScheduleFingerprint('X@2026-05-01|Y@2026-05-01');
 
       const archived = readdirSync(checksDir).filter((f) => f.includes('archived'));
@@ -767,6 +817,7 @@ describe('ChecksStore', () => {
       const events: CheckChangedEvent[] = [];
       store.on('checkChanged', (e) => events.push(e));
 
+      store.setScheduleFingerprint('X@2026-05-01|Y@2026-05-01');
       store.setScheduleFingerprint('X@2026-05-01|Y@2026-05-01');
 
       expect(events).toHaveLength(1);
@@ -828,7 +879,102 @@ describe('ChecksStore', () => {
     });
   });
 
+  describe('Malformed checks files', () => {
+    function writeChecksFile(filename: string, body: string): string {
+      const checksDir = join(tempDir, '.c123-server', 'checks');
+      mkdirSync(checksDir, { recursive: true });
+      writeFileSync(join(checksDir, `${filename}.checks.json`), body);
+      return checksDir;
+    }
+
+    it('falls back to fresh data when races is missing', () => {
+      const filename = getUniqueTestFile();
+      writeChecksFile(filename, JSON.stringify({ xmlFilename: filename, fingerprint: 'A@1' }));
+
+      store.loadForFile(filename);
+
+      // Must not throw, and the escape hatch must stay usable.
+      expect(() => store.getChecks('R1')).not.toThrow();
+      expect(() => store.setScheduleFingerprint('X@2026-05-01')).not.toThrow();
+      expect(() => store.setCheck('R1', '1', 1, 2)).not.toThrow();
+      expect(() => store.resetForNewEvent()).not.toThrow();
+    });
+
+    it('falls back to fresh data when a race has no checks object', () => {
+      const filename = getUniqueTestFile();
+      writeChecksFile(
+        filename,
+        JSON.stringify({ xmlFilename: filename, fingerprint: null, races: { R1: { flags: [] } } })
+      );
+
+      store.loadForFile(filename);
+
+      expect(store.getAllChecks()?.races).toEqual({});
+      expect(() => store.setCheck('R1', '1', 1, 2)).not.toThrow();
+    });
+
+    it('falls back to fresh data when the file is not an object', () => {
+      const filename = getUniqueTestFile();
+      writeChecksFile(filename, 'null');
+
+      store.loadForFile(filename);
+
+      expect(store.getAllChecks()?.races).toEqual({});
+    });
+
+    it('trusts the path over a mismatched xmlFilename in the file', () => {
+      const filename = getUniqueTestFile();
+      writeChecksFile(
+        filename,
+        JSON.stringify({ xmlFilename: 'someone-elses.xml', fingerprint: null, races: {} })
+      );
+
+      store.loadForFile(filename);
+
+      expect(store.getAllChecks()?.xmlFilename).toBe(filename);
+    });
+  });
+
   describe('resetForNewEvent', () => {
+    it('does not carry the old schedule into the new event', () => {
+      const filename = getUniqueTestFile();
+      store.loadForFile(filename);
+      store.setScheduleFingerprint('A@2026-04-19|B@2026-04-19');
+      store.setCheck('A', '1', 1, 2);
+
+      store.resetForNewEvent();
+
+      // A check made before the new XML loads must not pin the old event,
+      // which the next schedule change would then archive away.
+      store.setCheck('A', '1', 1, 2);
+      expect(store.getAllChecks()?.fingerprint).toBeNull();
+
+      store.setScheduleFingerprint('X@2026-05-01|Y@2026-05-01');
+      store.setScheduleFingerprint('X@2026-05-01|Y@2026-05-01');
+      expect(store.getChecks('A').checks['1:1']).toBeDefined();
+    });
+
+    it('reports false when no checks file is loaded', () => {
+      expect(store.resetForNewEvent()).toBe(false);
+    });
+
+    it('keeps both archives when reset twice in the same millisecond', () => {
+      const filename = getUniqueTestFile();
+      store.loadForFile(filename);
+      store.setScheduleFingerprint('A@2026-04-19');
+      store.setCheck('A', '1', 1, 2);
+      store.resetForNewEvent();
+
+      store.setScheduleFingerprint('B@2026-04-20');
+      store.setCheck('B', '2', 2, 50);
+      store.resetForNewEvent();
+
+      const archived = readdirSync(join(tempDir, '.c123-server', 'checks')).filter((f) =>
+        f.includes('archived')
+      );
+      expect(archived).toHaveLength(2);
+    });
+
     it('archives, empties and unpins', () => {
       const filename = getUniqueTestFile();
       store.loadForFile(filename);

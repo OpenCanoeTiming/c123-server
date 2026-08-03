@@ -2,7 +2,12 @@
 export interface CheckEntry {
   /** When the check was performed */
   checkedAt: string; // ISO 8601
-  /** Penalty value snapshot at time of check (0, 2, 50, or null if no penalty) */
+  /**
+   * Penalty value snapshot at the time of the check. Individual races use
+   * 0, 2 or 50; team races carry cumulative values such as 52, 100 or 150.
+   * Null means the value was not known — the gate was unjudged, or the XML
+   * could not be read — which is deliberately distinct from a clean 0.
+   */
   value: number | null;
   /** Optional tag/note */
   tag?: string;
@@ -54,6 +59,16 @@ export interface ChecksFileData {
   /** Per-race checks data. Key is raceId */
   races: Record<string, RaceChecksData>;
 }
+
+/**
+ * Outcome of comparing the stored fingerprint against the live schedule.
+ *
+ * `pending-confirmation` means the schedule looks like a different event but
+ * has only been seen once. The caller must re-read the XML and report again:
+ * a torn read of a file being rewritten resolves itself, a real event change
+ * repeats and then archives.
+ */
+export type ScheduleValidation = 'ok' | 'pending-confirmation' | 'archived';
 
 /** Events emitted by ChecksStore */
 export interface ChecksStoreEvents {

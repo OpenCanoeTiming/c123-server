@@ -12,6 +12,7 @@ import type {
   ChecksStoreEvents,
   CheckChangedEvent,
   FlagChangedEvent,
+  ScheduleValidation,
 } from './types.js';
 import { isSameEvent } from './fingerprint.js';
 
@@ -37,6 +38,12 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
    * never reads the XML itself.
    */
   private liveFingerprint = '';
+
+  /**
+   * Fingerprint that last looked like a different event, still awaiting a
+   * second sighting before we act on it. See validateAgainstSchedule().
+   */
+  private pendingMismatch: string | null = null;
 
   constructor() {
     super();
@@ -95,6 +102,10 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
    * setScheduleFingerprint().
    */
   loadForFile(xmlFilename: string): void {
+    // Writes are debounced, so a pending change to the outgoing file would be
+    // lost by switching without flushing it first.
+    this.flush();
+
     const filePath = this.getFilePath(xmlFilename);
     this.currentFilePath = filePath;
 
@@ -110,7 +121,7 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
 
     try {
       const content = fs.readFileSync(filePath, 'utf-8');
-      const data: ChecksFileData = JSON.parse(content);
+      const data = this.parseChecksFile(content, xmlFilename);
       this.currentData = data;
       Logger.info(
         'ChecksStore',
@@ -123,15 +134,62 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
   }
 
   /**
+   * Parse and structurally validate a checks file.
+   *
+   * A file with the right JSON syntax but the wrong shape — an older schema, a
+   * hand-edited file, a truncated write — would otherwise be accepted whole and
+   * make every later operation throw on a missing `races`, including the
+   * new-event reset that is meant to be the way out. Anything unusable is
+   * rejected here so the caller falls back to fresh data.
+   */
+  private parseChecksFile(content: string, xmlFilename: string): ChecksFileData {
+    const parsed: unknown = JSON.parse(content);
+
+    if (typeof parsed !== 'object' || parsed === null) {
+      throw new Error('checks file is not an object');
+    }
+
+    const data = parsed as Partial<ChecksFileData>;
+
+    if (typeof data.races !== 'object' || data.races === null || Array.isArray(data.races)) {
+      throw new Error('checks file has no usable "races" object');
+    }
+
+    for (const [raceId, race] of Object.entries(data.races)) {
+      if (typeof race !== 'object' || race === null) {
+        throw new Error(`race "${raceId}" is not an object`);
+      }
+      if (typeof race.checks !== 'object' || race.checks === null || Array.isArray(race.checks)) {
+        throw new Error(`race "${raceId}" has no usable "checks" object`);
+      }
+      if (!Array.isArray(race.flags)) {
+        throw new Error(`race "${raceId}" has no usable "flags" array`);
+      }
+    }
+
+    return {
+      // The path is authoritative; a copied file must not misreport which XML
+      // it belongs to.
+      xmlFilename,
+      fingerprint: typeof data.fingerprint === 'string' && data.fingerprint !== ''
+        ? data.fingerprint
+        : null,
+      lastModified:
+        typeof data.lastModified === 'string' ? data.lastModified : new Date().toISOString(),
+      races: data.races as ChecksFileData['races'],
+    };
+  }
+
+  /**
    * Report the fingerprint of the current schedule.
    *
    * Called by the server whenever the XML Schedule section changes, which also
    * covers the first parse after startup and after an XML path switch. Passing
    * an empty string means the schedule is unknown; that never archives anything.
    */
-  setScheduleFingerprint(fingerprint: string): void {
+  setScheduleFingerprint(fingerprint: string): ScheduleValidation {
     this.liveFingerprint = fingerprint;
-    this.validateAgainstSchedule();
+    return this.validateAgainstSchedule();
   }
 
   /**
@@ -142,14 +200,45 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
    * comparing one token. The fingerprint is unpinned and re-pins on the next
    * write.
    */
-  resetForNewEvent(): void {
+  resetForNewEvent(): boolean {
     if (!this.currentData) {
       Logger.warn('ChecksStore', 'resetForNewEvent: no checks file loaded');
-      return;
+      return false;
     }
 
     Logger.info('ChecksStore', 'Starting a new event: archiving current checks');
     this.archiveAndReset();
+
+    // The operator has declared the current schedule stale. Keeping it as the
+    // live fingerprint would let a check made before the new XML loads pin the
+    // OLD event, which the next schedule change would then archive away.
+    // Unpinned is safe — it never archives — and the next schedule change
+    // supplies the real value.
+    this.liveFingerprint = '';
+    this.pendingMismatch = null;
+
+    return true;
+  }
+
+  /**
+   * Pick an archive filename that does not already exist.
+   *
+   * The timestamp has millisecond resolution, and renameSync overwrites
+   * silently — two archives in the same millisecond would destroy the first,
+   * which is the only copy of the discarded checks.
+   */
+  private nextArchivePath(filePath: string): string {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const base = filePath.replace('.checks.json', `.checks.archived-${timestamp}`);
+
+    let candidate = `${base}.json`;
+    let suffix = 1;
+    while (fs.existsSync(candidate)) {
+      candidate = `${base}-${suffix}.json`;
+      suffix++;
+    }
+
+    return candidate;
   }
 
   private emptyData(xmlFilename: string): ChecksFileData {
@@ -165,25 +254,27 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
    * Compare the pinned fingerprint against the live schedule and archive when
    * they describe different events.
    */
-  private validateAgainstSchedule(): void {
+  private validateAgainstSchedule(): ScheduleValidation {
     if (!this.currentData) {
-      return;
+      return 'ok';
     }
 
     // An unknown or empty schedule tells us nothing. Treating it as an empty
     // intersection would let a transient XML read failure wipe the event.
     if (!this.liveFingerprint) {
-      return;
+      return 'ok';
     }
 
     const stored = this.currentData.fingerprint;
 
     // Never pinned: no writes yet, so there is nothing to protect.
     if (!stored) {
-      return;
+      return 'ok';
     }
 
     if (isSameEvent(stored, this.liveFingerprint)) {
+      this.pendingMismatch = null;
+
       // Same event with an edited schedule — track the latest so a long event
       // that drifts race by race keeps comparing against recent reality.
       if (stored !== this.liveFingerprint) {
@@ -192,14 +283,31 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
         this.scheduleFlush();
         Logger.info('ChecksStore', 'Schedule changed within the same event, fingerprint refreshed');
       }
-      return;
+      return 'ok';
+    }
+
+    // Require the same mismatch twice before destroying anything. Canoe123
+    // rewrites the multi-megabyte XML after every competitor, so a read can
+    // catch the file mid-write and return a truncated but still well-formed
+    // schedule. That transient looks exactly like a different event, and
+    // archiving on it would discard the day's checks. A genuinely different
+    // event keeps reporting the same schedule; a torn read does not.
+    if (this.pendingMismatch !== this.liveFingerprint) {
+      this.pendingMismatch = this.liveFingerprint;
+      Logger.warn(
+        'ChecksStore',
+        `Schedule looks like a different event (stored: ${stored}, current: ${this.liveFingerprint}). Awaiting confirmation before archiving.`
+      );
+      return 'pending-confirmation';
     }
 
     Logger.warn(
       'ChecksStore',
-      `Schedule describes a different event (stored: ${stored}, current: ${this.liveFingerprint}). Archiving.`
+      `Schedule confirmed as a different event (stored: ${stored}, current: ${this.liveFingerprint}). Archiving.`
     );
+    this.pendingMismatch = null;
     this.archiveAndReset();
+    return 'archived';
   }
 
   /**
@@ -236,11 +344,7 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
       this.flush();
 
       if (fs.existsSync(this.currentFilePath)) {
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const archivePath = this.currentFilePath.replace(
-          '.checks.json',
-          `.checks.archived-${timestamp}.json`
-        );
+        const archivePath = this.nextArchivePath(this.currentFilePath);
         try {
           fs.renameSync(this.currentFilePath, archivePath);
           Logger.info('ChecksStore', `Archived to ${path.basename(archivePath)}`);
