@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/OpenCanoeTiming/c123-server/compare/v0.11.3...v0.12.0) (2026-08-03)
+
+
+### Features
+
+* penalty check persistence (REST API + WS broadcast) ([#24](https://github.com/OpenCanoeTiming/c123-server/issues/24)) ([41a0881](https://github.com/OpenCanoeTiming/c123-server/commit/41a08811406ca3df88ecbcecd0c404e83f6de048)), closes [#6](https://github.com/OpenCanoeTiming/c123-server/issues/6) [#23](https://github.com/OpenCanoeTiming/c123-server/issues/23)
+
 ## [0.11.3](https://github.com/OpenCanoeTiming/c123-server/compare/v0.11.2...v0.11.3) (2026-08-02)
 
 
