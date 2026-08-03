@@ -296,8 +296,13 @@ export class Server extends EventEmitter<ServerEvents> {
    * Set XML source path manually (disables autodetect)
    */
   setXmlPath(xmlPath: string, saveToSettings: boolean = true): void {
-    // Flush current checks before switching XML
+    // Flush current checks before switching XML, and drop any confirmation
+    // re-read still pending for the outgoing file.
     this.checksStore.flush();
+    if (this.mismatchConfirmTimer) {
+      clearTimeout(this.mismatchConfirmTimer);
+      this.mismatchConfirmTimer = null;
+    }
 
     this.xmlSource?.stop();
     this.xmlChangeNotifier?.stop();

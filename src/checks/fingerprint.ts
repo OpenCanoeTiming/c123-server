@@ -13,6 +13,12 @@ export const SAME_EVENT_MIN_RATIO = 0.5;
 /**
  * Build the event fingerprint from a schedule.
  *
+ * Not to be confused with `EventState.createScheduleFingerprint`, which serves
+ * a different purpose from a different source: it detects that the *TCP* feed
+ * switched events, orders race IDs by race order, carries no day component and
+ * compares by exact equality. This one identifies the event a persisted checks
+ * file belongs to and must tolerate a schedule being edited mid-event.
+ *
  * One `raceId@YYYY-MM-DD` token per race, deduplicated, sorted, joined by `|`.
  * Kept human-readable rather than hashed: this guards against data loss, and
  * diagnosing a file that archived unexpectedly means reading the stored value.

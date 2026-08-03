@@ -217,6 +217,29 @@ describe('Penalty Checks API', () => {
       expect(store.getChecks('K1M_BR1').checks['42:5']).toBeUndefined();
     });
 
+    it('accepts a numeric string, matching how gate already behaved', async () => {
+      const response = await fetch(`${baseUrl}/api/checks/K1M_BR1/check`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bib: '42', gate: '5', value: '2' }),
+      });
+      expect(response.status).toBe(200);
+
+      const data = (await response.json()) as JsonResponse;
+      expect(data.check.value).toBe(2);
+    });
+
+    it('rejects a non-string tag', async () => {
+      // Anything accepted here is persisted to disk and broadcast to clients.
+      const response = await fetch(`${baseUrl}/api/checks/K1M_BR1/check`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bib: '42', gate: 5, value: 2, tag: { evil: [1, 2, 3] } }),
+      });
+      expect(response.status).toBe(400);
+      expect(store.getChecks('K1M_BR1').checks['42:5']).toBeUndefined();
+    });
+
     it('rejects a boolean value', async () => {
       const response = await fetch(`${baseUrl}/api/checks/K1M_BR1/check`, {
         method: 'PUT',
@@ -238,6 +261,15 @@ describe('Penalty Checks API', () => {
       });
       expect(response.status).toBe(200);
       expect(store.getChecks('K1M_BR1').checks['42:5']).toBeUndefined();
+    });
+
+    it('returns 404 for a check that was never set', async () => {
+      const response = await fetch(`${baseUrl}/api/checks/K1M_BR1/check`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bib: '99', gate: 1 }),
+      });
+      expect(response.status).toBe(404);
     });
   });
 

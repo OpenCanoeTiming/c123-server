@@ -3358,10 +3358,6 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
-   * Helper: Parse and validate bib and gate from request body
-   * Returns parsed values or null (and sends 400 response)
-   */
-  /**
    * Guard for the checks routes: the service must exist and have a file open.
    *
    * "No XML path set yet" is the not-ready state that actually occurs in
@@ -3384,6 +3380,10 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     return this.checksStore;
   }
 
+  /**
+   * Helper: Parse and validate bib and gate from request body
+   * Returns parsed values or null (and sends 400 response)
+   */
   private parseBibGate(req: Request, res: Response): { bib: string; gate: number } | null {
     const { bib, gate } = req.body;
 
@@ -3497,6 +3497,13 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     const { raceId } = req.params;
     const { value, tag } = req.body;
 
+    // A tag is free text. Without this an arbitrary JSON value would be
+    // persisted to the checks file and broadcast to every connected client.
+    if (tag !== undefined && typeof tag !== 'string') {
+      res.status(400).json({ error: 'tag must be a string' });
+      return;
+    }
+
     // Validate bib and gate
     const parsed = this.parseBibGate(req, res);
     if (!parsed) {
@@ -3562,7 +3569,12 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     const { bib, gate: gateNum } = parsed;
 
     try {
-      checks.removeCheck(raceId, bib, gateNum);
+      if (!checks.removeCheck(raceId, bib, gateNum)) {
+        Logger.debug('Unified', `DELETE /api/checks/${raceId}/check: ${bib}:${gateNum} not found`);
+        res.status(404).json({ error: 'Check not found' });
+        return;
+      }
+
       res.json({ success: true });
     } catch (err) {
       Logger.error('Unified', 'RemoveCheck error', err);
