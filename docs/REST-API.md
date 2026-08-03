@@ -518,7 +518,7 @@ Get results for a specific race.
 | `total` | number | Total time in milliseconds (`time` + `pen` × 1000) |
 | `rank` | number | Position in results |
 | `status` | string | Empty for valid, `DSQ`, `DNS`, `DNF` for invalid |
-| `gates` | string | Space-separated per-gate penalties (0, 2, or 50) |
+| `gates` | string | Space-separated per-gate penalties (0, 2, or 50), 1-indexed by position — in `"0 0 2 0 50"` gate 3 got 2 and gate 5 got 50. This is the field the [Penalty Checks API](#penalty-checks-api) snapshots when `value` is omitted on `PUT /check` |
 
 **Response (merged=true):**
 
@@ -1736,7 +1736,54 @@ Manages penalty verification checks and review flags (podněty) for gate judges.
 - Windows: `%APPDATA%\c123-server\checks\`
 - Linux/macOS: `~/.c123-server/checks/`
 
-When the XML file changes (different fingerprint), old checks are archived automatically.
+### Event identity
+
+Each checks file records a **fingerprint** identifying the event it belongs to: sorted `raceId@YYYY-MM-DD` tokens joined by `|`, derived from the schedule.
+
+```
+C1W_BR1@2026-04-19|K1M_BR1@2026-04-19|K1M_BR2@2026-04-19
+```
+
+Races without a `StartTime` — extreme heats, for instance — contribute an empty day component (`K1XM-ZS_XT_25@`).
+
+The fingerprint is **pinned on the first check or flag**, not when the file is loaded. Before that it is `null`. The preparation phase before an event is exactly when the schedule changes most, and a file with no checks has nothing to protect.
+
+Once pinned, the fingerprint is compared against the live schedule whenever the XML `Schedule` section changes. The file belongs to the same event when **at least half of its recorded races still exist**. Adding, removing or reordering races therefore leaves checks untouched; a genuinely different event reusing the same XML filename shares no token and causes the file to be archived with a timestamp suffix, after which a `ChecksChanged` message with event `checks-reset` is broadcast.
+
+An empty or unreadable schedule never archives anything.
+
+Use [`POST /api/checks/new-event`](#post-apichecksnew-event) to force a fresh start.
+
+---
+
+### GET /api/checks
+
+All checks and flags for every race in the current checks file, in one call.
+
+**Response:**
+
+```json
+{
+  "xmlFilename": "2026-lodm.xml",
+  "fingerprint": "C1W_BR1@2026-04-19|K1M_BR1@2026-04-19",
+  "races": {
+    "K1M_BR1": {
+      "checks": {
+        "42:5": { "checkedAt": "2025-01-02T10:30:00.000Z", "value": 2 }
+      },
+      "flags": []
+    }
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `xmlFilename` | string\|null | XML file the checks belong to |
+| `fingerprint` | string\|null | Event fingerprint; `null` before the first write |
+| `races` | object | Map of raceId → `{ checks, flags }` |
+
+No progress summary is computed server-side. Progress counts only finished runs without a status, which the server has no basis to know — aggregate on the client.
 
 ---
 
@@ -1749,22 +1796,20 @@ Get all checks and flags for a race.
 ```json
 {
   "checks": {
-    "checks": {
-      "1:5": {
-        "checkedAt": "2025-01-02T10:30:00.000Z",
-        "value": 2,
-        "tag": "verified"
-      }
-    },
-    "flags": []
-  }
+    "42:5": {
+      "checkedAt": "2025-01-02T10:30:00.000Z",
+      "value": 2,
+      "tag": "verified"
+    }
+  },
+  "flags": []
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `checks.checks` | object | Map of "bib:gate" → CheckEntry |
-| `checks.flags` | FlagEntry[] | Array of review flags |
+| `checks` | object | Map of "bib:gate" → CheckEntry |
+| `flags` | FlagEntry[] | Review flags; each carries its own `bib` and `gate` |
 
 **CheckEntry fields:**
 
@@ -1802,6 +1847,12 @@ Set or update a penalty check.
 
 **Errors:** 400 for missing/invalid bib or gate, 503 if checks service not available.
 
+**Pass `value` explicitly when you have just written the penalty.**
+
+If `value` is omitted the server snapshots the gate value from the XML. A client that writes a penalty through `POST /api/c123/scoring` and then sets the check must not rely on that: Canoe123 has not rewritten the XML yet, so the fallback would capture the **previous** value and the check would look stale the instant it was created.
+
+This matters because it is the most common correction flow — the penalty disagrees with the paper protocol, the operator overwrites it, and that same act verifies the gate.
+
 ---
 
 ### DELETE /api/checks/:raceId/check
@@ -1816,7 +1867,19 @@ Remove a penalty check.
 
 ### DELETE /api/checks/:raceId
 
-Clear all checks and flags for a race.
+Clear all checks and flags for a race. The event fingerprint stays pinned — use [`POST /api/checks/new-event`](#post-apichecksnew-event) to reset the whole file.
+
+**Response:** `{ "success": true }`
+
+---
+
+### POST /api/checks/new-event
+
+Archives the current checks file, starts empty and unpins the fingerprint, which is re-pinned on the next write.
+
+This is the manual override for the fingerprint heuristic — needed most plausibly with a single-race schedule, where "at least half the races survive" degenerates to comparing one token. Unlike `DELETE /api/checks/:raceId`, which clears one race and leaves the fingerprint alone, this affects the whole file.
+
+Broadcasts `ChecksChanged` with event `checks-reset`, so connected clients refetch.
 
 **Response:** `{ "success": true }`
 

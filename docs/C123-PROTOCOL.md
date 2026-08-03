@@ -386,6 +386,7 @@ Sent when a penalty check is set, removed, invalidated, or cleared:
 | `check-removed` | Check manually removed |
 | `check-invalidated` | Check auto-removed after scoring change |
 | `checks-cleared` | All checks cleared for a race |
+| `checks-reset` | Whole file discarded (a different event was detected, or `POST /api/checks/new-event` was called); `raceId` is empty and clients should refetch everything |
 
 ### FlagChanged
 
