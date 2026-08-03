@@ -13,6 +13,7 @@ import type {
   CheckChangedEvent,
   FlagChangedEvent,
   ScheduleValidation,
+  NewEventReset,
 } from './types.js';
 import { isSameEvent } from './fingerprint.js';
 
@@ -230,17 +231,17 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
    * comparing one token. The fingerprint is unpinned and re-pins on the next
    * write.
    */
-  resetForNewEvent(): boolean {
+  resetForNewEvent(): NewEventReset {
     if (!this.currentData) {
       Logger.warn('ChecksStore', 'resetForNewEvent: no checks file loaded');
-      return false;
+      return 'no-file';
     }
 
     Logger.info('ChecksStore', 'Starting a new event: archiving current checks');
     if (!this.archiveAndReset()) {
       // Reported to the operator rather than silently doing nothing, or
       // worse, discarding the checks it could not back up.
-      return false;
+      return 'archive-failed';
     }
 
     // The operator has declared the current schedule stale. Keeping it as the
@@ -251,7 +252,7 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
     this.liveFingerprint = '';
     this.pendingMismatch = null;
 
-    return true;
+    return 'reset';
   }
 
   /**

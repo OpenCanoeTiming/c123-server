@@ -3476,11 +3476,22 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     }
 
     try {
-      // Reports false when no checks file is loaded — there is no XML path
-      // yet, so there is nothing to reset. Saying "success" there would tell
-      // the client an archive happened when it did not.
-      if (!this.checksStore.resetForNewEvent()) {
+      // Two ways to do nothing, needing different answers: no XML path yet,
+      // versus the current checks could not be backed up so they were left
+      // alone. Collapsing them would send an operator to fix an XML path when
+      // the real problem is a file the server could not rename.
+      const outcome = this.checksStore.resetForNewEvent();
+
+      if (outcome === 'no-file') {
         res.status(503).json({ error: 'No checks file loaded — set an XML path first' });
+        return;
+      }
+
+      if (outcome === 'archive-failed') {
+        res.status(500).json({
+          error:
+            'Could not archive the current checks, so nothing was reset — they are unchanged. See the server log.',
+        });
         return;
       }
 

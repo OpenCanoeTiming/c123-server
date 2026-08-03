@@ -1900,7 +1900,19 @@ Call this **after** the new event's XML is loaded where possible. It deliberatel
 
 **Response:** `{ "success": true }`
 
-**Errors:** 503 when no checks file is loaded (no XML path set) — nothing was archived.
+**Errors:**
+
+| Status | Meaning |
+|--------|---------|
+| 503 | No checks file is loaded — no XML path is set. Nothing was archived. |
+| 500 | The current checks could not be archived, so nothing was reset and **they are unchanged**. Usually a file the server could not rename: on Windows, a scanner or indexer holding it open. The server log names the file; retry once it is released. |
+
+### When the checks file cannot be preserved
+
+Archiving always copies before it discards, and if the copy fails the discard does not happen. Two consequences worth knowing:
+
+- A confirmed event change whose archive fails keeps the old checks and retries on the next `Schedule` change. On an XML file that is no longer being rewritten, that next change never comes — the stale checks stay visible until the obstruction clears and something touches the schedule.
+- If the checks file on disk is unreadable *and* cannot be renamed aside, the server detaches from it so nothing overwrites it. Writes still return `200` and still broadcast, but **nothing is persisted** until the file is moved or repaired by hand. This is visible only in the server log.
 
 ---
 

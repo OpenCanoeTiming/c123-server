@@ -150,20 +150,27 @@ describe('ChecksStore', () => {
       expect(data.checks['1:1']).toEqual(check);
     });
 
-    it('setCheck() updates existing check', async () => {
-      const check1 = store.setCheck('K1M-1', '1', 1, 2);
+    it('setCheck() updates existing check', () => {
+      // Drive the clock rather than sleeping 1ms: on a fast machine both
+      // writes land in the same millisecond and the timestamps compare equal.
+      vi.useFakeTimers();
 
-      // Wait 1ms to ensure timestamp difference
-      await new Promise(resolve => setTimeout(resolve, 1));
+      try {
+        vi.setSystemTime(new Date('2026-04-19T09:00:00.000Z'));
+        const check1 = store.setCheck('K1M-1', '1', 1, 2);
 
-      const check2 = store.setCheck('K1M-1', '1', 1, 0, 'corrected');
+        vi.setSystemTime(new Date('2026-04-19T09:00:01.000Z'));
+        const check2 = store.setCheck('K1M-1', '1', 1, 0, 'corrected');
 
-      expect(check2.value).toBe(0);
-      expect(check2.tag).toBe('corrected');
-      expect(check2.checkedAt).not.toBe(check1.checkedAt);
+        expect(check2.value).toBe(0);
+        expect(check2.tag).toBe('corrected');
+        expect(check2.checkedAt).not.toBe(check1.checkedAt);
 
-      const data = store.getChecks('K1M-1');
-      expect(Object.keys(data.checks)).toHaveLength(1);
+        const data = store.getChecks('K1M-1');
+        expect(Object.keys(data.checks)).toHaveLength(1);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('getChecks() returns empty data for unknown race', () => {
@@ -964,8 +971,9 @@ describe('ChecksStore', () => {
       store.loadForFile(filename);
       store.setScheduleFingerprint('A@2026-04-19');
 
-      // Both destructive paths must decline rather than discard.
-      expect(store.resetForNewEvent()).toBe(false);
+      // Both destructive paths must decline rather than discard, and the
+      // reason must be distinguishable from "no file loaded".
+      expect(store.resetForNewEvent()).toBe('archive-failed');
       expect(store.getChecks('R1').checks['42:5']).toBeDefined();
 
       store.setScheduleFingerprint('X@2026-05-01');
@@ -1081,8 +1089,8 @@ describe('ChecksStore', () => {
       expect(store.getChecks('A').checks['1:1']).toBeDefined();
     });
 
-    it('reports false when no checks file is loaded', () => {
-      expect(store.resetForNewEvent()).toBe(false);
+    it('reports no-file when no checks file is loaded', () => {
+      expect(store.resetForNewEvent()).toBe('no-file');
     });
 
     it('keeps both archives when reset twice in the same millisecond', () => {

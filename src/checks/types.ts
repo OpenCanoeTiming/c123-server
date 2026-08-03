@@ -70,6 +70,15 @@ export interface ChecksFileData {
  */
 export type ScheduleValidation = 'ok' | 'pending-confirmation' | 'archived';
 
+/**
+ * Outcome of an explicit new-event reset.
+ *
+ * `archive-failed` and `no-file` both mean nothing changed, but for unrelated
+ * reasons that need different answers: one is a transient filesystem problem
+ * with the checks intact, the other is a server that has no XML path yet.
+ */
+export type NewEventReset = 'reset' | 'no-file' | 'archive-failed';
+
 /** Events emitted by ChecksStore */
 export interface ChecksStoreEvents {
   checkChanged: [data: CheckChangedEvent];
