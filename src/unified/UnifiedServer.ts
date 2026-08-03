@@ -1110,6 +1110,10 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     this.app.post('/api/live/delete-event', this.handleLiveDeleteEvent.bind(this));
 
     // Penalty Checks API
+    // Collection routes first — they are literal paths and must not be
+    // shadowed by the :raceId parameter routes below.
+    this.app.get('/api/checks', this.handleGetAllChecks.bind(this));
+    this.app.post('/api/checks/new-event', this.handleNewEvent.bind(this));
     this.app.get('/api/checks/:raceId', this.handleGetChecks.bind(this));
     this.app.put('/api/checks/:raceId/check', this.handleSetCheck.bind(this));
     this.app.delete('/api/checks/:raceId/check', this.handleRemoveCheck.bind(this));
@@ -3370,7 +3374,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   /**
    * GET /api/checks/:raceId - Get checks and flags for a race
    */
-  private async handleGetChecks(req: Request, res: Response): Promise<void> {
+  private handleGetChecks(req: Request, res: Response): void {
     if (!this.checksStore) {
       Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
       res.status(503).json({ error: 'Checks service not available' });
@@ -3378,9 +3382,62 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     }
 
     const { raceId } = req.params;
-    const checks = this.checksStore.getChecks(raceId);
+    const { checks, flags } = this.checksStore.getChecks(raceId);
 
-    res.json({ checks });
+    res.json({ checks, flags });
+  }
+
+  /**
+   * GET /api/checks - Get checks and flags for every race at once
+   *
+   * Verification progress is shown per race in the client's race switcher.
+   * Serving that from the per-race route would take one request per race in
+   * the schedule; the store already holds them all in one object.
+   */
+  private handleGetAllChecks(_req: Request, res: Response): void {
+    if (!this.checksStore) {
+      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
+      res.status(503).json({ error: 'Checks service not available' });
+      return;
+    }
+
+    const data = this.checksStore.getAllChecks();
+
+    if (!data) {
+      Logger.debug('Unified', 'GET /api/checks: no checks file loaded');
+      res.json({ xmlFilename: null, fingerprint: null, races: {} });
+      return;
+    }
+
+    res.json({
+      xmlFilename: data.xmlFilename,
+      fingerprint: data.fingerprint,
+      races: data.races,
+    });
+  }
+
+  /**
+   * POST /api/checks/new-event - Archive the current checks and start empty
+   *
+   * The operator's override when the fingerprint heuristic decides that a new
+   * event is a continuation of the old one.
+   */
+  private handleNewEvent(_req: Request, res: Response): void {
+    if (!this.checksStore) {
+      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
+      res.status(503).json({ error: 'Checks service not available' });
+      return;
+    }
+
+    try {
+      this.checksStore.resetForNewEvent();
+      res.json({ success: true });
+    } catch (err) {
+      Logger.error('Unified', 'NewEvent error', err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
   }
 
   /**
