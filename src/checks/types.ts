@@ -42,8 +42,13 @@ export interface RaceChecksData {
 export interface ChecksFileData {
   /** XML filename this checks file belongs to */
   xmlFilename: string;
-  /** Fingerprint (checksum) of the XML file when checks were created */
-  fingerprint: string;
+  /**
+   * Event fingerprint, pinned on the first write from the schedule valid at
+   * that moment. Null until then: a file with no writes has nothing to protect,
+   * and the preparation phase before an event is exactly when the schedule
+   * churns.
+   */
+  fingerprint: string | null;
   /** Last modified timestamp */
   lastModified: string; // ISO 8601
   /** Per-race checks data. Key is raceId */
@@ -57,7 +62,13 @@ export interface ChecksStoreEvents {
 }
 
 export interface CheckChangedEvent {
-  event: 'check-set' | 'check-removed' | 'check-invalidated' | 'checks-cleared';
+  event:
+    | 'check-set'
+    | 'check-removed'
+    | 'check-invalidated'
+    | 'checks-cleared'
+    | 'checks-reset';
+  /** Empty string for 'checks-reset', which discards every race at once. */
   raceId: string;
   bib?: string;
   gate?: number;

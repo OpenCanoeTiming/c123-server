@@ -13,6 +13,7 @@ import type {
   CheckChangedEvent,
   FlagChangedEvent,
 } from './types.js';
+import { isSameEvent } from './fingerprint.js';
 
 /**
  * ChecksStore manages persistent penalty check and flag data.
@@ -29,6 +30,13 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
   private currentFilePath: string | null = null;
   private flushTimer: NodeJS.Timeout | null = null;
   private readonly FLUSH_DEBOUNCE_MS = 2000;
+
+  /**
+   * Fingerprint of the live schedule, pushed in by the server whenever the XML
+   * Schedule section changes. Empty when the schedule is unknown — the store
+   * never reads the XML itself.
+   */
+  private liveFingerprint = '';
 
   constructor() {
     super();
@@ -80,62 +88,163 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
   }
 
   /**
-   * Load checks file for a given XML file.
-   * If fingerprint doesn't match, archive old file and create fresh data.
+   * Load the checks file for an XML file.
+   *
+   * The fingerprint is neither supplied nor checked here. It is pinned on the
+   * first write and validated once the schedule is known; see
+   * setScheduleFingerprint().
    */
-  loadForFile(xmlFilename: string, fingerprint: string): void {
+  loadForFile(xmlFilename: string): void {
     const filePath = this.getFilePath(xmlFilename);
     this.currentFilePath = filePath;
 
+    // A new XML file means the live schedule is unknown until it is parsed.
+    // Carrying the previous file's fingerprint over would pin the wrong event.
+    this.liveFingerprint = '';
+
     if (!fs.existsSync(filePath)) {
       Logger.info('ChecksStore', `No existing checks file for ${xmlFilename}, creating fresh data`);
-      this.currentData = {
-        xmlFilename,
-        fingerprint,
-        lastModified: new Date().toISOString(),
-        races: {},
-      };
+      this.currentData = this.emptyData(xmlFilename);
       return;
     }
 
     try {
       const content = fs.readFileSync(filePath, 'utf-8');
       const data: ChecksFileData = JSON.parse(content);
-
-      // Check fingerprint match
-      if (data.fingerprint !== fingerprint) {
-        Logger.warn(
-          'ChecksStore',
-          `Fingerprint mismatch for ${xmlFilename}. Archiving old checks file.`
-        );
-
-        // Archive old file
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const archivePath = filePath.replace('.checks.json', `.checks.archived-${timestamp}.json`);
-        fs.renameSync(filePath, archivePath);
-        Logger.info('ChecksStore', `Archived to ${path.basename(archivePath)}`);
-
-        // Create fresh data
-        this.currentData = {
-          xmlFilename,
-          fingerprint,
-          lastModified: new Date().toISOString(),
-          races: {},
-        };
-      } else {
-        Logger.info('ChecksStore', `Loaded checks file for ${xmlFilename}`);
-        this.currentData = data;
-      }
+      this.currentData = data;
+      Logger.info(
+        'ChecksStore',
+        `Loaded checks file for ${xmlFilename} (fingerprint: ${data.fingerprint || 'unpinned'})`
+      );
     } catch (error) {
       Logger.error('ChecksStore', `Error loading checks file: ${error}`);
-      // Create fresh data on error
-      this.currentData = {
-        xmlFilename,
-        fingerprint,
-        lastModified: new Date().toISOString(),
-        races: {},
-      };
+      this.currentData = this.emptyData(xmlFilename);
     }
+  }
+
+  /**
+   * Report the fingerprint of the current schedule.
+   *
+   * Called by the server whenever the XML Schedule section changes, which also
+   * covers the first parse after startup and after an XML path switch. Passing
+   * an empty string means the schedule is unknown; that never archives anything.
+   */
+  setScheduleFingerprint(fingerprint: string): void {
+    this.liveFingerprint = fingerprint;
+    this.validateAgainstSchedule();
+  }
+
+  /**
+   * Archive the current checks file and start empty.
+   *
+   * The operator's escape hatch when the overlap heuristic decides wrongly —
+   * most plausibly with a single-race schedule, where the ratio degenerates to
+   * comparing one token. The fingerprint is unpinned and re-pins on the next
+   * write.
+   */
+  resetForNewEvent(): void {
+    if (!this.currentData) {
+      Logger.warn('ChecksStore', 'resetForNewEvent: no checks file loaded');
+      return;
+    }
+
+    Logger.info('ChecksStore', 'Starting a new event: archiving current checks');
+    this.archiveAndReset();
+  }
+
+  private emptyData(xmlFilename: string): ChecksFileData {
+    return {
+      xmlFilename,
+      fingerprint: null,
+      lastModified: new Date().toISOString(),
+      races: {},
+    };
+  }
+
+  /**
+   * Compare the pinned fingerprint against the live schedule and archive when
+   * they describe different events.
+   */
+  private validateAgainstSchedule(): void {
+    if (!this.currentData) {
+      return;
+    }
+
+    // An unknown or empty schedule tells us nothing. Treating it as an empty
+    // intersection would let a transient XML read failure wipe the event.
+    if (!this.liveFingerprint) {
+      return;
+    }
+
+    const stored = this.currentData.fingerprint;
+
+    // Never pinned: no writes yet, so there is nothing to protect.
+    if (!stored) {
+      return;
+    }
+
+    if (isSameEvent(stored, this.liveFingerprint)) {
+      // Same event with an edited schedule — track the latest so a long event
+      // that drifts race by race keeps comparing against recent reality.
+      if (stored !== this.liveFingerprint) {
+        this.currentData.fingerprint = this.liveFingerprint;
+        this.currentData.lastModified = new Date().toISOString();
+        this.scheduleFlush();
+        Logger.info('ChecksStore', 'Schedule changed within the same event, fingerprint refreshed');
+      }
+      return;
+    }
+
+    Logger.warn(
+      'ChecksStore',
+      `Schedule describes a different event (stored: ${stored}, current: ${this.liveFingerprint}). Archiving.`
+    );
+    this.archiveAndReset();
+  }
+
+  /**
+   * Pin the fingerprint if it is not pinned yet. Called from every write.
+   *
+   * An empty live fingerprint never pins: storing one would be
+   * indistinguishable from the unpinned state and would disable the check.
+   */
+  private pinFingerprintIfNeeded(): void {
+    if (!this.currentData || this.currentData.fingerprint || !this.liveFingerprint) {
+      return;
+    }
+
+    this.currentData.fingerprint = this.liveFingerprint;
+    Logger.info('ChecksStore', `Pinned event fingerprint: ${this.liveFingerprint}`);
+  }
+
+  /**
+   * Move the current file aside and start empty, keeping the same XML filename.
+   */
+  private archiveAndReset(): void {
+    if (!this.currentData || !this.currentFilePath) {
+      return;
+    }
+
+    if (fs.existsSync(this.currentFilePath)) {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const archivePath = this.currentFilePath.replace(
+        '.checks.json',
+        `.checks.archived-${timestamp}.json`
+      );
+      try {
+        fs.renameSync(this.currentFilePath, archivePath);
+        Logger.info('ChecksStore', `Archived to ${path.basename(archivePath)}`);
+      } catch (error) {
+        Logger.error('ChecksStore', `Error archiving checks file: ${error}`);
+      }
+    }
+
+    this.currentData = this.emptyData(this.currentData.xmlFilename);
+
+    const event: CheckChangedEvent = { event: 'checks-reset', raceId: '' };
+    this.emit('checkChanged', event);
+
+    this.flush();
   }
 
   /**
@@ -164,6 +273,8 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
     if (!this.currentData) {
       throw new Error('No checks file loaded. Call loadForFile() first.');
     }
+
+    this.pinFingerprintIfNeeded();
 
     // Ensure race exists
     if (!this.currentData.races[raceId]) {
@@ -265,6 +376,8 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
     if (!this.currentData) {
       throw new Error('No checks file loaded. Call loadForFile() first.');
     }
+
+    this.pinFingerprintIfNeeded();
 
     // Ensure race exists
     if (!this.currentData.races[raceId]) {

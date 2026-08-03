@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, mkdirSync } from 'fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { ChecksStore } from '../ChecksStore.js';
@@ -56,12 +56,12 @@ describe('ChecksStore', () => {
   describe('File load/save lifecycle', () => {
     it('loadForFile() creates new data when file does not exist', () => {
       const filename = getUniqueTestFile();
-      store.loadForFile(filename, 'fingerprint123');
+      store.loadForFile(filename);
 
       const data = store.getAllChecks();
       expect(data).toBeDefined();
       expect(data?.xmlFilename).toBe(filename);
-      expect(data?.fingerprint).toBe('fingerprint123');
+      expect(data?.fingerprint).toBeNull();
       expect(data?.races).toEqual({});
     });
 
@@ -69,7 +69,8 @@ describe('ChecksStore', () => {
       const filename = getUniqueTestFile();
 
       // First load creates the file
-      store.loadForFile(filename, 'fingerprint123');
+      store.loadForFile(filename);
+      store.setScheduleFingerprint('K1M-1@2026-04-19');
       store.setCheck('K1M-1', '1', 1, 2);
       store.flush();
       store.destroy();
@@ -77,42 +78,13 @@ describe('ChecksStore', () => {
       // Create a new store instance with mocked homedir
       vi.spyOn(require('os'), 'homedir').mockReturnValue(tempDir);
       const store2 = new ChecksStore();
-      store2.loadForFile(filename, 'fingerprint123');
+      store2.loadForFile(filename);
 
       const data = store2.getAllChecks();
       expect(data?.xmlFilename).toBe(filename);
-      expect(data?.fingerprint).toBe('fingerprint123');
+      // The fingerprint pinned before the first write survives a reload.
+      expect(data?.fingerprint).toBe('K1M-1@2026-04-19');
       expect(data?.races['K1M-1']?.checks['1:1']).toBeDefined();
-
-      store2.destroy();
-      store = null as any; // Prevent double cleanup in afterEach
-    });
-
-    it('loadForFile() archives data when fingerprint mismatches', () => {
-      const filename = getUniqueTestFile();
-
-      // Create initial data with old fingerprint
-      store.loadForFile(filename, 'old-fingerprint');
-      store.setCheck('K1M-1', '1', 1, 2);
-      store.flush();
-
-      const checksDir = join(tempDir, '.c123-server', 'checks');
-      store.destroy();
-
-      // Create new store and load with different fingerprint
-      vi.spyOn(require('os'), 'homedir').mockReturnValue(tempDir);
-      const store2 = new ChecksStore();
-      store2.loadForFile(filename, 'new-fingerprint');
-
-      // Data should be fresh
-      const data = store2.getAllChecks();
-      expect(data?.fingerprint).toBe('new-fingerprint');
-      expect(data?.races).toEqual({});
-
-      // Check for archived file BEFORE destroying store2
-      const files = readdirSync(checksDir);
-      const archivedFile = files.find(f => f.includes('.archived-'));
-      expect(archivedFile).toBeDefined();
 
       store2.destroy();
       store = null as any; // Prevent double cleanup in afterEach
@@ -120,7 +92,7 @@ describe('ChecksStore', () => {
 
     it('flush() writes data to disk immediately', () => {
       const filename = getUniqueTestFile();
-      store.loadForFile(filename, 'fingerprint123');
+      store.loadForFile(filename);
       store.setCheck('K1M-1', '1', 1, 2);
 
       // Flush immediately
@@ -141,7 +113,7 @@ describe('ChecksStore', () => {
 
     it('flush() uses atomic write pattern (tmp → rename)', () => {
       const filename = getUniqueTestFile();
-      store.loadForFile(filename, 'fingerprint123');
+      store.loadForFile(filename);
       store.setCheck('K1M-1', '1', 1, 2);
 
       const checksDir = join(tempDir, '.c123-server', 'checks');
@@ -164,7 +136,7 @@ describe('ChecksStore', () => {
 
   describe('Check CRUD', () => {
     beforeEach(() => {
-      store.loadForFile(getUniqueTestFile(), 'fingerprint123');
+      store.loadForFile(getUniqueTestFile());
     });
 
     it('setCheck() creates a new check entry', () => {
@@ -231,7 +203,7 @@ describe('ChecksStore', () => {
 
   describe('Flag CRUD', () => {
     beforeEach(() => {
-      store.loadForFile(getUniqueTestFile(), 'fingerprint123');
+      store.loadForFile(getUniqueTestFile());
     });
 
     it('createFlag() creates flag with unique ID', () => {
@@ -315,7 +287,7 @@ describe('ChecksStore', () => {
 
   describe('Scoring invalidation', () => {
     beforeEach(() => {
-      store.loadForFile(getUniqueTestFile(), 'fingerprint123');
+      store.loadForFile(getUniqueTestFile());
     });
 
     it('invalidateCheck() removes existing check, returns true', () => {
@@ -354,7 +326,7 @@ describe('ChecksStore', () => {
 
   describe('Events', () => {
     beforeEach(() => {
-      store.loadForFile(getUniqueTestFile(), 'fingerprint123');
+      store.loadForFile(getUniqueTestFile());
     });
 
     it('setCheck emits checkChanged with event=check-set', () => {
@@ -459,7 +431,7 @@ describe('ChecksStore', () => {
   describe('Debounced flush', () => {
     beforeEach(() => {
       vi.useFakeTimers();
-      store.loadForFile(getUniqueTestFile(), 'fingerprint123');
+      store.loadForFile(getUniqueTestFile());
     });
 
     afterEach(() => {
@@ -543,7 +515,7 @@ describe('ChecksStore', () => {
 
     it('destroy() flushes and cleans up', () => {
       const filename = getUniqueTestFile();
-      store.loadForFile(filename, 'fingerprint123');
+      store.loadForFile(filename);
       store.setCheck('K1M-1', '1', 1, 2);
 
       store.destroy();
@@ -555,7 +527,7 @@ describe('ChecksStore', () => {
     });
 
     it('handles multiple races independently', () => {
-      store.loadForFile(getUniqueTestFile(), 'fingerprint123');
+      store.loadForFile(getUniqueTestFile());
 
       store.setCheck('K1M-1', '1', 1, 2);
       store.setCheck('K1W-1', '2', 3, 0);
@@ -571,7 +543,7 @@ describe('ChecksStore', () => {
     });
 
     it('handles gates with same bib in different gates', () => {
-      store.loadForFile(getUniqueTestFile(), 'fingerprint123');
+      store.loadForFile(getUniqueTestFile());
 
       store.setCheck('K1M-1', '1', 1, 2);
       store.setCheck('K1M-1', '1', 5, 0);
@@ -585,7 +557,7 @@ describe('ChecksStore', () => {
     });
 
     it('handles null penalty value', () => {
-      store.loadForFile(getUniqueTestFile(), 'fingerprint123');
+      store.loadForFile(getUniqueTestFile());
 
       const check = store.setCheck('K1M-1', '1', 1, null, 'no penalty');
 
@@ -594,7 +566,7 @@ describe('ChecksStore', () => {
     });
 
     it('handles check without tag', () => {
-      store.loadForFile(getUniqueTestFile(), 'fingerprint123');
+      store.loadForFile(getUniqueTestFile());
 
       const check = store.setCheck('K1M-1', '1', 1, 2);
 
@@ -602,7 +574,7 @@ describe('ChecksStore', () => {
     });
 
     it('handles flag without suggested value', () => {
-      store.loadForFile(getUniqueTestFile(), 'fingerprint123');
+      store.loadForFile(getUniqueTestFile());
 
       const flag = store.createFlag('K1M-1', '1', 1, 'check this');
 
@@ -656,7 +628,7 @@ describe('ChecksStore', () => {
     it('uses APPDATA on Windows', () => {
       const winStore = new ChecksStore();
       const filename = getUniqueTestFile();
-      winStore.loadForFile(filename, 'fingerprint123');
+      winStore.loadForFile(filename);
       winStore.setCheck('K1M-1', '1', 1, 2);
       winStore.flush();
 
@@ -674,6 +646,187 @@ describe('ChecksStore', () => {
       expect(() => {
         new ChecksStore();
       }).toThrow('APPDATA environment variable not found');
+    });
+  });
+
+  describe('Fingerprint lifecycle', () => {
+    it('leaves the fingerprint unpinned until the first write', () => {
+      const filename = getUniqueTestFile();
+      store.loadForFile(filename);
+      store.setScheduleFingerprint('A@2026-04-19|B@2026-04-19');
+
+      expect(store.getAllChecks()?.fingerprint).toBeNull();
+
+      store.setCheck('A', '1', 1, 2);
+
+      expect(store.getAllChecks()?.fingerprint).toBe('A@2026-04-19|B@2026-04-19');
+    });
+
+    it('pins the fingerprint on the first flag as well as the first check', () => {
+      const filename = getUniqueTestFile();
+      store.loadForFile(filename);
+      store.setScheduleFingerprint('A@2026-04-19');
+
+      store.createFlag('A', '1', 1, 'disputed');
+
+      expect(store.getAllChecks()?.fingerprint).toBe('A@2026-04-19');
+    });
+
+    it('does not pin from an empty schedule', () => {
+      const filename = getUniqueTestFile();
+      store.loadForFile(filename);
+      store.setScheduleFingerprint('');
+
+      store.setCheck('A', '1', 1, 2);
+
+      expect(store.getAllChecks()?.fingerprint).toBeNull();
+    });
+
+    it('pins on a later write once the schedule becomes available', () => {
+      const filename = getUniqueTestFile();
+      store.loadForFile(filename);
+      store.setScheduleFingerprint('');
+      store.setCheck('A', '1', 1, 2);
+
+      store.setScheduleFingerprint('A@2026-04-19');
+      store.setCheck('A', '1', 2, 0);
+
+      expect(store.getAllChecks()?.fingerprint).toBe('A@2026-04-19');
+    });
+
+    it('keeps checks and refreshes the fingerprint when a race is added', () => {
+      const filename = getUniqueTestFile();
+      store.loadForFile(filename);
+      store.setScheduleFingerprint('A@2026-04-19|B@2026-04-19');
+      store.setCheck('A', '1', 1, 2);
+
+      store.setScheduleFingerprint('A@2026-04-19|B@2026-04-19|C@2026-04-19');
+
+      expect(store.getChecks('A').checks['1:1']).toBeDefined();
+      expect(store.getAllChecks()?.fingerprint).toBe(
+        'A@2026-04-19|B@2026-04-19|C@2026-04-19'
+      );
+    });
+
+    it('archives and resets when the schedule is a different event', () => {
+      const filename = getUniqueTestFile();
+      store.loadForFile(filename);
+      store.setScheduleFingerprint('A@2026-04-19|B@2026-04-19');
+      store.setCheck('A', '1', 1, 2);
+      store.flush();
+
+      store.setScheduleFingerprint('X@2026-05-01|Y@2026-05-01');
+
+      expect(store.getChecks('A').checks['1:1']).toBeUndefined();
+      expect(store.getAllChecks()?.fingerprint).toBeNull();
+
+      const archived = readdirSync(join(tempDir, '.c123-server', 'checks')).filter((f) =>
+        f.includes('archived')
+      );
+      expect(archived).toHaveLength(1);
+    });
+
+    it('emits checks-reset when archiving', () => {
+      const filename = getUniqueTestFile();
+      store.loadForFile(filename);
+      store.setScheduleFingerprint('A@2026-04-19|B@2026-04-19');
+      store.setCheck('A', '1', 1, 2);
+
+      const events: CheckChangedEvent[] = [];
+      store.on('checkChanged', (e) => events.push(e));
+
+      store.setScheduleFingerprint('X@2026-05-01|Y@2026-05-01');
+
+      expect(events).toHaveLength(1);
+      expect(events[0].event).toBe('checks-reset');
+      expect(events[0].raceId).toBe('');
+    });
+
+    it('never archives on an empty schedule', () => {
+      const filename = getUniqueTestFile();
+      store.loadForFile(filename);
+      store.setScheduleFingerprint('A@2026-04-19|B@2026-04-19');
+      store.setCheck('A', '1', 1, 2);
+
+      // XML temporarily unreadable or mid-write: tells us nothing.
+      store.setScheduleFingerprint('');
+
+      expect(store.getChecks('A').checks['1:1']).toBeDefined();
+      expect(store.getAllChecks()?.fingerprint).toBe('A@2026-04-19|B@2026-04-19');
+    });
+
+    it('treats a legacy file with an empty fingerprint as unpinned', () => {
+      const filename = getUniqueTestFile();
+      const checksDir = join(tempDir, '.c123-server', 'checks');
+      mkdirSync(checksDir, { recursive: true });
+      writeFileSync(
+        join(checksDir, `${filename}.checks.json`),
+        JSON.stringify({
+          xmlFilename: filename,
+          fingerprint: '',
+          lastModified: new Date().toISOString(),
+          races: {
+            A: {
+              checks: { '1:1': { checkedAt: '2026-04-19T09:00:00Z', value: 2 } },
+              flags: [],
+            },
+          },
+        })
+      );
+
+      store.loadForFile(filename);
+      store.setScheduleFingerprint('X@2026-05-01');
+
+      // Not archived — an empty stored fingerprint was never pinned.
+      expect(store.getChecks('A').checks['1:1']).toBeDefined();
+
+      store.setCheck('A', '1', 2, 0);
+      expect(store.getAllChecks()?.fingerprint).toBe('X@2026-05-01');
+    });
+
+    it('forgets the live fingerprint when a different XML file is loaded', () => {
+      store.loadForFile(getUniqueTestFile());
+      store.setScheduleFingerprint('A@2026-04-19');
+
+      store.loadForFile(getUniqueTestFile());
+      store.setCheck('A', '1', 1, 2);
+
+      // The previous file's schedule must not pin the new file.
+      expect(store.getAllChecks()?.fingerprint).toBeNull();
+    });
+  });
+
+  describe('resetForNewEvent', () => {
+    it('archives, empties and unpins', () => {
+      const filename = getUniqueTestFile();
+      store.loadForFile(filename);
+      store.setScheduleFingerprint('A@2026-04-19');
+      store.setCheck('A', '1', 1, 2);
+      store.flush();
+
+      store.resetForNewEvent();
+
+      expect(store.getChecks('A').checks).toEqual({});
+      expect(store.getAllChecks()?.fingerprint).toBeNull();
+      expect(store.getAllChecks()?.xmlFilename).toBe(filename);
+
+      const archived = readdirSync(join(tempDir, '.c123-server', 'checks')).filter((f) =>
+        f.includes('archived')
+      );
+      expect(archived).toHaveLength(1);
+    });
+
+    it('re-pins from the current schedule on the next write', () => {
+      const filename = getUniqueTestFile();
+      store.loadForFile(filename);
+      store.setScheduleFingerprint('A@2026-04-19');
+      store.setCheck('A', '1', 1, 2);
+      store.resetForNewEvent();
+
+      store.setScheduleFingerprint('X@2026-05-01');
+      store.setCheck('X', '1', 1, 50);
+
+      expect(store.getAllChecks()?.fingerprint).toBe('X@2026-05-01');
     });
   });
 });
