@@ -93,8 +93,10 @@ async function downloadFile(url: string, dest: string): Promise<void> {
         response.pipe(file);
 
         file.on('finish', () => {
-          file.close();
-          resolve();
+          // Resolve only once the handle is closed. Resolving on 'finish'
+          // alone lets the caller open the file mid-close and read it short,
+          // which surfaces as a recording with zero entries.
+          file.close(() => resolve());
         });
       })
       .on('error', (err) => {
@@ -114,18 +116,33 @@ async function downloadFile(url: string, dest: string): Promise<void> {
 export async function getRecordingPath(): Promise<string | null> {
   // Check if already available
   const existingPath = findRecordingPath();
-  if (existingPath) {
+  if (existingPath && isUsable(existingPath)) {
     return existingPath;
   }
 
   // Try to download from GitHub
   try {
     await downloadFile(GITHUB_RAW_URL, CACHE_PATH);
-    return CACHE_PATH;
+    return isUsable(CACHE_PATH) ? CACHE_PATH : null;
   } catch (error) {
     // Download failed (offline, rate limited, etc.)
     console.warn(`Could not download recording from GitHub: ${error}`);
     return null;
+  }
+}
+
+/**
+ * An empty file is not a recording.
+ *
+ * Returning its path anyway makes the suite fail on empty assertions rather
+ * than skip, which is what this module promises when a recording cannot be
+ * obtained.
+ */
+function isUsable(recordingPath: string): boolean {
+  try {
+    return fs.statSync(recordingPath).size > 0;
+  } catch {
+    return false;
   }
 }
 

@@ -23,6 +23,7 @@ The C123 Server provides the following APIs:
 | **Logs API** | `/api/logs` | Log entries retrieval |
 | **C123 Write API** | `/api/c123` | Send commands to C123 (scoring, timing) |
 | **Live API** | `/api/live` | Push data to remote live server |
+| **Penalty Checks API** | `/api/checks` | Penalty verification checks and review flags |
 
 **Base URL:** `http://<server>:27123`
 
@@ -517,7 +518,7 @@ Get results for a specific race.
 | `total` | number | Total time in milliseconds (`time` + `pen` × 1000) |
 | `rank` | number | Position in results |
 | `status` | string | Empty for valid, `DSQ`, `DNS`, `DNF` for invalid |
-| `gates` | string | Space-separated per-gate penalties (0, 2, or 50) |
+| `gates` | string | Per-gate penalties as a **fixed-width** field: three characters per gate, right-aligned and space-padded — see [XML-FORMAT.md](XML-FORMAT.md). Gate *n* is `slice((n-1)*3, n*3)`; three spaces means the gate was not judged. Do **not** split on whitespace — a blank gate would collapse and shift every later one. Individual races use 0/2/50, but team races carry cumulative values such as `52`, `100` or `150`. This is the field the [Penalty Checks API](#penalty-checks-api) snapshots when `value` is omitted on `PUT /check` |
 
 **Response (merged=true):**
 
@@ -1722,6 +1723,273 @@ When a C123 command is successfully sent, a `ScoringEvent` message is broadcast 
 | `penalty` | `{ gate: number, value: 0 \| 2 \| 50 \| null, raceId?: string }` (`raceId` present for finished-competitor corrections) |
 | `remove` | `{ reason: "DNS" \| "DNF" \| "CAP", position: number }` |
 | `timing` | `{ channelPosition: "Start" \| "Finish" \| "Split1" \| "Split2" }` |
+
+**Check Invalidation:** When a penalty is scored via this endpoint, any existing check for the same bib+gate is automatically invalidated (removed). This ensures checks don't become stale when the underlying penalty changes.
+
+---
+
+## Penalty Checks API
+
+Manages penalty verification checks and review flags (podněty) for gate judges. Data persists across server restarts.
+
+**Storage:** Checks are saved to `{xmlFilename}.checks.json` in platform-specific directories:
+- Windows: `%APPDATA%\c123-server\checks\`
+- Linux/macOS: `~/.c123-server/checks/`
+
+### Event identity
+
+Each checks file records a **fingerprint** identifying the event it belongs to: sorted `raceId@YYYY-MM-DD` tokens joined by `|`, derived from the schedule.
+
+```
+C1W_BR1@2026-04-19|K1M_BR1@2026-04-19|K1M_BR2@2026-04-19
+```
+
+Races without a `StartTime` — extreme heats, for instance — contribute an empty day component (`K1XM-ZS_XT_25@`).
+
+The fingerprint is **pinned on the first check or flag**, not when the file is loaded. Before that it is `null`. The preparation phase before an event is exactly when the schedule changes most, and a file with no checks has nothing to protect.
+
+Once pinned, the fingerprint is compared against the live schedule whenever the XML `Schedule` section changes. The file belongs to the same event when **at least half of its recorded races still exist**. Adding, removing or reordering races therefore leaves checks untouched; a different event reusing the same XML filename falls below that threshold and causes the file to be archived with a timestamp suffix, after which a `ChecksChanged` message with event `checks-reset` is broadcast.
+
+Two safeguards sit in front of archiving, because it is destructive and can only be undone by renaming the archive file on the server by hand:
+
+- **An empty or unreadable schedule never archives anything.**
+- **The same differing schedule must be seen twice in a row.** Canoe123 rewrites the multi-megabyte XML after every competitor, so a read can catch it mid-write and return a truncated but still well-formed schedule. That transient looks exactly like a different event; a real one keeps reporting the same schedule, a torn read does not.
+
+When the file is judged to belong to the same event, the stored fingerprint is refreshed to the current schedule. Over a long event this makes the comparison transitive — a schedule that turns over half its races twice will drift to a fully disjoint set without ever archiving. This is deliberate: the design prefers keeping stale checks (visible, and clearable by hand) over destroying real ones.
+
+Use [`POST /api/checks/new-event`](#post-apichecksnew-event) whenever the automatic rule gets it wrong in either direction.
+
+---
+
+### GET /api/checks
+
+All checks and flags for every race in the current checks file, in one call.
+
+**Response:**
+
+```json
+{
+  "xmlFilename": "2026-lodm.xml",
+  "fingerprint": "C1W_BR1@2026-04-19|K1M_BR1@2026-04-19",
+  "races": {
+    "K1M_BR1": {
+      "checks": {
+        "42:5": { "checkedAt": "2025-01-02T10:30:00.000Z", "value": 2 }
+      },
+      "flags": []
+    }
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `xmlFilename` | string\|null | XML file the checks belong to |
+| `fingerprint` | string\|null | Event fingerprint; `null` before the first write |
+| `races` | object | Map of raceId → `{ checks, flags }` |
+
+No progress summary is computed server-side. Progress counts only finished runs without a status, which the server has no basis to know — aggregate on the client.
+
+---
+
+### GET /api/checks/:raceId
+
+Get all checks and flags for a race.
+
+**Response:**
+
+```json
+{
+  "checks": {
+    "42:5": {
+      "checkedAt": "2025-01-02T10:30:00.000Z",
+      "value": 2,
+      "tag": "verified"
+    }
+  },
+  "flags": []
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `checks` | object | Map of "bib:gate" → CheckEntry |
+| `flags` | FlagEntry[] | Review flags; each carries its own `bib` and `gate` |
+
+**CheckEntry fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `checkedAt` | string | ISO 8601 timestamp |
+| `value` | number\|null | Penalty value snapshot (0, 2, 50, or null) |
+| `tag` | string | Optional note |
+
+---
+
+### PUT /api/checks/:raceId/check
+
+Set or update a penalty check.
+
+**Request:**
+
+```json
+{
+  "bib": "1",
+  "gate": 5,
+  "value": 2,
+  "tag": "verified"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `bib` | string | Yes | Competitor start number |
+| `gate` | number | Yes | Gate number (1-25) |
+| `value` | number\|null | No | Penalty value. Must be a JSON number or `null` — strings and booleans are rejected. If omitted, snapshotted from the XML `gates` field; `null` there means the gate was not judged. Individual races use 0/2/50, team races also carry cumulative values |
+| `tag` | string | No | Optional note. Must be a string — anything else is rejected, since it would be persisted and broadcast to every client |
+
+**Response:** `{ "success": true, "check": { ... } }`
+
+**Errors:** 400 for missing/invalid bib or gate, 503 if checks service not available.
+
+**Pass `value` explicitly when you have just written the penalty.**
+
+If `value` is omitted the server snapshots the gate value from the XML. A client that writes a penalty through `POST /api/c123/scoring` and then sets the check must not rely on that: Canoe123 has not rewritten the XML yet, so the fallback would capture the **previous** value and the check would look stale the instant it was created.
+
+This matters because it is the most common correction flow — the penalty disagrees with the paper protocol, the operator overwrites it, and that same act verifies the gate.
+
+---
+
+### DELETE /api/checks/:raceId/check
+
+Remove a penalty check.
+
+**Request body:** `{ "bib": "1", "gate": 5 }`
+
+**Response:** `{ "success": true }`
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| 400 | `{ "error": "bib is required" }`, `{ "error": "gate must be a whole number between 1 and 25" }` |
+| 404 | `{ "error": "Check not found" }` — no check was set for that `bib:gate` |
+| 503 | `{ "error": "No checks file loaded — set an XML path first" }` |
+
+**This route is not idempotent.** Deleting a check that was never set is a 404, not a 200.
+
+---
+
+### DELETE /api/checks/:raceId
+
+Clear all checks and flags for a race. The event fingerprint stays pinned — use [`POST /api/checks/new-event`](#post-apichecksnew-event) to reset the whole file.
+
+**Response:** `{ "success": true }`
+
+---
+
+### POST /api/checks/new-event
+
+Archives the current checks file, starts empty and unpins the fingerprint, which is re-pinned on the next write.
+
+This is the manual override for the fingerprint heuristic — needed most plausibly with a single-race schedule, where "at least half the races survive" degenerates to comparing one token. Unlike `DELETE /api/checks/:raceId`, which clears one race and leaves the fingerprint alone, this affects the whole file.
+
+Broadcasts `ChecksChanged` with event `checks-reset`, so connected clients refetch. The `checks-reset` event is sent on the `ChecksChanged` channel only — a client that tracks flags through `FlagChanged` alone must still refetch them when it sees it.
+
+Call this **after** the new event's XML is loaded where possible. It deliberately forgets the current schedule, so checks made before the new XML arrives stay unpinned until it does.
+
+**Response:** `{ "success": true }`
+
+**Errors:**
+
+| Status | Meaning |
+|--------|---------|
+| 503 | No checks file is loaded — no XML path is set. Nothing was archived. |
+| 500 | The current checks could not be archived, so nothing was reset and **they are unchanged**. Usually a file the server could not rename: on Windows, a scanner or indexer holding it open. The server log names the file; retry once it is released. |
+
+### When the checks file cannot be preserved
+
+Archiving always copies before it discards, and if the copy fails the discard does not happen. Two consequences worth knowing:
+
+- A confirmed event change whose archive fails keeps the old checks and retries on the next `Schedule` change. On an XML file that is no longer being rewritten, that next change never comes — the stale checks stay visible until the obstruction clears and something touches the schedule.
+- If the checks file on disk is unreadable *and* cannot be renamed aside, the server detaches from it so nothing overwrites it. Writes still return `200` and still broadcast, but **nothing is persisted** until the file is moved or repaired by hand. This is visible only in the server log.
+
+---
+
+### POST /api/checks/:raceId/flag
+
+Create a review flag (podnět).
+
+**Request:**
+
+```json
+{
+  "bib": "1",
+  "gate": 5,
+  "comment": "Possible touch on gate 5",
+  "suggestedValue": 2
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `bib` | string | Yes | Competitor start number |
+| `gate` | number | Yes | Gate number (1-25) |
+| `comment` | string | Yes | Description of the issue |
+| `suggestedValue` | number\|null | No | Suggested penalty value |
+
+**Response (201):** `{ "success": true, "flag": { ... } }`
+
+**FlagEntry fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique flag ID (UUID) |
+| `bib` | string | Start number |
+| `gate` | number | Gate number |
+| `createdAt` | string | ISO 8601 timestamp |
+| `comment` | string | Issue description |
+| `suggestedValue` | number\|null | Suggested penalty |
+| `resolved` | boolean | Whether resolved |
+| `resolvedAt` | string | When resolved |
+| `resolution` | string | Resolution comment |
+
+---
+
+### PATCH /api/checks/:raceId/flag/:id
+
+Resolve a flag. Auto-creates a check entry with current XML penalty value.
+
+**Request:** `{ "resolution": "Confirmed touch" }`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `resolution` | string | No | Resolution comment |
+
+**Response:** `{ "success": true, "flag": { ... }, "check": { ... } }`
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| 404 | `{ "error": "Flag <id> not found in race <raceId>" }`, or `{ "error": "Race <raceId> not found" }` when the race has no checks data |
+| 409 | `{ "error": "Flag <id> is already resolved" }` |
+
+When the gate value cannot be read from the XML — the gate is unjudged, or the run is not in the results yet — the auto-created check falls back to the flag's `suggestedValue`, and to `null` if the flag has none. It is never recorded as a clean `0` on the strength of a failed lookup.
+
+---
+
+### DELETE /api/checks/:raceId/flag/:id
+
+Delete a flag.
+
+**Response:** `{ "success": true, "flag": { ... } }`
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| 404 | `{ "error": "Flag not found" }` |
 
 ---
 

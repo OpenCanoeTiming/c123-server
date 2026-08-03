@@ -5,7 +5,7 @@ import { EventEmitter } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import type { ScoreboardConfig } from '../admin/types.js';
-import type { C123Message, C123XmlChange, C123XmlMismatch, C123ForceRefresh, C123LogEntry, C123Connected, C123ScoringEvent, C123Schedule, XmlSection, LogLevel, C123ClientState } from '../protocol/types.js';
+import type { C123Message, C123XmlChange, C123XmlMismatch, C123ForceRefresh, C123LogEntry, C123Connected, C123ScoringEvent, C123Schedule, XmlSection, LogLevel, C123ClientState, C123ChecksChanged, C123FlagChanged } from '../protocol/types.js';
 import type { MismatchState } from '../xml/XmlMismatchDetector.js';
 import { getLogBuffer, type LogEntry, type LogFilterOptions } from '../utils/LogBuffer.js';
 import { ScoreboardSession } from '../ws/ScoreboardSession.js';
@@ -21,6 +21,7 @@ import type { XmlChangeNotifier } from '../xml/XmlChangeNotifier.js';
 import { getAppSettings, WindowsConfigDetector } from '../config/index.js';
 import type { ClientConfig } from '../config/types.js';
 import { APP_VERSION, compareVersions } from '../utils/appVersion.js';
+import type { ChecksStore } from '../checks/ChecksStore.js';
 
 // Get admin-ui directory path (works for both dev and dist)
 const __filename = fileURLToPath(import.meta.url);
@@ -132,6 +133,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   private c123Server: C123Server | null = null;
   private lastMismatchState: MismatchState | null = null;
   private livePusher: LivePusher | null = null;
+  private checksStore: ChecksStore | null = null;
 
   constructor(config?: UnifiedServerConfig) {
     super();
@@ -205,6 +207,13 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     } catch (err) {
       Logger.error('Unified', 'Live-Mini auto-reconnect failed', err);
     }
+  }
+
+  /**
+   * Register ChecksStore for penalty check persistence
+   */
+  setChecksStore(store: ChecksStore): void {
+    this.checksStore = store;
   }
 
   /**
@@ -647,6 +656,32 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   }
 
   /**
+   * Broadcast a checks change event to all scoreboard sessions
+   */
+  broadcastChecksChanged(data: import('../checks/types.js').CheckChangedEvent): void {
+    const message: C123ChecksChanged = {
+      type: 'ChecksChanged',
+      timestamp: new Date().toISOString(),
+      data,
+    };
+    this.broadcast(message);
+    Logger.debug('Unified', `Broadcast ChecksChanged: ${data.event} race=${data.raceId} ${data.bib ? `bib=${data.bib}` : ''}`);
+  }
+
+  /**
+   * Broadcast a flag change event to all scoreboard sessions
+   */
+  broadcastFlagChanged(data: import('../checks/types.js').FlagChangedEvent): void {
+    const message: C123FlagChanged = {
+      type: 'FlagChanged',
+      timestamp: new Date().toISOString(),
+      data,
+    };
+    this.broadcast(message);
+    Logger.debug('Unified', `Broadcast FlagChanged: ${data.event} race=${data.raceId}`);
+  }
+
+  /**
    * Broadcast default assets change to all connected clients
    * @param clearedKeys - Asset keys that were cleared (will be sent as null)
    */
@@ -1073,6 +1108,19 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     this.app.patch('/api/live/config', this.handleLiveConfig.bind(this));
     this.app.post('/api/live/events', this.handleLiveListEvents.bind(this));
     this.app.post('/api/live/delete-event', this.handleLiveDeleteEvent.bind(this));
+
+    // Penalty Checks API
+    // Collection routes first — they are literal paths and must not be
+    // shadowed by the :raceId parameter routes below.
+    this.app.get('/api/checks', this.handleGetAllChecks.bind(this));
+    this.app.post('/api/checks/new-event', this.handleNewEvent.bind(this));
+    this.app.get('/api/checks/:raceId', this.handleGetChecks.bind(this));
+    this.app.put('/api/checks/:raceId/check', this.handleSetCheck.bind(this));
+    this.app.delete('/api/checks/:raceId/check', this.handleRemoveCheck.bind(this));
+    this.app.delete('/api/checks/:raceId', this.handleClearChecks.bind(this));
+    this.app.post('/api/checks/:raceId/flag', this.handleCreateFlag.bind(this));
+    this.app.patch('/api/checks/:raceId/flag/:id', this.handleResolveFlag.bind(this));
+    this.app.delete('/api/checks/:raceId/flag/:id', this.handleDeleteFlag.bind(this));
 
     // Health check
     this.app.get('/health', (_req: Request, res: Response) => {
@@ -2496,6 +2544,36 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         details: penaltyDetails,
       });
 
+      // Invalidate penalty check when scoring changes a gate value
+      if (this.checksStore) {
+        const bibStr = String(bib);
+        if (raceId) {
+          // Finished competitor — we know the raceId
+          const invalidated = this.checksStore.invalidateCheck(String(raceId), bibStr, gateNum);
+          if (invalidated) {
+            Logger.info('Unified', `Check invalidated: bib=${bibStr} gate=${gateNum} race=${raceId}`);
+          }
+        } else {
+          // On-course competitor — the request carries no raceId. Bibs are
+          // only unique within a class, so the same bib in another race is a
+          // different person: invalidating every race that happens to share
+          // bib:gate would silently delete other competitors' verified checks.
+          // Scope to the race currently on course instead.
+          const currentRaceId = this.eventState?.state.currentRaceId ?? null;
+          if (currentRaceId) {
+            const invalidated = this.checksStore.invalidateCheck(currentRaceId, bibStr, gateNum);
+            if (invalidated) {
+              Logger.info('Unified', `Check invalidated (on-course): bib=${bibStr} gate=${gateNum} race=${currentRaceId}`);
+            }
+          } else {
+            Logger.warn(
+              'Unified',
+              `Scoring for bib=${bibStr} gate=${gateNum} without raceId and no race on course; check left untouched`
+            );
+          }
+        }
+      }
+
       res.json({
         success: true,
         raceId: raceId ? String(raceId) : undefined,
@@ -3225,6 +3303,459 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       });
     } catch (err) {
       Logger.error('Unified', 'Live-Mini config error', err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  // ==========================================================================
+  // Penalty Checks API Handlers
+  // ==========================================================================
+
+  /**
+   * Helper: Look up current gate penalty value from XML data
+   * Returns the penalty value or null if not found
+   */
+  private async lookupGateValueFromXml(raceId: string, bib: string, gate: number): Promise<number | null> {
+    if (!this.xmlDataService) {
+      return null;
+    }
+
+    try {
+      const results = await this.xmlDataService.getResultsForRace(raceId);
+      if (!results) {
+        return null;
+      }
+
+      const competitor = results.find((r) => r.bib === bib);
+      if (!competitor || !competitor.gates) {
+        return null;
+      }
+
+      // Gates is a fixed-width field: three characters per gate, right-aligned
+      // and space-padded (see docs/XML-FORMAT.md). An unjudged gate is three
+      // spaces, so splitting on whitespace drops it and shifts every later
+      // gate — in "  0  2     0" gate 3 is unjudged and gate 4 is 0, but a
+      // split reads gate 3 as 0.
+      const cellStart = (gate - 1) * 3;
+      if (cellStart < 0 || cellStart + 3 > competitor.gates.length) {
+        return null;
+      }
+
+      const cell = competitor.gates.slice(cellStart, cellStart + 3).trim();
+      if (cell === '') {
+        // Gate not judged — distinct from a clean 0.
+        return null;
+      }
+
+      const value = Number.parseInt(cell, 10);
+      return Number.isNaN(value) ? null : value;
+    } catch (err) {
+      Logger.warn('Unified', `Failed to lookup gate value from XML: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      return null;
+    }
+  }
+
+  /**
+   * Guard for the checks routes: the service must exist and have a file open.
+   *
+   * "No XML path set yet" is the not-ready state that actually occurs in
+   * production — the store itself is always constructed. Without this the
+   * mutating routes surfaced it as a 500 carrying an internal message.
+   */
+  private requireChecks(res: Response): ChecksStore | null {
+    if (!this.checksStore) {
+      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
+      res.status(503).json({ error: 'Checks service not available' });
+      return null;
+    }
+
+    if (!this.checksStore.getAllChecks()) {
+      Logger.warn('Unified', 'Checks API: no checks file loaded');
+      res.status(503).json({ error: 'No checks file loaded — set an XML path first' });
+      return null;
+    }
+
+    return this.checksStore;
+  }
+
+  /**
+   * Helper: Parse and validate bib and gate from request body
+   * Returns parsed values or null (and sends 400 response)
+   */
+  private parseBibGate(req: Request, res: Response): { bib: string; gate: number } | null {
+    const { bib, gate } = req.body;
+
+    // Both must be a string or a number. String(true) is "true" and Number([5])
+    // is 5, so without this a boolean or a single-element array silently
+    // becomes a real bib or gate — producing keys like "true:5" that match no
+    // competitor and that no invalidation path can ever reach.
+    if (typeof bib !== 'string' && typeof bib !== 'number') {
+      res.status(400).json({ error: 'bib is required and must be a string or number' });
+      return null;
+    }
+
+    if (String(bib).trim() === '') {
+      res.status(400).json({ error: 'bib is required' });
+      return null;
+    }
+
+    if (typeof gate !== 'string' && typeof gate !== 'number') {
+      res.status(400).json({ error: 'gate is required and must be a string or number' });
+      return null;
+    }
+
+    // Integer-only: a fractional gate produces a key like "1:3.5" that no
+    // invalidation path can ever match, so the check would be unremovable.
+    const gateNum = Number(gate);
+    if (!Number.isInteger(gateNum) || gateNum < 1 || gateNum > 25) {
+      res.status(400).json({ error: 'gate must be a whole number between 1 and 25' });
+      return null;
+    }
+
+    return { bib: String(bib).trim(), gate: gateNum };
+  }
+
+  /**
+   * GET /api/checks/:raceId - Get checks and flags for a race
+   */
+  private handleGetChecks(req: Request, res: Response): void {
+    if (!this.checksStore) {
+      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
+      res.status(503).json({ error: 'Checks service not available' });
+      return;
+    }
+
+    const { raceId } = req.params;
+    const { checks, flags } = this.checksStore.getChecks(raceId);
+
+    res.json({ checks, flags });
+  }
+
+  /**
+   * GET /api/checks - Get checks and flags for every race at once
+   *
+   * Verification progress is shown per race in the client's race switcher.
+   * Serving that from the per-race route would take one request per race in
+   * the schedule; the store already holds them all in one object.
+   */
+  private handleGetAllChecks(_req: Request, res: Response): void {
+    if (!this.checksStore) {
+      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
+      res.status(503).json({ error: 'Checks service not available' });
+      return;
+    }
+
+    const data = this.checksStore.getAllChecks();
+
+    if (!data) {
+      Logger.debug('Unified', 'GET /api/checks: no checks file loaded');
+      res.json({ xmlFilename: null, fingerprint: null, races: {} });
+      return;
+    }
+
+    res.json({
+      xmlFilename: data.xmlFilename,
+      fingerprint: data.fingerprint,
+      races: data.races,
+    });
+  }
+
+  /**
+   * POST /api/checks/new-event - Archive the current checks and start empty
+   *
+   * The operator's override when the fingerprint heuristic decides that a new
+   * event is a continuation of the old one.
+   */
+  private handleNewEvent(_req: Request, res: Response): void {
+    if (!this.checksStore) {
+      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
+      res.status(503).json({ error: 'Checks service not available' });
+      return;
+    }
+
+    try {
+      // Two ways to do nothing, needing different answers: no XML path yet,
+      // versus the current checks could not be backed up so they were left
+      // alone. Collapsing them would send an operator to fix an XML path when
+      // the real problem is a file the server could not rename.
+      const outcome = this.checksStore.resetForNewEvent();
+
+      if (outcome === 'no-file') {
+        res.status(503).json({ error: 'No checks file loaded — set an XML path first' });
+        return;
+      }
+
+      if (outcome === 'archive-failed') {
+        res.status(500).json({
+          error:
+            'Could not archive the current checks, so nothing was reset — they are unchanged. See the server log.',
+        });
+        return;
+      }
+
+      res.json({ success: true });
+    } catch (err) {
+      Logger.error('Unified', 'NewEvent error', err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * PUT /api/checks/:raceId/check - Set a penalty check
+   * Body: { bib: string, gate: number, value?: number|null, tag?: string }
+   */
+  private async handleSetCheck(req: Request, res: Response): Promise<void> {
+    const checks = this.requireChecks(res);
+    if (!checks) {
+      return;
+    }
+
+    const { raceId } = req.params;
+    const { value, tag } = req.body;
+
+    // A tag is free text. Without this an arbitrary JSON value would be
+    // persisted to the checks file and broadcast to every connected client.
+    if (tag !== undefined && typeof tag !== 'string') {
+      res.status(400).json({ error: 'tag must be a string' });
+      return;
+    }
+
+    // Validate bib and gate
+    const parsed = this.parseBibGate(req, res);
+    if (!parsed) {
+      return;
+    }
+    const { bib, gate: gateNum } = parsed;
+
+    // Determine penalty value
+    let penaltyValue: number | null = null;
+
+    if (value !== undefined) {
+      // Value explicitly provided
+      if (value !== null) {
+        // A numeric string is fine — gate accepts one too, and clients that
+        // post form values send strings. What must not pass is anything
+        // whose numeric reading is invented: Number('') and Number(' ') are
+        // 0 and Number(true) is 1, so a client bug would otherwise be stored
+        // as "verified clean" — the most damaging value to get wrong.
+        const raw = typeof value === 'string' ? value.trim() : value;
+        const isUsable =
+          (typeof raw === 'number' || (typeof raw === 'string' && raw !== '')) &&
+          Number.isFinite(Number(raw));
+
+        if (!isUsable) {
+          res.status(400).json({ error: 'value must be a number or null' });
+          return;
+        }
+        penaltyValue = Number(raw);
+      }
+    } else {
+      // Value not provided, try to look up from XML
+      penaltyValue = await this.lookupGateValueFromXml(raceId, bib, gateNum);
+    }
+
+    try {
+      const check = checks.setCheck(raceId, bib, gateNum, penaltyValue, tag);
+      res.json({ success: true, check });
+    } catch (err) {
+      Logger.error('Unified', 'SetCheck error', err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * DELETE /api/checks/:raceId/check - Remove a penalty check
+   * Body: { bib: string, gate: number }
+   */
+  private async handleRemoveCheck(req: Request, res: Response): Promise<void> {
+    const checks = this.requireChecks(res);
+    if (!checks) {
+      return;
+    }
+
+    const { raceId } = req.params;
+
+    // Validate bib and gate
+    const parsed = this.parseBibGate(req, res);
+    if (!parsed) {
+      return;
+    }
+    const { bib, gate: gateNum } = parsed;
+
+    try {
+      if (!checks.removeCheck(raceId, bib, gateNum)) {
+        Logger.debug('Unified', `DELETE /api/checks/${raceId}/check: ${bib}:${gateNum} not found`);
+        res.status(404).json({ error: 'Check not found' });
+        return;
+      }
+
+      res.json({ success: true });
+    } catch (err) {
+      Logger.error('Unified', 'RemoveCheck error', err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * DELETE /api/checks/:raceId - Clear all checks for a race
+   */
+  private async handleClearChecks(req: Request, res: Response): Promise<void> {
+    const checks = this.requireChecks(res);
+    if (!checks) {
+      return;
+    }
+
+    const { raceId } = req.params;
+
+    try {
+      checks.clearRace(raceId);
+      res.json({ success: true });
+    } catch (err) {
+      Logger.error('Unified', 'ClearChecks error', err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * POST /api/checks/:raceId/flag - Create a flag (review request)
+   * Body: { bib: string, gate: number, comment: string, suggestedValue?: number|null }
+   */
+  private async handleCreateFlag(req: Request, res: Response): Promise<void> {
+    const checks = this.requireChecks(res);
+    if (!checks) {
+      return;
+    }
+
+    const { raceId } = req.params;
+    const { comment, suggestedValue } = req.body;
+
+    // Validate bib and gate
+    const parsed = this.parseBibGate(req, res);
+    if (!parsed) {
+      return;
+    }
+    const { bib, gate: gateNum } = parsed;
+
+    // Validate comment
+    if (comment === undefined || comment === null || String(comment).trim() === '') {
+      res.status(400).json({ error: 'comment is required' });
+      return;
+    }
+
+    // Validate suggestedValue if provided
+    let suggestedValueProcessed: number | null | undefined = undefined;
+    if (suggestedValue !== undefined) {
+      if (suggestedValue === null) {
+        suggestedValueProcessed = null;
+      } else {
+        const suggestedValueNum = Number(suggestedValue);
+        if (isNaN(suggestedValueNum)) {
+          res.status(400).json({ error: 'suggestedValue must be a number or null' });
+          return;
+        }
+        suggestedValueProcessed = suggestedValueNum;
+      }
+    }
+
+    try {
+      const flag = checks.createFlag(
+        raceId,
+        bib,
+        gateNum,
+        String(comment).trim(),
+        suggestedValueProcessed,
+      );
+      res.status(201).json({ success: true, flag });
+    } catch (err) {
+      Logger.error('Unified', 'CreateFlag error', err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * PATCH /api/checks/:raceId/flag/:id - Resolve a flag
+   * Body: { resolution?: string }
+   */
+  private async handleResolveFlag(req: Request, res: Response): Promise<void> {
+    const checks = this.requireChecks(res);
+    if (!checks) {
+      return;
+    }
+
+    const { raceId, id } = req.params;
+    const { resolution } = req.body;
+
+    // Validate resolution if provided
+    if (resolution !== undefined && typeof resolution !== 'string') {
+      res.status(400).json({ error: 'resolution must be a string' });
+      return;
+    }
+
+    // Look up the current penalty value from the XML. Left undefined when the
+    // lookup finds nothing, so ChecksStore falls back to the flag's
+    // suggestedValue — passing an explicit null would record "verified clean"
+    // for a gate we could not actually read.
+    let currentValue: number | null | undefined = undefined;
+    const checksData = checks.getChecks(raceId);
+    const flag = checksData.flags.find((f) => f.id === id);
+
+    if (flag) {
+      const looked = await this.lookupGateValueFromXml(raceId, flag.bib, flag.gate);
+      if (looked !== null) {
+        currentValue = looked;
+      }
+    }
+
+    try {
+      const result = checks.resolveFlag(raceId, id, resolution, currentValue);
+      res.json({ success: true, flag: result.flag, check: result.check });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      if (errorMessage.includes('not found')) {
+        res.status(404).json({ error: errorMessage });
+      } else if (errorMessage.includes('already resolved')) {
+        res.status(409).json({ error: errorMessage });
+      } else {
+        Logger.error('Unified', 'ResolveFlag error', err);
+        res.status(500).json({ error: errorMessage });
+      }
+    }
+  }
+
+  /**
+   * DELETE /api/checks/:raceId/flag/:id - Delete a flag
+   */
+  private async handleDeleteFlag(req: Request, res: Response): Promise<void> {
+    const checks = this.requireChecks(res);
+    if (!checks) {
+      return;
+    }
+
+    const { raceId, id } = req.params;
+
+    try {
+      const flag = checks.deleteFlag(raceId, id);
+      if (!flag) {
+        Logger.debug('Unified', `DELETE /api/checks/${raceId}/flag/${id}: not found`);
+        res.status(404).json({ error: 'Flag not found' });
+        return;
+      }
+
+      res.json({ success: true, flag });
+    } catch (err) {
+      Logger.error('Unified', 'DeleteFlag error', err);
       res.status(500).json({
         error: err instanceof Error ? err.message : 'Unknown error',
       });

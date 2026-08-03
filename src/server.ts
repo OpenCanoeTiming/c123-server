@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import path from 'node:path';
 import type { ParsedMessage } from './protocol/index.js';
 import { parseXmlMessage } from './protocol/index.js';
 import type { Source, SourceStatus } from './sources/types.js';
@@ -22,6 +23,8 @@ import {
 } from './protocol/index.js';
 import { WindowsConfigDetector, getAppSettings } from './config/index.js';
 import type { AvailableXmlPaths, XmlPathDetectionResult, XmlSourceMode } from './config/index.js';
+import { ChecksStore } from './checks/ChecksStore.js';
+import { computeScheduleFingerprint } from './checks/fingerprint.js';
 
 /**
  * Wrapper to make UdpDiscovery compatible with Source interface for admin display
@@ -77,6 +80,13 @@ export interface ServerEvents {
   xmlMismatchResolved: [];
 }
 
+/**
+ * How long to wait before re-reading the XML to confirm a suspected event
+ * change. Long enough for an in-progress Canoe123 rewrite to finish, short
+ * enough that a real event switch archives promptly.
+ */
+const MISMATCH_CONFIRM_DELAY_MS = 1500;
+
 const DEFAULT_CONFIG: Required<ServerConfig> = {
   tcpHost: '',
   tcpPort: 27333,
@@ -112,6 +122,8 @@ export class Server extends EventEmitter<ServerEvents> {
   private xmlDataService: XmlDataService;
   private windowsConfigDetector: WindowsConfigDetector | null = null;
   private livePusher: LivePusher;
+  private checksStore: ChecksStore;
+  private mismatchConfirmTimer: NodeJS.Timeout | null = null;
 
   private isRunning = false;
   private discoveredHost: string | null = null;
@@ -125,6 +137,7 @@ export class Server extends EventEmitter<ServerEvents> {
     this.unifiedServer = new UnifiedServer({ port: this.config.port });
     this.xmlDataService = new XmlDataService();
     this.livePusher = new LivePusher(this.xmlDataService);
+    this.checksStore = new ChecksStore();
 
     this.setupEventHandlers();
   }
@@ -145,6 +158,7 @@ export class Server extends EventEmitter<ServerEvents> {
     this.unifiedServer.setXmlDataService(this.xmlDataService);
     this.unifiedServer.setServer(this);
     this.unifiedServer.setLivePusher(this.livePusher);
+    this.unifiedServer.setChecksStore(this.checksStore);
 
     // Start data sources
     if (this.config.autoDiscovery && !this.config.tcpHost) {
@@ -162,6 +176,10 @@ export class Server extends EventEmitter<ServerEvents> {
       // Also configure XmlDataService for REST API
       this.xmlDataService.setPath(this.config.xmlPath);
       this.xmlPathSource = 'manual';
+
+      // Load checks for this XML file. The fingerprint is not needed here — it
+      // is pinned on the first write and validated when the schedule arrives.
+      this.checksStore.loadForFile(path.basename(this.config.xmlPath));
     }
 
     // Start XML autodetection if enabled and no manual path set
@@ -198,6 +216,14 @@ export class Server extends EventEmitter<ServerEvents> {
     await this.xmlChangeNotifier?.stop();
     this.xmlMismatchDetector?.stop();
     this.stopAutoDetection();
+
+    if (this.mismatchConfirmTimer) {
+      clearTimeout(this.mismatchConfirmTimer);
+      this.mismatchConfirmTimer = null;
+    }
+
+    // Flush and cleanup checks
+    this.checksStore.destroy();
 
     // Stop unified server
     await this.unifiedServer.stop();
@@ -252,6 +278,13 @@ export class Server extends EventEmitter<ServerEvents> {
   }
 
   /**
+   * Get ChecksStore (for external access)
+   */
+  getChecksStore(): ChecksStore {
+    return this.checksStore;
+  }
+
+  /**
    * Manually set TCP source host (useful for switching)
    */
   setTcpHost(host: string, port?: number): void {
@@ -262,21 +295,31 @@ export class Server extends EventEmitter<ServerEvents> {
   /**
    * Set XML source path manually (disables autodetect)
    */
-  setXmlPath(path: string, saveToSettings: boolean = true): void {
+  setXmlPath(xmlPath: string, saveToSettings: boolean = true): void {
+    // Flush current checks before switching XML, and drop any confirmation
+    // re-read still pending for the outgoing file.
+    this.checksStore.flush();
+    if (this.mismatchConfirmTimer) {
+      clearTimeout(this.mismatchConfirmTimer);
+      this.mismatchConfirmTimer = null;
+    }
+
     this.xmlSource?.stop();
     this.xmlChangeNotifier?.stop();
-    this.config.xmlPath = path;
-    this.xmlDataService.setPath(path);
-    this.xmlPathSource = path ? 'manual' : null;
+    this.config.xmlPath = xmlPath;
+    this.xmlDataService.setPath(xmlPath);
+    this.xmlPathSource = xmlPath ? 'manual' : null;
 
-    if (saveToSettings && path) {
-      getAppSettings().setXmlPath(path);
+    if (saveToSettings && xmlPath) {
+      getAppSettings().setXmlPath(xmlPath);
       this.stopAutoDetection();
     }
 
-    if (path) {
+    if (xmlPath) {
       this.startXmlSource();
       this.startXmlChangeNotifier();
+
+      this.checksStore.loadForFile(path.basename(xmlPath));
     }
   }
 
@@ -601,6 +644,15 @@ export class Server extends EventEmitter<ServerEvents> {
         this.emit('liveError', status.lastError);
       }
     });
+
+    // Forward checks events to WebSocket broadcast
+    this.checksStore.on('checkChanged', (data) => {
+      this.unifiedServer.broadcastChecksChanged(data);
+    });
+
+    this.checksStore.on('flagChanged', (data) => {
+      this.unifiedServer.broadcastFlagChanged(data);
+    });
   }
 
   private startUdpDiscovery(): void {
@@ -705,6 +757,12 @@ export class Server extends EventEmitter<ServerEvents> {
       this.unifiedServer.broadcastXmlChange(sections, checksum);
       // Clear XmlDataService cache so next REST request gets fresh data
       this.xmlDataService.clearCache();
+
+      // On the first read the notifier reports every present section, so this
+      // also covers startup and XML path switches.
+      if (sections.includes('Schedule')) {
+        void this.refreshScheduleFingerprint();
+      }
     });
 
     this.xmlChangeNotifier.on('error', (err) => {
@@ -712,6 +770,55 @@ export class Server extends EventEmitter<ServerEvents> {
     });
 
     this.xmlChangeNotifier.start();
+  }
+
+  /**
+   * Derive the event fingerprint from the current schedule and hand it to
+   * ChecksStore, which validates the loaded checks file against it.
+   *
+   * On failure the store keeps its previous value rather than receiving an
+   * empty one, so a transient parse error cannot look like a different event.
+   */
+  private async refreshScheduleFingerprint(): Promise<void> {
+    try {
+      const schedule = await this.xmlDataService.getSchedule();
+      const outcome = this.checksStore.setScheduleFingerprint(computeScheduleFingerprint(schedule));
+
+      if (outcome === 'pending-confirmation') {
+        this.confirmScheduleMismatch();
+      }
+    } catch (err) {
+      Logger.warn(
+        'Server',
+        `Could not compute schedule fingerprint: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+
+  /**
+   * Re-read the XML once to confirm a suspected event change.
+   *
+   * Archiving is destructive, so the store refuses to act on a single sighting
+   * — Canoe123 rewrites the multi-megabyte XML constantly and a read can catch
+   * it mid-write. The confirmation cannot wait for the next 'change' event: a
+   * file that is not being rewritten (an offline copy of another event) would
+   * never produce one, and the stale checks would linger forever. So we force
+   * a fresh read ourselves after a short delay.
+   */
+  private confirmScheduleMismatch(): void {
+    if (this.mismatchConfirmTimer) {
+      return;
+    }
+
+    this.mismatchConfirmTimer = setTimeout(() => {
+      this.mismatchConfirmTimer = null;
+      // Bypass the read cache so this is a genuinely independent read.
+      this.xmlDataService.clearCache();
+      void this.refreshScheduleFingerprint();
+    }, MISMATCH_CONFIRM_DELAY_MS);
+
+    // Never hold the process open for this.
+    this.mismatchConfirmTimer.unref?.();
   }
 
   private startXmlMismatchDetector(): void {

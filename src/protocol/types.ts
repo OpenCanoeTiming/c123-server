@@ -223,6 +223,24 @@ export interface C123XmlMismatch extends C123MessageBase {
 }
 
 /**
+ * Check state changed notification (server-generated)
+ * Sent when a penalty check is set, removed, invalidated, or cleared
+ */
+export interface C123ChecksChanged extends C123MessageBase {
+  type: 'ChecksChanged';
+  data: import('../checks/types.js').CheckChangedEvent;
+}
+
+/**
+ * Flag state changed notification (server-generated)
+ * Sent when a flag is created, resolved, or deleted
+ */
+export interface C123FlagChanged extends C123MessageBase {
+  type: 'FlagChanged';
+  data: import('../checks/types.js').FlagChangedEvent;
+}
+
+/**
  * Union of all C123 protocol messages
  */
 export type C123Message =
@@ -239,7 +257,9 @@ export type C123Message =
   | C123LogEntry
   | C123ConfigPush
   | C123ClientState
-  | C123ScoringEvent;
+  | C123ScoringEvent
+  | C123ChecksChanged
+  | C123FlagChanged;
 
 /**
  * Type guard for C123TimeOfDay
@@ -337,4 +357,18 @@ export function isXmlMismatch(msg: C123Message): msg is C123XmlMismatch {
  */
 export function isScoringEvent(msg: C123Message): msg is C123ScoringEvent {
   return msg.type === 'ScoringEvent';
+}
+
+/**
+ * Type guard for C123ChecksChanged
+ */
+export function isChecksChanged(msg: C123Message): msg is C123ChecksChanged {
+  return msg.type === 'ChecksChanged';
+}
+
+/**
+ * Type guard for C123FlagChanged
+ */
+export function isFlagChanged(msg: C123Message): msg is C123FlagChanged {
+  return msg.type === 'FlagChanged';
 }
