@@ -24,6 +24,7 @@ import {
 import { WindowsConfigDetector, getAppSettings } from './config/index.js';
 import type { AvailableXmlPaths, XmlPathDetectionResult, XmlSourceMode } from './config/index.js';
 import { ChecksStore } from './checks/ChecksStore.js';
+import { computeScheduleFingerprint } from './checks/fingerprint.js';
 
 /**
  * Wrapper to make UdpDiscovery compatible with Source interface for admin display
@@ -168,14 +169,9 @@ export class Server extends EventEmitter<ServerEvents> {
       this.xmlDataService.setPath(this.config.xmlPath);
       this.xmlPathSource = 'manual';
 
-      // Load checks for this XML file
-      // Note: checksum may be empty before first XML parse, validated on next XML file switch
-      const xmlBasename = path.basename(this.config.xmlPath);
-      this.checksStore.loadForFile(xmlBasename, this.xmlDataService.getChecksum() || '');
-
-      if (!this.xmlDataService.getChecksum()) {
-        Logger.warn('Server', `Checks loaded for ${xmlBasename} with empty fingerprint (XML not yet parsed)`);
-      }
+      // Load checks for this XML file. The fingerprint is not needed here — it
+      // is pinned on the first write and validated when the schedule arrives.
+      this.checksStore.loadForFile(path.basename(this.config.xmlPath));
     }
 
     // Start XML autodetection if enabled and no manual path set
@@ -305,14 +301,7 @@ export class Server extends EventEmitter<ServerEvents> {
       this.startXmlSource();
       this.startXmlChangeNotifier();
 
-      // Load checks for the new XML file
-      const xmlBasename = path.basename(xmlPath);
-      const checksum = this.xmlDataService.getChecksum() || '';
-      this.checksStore.loadForFile(xmlBasename, checksum);
-
-      if (!checksum) {
-        Logger.warn('Server', `Checks loaded for ${xmlBasename} with empty fingerprint (XML not yet parsed)`);
-      }
+      this.checksStore.loadForFile(path.basename(xmlPath));
     }
   }
 
@@ -750,6 +739,12 @@ export class Server extends EventEmitter<ServerEvents> {
       this.unifiedServer.broadcastXmlChange(sections, checksum);
       // Clear XmlDataService cache so next REST request gets fresh data
       this.xmlDataService.clearCache();
+
+      // On the first read the notifier reports every present section, so this
+      // also covers startup and XML path switches.
+      if (sections.includes('Schedule')) {
+        void this.refreshScheduleFingerprint();
+      }
     });
 
     this.xmlChangeNotifier.on('error', (err) => {
@@ -757,6 +752,25 @@ export class Server extends EventEmitter<ServerEvents> {
     });
 
     this.xmlChangeNotifier.start();
+  }
+
+  /**
+   * Derive the event fingerprint from the current schedule and hand it to
+   * ChecksStore, which validates the loaded checks file against it.
+   *
+   * On failure the store keeps its previous value rather than receiving an
+   * empty one, so a transient parse error cannot look like a different event.
+   */
+  private async refreshScheduleFingerprint(): Promise<void> {
+    try {
+      const schedule = await this.xmlDataService.getSchedule();
+      this.checksStore.setScheduleFingerprint(computeScheduleFingerprint(schedule));
+    } catch (err) {
+      Logger.warn(
+        'Server',
+        `Could not compute schedule fingerprint: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
   }
 
   private startXmlMismatchDetector(): void {
