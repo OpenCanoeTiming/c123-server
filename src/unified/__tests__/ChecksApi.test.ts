@@ -193,6 +193,38 @@ describe('Penalty Checks API', () => {
       });
       expect(response.status).toBe(400);
     });
+
+    it('rejects a fractional gate', async () => {
+      // "42:3.5" would be unreachable by every invalidation path.
+      const response = await fetch(`${baseUrl}/api/checks/K1M_BR1/check`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bib: '42', gate: 3.5, value: 2 }),
+      });
+      expect(response.status).toBe(400);
+      expect(store.getChecks('K1M_BR1').checks['42:3.5']).toBeUndefined();
+    });
+
+    it('rejects an empty-string value instead of recording it as clean', async () => {
+      // Number('') is 0, so a client form bug would otherwise be stored as
+      // "verified, no penalty" — the most damaging value to get wrong.
+      const response = await fetch(`${baseUrl}/api/checks/K1M_BR1/check`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bib: '42', gate: 5, value: '' }),
+      });
+      expect(response.status).toBe(400);
+      expect(store.getChecks('K1M_BR1').checks['42:5']).toBeUndefined();
+    });
+
+    it('rejects a boolean value', async () => {
+      const response = await fetch(`${baseUrl}/api/checks/K1M_BR1/check`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bib: '42', gate: 5, value: true }),
+      });
+      expect(response.status).toBe(400);
+    });
   });
 
   describe('DELETE /api/checks/:raceId/check', () => {
@@ -311,6 +343,78 @@ describe('Penalty Checks API', () => {
         method: 'DELETE',
       });
       expect(response.status).toBe(404);
+    });
+  });
+
+  describe('gate value snapshot from XML', () => {
+    // Gates is fixed-width: three characters per gate, right-aligned and
+    // space-padded (docs/XML-FORMAT.md). Built from cells rather than written
+    // as a literal so the alignment cannot drift. Gate 4 is unjudged; gate 5
+    // is 50. Splitting on whitespace would drop the blank and read gate 4
+    // as 50.
+    const GATES = ['0', '2', '0', '', '50', '0'].map((v) => v.padStart(3)).join('');
+
+    beforeEach(() => {
+      server.setXmlDataService({
+        getResultsForRace: async (raceId: string) =>
+          raceId === 'K1M_BR1' ? [{ bib: '42', gates: GATES }] : null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
+    });
+
+    it('reads the gate at its fixed-width position, not its split index', async () => {
+      const response = await fetch(`${baseUrl}/api/checks/K1M_BR1/check`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bib: '42', gate: 5 }),
+      });
+      expect(response.status).toBe(200);
+
+      const data = (await response.json()) as JsonResponse;
+      expect(data.check.value).toBe(50);
+    });
+
+    it('records an unjudged gate as null rather than as clean', async () => {
+      const response = await fetch(`${baseUrl}/api/checks/K1M_BR1/check`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bib: '42', gate: 4 }),
+      });
+      expect(response.status).toBe(200);
+
+      const data = (await response.json()) as JsonResponse;
+      expect(data.check.value).toBeNull();
+    });
+
+    it('reads the earlier gates correctly too', async () => {
+      const put = async (gate: number) => {
+        const r = await fetch(`${baseUrl}/api/checks/K1M_BR1/check`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bib: '42', gate }),
+        });
+        return ((await r.json()) as JsonResponse).check.value;
+      };
+
+      expect(await put(1)).toBe(0);
+      expect(await put(2)).toBe(2);
+      expect(await put(3)).toBe(0);
+    });
+
+    it('falls back to suggestedValue when the gate cannot be read', async () => {
+      // Gate 4 is unjudged, so resolving must not record an affirmative
+      // "clean" — the flag's suggestion is the better answer.
+      const flag = store.createFlag('K1M_BR1', '42', 4, 'protocol says 50', 50);
+
+      const response = await fetch(`${baseUrl}/api/checks/K1M_BR1/flag/${flag.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolution: 'per paper protocol' }),
+      });
+      expect(response.status).toBe(200);
+
+      const data = (await response.json()) as JsonResponse;
+      expect(data.check.value).toBe(50);
     });
   });
 

@@ -2554,18 +2554,22 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
             Logger.info('Unified', `Check invalidated: bib=${bibStr} gate=${gateNum} race=${raceId}`);
           }
         } else {
-          // On-course competitor — search all races for this bib:gate
-          const allChecks = this.checksStore.getAllChecks();
-          if (allChecks) {
-            const key = `${bibStr}:${gateNum}`;
-            for (const rId of Object.keys(allChecks.races)) {
-              if (allChecks.races[rId].checks[key]) {
-                const invalidated = this.checksStore.invalidateCheck(rId, bibStr, gateNum);
-                if (invalidated) {
-                  Logger.info('Unified', `Check invalidated (on-course): bib=${bibStr} gate=${gateNum} race=${rId}`);
-                }
-              }
+          // On-course competitor — the request carries no raceId. Bibs are
+          // only unique within a class, so the same bib in another race is a
+          // different person: invalidating every race that happens to share
+          // bib:gate would silently delete other competitors' verified checks.
+          // Scope to the race currently on course instead.
+          const currentRaceId = this.eventState?.state.currentRaceId ?? null;
+          if (currentRaceId) {
+            const invalidated = this.checksStore.invalidateCheck(currentRaceId, bibStr, gateNum);
+            if (invalidated) {
+              Logger.info('Unified', `Check invalidated (on-course): bib=${bibStr} gate=${gateNum} race=${currentRaceId}`);
             }
+          } else {
+            Logger.warn(
+              'Unified',
+              `Scoring for bib=${bibStr} gate=${gateNum} without raceId and no race on course; check left untouched`
+            );
           }
         }
       }
@@ -3329,16 +3333,24 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
         return null;
       }
 
-      // Parse gates string: space-separated values
-      // e.g., "0 0 2 0 50 0 ..." where index corresponds to gate number (1-indexed)
-      const gateValues = competitor.gates.trim().split(/\s+/).map((v) => parseInt(v, 10));
-      const gateIndex = gate - 1; // Convert to 0-indexed
-
-      if (gateIndex >= 0 && gateIndex < gateValues.length) {
-        return gateValues[gateIndex];
+      // Gates is a fixed-width field: three characters per gate, right-aligned
+      // and space-padded (see docs/XML-FORMAT.md). An unjudged gate is three
+      // spaces, so splitting on whitespace drops it and shifts every later
+      // gate — in "  0  2     0" gate 3 is unjudged and gate 4 is 0, but a
+      // split reads gate 3 as 0.
+      const cellStart = (gate - 1) * 3;
+      if (cellStart < 0 || cellStart + 3 > competitor.gates.length) {
+        return null;
       }
 
-      return null;
+      const cell = competitor.gates.slice(cellStart, cellStart + 3).trim();
+      if (cell === '') {
+        // Gate not judged — distinct from a clean 0.
+        return null;
+      }
+
+      const value = Number.parseInt(cell, 10);
+      return Number.isNaN(value) ? null : value;
     } catch (err) {
       Logger.warn('Unified', `Failed to lookup gate value from XML: ${err instanceof Error ? err.message : 'Unknown error'}`);
       return null;
@@ -3362,9 +3374,11 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       return null;
     }
 
+    // Integer-only: a fractional gate produces a key like "1:3.5" that no
+    // invalidation path can ever match, so the check would be unremovable.
     const gateNum = Number(gate);
-    if (isNaN(gateNum) || gateNum < 1 || gateNum > 25) {
-      res.status(400).json({ error: 'gate must be a number between 1 and 25' });
+    if (!Number.isInteger(gateNum) || gateNum < 1 || gateNum > 25) {
+      res.status(400).json({ error: 'gate must be a whole number between 1 and 25' });
       return null;
     }
 
@@ -3430,7 +3444,14 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     }
 
     try {
-      this.checksStore.resetForNewEvent();
+      // Reports false when no checks file is loaded — there is no XML path
+      // yet, so there is nothing to reset. Saying "success" there would tell
+      // the client an archive happened when it did not.
+      if (!this.checksStore.resetForNewEvent()) {
+        res.status(503).json({ error: 'No checks file loaded — set an XML path first' });
+        return;
+      }
+
       res.json({ success: true });
     } catch (err) {
       Logger.error('Unified', 'NewEvent error', err);
@@ -3467,12 +3488,14 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     if (value !== undefined) {
       // Value explicitly provided
       if (value !== null) {
-        const valueNum = Number(value);
-        if (isNaN(valueNum)) {
+        // Reject anything that is not already a number. Number('') is 0 and
+        // Number(true) is 1, so a client form bug would otherwise be recorded
+        // as "verified clean" — the most damaging value to get wrong.
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
           res.status(400).json({ error: 'value must be a number or null' });
           return;
         }
-        penaltyValue = valueNum;
+        penaltyValue = value;
       }
     } else {
       // Value not provided, try to look up from XML
@@ -3623,13 +3646,19 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
       return;
     }
 
-    // Look up current penalty value from XML
-    let currentValue: number | null = null;
+    // Look up the current penalty value from the XML. Left undefined when the
+    // lookup finds nothing, so ChecksStore falls back to the flag's
+    // suggestedValue — passing an explicit null would record "verified clean"
+    // for a gate we could not actually read.
+    let currentValue: number | null | undefined = undefined;
     const checksData = this.checksStore.getChecks(raceId);
     const flag = checksData.flags.find((f) => f.id === id);
 
     if (flag) {
-      currentValue = await this.lookupGateValueFromXml(raceId, flag.bib, flag.gate);
+      const looked = await this.lookupGateValueFromXml(raceId, flag.bib, flag.gate);
+      if (looked !== null) {
+        currentValue = looked;
+      }
     }
 
     try {

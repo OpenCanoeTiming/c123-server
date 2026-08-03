@@ -518,7 +518,7 @@ Get results for a specific race.
 | `total` | number | Total time in milliseconds (`time` + `pen` × 1000) |
 | `rank` | number | Position in results |
 | `status` | string | Empty for valid, `DSQ`, `DNS`, `DNF` for invalid |
-| `gates` | string | Space-separated per-gate penalties (0, 2, or 50), 1-indexed by position — in `"0 0 2 0 50"` gate 3 got 2 and gate 5 got 50. This is the field the [Penalty Checks API](#penalty-checks-api) snapshots when `value` is omitted on `PUT /check` |
+| `gates` | string | Per-gate penalties as a **fixed-width** field: three characters per gate, right-aligned and space-padded — see [XML-FORMAT.md](XML-FORMAT.md). Gate *n* is `slice((n-1)*3, n*3)`; three spaces means the gate was not judged. Do **not** split on whitespace — a blank gate would collapse and shift every later one. Individual races use 0/2/50, but team races carry cumulative values such as `52`, `100` or `150`. This is the field the [Penalty Checks API](#penalty-checks-api) snapshots when `value` is omitted on `PUT /check` |
 
 **Response (merged=true):**
 
@@ -1748,9 +1748,16 @@ Races without a `StartTime` — extreme heats, for instance — contribute an em
 
 The fingerprint is **pinned on the first check or flag**, not when the file is loaded. Before that it is `null`. The preparation phase before an event is exactly when the schedule changes most, and a file with no checks has nothing to protect.
 
-Once pinned, the fingerprint is compared against the live schedule whenever the XML `Schedule` section changes. The file belongs to the same event when **at least half of its recorded races still exist**. Adding, removing or reordering races therefore leaves checks untouched; a genuinely different event reusing the same XML filename shares no token and causes the file to be archived with a timestamp suffix, after which a `ChecksChanged` message with event `checks-reset` is broadcast.
+Once pinned, the fingerprint is compared against the live schedule whenever the XML `Schedule` section changes. The file belongs to the same event when **at least half of its recorded races still exist**. Adding, removing or reordering races therefore leaves checks untouched; a different event reusing the same XML filename falls below that threshold and causes the file to be archived with a timestamp suffix, after which a `ChecksChanged` message with event `checks-reset` is broadcast.
 
-An empty or unreadable schedule never archives anything.
+Two safeguards sit in front of archiving, because it is destructive and can only be undone by renaming the archive file on the server by hand:
+
+- **An empty or unreadable schedule never archives anything.**
+- **The same differing schedule must be seen twice in a row.** Canoe123 rewrites the multi-megabyte XML after every competitor, so a read can catch it mid-write and return a truncated but still well-formed schedule. That transient looks exactly like a different event; a real one keeps reporting the same schedule, a torn read does not.
+
+When the file is judged to belong to the same event, the stored fingerprint is refreshed to the current schedule. Over a long event this makes the comparison transitive — a schedule that turns over half its races twice will drift to a fully disjoint set without ever archiving. This is deliberate: the design prefers keeping stale checks (visible, and clearable by hand) over destroying real ones.
+
+Use `POST /api/checks/new-event` whenever the automatic rule gets it wrong in either direction.
 
 Use [`POST /api/checks/new-event`](#post-apichecksnew-event) to force a fresh start.
 
@@ -1840,7 +1847,7 @@ Set or update a penalty check.
 |-------|------|----------|-------------|
 | `bib` | string | Yes | Competitor start number |
 | `gate` | number | Yes | Gate number (1-25) |
-| `value` | number\|null | No | Penalty value. If omitted, looked up from XML |
+| `value` | number\|null | No | Penalty value. Must be a JSON number or `null` — strings and booleans are rejected. If omitted, snapshotted from the XML `gates` field; `null` there means the gate was not judged. Individual races use 0/2/50, team races also carry cumulative values |
 | `tag` | string | No | Optional note |
 
 **Response:** `{ "success": true, "check": { ... } }`
@@ -1879,9 +1886,13 @@ Archives the current checks file, starts empty and unpins the fingerprint, which
 
 This is the manual override for the fingerprint heuristic — needed most plausibly with a single-race schedule, where "at least half the races survive" degenerates to comparing one token. Unlike `DELETE /api/checks/:raceId`, which clears one race and leaves the fingerprint alone, this affects the whole file.
 
-Broadcasts `ChecksChanged` with event `checks-reset`, so connected clients refetch.
+Broadcasts `ChecksChanged` with event `checks-reset`, so connected clients refetch. The `checks-reset` event is sent on the `ChecksChanged` channel only — a client that tracks flags through `FlagChanged` alone must still refetch them when it sees it.
+
+Call this **after** the new event's XML is loaded where possible. It deliberately forgets the current schedule, so checks made before the new XML arrives stay unpinned until it does.
 
 **Response:** `{ "success": true }`
+
+**Errors:** 503 when no checks file is loaded (no XML path set) — nothing was archived.
 
 ---
 
@@ -1941,8 +1952,10 @@ Resolve a flag. Auto-creates a check entry with current XML penalty value.
 
 | Status | Response |
 |--------|----------|
-| 404 | `{ "error": "Flag not found" }` |
-| 409 | `{ "error": "Flag is already resolved" }` |
+| 404 | `{ "error": "Flag <id> not found in race <raceId>" }`, or `{ "error": "Race <raceId> not found" }` when the race has no checks data |
+| 409 | `{ "error": "Flag <id> is already resolved" }` |
+
+When the gate value cannot be read from the XML — the gate is unjudged, or the run is not in the results yet — the auto-created check falls back to the flag's `suggestedValue`, and to `null` if the flag has none. It is never recorded as a clean `0` on the strength of a failed lookup.
 
 ---
 
