@@ -110,8 +110,11 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
     this.currentFilePath = filePath;
 
     // A new XML file means the live schedule is unknown until it is parsed.
-    // Carrying the previous file's fingerprint over would pin the wrong event.
+    // Carrying the previous file's fingerprint over would pin the wrong event,
+    // and a pending mismatch left armed would let the very first sighting for
+    // the new file archive without the confirmation the guarantee rests on.
     this.liveFingerprint = '';
+    this.pendingMismatch = null;
 
     if (!fs.existsSync(filePath)) {
       Logger.info('ChecksStore', `No existing checks file for ${xmlFilename}, creating fresh data`);
@@ -129,6 +132,13 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
       );
     } catch (error) {
       Logger.error('ChecksStore', `Error loading checks file: ${error}`);
+
+      // Move the unreadable file aside before falling back. Otherwise the next
+      // flush overwrites it, destroying the only copy of whatever checks it
+      // held — one bad race entry among fifty good ones would take the lot,
+      // which is exactly the loss this whole mechanism exists to prevent.
+      this.moveAside(filePath, 'unreadable');
+
       this.currentData = this.emptyData(xmlFilename);
     }
   }
@@ -164,6 +174,13 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
       }
       if (!Array.isArray(race.flags)) {
         throw new Error(`race "${raceId}" has no usable "flags" array`);
+      }
+      // Entries must at least be objects carrying an id — deleteFlag and
+      // resolveFlag read `.id` off every element.
+      for (const flag of race.flags) {
+        if (typeof flag !== 'object' || flag === null || typeof flag.id !== 'string') {
+          throw new Error(`race "${raceId}" has a flag without a usable id`);
+        }
       }
     }
 
@@ -221,15 +238,36 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
   }
 
   /**
-   * Pick an archive filename that does not already exist.
+   * Rename a checks file out of the way, keeping it recoverable.
    *
-   * The timestamp has millisecond resolution, and renameSync overwrites
-   * silently — two archives in the same millisecond would destroy the first,
-   * which is the only copy of the discarded checks.
+   * Returns the new path, or null if there was nothing to move.
    */
-  private nextArchivePath(filePath: string): string {
+  private moveAside(filePath: string, label: 'archived' | 'unreadable'): string | null {
+    if (!fs.existsSync(filePath)) {
+      return null;
+    }
+
+    const target = this.freeSidecarPath(filePath, label);
+    try {
+      fs.renameSync(filePath, target);
+      Logger.info('ChecksStore', `Moved ${label} checks file to ${path.basename(target)}`);
+      return target;
+    } catch (error) {
+      Logger.error('ChecksStore', `Error moving ${label} checks file aside: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Pick a sidecar filename that does not already exist.
+   *
+   * The timestamp has millisecond resolution and renameSync overwrites
+   * silently, so two files set aside in the same millisecond would destroy the
+   * first — which is the only copy of the discarded checks.
+   */
+  private freeSidecarPath(filePath: string, label: string): string {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const base = filePath.replace('.checks.json', `.checks.archived-${timestamp}`);
+    const base = filePath.replace('.checks.json', `.checks.${label}-${timestamp}`);
 
     let candidate = `${base}.json`;
     let suffix = 1;
@@ -260,8 +298,11 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
     }
 
     // An unknown or empty schedule tells us nothing. Treating it as an empty
-    // intersection would let a transient XML read failure wipe the event.
+    // intersection would let a transient XML read failure wipe the event. Any
+    // pending suspicion is dropped rather than left armed with nothing to
+    // resolve it — the next real schedule has to make the case again.
     if (!this.liveFingerprint) {
+      this.pendingMismatch = null;
       return 'ok';
     }
 
@@ -343,15 +384,7 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
       // would otherwise discard the checks with no archive to recover from.
       this.flush();
 
-      if (fs.existsSync(this.currentFilePath)) {
-        const archivePath = this.nextArchivePath(this.currentFilePath);
-        try {
-          fs.renameSync(this.currentFilePath, archivePath);
-          Logger.info('ChecksStore', `Archived to ${path.basename(archivePath)}`);
-        } catch (error) {
-          Logger.error('ChecksStore', `Error archiving checks file: ${error}`);
-        }
-      }
+      this.moveAside(this.currentFilePath, 'archived');
     }
 
     this.currentData = this.emptyData(this.currentData.xmlFilename);

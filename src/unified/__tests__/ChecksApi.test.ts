@@ -386,6 +386,18 @@ describe('Penalty Checks API', () => {
       expect(data.check.value).toBeNull();
     });
 
+    it('returns null for a gate past the end of the string', async () => {
+      const response = await fetch(`${baseUrl}/api/checks/K1M_BR1/check`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bib: '42', gate: 7 }),
+      });
+      expect(response.status).toBe(200);
+
+      const data = (await response.json()) as JsonResponse;
+      expect(data.check.value).toBeNull();
+    });
+
     it('reads the earlier gates correctly too', async () => {
       const put = async (gate: number) => {
         const r = await fetch(`${baseUrl}/api/checks/K1M_BR1/check`, {
@@ -432,6 +444,57 @@ describe('Penalty Checks API', () => {
         ).toBe(503);
       } finally {
         await bare.stop();
+      }
+    });
+  });
+
+  describe('with a store but no checks file loaded', () => {
+    // The production not-ready state: the store is always constructed, but no
+    // XML path has been set yet. This must not surface as a 500 carrying an
+    // internal message, nor as a misleading 404.
+    let bare: UnifiedServer;
+    let bareUrl: string;
+
+    beforeEach(async () => {
+      bare = new UnifiedServer({ port: getNextPort() });
+      await bare.start();
+      bare.setChecksStore(new ChecksStore());
+      bareUrl = `http://localhost:${bare.getPort()}`;
+    });
+
+    afterEach(async () => {
+      await bare.stop();
+    });
+
+    const json = { 'Content-Type': 'application/json' };
+
+    it('answers 503 on every mutating route', async () => {
+      const cases: Array<[string, RequestInit]> = [
+        [
+          '/api/checks/R1/check',
+          { method: 'PUT', headers: json, body: JSON.stringify({ bib: '1', gate: 1, value: 2 }) },
+        ],
+        [
+          '/api/checks/R1/check',
+          { method: 'DELETE', headers: json, body: JSON.stringify({ bib: '1', gate: 1 }) },
+        ],
+        ['/api/checks/R1', { method: 'DELETE' }],
+        [
+          '/api/checks/R1/flag',
+          { method: 'POST', headers: json, body: JSON.stringify({ bib: '1', gate: 1, comment: 'x' }) },
+        ],
+        ['/api/checks/R1/flag/z', { method: 'PATCH', headers: json, body: JSON.stringify({}) }],
+        ['/api/checks/R1/flag/z', { method: 'DELETE' }],
+        ['/api/checks/new-event', { method: 'POST' }],
+      ];
+
+      for (const [path, init] of cases) {
+        const response = await fetch(`${bareUrl}${path}`, init);
+        expect({ path, method: init.method, status: response.status }).toEqual({
+          path,
+          method: init.method,
+          status: 503,
+        });
       }
     });
   });

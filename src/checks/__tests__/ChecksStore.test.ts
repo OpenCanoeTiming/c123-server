@@ -761,6 +761,35 @@ describe('ChecksStore', () => {
       expect(archived).toHaveLength(0);
     });
 
+    it('does not carry a pending mismatch across an XML file switch', () => {
+      const other = 'X@2026-05-01|Y@2026-05-01';
+      store.loadForFile(getUniqueTestFile());
+      store.setScheduleFingerprint('A@2026-04-19|B@2026-04-19');
+      store.setCheck('A', '1', 1, 2);
+      expect(store.setScheduleFingerprint(other)).toBe('pending-confirmation');
+
+      // Switching files must disarm it — otherwise the first sighting for the
+      // new file archives without the confirmation the guarantee rests on.
+      const second = getUniqueTestFile();
+      store.loadForFile(second);
+      store.setScheduleFingerprint('A@2026-04-19|B@2026-04-19');
+      store.setCheck('A', '1', 1, 2);
+
+      expect(store.setScheduleFingerprint(other)).toBe('pending-confirmation');
+    });
+
+    it('drops a pending mismatch when the schedule becomes unreadable', () => {
+      store.loadForFile(getUniqueTestFile());
+      store.setScheduleFingerprint('A@2026-04-19|B@2026-04-19');
+      store.setCheck('A', '1', 1, 2);
+
+      expect(store.setScheduleFingerprint('X@2026-05-01')).toBe('pending-confirmation');
+      expect(store.setScheduleFingerprint('')).toBe('ok');
+
+      // The suspicion has to be made again from scratch.
+      expect(store.setScheduleFingerprint('X@2026-05-01')).toBe('pending-confirmation');
+    });
+
     it('requires the same schedule twice, not just two mismatches', () => {
       const filename = getUniqueTestFile();
       store.loadForFile(filename);
@@ -886,6 +915,49 @@ describe('ChecksStore', () => {
       writeFileSync(join(checksDir, `${filename}.checks.json`), body);
       return checksDir;
     }
+
+    it('preserves the rejected file instead of overwriting it', () => {
+      const filename = getUniqueTestFile();
+      // One good race and one bad one: the good checks must stay recoverable.
+      const checksDir = writeChecksFile(
+        filename,
+        JSON.stringify({
+          xmlFilename: filename,
+          fingerprint: 'A@2026-04-19',
+          races: {
+            R1: { checks: { '42:5': { checkedAt: '2026-04-19T09:00:00Z', value: 2 } }, flags: [] },
+            R2: { checks: {} },
+          },
+        })
+      );
+
+      store.loadForFile(filename);
+      store.setCheck('R9', '1', 1, 0);
+      store.flush();
+
+      const setAside = readdirSync(checksDir).filter((f) => f.includes('unreadable'));
+      expect(setAside).toHaveLength(1);
+
+      const rescued = readFileSync(join(checksDir, setAside[0]), 'utf-8');
+      expect(rescued).toContain('42:5');
+    });
+
+    it('rejects a flag entry with no id', () => {
+      const filename = getUniqueTestFile();
+      writeChecksFile(
+        filename,
+        JSON.stringify({
+          xmlFilename: filename,
+          fingerprint: null,
+          races: { R1: { checks: {}, flags: [null, { id: 'ok' }] } },
+        })
+      );
+
+      store.loadForFile(filename);
+
+      expect(store.getAllChecks()?.races).toEqual({});
+      expect(() => store.deleteFlag('R1', 'ok')).not.toThrow();
+    });
 
     it('falls back to fresh data when races is missing', () => {
       const filename = getUniqueTestFile();

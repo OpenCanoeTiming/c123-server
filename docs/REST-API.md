@@ -1757,9 +1757,7 @@ Two safeguards sit in front of archiving, because it is destructive and can only
 
 When the file is judged to belong to the same event, the stored fingerprint is refreshed to the current schedule. Over a long event this makes the comparison transitive — a schedule that turns over half its races twice will drift to a fully disjoint set without ever archiving. This is deliberate: the design prefers keeping stale checks (visible, and clearable by hand) over destroying real ones.
 
-Use `POST /api/checks/new-event` whenever the automatic rule gets it wrong in either direction.
-
-Use [`POST /api/checks/new-event`](#post-apichecksnew-event) to force a fresh start.
+Use [`POST /api/checks/new-event`](#post-apichecksnew-event) whenever the automatic rule gets it wrong in either direction.
 
 ---
 

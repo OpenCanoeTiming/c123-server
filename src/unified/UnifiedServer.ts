@@ -3361,6 +3361,29 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    * Helper: Parse and validate bib and gate from request body
    * Returns parsed values or null (and sends 400 response)
    */
+  /**
+   * Guard for the checks routes: the service must exist and have a file open.
+   *
+   * "No XML path set yet" is the not-ready state that actually occurs in
+   * production — the store itself is always constructed. Without this the
+   * mutating routes surfaced it as a 500 carrying an internal message.
+   */
+  private requireChecks(res: Response): ChecksStore | null {
+    if (!this.checksStore) {
+      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
+      res.status(503).json({ error: 'Checks service not available' });
+      return null;
+    }
+
+    if (!this.checksStore.getAllChecks()) {
+      Logger.warn('Unified', 'Checks API: no checks file loaded');
+      res.status(503).json({ error: 'No checks file loaded — set an XML path first' });
+      return null;
+    }
+
+    return this.checksStore;
+  }
+
   private parseBibGate(req: Request, res: Response): { bib: string; gate: number } | null {
     const { bib, gate } = req.body;
 
@@ -3466,9 +3489,8 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    * Body: { bib: string, gate: number, value?: number|null, tag?: string }
    */
   private async handleSetCheck(req: Request, res: Response): Promise<void> {
-    if (!this.checksStore) {
-      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
-      res.status(503).json({ error: 'Checks service not available' });
+    const checks = this.requireChecks(res);
+    if (!checks) {
       return;
     }
 
@@ -3488,14 +3510,21 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     if (value !== undefined) {
       // Value explicitly provided
       if (value !== null) {
-        // Reject anything that is not already a number. Number('') is 0 and
-        // Number(true) is 1, so a client form bug would otherwise be recorded
+        // A numeric string is fine — gate accepts one too, and clients that
+        // post form values send strings. What must not pass is anything
+        // whose numeric reading is invented: Number('') and Number(' ') are
+        // 0 and Number(true) is 1, so a client bug would otherwise be stored
         // as "verified clean" — the most damaging value to get wrong.
-        if (typeof value !== 'number' || !Number.isFinite(value)) {
+        const raw = typeof value === 'string' ? value.trim() : value;
+        const isUsable =
+          (typeof raw === 'number' || (typeof raw === 'string' && raw !== '')) &&
+          Number.isFinite(Number(raw));
+
+        if (!isUsable) {
           res.status(400).json({ error: 'value must be a number or null' });
           return;
         }
-        penaltyValue = value;
+        penaltyValue = Number(raw);
       }
     } else {
       // Value not provided, try to look up from XML
@@ -3503,7 +3532,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     }
 
     try {
-      const check = this.checksStore.setCheck(raceId, bib, gateNum, penaltyValue, tag);
+      const check = checks.setCheck(raceId, bib, gateNum, penaltyValue, tag);
       res.json({ success: true, check });
     } catch (err) {
       Logger.error('Unified', 'SetCheck error', err);
@@ -3518,9 +3547,8 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    * Body: { bib: string, gate: number }
    */
   private async handleRemoveCheck(req: Request, res: Response): Promise<void> {
-    if (!this.checksStore) {
-      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
-      res.status(503).json({ error: 'Checks service not available' });
+    const checks = this.requireChecks(res);
+    if (!checks) {
       return;
     }
 
@@ -3534,7 +3562,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     const { bib, gate: gateNum } = parsed;
 
     try {
-      this.checksStore.removeCheck(raceId, bib, gateNum);
+      checks.removeCheck(raceId, bib, gateNum);
       res.json({ success: true });
     } catch (err) {
       Logger.error('Unified', 'RemoveCheck error', err);
@@ -3548,16 +3576,15 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    * DELETE /api/checks/:raceId - Clear all checks for a race
    */
   private async handleClearChecks(req: Request, res: Response): Promise<void> {
-    if (!this.checksStore) {
-      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
-      res.status(503).json({ error: 'Checks service not available' });
+    const checks = this.requireChecks(res);
+    if (!checks) {
       return;
     }
 
     const { raceId } = req.params;
 
     try {
-      this.checksStore.clearRace(raceId);
+      checks.clearRace(raceId);
       res.json({ success: true });
     } catch (err) {
       Logger.error('Unified', 'ClearChecks error', err);
@@ -3572,9 +3599,8 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    * Body: { bib: string, gate: number, comment: string, suggestedValue?: number|null }
    */
   private async handleCreateFlag(req: Request, res: Response): Promise<void> {
-    if (!this.checksStore) {
-      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
-      res.status(503).json({ error: 'Checks service not available' });
+    const checks = this.requireChecks(res);
+    if (!checks) {
       return;
     }
 
@@ -3610,7 +3636,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     }
 
     try {
-      const flag = this.checksStore.createFlag(
+      const flag = checks.createFlag(
         raceId,
         bib,
         gateNum,
@@ -3631,9 +3657,8 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    * Body: { resolution?: string }
    */
   private async handleResolveFlag(req: Request, res: Response): Promise<void> {
-    if (!this.checksStore) {
-      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
-      res.status(503).json({ error: 'Checks service not available' });
+    const checks = this.requireChecks(res);
+    if (!checks) {
       return;
     }
 
@@ -3651,7 +3676,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     // suggestedValue — passing an explicit null would record "verified clean"
     // for a gate we could not actually read.
     let currentValue: number | null | undefined = undefined;
-    const checksData = this.checksStore.getChecks(raceId);
+    const checksData = checks.getChecks(raceId);
     const flag = checksData.flags.find((f) => f.id === id);
 
     if (flag) {
@@ -3662,7 +3687,7 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     }
 
     try {
-      const result = this.checksStore.resolveFlag(raceId, id, resolution, currentValue);
+      const result = checks.resolveFlag(raceId, id, resolution, currentValue);
       res.json({ success: true, flag: result.flag, check: result.check });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -3681,16 +3706,15 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
    * DELETE /api/checks/:raceId/flag/:id - Delete a flag
    */
   private async handleDeleteFlag(req: Request, res: Response): Promise<void> {
-    if (!this.checksStore) {
-      Logger.warn('Unified', 'Checks API: ChecksStore not initialized');
-      res.status(503).json({ error: 'Checks service not available' });
+    const checks = this.requireChecks(res);
+    if (!checks) {
       return;
     }
 
     const { raceId, id } = req.params;
 
     try {
-      const flag = this.checksStore.deleteFlag(raceId, id);
+      const flag = checks.deleteFlag(raceId, id);
       if (!flag) {
         Logger.debug('Unified', `DELETE /api/checks/${raceId}/flag/${id}: not found`);
         res.status(404).json({ error: 'Flag not found' });
