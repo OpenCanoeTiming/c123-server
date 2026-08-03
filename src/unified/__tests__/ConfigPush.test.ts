@@ -16,6 +16,13 @@ import type { C123ConfigPush } from '../../protocol/types.js';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type JsonResponse = Record<string, any>;
 
+// These tests store config under a fixed IP and assert the server pushes it to
+// the connecting client, so the client must connect over that exact address.
+// Connecting to 'localhost' would leave the family up to happy-eyeballs: over
+// IPv6 the server sees '::1' (not the '::ffff:' mapped form it normalizes), the
+// key no longer matches and every assertion here silently sees zero pushes.
+const CLIENT_IP = '127.0.0.1';
+
 // Helper: Create WebSocket with message handler already attached
 // This ensures we don't miss messages sent immediately on connection
 function createClientWithHandler(
@@ -61,7 +68,7 @@ describe('ConfigPush Mechanism', () => {
       // No config stored - use collector that starts before connection
       const messages: C123ConfigPush[] = [];
       const client = await createClientWithHandler(
-        `ws://localhost:${port}/ws`,
+        `ws://${CLIENT_IP}:${port}/ws`,
         (msg) => {
           if ((msg as { type?: string }).type === 'ConfigPush') {
             messages.push(msg as C123ConfigPush);
@@ -81,7 +88,7 @@ describe('ConfigPush Mechanism', () => {
     it('should send ConfigPush on connection when stored config exists', async () => {
       // Pre-store config for localhost IP (127.0.0.1)
       const settings = getAppSettings();
-      settings.setClientConfig('127.0.0.1', {
+      settings.setClientConfig(CLIENT_IP, {
         type: 'ledwall',
         displayRows: 10,
         customTitle: 'Test Scoreboard',
@@ -90,7 +97,7 @@ describe('ConfigPush Mechanism', () => {
       // Collect messages starting BEFORE connection opens
       const messages: C123ConfigPush[] = [];
       const client = await createClientWithHandler(
-        `ws://localhost:${port}/ws`,
+        `ws://${CLIENT_IP}:${port}/ws`,
         (msg) => {
           if ((msg as { type?: string }).type === 'ConfigPush') {
             messages.push(msg as C123ConfigPush);
@@ -114,13 +121,13 @@ describe('ConfigPush Mechanism', () => {
     it('should only send defined parameters in ConfigPush', async () => {
       // Pre-store partial config (only type)
       const settings = getAppSettings();
-      settings.setClientConfig('127.0.0.1', {
+      settings.setClientConfig(CLIENT_IP, {
         type: 'vertical',
       });
 
       const messages: C123ConfigPush[] = [];
       const client = await createClientWithHandler(
-        `ws://localhost:${port}/ws`,
+        `ws://${CLIENT_IP}:${port}/ws`,
         (msg) => {
           if ((msg as { type?: string }).type === 'ConfigPush') {
             messages.push(msg as C123ConfigPush);
@@ -142,11 +149,11 @@ describe('ConfigPush Mechanism', () => {
 
     it('should update lastSeen timestamp on connection', async () => {
       const settings = getAppSettings();
-      settings.setClientConfig('127.0.0.1', { type: 'ledwall' });
+      settings.setClientConfig(CLIENT_IP, { type: 'ledwall' });
 
       const beforeConnect = new Date().toISOString();
 
-      const client = new WebSocket(`ws://localhost:${port}/ws`);
+      const client = new WebSocket(`ws://${CLIENT_IP}:${port}/ws`);
 
       await new Promise<void>((resolve) => {
         client.on('open', () => resolve());
@@ -154,7 +161,7 @@ describe('ConfigPush Mechanism', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const config = settings.getClientConfig('127.0.0.1');
+      const config = settings.getClientConfig(CLIENT_IP);
       expect(config?.lastSeen).toBeDefined();
 
       // lastSeen should be after beforeConnect
@@ -174,7 +181,7 @@ describe('ConfigPush Mechanism', () => {
     });
 
     it('should return 0 when config does not exist for IP', async () => {
-      const client = new WebSocket(`ws://localhost:${port}/ws`);
+      const client = new WebSocket(`ws://${CLIENT_IP}:${port}/ws`);
 
       await new Promise<void>((resolve) => {
         client.on('open', () => resolve());
@@ -184,10 +191,10 @@ describe('ConfigPush Mechanism', () => {
 
       // Ensure no config stored for 127.0.0.1 (in case previous test left one)
       const settings = getAppSettings();
-      settings.deleteClientConfig('127.0.0.1');
+      settings.deleteClientConfig(CLIENT_IP);
 
       // Now push should return 0 - session exists but no config
-      const count = server.pushConfigToIp('127.0.0.1');
+      const count = server.pushConfigToIp(CLIENT_IP);
       expect(count).toBe(0);
 
       client.close();
@@ -195,7 +202,7 @@ describe('ConfigPush Mechanism', () => {
     });
 
     it('should push config to connected client and return count', async () => {
-      const client = new WebSocket(`ws://localhost:${port}/ws`);
+      const client = new WebSocket(`ws://${CLIENT_IP}:${port}/ws`);
 
       await new Promise<void>((resolve) => {
         client.on('open', () => resolve());
@@ -205,7 +212,7 @@ describe('ConfigPush Mechanism', () => {
 
       // Store config for 127.0.0.1
       const settings = getAppSettings();
-      settings.setClientConfig('127.0.0.1', {
+      settings.setClientConfig(CLIENT_IP, {
         type: 'ledwall',
         displayRows: 8,
       });
@@ -220,7 +227,7 @@ describe('ConfigPush Mechanism', () => {
       });
 
       // Push config
-      const count = server.pushConfigToIp('127.0.0.1');
+      const count = server.pushConfigToIp(CLIENT_IP);
       expect(count).toBe(1);
 
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -234,8 +241,8 @@ describe('ConfigPush Mechanism', () => {
     });
 
     it('should push to multiple sessions from same IP', async () => {
-      const client1 = new WebSocket(`ws://localhost:${port}/ws`);
-      const client2 = new WebSocket(`ws://localhost:${port}/ws`);
+      const client1 = new WebSocket(`ws://${CLIENT_IP}:${port}/ws`);
+      const client2 = new WebSocket(`ws://${CLIENT_IP}:${port}/ws`);
 
       await Promise.all([
         new Promise<void>((resolve) => client1.on('open', () => resolve())),
@@ -246,7 +253,7 @@ describe('ConfigPush Mechanism', () => {
 
       // Store config
       const settings = getAppSettings();
-      settings.setClientConfig('127.0.0.1', { type: 'vertical' });
+      settings.setClientConfig(CLIENT_IP, { type: 'vertical' });
 
       // Set up message listeners
       const messages1: C123ConfigPush[] = [];
@@ -261,7 +268,7 @@ describe('ConfigPush Mechanism', () => {
       });
 
       // Push config
-      const count = server.pushConfigToIp('127.0.0.1');
+      const count = server.pushConfigToIp(CLIENT_IP);
       expect(count).toBe(2);
 
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -277,7 +284,7 @@ describe('ConfigPush Mechanism', () => {
 
   describe('ConfigPush via API', () => {
     it('should push config to client when updated via PUT /api/clients/:ip/config', async () => {
-      const client = new WebSocket(`ws://localhost:${port}/ws`);
+      const client = new WebSocket(`ws://${CLIENT_IP}:${port}/ws`);
 
       await new Promise<void>((resolve) => {
         client.on('open', () => resolve());
@@ -295,7 +302,7 @@ describe('ConfigPush Mechanism', () => {
       });
 
       // Update config via API
-      const response = await fetch(`http://localhost:${port}/api/clients/127.0.0.1/config`, {
+      const response = await fetch(`http://localhost:${port}/api/clients/${CLIENT_IP}/config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -347,12 +354,12 @@ describe('ConfigPush Mechanism', () => {
     it('should push merged config after partial update', async () => {
       // Pre-store some config
       const settings = getAppSettings();
-      settings.setClientConfig('127.0.0.1', {
+      settings.setClientConfig(CLIENT_IP, {
         type: 'ledwall',
         displayRows: 10,
       });
 
-      const client = new WebSocket(`ws://localhost:${port}/ws`);
+      const client = new WebSocket(`ws://${CLIENT_IP}:${port}/ws`);
 
       await new Promise<void>((resolve) => {
         client.on('open', () => resolve());
@@ -371,7 +378,7 @@ describe('ConfigPush Mechanism', () => {
       });
 
       // Update only displayRows via API
-      const response = await fetch(`http://localhost:${port}/api/clients/127.0.0.1/config`, {
+      const response = await fetch(`http://localhost:${port}/api/clients/${CLIENT_IP}/config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ displayRows: 15 }),
@@ -392,7 +399,7 @@ describe('ConfigPush Mechanism', () => {
 
     it('should include custom parameters in ConfigPush', async () => {
       const settings = getAppSettings();
-      settings.setClientConfig('127.0.0.1', {
+      settings.setClientConfig(CLIENT_IP, {
         type: 'vertical',
         custom: {
           theme: 'dark',
@@ -402,7 +409,7 @@ describe('ConfigPush Mechanism', () => {
 
       const messages: C123ConfigPush[] = [];
       const client = await createClientWithHandler(
-        `ws://localhost:${port}/ws`,
+        `ws://${CLIENT_IP}:${port}/ws`,
         (msg) => {
           if ((msg as { type?: string }).type === 'ConfigPush') {
             messages.push(msg as C123ConfigPush);
@@ -427,14 +434,14 @@ describe('ConfigPush Mechanism', () => {
   describe('ConfigPush message format', () => {
     it('should have correct message structure', async () => {
       const settings = getAppSettings();
-      settings.setClientConfig('127.0.0.1', {
+      settings.setClientConfig(CLIENT_IP, {
         type: 'ledwall',
         displayRows: 8,
       });
 
       const messages: C123ConfigPush[] = [];
       const client = await createClientWithHandler(
-        `ws://localhost:${port}/ws`,
+        `ws://${CLIENT_IP}:${port}/ws`,
         (msg) => {
           if ((msg as { type?: string }).type === 'ConfigPush') {
             messages.push(msg as C123ConfigPush);

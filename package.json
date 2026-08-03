@@ -1,6 +1,6 @@
 {
   "name": "@canoe-scoreboard/c123-server",
-  "version": "0.11.2",
+  "version": "0.11.3",
   "description": "C123 to Scoreboard bridge - smart middleware for canoe slalom timing",
   "type": "module",
   "main": "dist/index.js",
@@ -23,8 +23,8 @@
     "@opencanoetiming/timing-design-system": "^0.9.0",
     "chokidar": "^5.0.0",
     "express": "^5.2.1",
-    "fast-xml-parser": "^5.5.9",
-    "ws": "^8.20.0"
+    "fast-xml-parser": "^5.10.1",
+    "ws": "^8.21.1"
   },
   "optionalDependencies": {
     "systray2": "^2.1.4"
@@ -32,15 +32,15 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/express": "^5.0.0",
-    "@types/node": "^25.5.0",
+    "@types/node": "^26.1.1",
     "@types/ws": "^8.5.13",
-    "@typescript-eslint/eslint-plugin": "^8.58.0",
-    "@typescript-eslint/parser": "^8.57.0",
-    "eslint": "^10.1.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.7.0",
-    "typescript-eslint": "^8.58.0",
-    "vitest": "^4.1.2"
+    "@typescript-eslint/eslint-plugin": "^8.59.1",
+    "@typescript-eslint/parser": "^8.65.0",
+    "eslint": "^10.8.0",
+    "tsx": "^4.23.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^4.1.10"
   },
   "engines": {
     "node": ">=20.0.0"

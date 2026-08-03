@@ -16,7 +16,7 @@ jobs:
       tag_name: ${{ steps.rp.outputs.tag_name }}
       sha: ${{ steps.rp.outputs.sha }}
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@v5
         id: rp
         with:
           config-file: release-please-config.json
@@ -40,13 +40,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.release-please.outputs.tag_name }}
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
           registry-url: 'https://npm.pkg.github.com'
@@ -91,7 +91,7 @@ jobs:
           Write-Host "Installer: $installerName"
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: c123-server-setup-${{ steps.version.outputs.version }}
           path: installer/Output/c123-server-setup-*.exe
@@ -107,12 +107,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Download installer
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: c123-server-setup-*
           merge-multiple: true

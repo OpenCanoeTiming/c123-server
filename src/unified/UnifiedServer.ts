@@ -1126,9 +1126,12 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
     // Static files for Admin UI (CSS, JS)
     this.app.use('/admin-ui', express.static(ADMIN_UI_DIR));
 
-    // Dashboard UI - serve index.html
+    // Dashboard UI - serve index.html.
+    // Must pass the directory as `root`: with a single absolute path, send()
+    // applies its `dotfiles: 'ignore'` rule to every segment of that path, so an
+    // install below a dot-directory (~/.nvm, ~/.local, ...) would 404 here.
     this.app.get('/', (_req: Request, res: Response) => {
-      res.sendFile(path.join(ADMIN_UI_DIR, 'index.html'));
+      res.sendFile('index.html', { root: ADMIN_UI_DIR });
     });
   }
 

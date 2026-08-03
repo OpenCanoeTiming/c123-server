@@ -11,8 +11,9 @@ The C123 Server provides the following APIs:
 | Category | Base URL | Description |
 |----------|----------|-------------|
 | **Discovery API** | `/api/discover` | Server identification for auto-discovery |
+| **Update Check API** | `/api/update-check` | Check GitHub Releases for a newer server version |
 | **Server API** | `/api` | Server status, sources, scoreboards |
-| **XML Data API** | `/api/xml` | Race data from XML file (schedule, results, participants) |
+| **XML Data API** | `/api/xml` | Race data from XML file (schedule, results, participants, mismatch) |
 | **Configuration API** | `/api/config` | Server configuration (XML source, event name) |
 | **Event API** | `/api/event` | Event name management |
 | **Broadcast API** | `/api/broadcast` | Broadcast messages to all clients |
@@ -62,6 +63,39 @@ Access-Control-Allow-Methods: GET, OPTIONS
 
 ---
 
+## Update Check API
+
+### GET /api/update-check
+
+Check GitHub Releases for a newer stable server version. Used by the admin dashboard to show an update banner.
+
+**Fail-safe by design:** any error (network, timeout, parse, disabled) returns HTTP `200` with `latest: null` and `isNewer: false` (plus an optional `error` field) so the dashboard never breaks. Results are cached for 1 hour to avoid hitting the GitHub API on every load. Prerelease/preview builds are ignored. Can be disabled with `{ "updateCheck": false }` in `settings.json` for closed networks.
+
+**Response:**
+
+```json
+{
+  "current": "0.9.0",
+  "latest": "0.10.0",
+  "url": "https://github.com/OpenCanoeTiming/c123-server/releases/tag/v0.10.0",
+  "isNewer": true,
+  "checkedAt": 1736000000000,
+  "enabled": true
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `current` | string | Installed server version (from `package.json`) |
+| `latest` | string \| null | Latest stable release version, or `null` on error/disabled |
+| `url` | string \| null | Release page URL, or `null` |
+| `isNewer` | boolean | `true` if `latest` is newer than `current` |
+| `checkedAt` | number | Epoch milliseconds when the check ran |
+| `enabled` | boolean | `false` if update checks are disabled via settings |
+| `error` | string | (optional) Reason the check failed (still HTTP 200) |
+
+---
+
 ## Server Status API
 
 ### GET /api/status
@@ -72,7 +106,7 @@ Get overall server status including uptime, connected scoreboards, and current e
 
 ```json
 {
-  "version": "0.9.0",
+  "version": "2.0.0",
   "uptime": 3600,
   "sources": [
     {
@@ -458,9 +492,9 @@ Get results for a specific race.
       "bib": "1",
       "startTime": "10:00:00",
       "status": "",
-      "time": 7899,
+      "time": 76990,
       "pen": 2,
-      "total": 7899,
+      "total": 78990,
       "rank": 1,
       "gates": "  0  0  2  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0",
       "participant": {
@@ -479,9 +513,9 @@ Get results for a specific race.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `time` | number | Run time in centiseconds (7899 = 78.99s) |
+| `time` | number | Run time in milliseconds (76990 = 76.99s) |
 | `pen` | number | Penalty in seconds |
-| `total` | number | Total time in centiseconds |
+| `total` | number | Total time in milliseconds (`time` + `pen` × 1000) |
 | `rank` | number | Position in results |
 | `status` | string | Empty for valid, `DSQ`, `DNS`, `DNF` for invalid |
 | `gates` | string | Space-separated per-gate penalties (0, 2, or 50) |
@@ -498,18 +532,18 @@ Get results for a specific race.
       "givenName": "Jakub",
       "club": "TJ DUKLA Praha",
       "run1": {
-        "time": 7899,
+        "time": 76990,
         "pen": 2,
-        "total": 7899,
+        "total": 78990,
         "rank": 1
       },
       "run2": {
-        "time": 7756,
+        "time": 77560,
         "pen": 0,
-        "total": 7756,
+        "total": 77560,
         "rank": 2
       },
-      "bestTotal": 7756,
+      "bestTotal": 77560,
       "bestRank": 1
     }
   ],
@@ -524,9 +558,9 @@ Get results for a specific race.
    ```json
    {
      "bib": "5",
-     "run1": { "time": 8156, "pen": 4, "total": 8196, "rank": 3 },
+     "run1": { "time": 81560, "pen": 4, "total": 85560, "rank": 3 },
      "run2": {},  // Not undefined!
-     "bestTotal": 8196,
+     "bestTotal": 85560,
      "bestRank": 3
    }
    ```
@@ -603,14 +637,69 @@ Get course configuration data including gate setup and split positions.
 
 | Character | Meaning |
 |-----------|---------|
-| `N` | Normal gate (downstream) |
-| `R` | Reverse gate (upstream) |
-| `S` | Split point (timing checkpoint) |
+| `N` | Downstream gate ("normal", green) |
+| `R` | Upstream gate ("reverse", red) |
+| `I` | Split timing ("insert split") |
+| `S` | Sector delimiter ("gate section") |
+| `E` | Roll zone |
+| `D` | Kayak cross start |
+
+Only `N` and `R` are gates. `I`, `S`, `E` and `D` are markers between them, so
+a course string is longer than its gate count — `NNRNSNRNSRNNSNRNSNRNSRNSNRNSNRNS`
+is 32 characters but 24 gates. See
+`../c123-protocol-docs/c123-xml-format.md` for the source-verified list.
+
+> **Known defect:** the `splits` array above is derived from `S` and reports
+> the raw character index, not the gate number, so its values are wrong on any
+> course containing markers (32-character example above → `[5, 9, 13, ...]`
+> instead of `[4, 7, 10, ...]`). The example payload in this section predates
+> the current implementation and matches neither. Tracked in
+> [#148](https://github.com/OpenCanoeTiming/c123-server/issues/148); the field
+> will change once it is decided whether it should express sectors (`S`) or
+> split timing (`I`).
 
 **Use cases:**
 - c123-scoring uses splits for automatic gate grouping
 - Visual course map generation
 - Split time validation
+
+---
+
+### GET /api/xml/mismatch
+
+Get the current XML/TCP mismatch state. The server compares the schedule fingerprint from the live C123 TCP feed against the loaded XML file; a mismatch means the XML file does not belong to the currently running event (wrong file selected).
+
+**Response (no mismatch):**
+
+```json
+{
+  "detected": false
+}
+```
+
+**Response (mismatch detected):**
+
+```json
+{
+  "detected": true,
+  "detectedAt": "2025-01-02T10:30:00.000Z",
+  "tcpFingerprint": "K1M_ST_BR1|K1W_ST_BR1|...",
+  "xmlFingerprint": "C1M_ST_BR1|C1W_ST_BR1|...",
+  "unmatchedRaceIds": ["K1M_ST_BR1_6"],
+  "message": "XML file does not match C123 live data"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `detected` | boolean | Whether a mismatch is currently active |
+| `detectedAt` | string | (optional) ISO timestamp when first detected |
+| `tcpFingerprint` | string | (optional) Schedule fingerprint from the C123 TCP feed |
+| `xmlFingerprint` | string | (optional) Schedule fingerprint from the XML file |
+| `unmatchedRaceIds` | string[] | (optional) Race IDs present in TCP but not matched in XML |
+| `message` | string | (optional) Human-readable explanation |
+
+The same information is pushed in real time to WebSocket clients via the `XmlMismatch` message — see [C123-PROTOCOL.md](C123-PROTOCOL.md).
 
 ---
 
@@ -1077,21 +1166,23 @@ Update configuration for a client. If the client is online, changes are pushed i
 ```json
 {
   "success": true,
+  "ip": "192.168.1.50",
   "config": {
     "type": "ledwall",
     "displayRows": 10,
     "customTitle": "Finish Line",
     "label": "TV in Hall A"
   },
-  "pushed": true
+  "pushedToSessions": 1
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `success` | boolean | Operation succeeded |
+| `ip` | string | Client config key (IP or clientId) |
 | `config` | object | Updated configuration |
-| `pushed` | boolean | Whether config was pushed to online client |
+| `pushedToSessions` | number | Number of online sessions the config was pushed to |
 
 **Errors:**
 
@@ -1129,16 +1220,23 @@ Set label for a client.
 
 ### DELETE /api/clients/:ip
 
-Delete stored configuration for a client.
+Delete stored configuration for a client. Does not disconnect an online client.
 
 **Response:**
 
 ```json
 {
   "success": true,
-  "deleted": true
+  "ip": "192.168.1.50",
+  "message": "Client configuration deleted"
 }
 ```
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| 404 | `{ "error": "Client configuration not found" }` |
 
 ---
 
@@ -1159,9 +1257,16 @@ Send ForceRefresh to a specific client.
 ```json
 {
   "success": true,
-  "refreshed": true
+  "ip": "192.168.1.50",
+  "sessionsRefreshed": 1,
+  "reason": "Manual refresh"
 }
 ```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sessionsRefreshed` | number | Number of online sessions refreshed |
+| `reason` | string \| null | The reason sent to the client (or `null`) |
 
 **Errors:**
 
@@ -1428,12 +1533,26 @@ These endpoints allow sending commands to the C123 timing system. Commands are s
 
 ### POST /api/c123/scoring
 
-Send a penalty scoring command to C123.
+Send a penalty scoring command to C123. The endpoint has two modes depending on whether `raceId` is supplied:
 
-**Request:**
+- **Without `raceId`** — scoring for a competitor currently **on course** (live).
+- **With `raceId`** — penalty **correction** for an already **finished** competitor in a specific race.
+
+**Request (on-course):**
 
 ```json
 {
+  "bib": "10",
+  "gate": 5,
+  "value": 2
+}
+```
+
+**Request (penalty correction for a finished competitor):**
+
+```json
+{
+  "raceId": "K1M_ST_BR2_6",
   "bib": "10",
   "gate": 5,
   "value": 2
@@ -1445,6 +1564,7 @@ Send a penalty scoring command to C123.
 | `bib` | string | Yes | Non-empty | Competitor start number |
 | `gate` | number | Yes | 1-24 | Gate number |
 | `value` | number\|null | Yes | 0, 2, 50, or null | Penalty value (null to delete) |
+| `raceId` | string | No | Non-empty if present | Target race; switches to penalty-correction mode for a finished competitor |
 
 **Penalty Values:**
 
@@ -1460,19 +1580,25 @@ Send a penalty scoring command to C123.
 ```json
 {
   "success": true,
+  "raceId": "K1M_ST_BR2_6",
   "bib": "10",
   "gate": 5,
   "value": 2
 }
 ```
 
+`raceId` is omitted from the response in on-course mode.
+
 **Errors:**
 
 | Status | Response |
 |--------|----------|
 | 400 | `{ "error": "bib is required" }` |
+| 400 | `{ "error": "gate is required" }` |
 | 400 | `{ "error": "gate must be a number between 1 and 24" }` |
+| 400 | `{ "error": "value is required (use null to delete)" }` |
 | 400 | `{ "error": "value must be 0, 2, 50, or null (to delete)" }` |
+| 400 | `{ "error": "raceId must be a non-empty string if provided" }` |
 | 503 | `{ "error": "Not connected to C123", "detail": "TCP connection to C123 is not established" }` |
 
 ---
@@ -1594,7 +1720,7 @@ When a C123 command is successfully sent, a `ScoringEvent` message is broadcast 
 
 | eventType | details |
 |-----------|---------|
-| `penalty` | `{ gate: number, value: 0 \| 2 \| 50 }` |
+| `penalty` | `{ gate: number, value: 0 \| 2 \| 50 \| null, raceId?: string }` (`raceId` present for finished-competitor corrections) |
 | `remove` | `{ reason: "DNS" \| "DNF" \| "CAP", position: number }` |
 | `timing` | `{ channelPosition: "Start" \| "Finish" \| "Split1" \| "Split2" }` |
 
@@ -2031,7 +2157,7 @@ Transition the event status on the live server.
 
 ### PATCH /api/live/config
 
-Toggle push channels on/off. At least one channel must be specified.
+Update push channels and automatic status transitions. At least one field must be specified.
 
 **Request:**
 
@@ -2039,7 +2165,8 @@ Toggle push channels on/off. At least one channel must be specified.
 {
   "pushXml": true,
   "pushOnCourse": true,
-  "pushResults": false
+  "pushResults": false,
+  "autoStatus": true
 }
 ```
 
@@ -2048,6 +2175,7 @@ Toggle push channels on/off. At least one channel must be specified.
 | `pushXml` | boolean | No | Enable/disable XML push |
 | `pushOnCourse` | boolean | No | Enable/disable OnCourse push |
 | `pushResults` | boolean | No | Enable/disable Results push |
+| `autoStatus` | boolean | No | Enable/disable automatic event status transitions (e.g. running → finished) |
 
 **Response:**
 
@@ -2059,6 +2187,7 @@ Toggle push channels on/off. At least one channel must be specified.
     "oncourse": true,
     "results": false
   },
+  "autoStatus": true,
   "status": { "..." }
 }
 ```
@@ -2069,6 +2198,85 @@ Toggle push channels on/off. At least one channel must be specified.
 |--------|----------|
 | 400 | `{ "error": "At least one channel must be specified" }` |
 | 400 | `{ "error": "pushXml must be a boolean" }` |
+| 400 | `{ "error": "autoStatus must be a boolean" }` |
+
+---
+
+### POST /api/live/events
+
+List events on a live server. This is a server-side proxy used by the admin UI to avoid browser CORS restrictions when querying a remote live server.
+
+**Request:**
+
+```json
+{
+  "serverUrl": "https://live.example.com",
+  "masterKey": "optional-admin-master-key"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `serverUrl` | string | Yes | Live-mini server URL |
+| `masterKey` | string | No | Admin master key (lists all events on the server) |
+
+**Response:**
+
+```json
+{
+  "events": [
+    {
+      "eventId": "czech-cup-2025",
+      "mainTitle": "Czech Cup 2025",
+      "location": "Prague",
+      "discipline": "CSL",
+      "status": "running",
+      "apiKey": "abc123...",
+      "createdAt": "2025-01-02T09:00:00.000Z"
+    }
+  ]
+}
+```
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| 400 | `{ "error": "serverUrl is required" }` |
+
+---
+
+### POST /api/live/delete-event
+
+Delete an event on the remote live server, then disconnect and clear the saved local connection config. Uses the currently saved server URL and API key.
+
+**Request:**
+
+```json
+{
+  "eventId": "czech-cup-2025"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `eventId` | string | Yes | Event to delete on the remote server |
+
+**Response:**
+
+```json
+{
+  "success": true
+}
+```
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| 400 | `{ "error": "eventId is required" }` |
+| 400 | `{ "error": "Not connected to any live server" }` |
+| 503 | `{ "error": "Live-Mini pusher not available" }` |
 
 ---
 
@@ -2103,7 +2311,7 @@ The same WebSocket connection used for real-time C123 data also delivers XML cha
   "type": "XmlChange",
   "timestamp": "2025-01-02T10:31:00.000Z",
   "data": {
-    "sections": ["Results", "StartList"],
+    "sections": ["Results", "Participants"],
     "checksum": "12345-67-89"
   }
 }
@@ -2111,7 +2319,7 @@ The same WebSocket connection used for real-time C123 data also delivers XML cha
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `sections` | string[] | Which sections changed: `Participants`, `Schedule`, `Results` |
+| `sections` | string[] | Which sections changed: `Participants`, `Schedule`, `Results`, `Classes` |
 | `checksum` | string | New file checksum |
 
 **Client workflow:**
@@ -2162,21 +2370,32 @@ All endpoints return consistent error responses:
 
 ## Time Format
 
-Times in results are stored as **centiseconds** (1/100th of a second):
+The `time` and `total` fields in results are **milliseconds** — the raw value
+from the Canoe123 XML, passed through without conversion:
 
 | Value | Meaning |
 |-------|---------|
-| `7899` | 78.99 seconds |
-| `8156` | 81.56 seconds |
+| `76990` | 76.99 seconds |
+| `81560` | 81.56 seconds |
+
+`pen` is different: it is a penalty in **whole seconds**, so
+`total = time + pen × 1000`.
 
 To convert to display format:
 
 ```javascript
-function formatTime(centiseconds) {
-  const seconds = centiseconds / 100;
+function formatTime(milliseconds) {
+  const seconds = milliseconds / 1000;
   return seconds.toFixed(2);
 }
 ```
+
+> **Historical note:** this section previously claimed centiseconds. It was
+> wrong, and the mistake propagated — c123-penalty-check divided by 100 and
+> displayed every time 10× too large
+> ([#98](https://github.com/OpenCanoeTiming/c123-penalty-check/issues/98)).
+> Verify against real data before trusting a unit: in the XML samples a 76.99s
+> run is `<Time>76990</Time>` with `<Total>78990</Total>` and `<Pen>2</Pen>`.
 
 ---
 

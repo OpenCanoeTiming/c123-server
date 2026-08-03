@@ -23,8 +23,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@shared/*": ["./shared/*"]
-    },
-    "baseUrl": "."
+    }
   },
   "include": ["src/**/*", "shared/**/*"],
   "exclude": ["node_modules", "dist", "**/__tests__/**"]

@@ -27,14 +27,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # Full history so `git rev-parse --short HEAD` in the stage script
           # can produce a meaningful commit tag for iss-defines.iss.
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
           registry-url: 'https://npm.pkg.github.com'
@@ -85,7 +85,7 @@ jobs:
           Write-Host "Installer: $installerName"
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: c123-server-setup-${{ steps.version.outputs.version }}
           path: installer/Output/c123-server-setup-*.exe
@@ -102,10 +102,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Download installer
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: c123-server-setup-*
           merge-multiple: true

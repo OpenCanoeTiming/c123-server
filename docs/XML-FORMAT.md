@@ -2,7 +2,7 @@
 
 This document describes the XML export format from Canoe123 (Siwidata) that C123 Server can read and serve via REST API.
 
-> **Complete documentation:** For exhaustive XML format documentation, see `analysis/c123-xml-format.md` in the analysis repository.
+> **Complete documentation:** For exhaustive XML format documentation, see `../c123-protocol-docs/c123-xml-format.md`.
 
 ---
 
@@ -18,12 +18,16 @@ Canoe123 exports race data to an XML file that is continuously updated during th
 
 | Section | Description | REST Endpoint |
 |---------|-------------|---------------|
-| `Events` | Competition metadata (title, location, dates) | `/api/xml/events` |
+| `Events` | Competition metadata (title, location, dates) | *not exposed directly* — event name via `/api/event` |
 | `Participants` | Competitors and teams | `/api/xml/participants` |
-| `Classes` | Race categories | `/api/xml/classes` |
+| `Classes` | Race categories | *not exposed directly* — `classId` appears in `/api/xml/schedule` and `/api/xml/races` |
 | `Schedule` | Race schedule | `/api/xml/schedule` |
-| `Results` | Race results | `/api/xml/races/:raceId/results` |
-| `CourseData` | Course configuration (gates) | `/api/xml/course` |
+| `Results` | Race results | `/api/xml/races/:id/results` |
+| `CourseData` | Course configuration (gates) | `/api/xml/courses` |
+
+> The endpoint list above is a convenience index, not the API reference.
+> [REST-API.md](REST-API.md) is authoritative for routes, parameters and
+> response shapes.
 
 ---
 
@@ -62,25 +66,37 @@ Canoe123 exports race data to an XML file that is continuously updated during th
 
 ```xml
 <Participants>
-  <Id>12345.K1M.ST</Id>
-  <ClassId>K1M-ST</ClassId>
-  <EventBib>42</EventBib>
-  <FirstName>Jan</FirstName>
-  <LastName>Novak</LastName>
+  <Id>60070.C1M.ZS</Id>
+  <ClassId>C1M-ZS</ClassId>
+  <EventBib>1</EventBib>
+  <ICFId>60070</ICFId>
+  <FamilyName>NOVAK</FamilyName>
+  <GivenName>Jan</GivenName>
+  <NOC>CZE</NOC>
   <Club>TJ Slavia Praha</Club>
-  <Nation>CZE</Nation>
+  <Year>2010</Year>
+  <CatId>ZS</CatId>
+  <IsTeam>false</IsTeam>
 </Participants>
 ```
+
+C2 crews carry a second paddler in `FamilyName2` / `GivenName2` / `ICFId2`;
+teams set `IsTeam` to `true` and reference their members in `Member1`-`Member3`.
 
 ### Classes (Race Categories)
 
 ```xml
 <Classes>
-  <ClassId>K1M-ST</ClassId>
-  <ShortName>K1m</ShortName>
-  <LongName>K1 Men - Medium Course</LongName>
-  <Boat>K1</Boat>
-  <Gender>M</Gender>
+  <ClassId>K1M-ZS</ClassId>
+  <Class>K1 Senior Men</Class>
+  <LongTitle>Kayak Senior Men</LongTitle>
+  <Categories>
+    <CatId>ZS</CatId>
+    <ClassId>K1M-ZS</ClassId>
+    <Category>Seniors</Category>
+    <FirstYear>1990</FirstYear>
+    <LastYear>2006</LastYear>
+  </Categories>
 </Classes>
 ```
 
@@ -88,65 +104,94 @@ Canoe123 exports race data to an XML file that is continuously updated during th
 
 ```xml
 <Schedule>
-  <RaceId>K1M_ST_BR1_6</RaceId>
-  <ClassId>K1M-ST</ClassId>
-  <Name>K1m - Medium Course - 1st Run</Name>
-  <MainTitle>K1m - Medium Course</MainTitle>
-  <SubTitle>1st Run</SubTitle>
-  <RaceType>BR1</RaceType>
-  <SortOrder>101</SortOrder>
-  <Status>5</Status>
+  <RaceId>K1M-ZS_BR1_25</RaceId>
+  <RaceOrder>10</RaceOrder>
+  <StartTime>2024-06-25T13:30:00+02:00</StartTime>
+  <Time>13:30:00</Time>
+  <ClassId>K1M-ZS</ClassId>
+  <DisId>BR1</DisId>
+  <FirstBib>1</FirstBib>
+  <StartInterval>1:00</StartInterval>
+  <JuryNr>1</JuryNr>
+  <CourseNr>1</CourseNr>
+  <RaceStatus>5</RaceStatus>
 </Schedule>
 ```
 
-**Race Status Values:**
+An optional `CustomTitle` carries a display name such as
+`K1m - short track - 1st run`; there are no separate `MainTitle` / `SubTitle`
+elements at schedule level.
+
+**RaceStatus Values:**
 | Value | Meaning |
 |-------|---------|
 | `0` | Not started |
 | `3` | Running |
+| `4` | Finished, results not yet official |
 | `5` | Finished |
 
-**Race Types:**
+Values `0`, `3`, `4` and `5` all occur in the reference samples. Treat any
+other value as unknown rather than assuming the list is exhaustive.
+
+**DisId (Run Type):**
 | Type | Description |
 |------|-------------|
 | `BR1` | Best Run - 1st Run |
 | `BR2` | Best Run - 2nd Run |
-| `FIN` | Final |
-| `SEM` | Semifinal |
-| `QUA` | Qualification |
+| `TSR` | Team Single Run |
+| `SR` | Single Run |
+| `XT` / `X4` / `XS` / `XF` / `XER` | Kayak cross phases (time trial, heats, semi, final, elimination) |
+
+`FIN`, `SEM` and `QUA` exist in Canoe123 for international formats but do not
+appear in any sample we hold. See `../c123-protocol-docs/c123-xml-format.md`
+for the full source-verified list.
 
 ### Results
 
 ```xml
 <Results>
   <RaceId>K1M_ST_BR1_6</RaceId>
-  <Rank>1</Rank>
-  <Bib>42</Bib>
+  <Id>12054.K1M_ST</Id>
+  <StartOrder>1</StartOrder>
+  <Bib>   1</Bib>
+  <Status />
+  <dtStart>08:30:10.780</dtStart>
+  <dtFinish>08:31:27.770</dtFinish>
+  <Time>76990</Time>
+  <Gates>  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  2</Gates>
   <Pen>2</Pen>
-  <Time>8532</Time>
-  <TotalTime>8732</TotalTime>
-  <Gates>0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0</Gates>
-  <Status>0</Status>
+  <Total>78990</Total>
+  <Rnk>1</Rnk>
 </Results>
 ```
 
-**Time Values:** All times are in centiseconds (1/100 second).
+**Time Values:** Run times are in milliseconds (76990 = 76.99 seconds).
 - `Time`: Run time without penalties
-- `TotalTime`: Run time + penalty seconds (each gate touch = 2s, miss = 50s)
-- `Pen`: Total penalty seconds
+- `Total`: Run time + penalty seconds, i.e. `Time + Pen × 1000`
+- `Pen`: Total penalty in whole seconds (each gate touch = 2s, miss = 50s)
 
-**Gates Format:** Comma-separated values per gate:
+The rank element is `Rnk`, not `Rank`. BR2 rows additionally carry the first
+run under the `Prev*` elements (`PrevTime`, `PrevTotal`, `PrevPen`, ...).
+
+**Gates Format:** Fixed-width fields, three characters per gate, right-aligned
+and space-padded — *not* comma-separated. A course with 24 gates yields a
+72-character string, which is the reliable way to count gates:
 - `0` = Clean
 - `2` = Touch (2 second penalty)
 - `50` = Miss (50 second penalty)
 
-**Status Values:**
+**Status Values:** A string, not a number. Empty (`<Status />`) for a valid run:
+
 | Value | Meaning |
 |-------|---------|
-| `0` | Finished |
-| `1` | Did Not Start (DNS) |
-| `2` | Did Not Finish (DNF) |
-| `3` | Disqualified (DSQ) |
+| *(empty)* | Finished, valid run |
+| `DNS` | Did Not Start |
+| `DNF` | Did Not Finish |
+| `DSQ` | Disqualified |
+| `RAL` | Rallied / re-run (seen in the 2024 LODM sample) |
+
+This list is what occurs in the reference samples; treat unknown values as
+invalid rather than assuming completeness.
 
 ---
 
@@ -154,8 +199,14 @@ Canoe123 exports race data to an XML file that is continuously updated during th
 
 Czech races typically use "Best Run" format where competitors have two runs and their better result counts.
 
-**Race ID Pattern:** `{ClassId}_{Course}_{RunType}_{Gates}`
-- Example: `K1M_ST_BR1_6` = K1 Men, Short course, 1st Run, 6 gates
+**Race ID Pattern:** `{ClassId}_{DisId}_{DayOfMonth}`
+- Example: `K1M_ST_BR1_6` = class `K1M_ST`, 1st run, 6th day of the month
+- Example: `K1M-ZS_BR1_25` = class `K1M-ZS`, 1st run, 25th day of the month
+
+The trailing number is the day of month, not a gate count: in
+`xboardtest02_jarni_v1.xml` race `K1M_ST_BR1_6` starts `2024-04-06`, and in
+`2024-LODM-fin.xml` race `K1M-ZS_BR1_25` starts `2024-06-25`. Do not parse it
+for anything else — use the `Gates` field width to count gates.
 
 **Important:** BR2 Results may contain BR1 values when BR1 was better. See [C123-PROTOCOL.md](C123-PROTOCOL.md#br1br2-two-run-handling) for details.
 
@@ -164,8 +215,11 @@ Czech races typically use "Best Run" format where competitors have two runs and 
 ## Sample Files
 
 For complete sample XML files, see:
-- `analysis/captures/xboardtest02_jarni_v1.xml` - Test data with multiple categories
-- `analysis/captures/2024-LODM-fin.xml` - Real competition data
+- `../c123-protocol-docs/samples/xboardtest02_jarni_v1.xml` - Test data with multiple categories
+- `../c123-protocol-docs/samples/2024-LODM-fin.xml` - Real competition data (incl. kayak cross and teams)
+
+Every example and value list in this document was checked against those two
+files.
 
 ---
 

@@ -17,3 +17,8 @@ user.config
 build-output/
 installer/Output/
 installer/iss-defines.iss
+
+# Local per-session tool state (skills, agents) — never commit
+.superpowers/
+.claude/
+docs/superpowers/

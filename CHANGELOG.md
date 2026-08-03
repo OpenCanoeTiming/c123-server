@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.3](https://github.com/OpenCanoeTiming/c123-server/compare/v0.11.2...v0.11.3) (2026-08-02)
+
+
+### Bug Fixes
+
+* remove deprecated baseUrl from tsconfig (TS 6.0 compat) ([ee0b0e2](https://github.com/OpenCanoeTiming/c123-server/commit/ee0b0e2bfb6945a250791cee9a75a986dd122d50))
+* serve dashboard from dot-directory paths and enable CI test step ([#143](https://github.com/OpenCanoeTiming/c123-server/issues/143)) ([9c6167a](https://github.com/OpenCanoeTiming/c123-server/commit/9c6167adf53ea0f04534d35edd1eaf0016474ca4)), closes [#142](https://github.com/OpenCanoeTiming/c123-server/issues/142)
+
 ## [0.11.2](https://github.com/OpenCanoeTiming/c123-server/compare/v0.11.1...v0.11.2) (2026-04-29)
 
 

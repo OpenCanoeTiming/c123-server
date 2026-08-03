@@ -52,9 +52,14 @@ describe('E2E Recording Replay', () => {
 
   afterAll(async () => {
     await server?.stop();
-    await new Promise<void>((resolve) => {
-      mockTcpServer?.close(() => resolve());
-    });
+    // beforeAll returns early when the recording is unavailable, so mockTcpServer
+    // may never have been created. Optional chaining would skip close() together
+    // with its callback, leaving the promise pending until the hook times out.
+    if (mockTcpServer) {
+      await new Promise<void>((resolve) => {
+        mockTcpServer.close(() => resolve());
+      });
+    }
   });
 
   it('should have loaded TCP messages from recording', ({ skip }) => {
