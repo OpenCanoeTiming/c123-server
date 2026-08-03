@@ -1846,7 +1846,7 @@ Set or update a penalty check.
 | `bib` | string | Yes | Competitor start number |
 | `gate` | number | Yes | Gate number (1-25) |
 | `value` | number\|null | No | Penalty value. Must be a JSON number or `null` — strings and booleans are rejected. If omitted, snapshotted from the XML `gates` field; `null` there means the gate was not judged. Individual races use 0/2/50, team races also carry cumulative values |
-| `tag` | string | No | Optional note |
+| `tag` | string | No | Optional note. Must be a string — anything else is rejected, since it would be persisted and broadcast to every client |
 
 **Response:** `{ "success": true, "check": { ... } }`
 
@@ -1867,6 +1867,16 @@ Remove a penalty check.
 **Request body:** `{ "bib": "1", "gate": 5 }`
 
 **Response:** `{ "success": true }`
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| 400 | `{ "error": "bib is required" }`, `{ "error": "gate must be a whole number between 1 and 25" }` |
+| 404 | `{ "error": "Check not found" }` — no check was set for that `bib:gate` |
+| 503 | `{ "error": "No checks file loaded — set an XML path first" }` |
+
+**This route is not idempotent.** Deleting a check that was never set is a 404, not a 200.
 
 ---
 

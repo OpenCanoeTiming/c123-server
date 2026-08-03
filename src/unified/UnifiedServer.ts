@@ -3387,13 +3387,22 @@ export class UnifiedServer extends EventEmitter<UnifiedServerEvents> {
   private parseBibGate(req: Request, res: Response): { bib: string; gate: number } | null {
     const { bib, gate } = req.body;
 
-    if (bib === undefined || bib === null || String(bib).trim() === '') {
+    // Both must be a string or a number. String(true) is "true" and Number([5])
+    // is 5, so without this a boolean or a single-element array silently
+    // becomes a real bib or gate — producing keys like "true:5" that match no
+    // competitor and that no invalidation path can ever reach.
+    if (typeof bib !== 'string' && typeof bib !== 'number') {
+      res.status(400).json({ error: 'bib is required and must be a string or number' });
+      return null;
+    }
+
+    if (String(bib).trim() === '') {
       res.status(400).json({ error: 'bib is required' });
       return null;
     }
 
-    if (gate === undefined || gate === null) {
-      res.status(400).json({ error: 'gate is required' });
+    if (typeof gate !== 'string' && typeof gate !== 'number') {
+      res.status(400).json({ error: 'gate is required and must be a string or number' });
       return null;
     }
 

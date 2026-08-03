@@ -942,6 +942,61 @@ describe('ChecksStore', () => {
       expect(rescued).toContain('42:5');
     });
 
+    /**
+     * A name where "<name>.checks.json" fits in NAME_MAX (255) but the sidecar
+     * "<name>.checks.<label>-<iso timestamp>.json" does not, so renameSync
+     * fails for real. No mocking: this is the same class of failure as a
+     * scanner holding the file open on Windows, which is the realistic trigger.
+     */
+    const unmovableName = () => `${'n'.repeat(220)}-${++testCounter}.xml`;
+
+    it('keeps the checks when the file cannot be moved aside', () => {
+      const filename = unmovableName();
+      const checksDir = writeChecksFile(
+        filename,
+        JSON.stringify({
+          xmlFilename: filename,
+          fingerprint: 'A@2026-04-19',
+          races: { R1: { checks: { '42:5': { checkedAt: 'x', value: 2 } }, flags: [] } },
+        })
+      );
+
+      store.loadForFile(filename);
+      store.setScheduleFingerprint('A@2026-04-19');
+
+      // Both destructive paths must decline rather than discard.
+      expect(store.resetForNewEvent()).toBe(false);
+      expect(store.getChecks('R1').checks['42:5']).toBeDefined();
+
+      store.setScheduleFingerprint('X@2026-05-01');
+      store.setScheduleFingerprint('X@2026-05-01');
+      expect(store.getChecks('R1').checks['42:5']).toBeDefined();
+
+      // The original file is still on disk and still holds the checks.
+      const onDisk = readFileSync(join(checksDir, `${filename}.checks.json`), 'utf-8');
+      expect(onDisk).toContain('42:5');
+    });
+
+    it('stops persisting when an unreadable file cannot be moved aside', () => {
+      const filename = unmovableName();
+      const checksDir = writeChecksFile(
+        filename,
+        JSON.stringify({
+          xmlFilename: filename,
+          fingerprint: 'A@1',
+          races: { R1: { checks: { '42:5': { checkedAt: 'x', value: 2 } } } },
+        })
+      );
+
+      store.loadForFile(filename);
+      store.setCheck('R9', '1', 1, 0);
+      store.flush();
+
+      // Detached from the path, so the unreadable original survives intact.
+      const onDisk = readFileSync(join(checksDir, `${filename}.checks.json`), 'utf-8');
+      expect(onDisk).toContain('42:5');
+    });
+
     it('rejects a flag entry with no id', () => {
       const filename = getUniqueTestFile();
       writeChecksFile(

@@ -137,9 +137,22 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
       // flush overwrites it, destroying the only copy of whatever checks it
       // held — one bad race entry among fifty good ones would take the lot,
       // which is exactly the loss this whole mechanism exists to prevent.
-      this.moveAside(filePath, 'unreadable');
+      const preserved = this.moveAside(filePath, 'unreadable');
 
       this.currentData = this.emptyData(xmlFilename);
+
+      if (!preserved && fs.existsSync(filePath)) {
+        // Could not rename it — a scanner holding the file open on Windows, a
+        // path length limit, a read-only directory. Detach from the path so no
+        // later flush can overwrite it. Checks stop persisting, which is loud
+        // and recoverable; silently destroying the file is neither.
+        Logger.error(
+          'ChecksStore',
+          `Could not preserve unreadable checks file ${path.basename(filePath)}; ` +
+            'checks will not be saved until it is moved or repaired by hand'
+        );
+        this.currentFilePath = null;
+      }
     }
   }
 
@@ -224,7 +237,11 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
     }
 
     Logger.info('ChecksStore', 'Starting a new event: archiving current checks');
-    this.archiveAndReset();
+    if (!this.archiveAndReset()) {
+      // Reported to the operator rather than silently doing nothing, or
+      // worse, discarding the checks it could not back up.
+      return false;
+    }
 
     // The operator has declared the current schedule stale. Keeping it as the
     // live fingerprint would let a check made before the new XML loads pin the
@@ -346,8 +363,15 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
       'ChecksStore',
       `Schedule confirmed as a different event (stored: ${stored}, current: ${this.liveFingerprint}). Archiving.`
     );
+
+    if (!this.archiveAndReset()) {
+      // Could not preserve the outgoing checks, so nothing was discarded.
+      // Leave the suspicion armed: the next schedule change retries, and the
+      // obstruction (a scanner holding the file, say) may be gone by then.
+      return 'ok';
+    }
+
     this.pendingMismatch = null;
-    this.archiveAndReset();
     return 'archived';
   }
 
@@ -368,10 +392,14 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
 
   /**
    * Move the current file aside and start empty, keeping the same XML filename.
+   *
+   * Returns false when the existing checks could not be preserved, in which
+   * case nothing is reset — losing the data is worse than declining to
+   * archive, so the caller is expected to surface the failure and retry later.
    */
-  private archiveAndReset(): void {
+  private archiveAndReset(): boolean {
     if (!this.currentData || !this.currentFilePath) {
-      return;
+      return false;
     }
 
     // Nothing worth keeping: a file that was never written to needs no archive.
@@ -384,7 +412,16 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
       // would otherwise discard the checks with no archive to recover from.
       this.flush();
 
-      this.moveAside(this.currentFilePath, 'archived');
+      if (!this.moveAside(this.currentFilePath, 'archived') && fs.existsSync(this.currentFilePath)) {
+        // The rename failed — a scanner holding the file open on Windows, a
+        // path length limit, a read-only directory. Resetting now would let
+        // the next flush overwrite the only copy of these checks.
+        Logger.error(
+          'ChecksStore',
+          `Could not archive ${path.basename(this.currentFilePath)}; keeping the current checks rather than discarding them`
+        );
+        return false;
+      }
     }
 
     this.currentData = this.emptyData(this.currentData.xmlFilename);
@@ -393,6 +430,7 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
     this.emit('checkChanged', event);
 
     this.flush();
+    return true;
   }
 
   /**

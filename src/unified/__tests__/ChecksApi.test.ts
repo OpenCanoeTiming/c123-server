@@ -240,6 +240,32 @@ describe('Penalty Checks API', () => {
       expect(store.getChecks('K1M_BR1').checks['42:5']).toBeUndefined();
     });
 
+    it('rejects a boolean or array gate', async () => {
+      // Number(true) is 1 and Number([5]) is 5, so these would silently become
+      // real gate numbers.
+      for (const gate of [true, [5]]) {
+        const response = await fetch(`${baseUrl}/api/checks/K1M_BR1/check`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bib: '1', gate, value: 2 }),
+        });
+        expect(response.status).toBe(400);
+      }
+
+      expect(store.getChecks('K1M_BR1').checks).toEqual({});
+    });
+
+    it('rejects a boolean bib', async () => {
+      // String(true) would key the check as "true:5", matching no competitor.
+      const response = await fetch(`${baseUrl}/api/checks/K1M_BR1/check`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bib: true, gate: 5, value: 2 }),
+      });
+      expect(response.status).toBe(400);
+      expect(store.getChecks('K1M_BR1').checks['true:5']).toBeUndefined();
+    });
+
     it('rejects a boolean value', async () => {
       const response = await fetch(`${baseUrl}/api/checks/K1M_BR1/check`, {
         method: 'PUT',
