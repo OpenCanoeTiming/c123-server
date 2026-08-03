@@ -713,7 +713,6 @@ describe('ChecksStore', () => {
       store.loadForFile(filename);
       store.setScheduleFingerprint('A@2026-04-19|B@2026-04-19');
       store.setCheck('A', '1', 1, 2);
-      store.flush();
 
       store.setScheduleFingerprint('X@2026-05-01|Y@2026-05-01');
 
@@ -724,6 +723,39 @@ describe('ChecksStore', () => {
         f.includes('archived')
       );
       expect(archived).toHaveLength(1);
+    });
+
+    it('archives the discarded checks even inside the flush debounce window', () => {
+      const filename = getUniqueTestFile();
+      const checksDir = join(tempDir, '.c123-server', 'checks');
+      store.loadForFile(filename);
+      store.setScheduleFingerprint('A@2026-04-19|B@2026-04-19');
+
+      // No explicit flush: the write is still only in memory, exactly as it
+      // would be if a schedule change landed within FLUSH_DEBOUNCE_MS.
+      store.setCheck('A', '1', 1, 2);
+
+      store.setScheduleFingerprint('X@2026-05-01|Y@2026-05-01');
+
+      const archived = readdirSync(checksDir).filter((f) => f.includes('archived'));
+      expect(archived).toHaveLength(1);
+
+      // The discarded check must be recoverable from the archive.
+      const data = JSON.parse(readFileSync(join(checksDir, archived[0]), 'utf-8'));
+      expect(data.races.A.checks['1:1'].value).toBe(2);
+      expect(data.fingerprint).toBe('A@2026-04-19|B@2026-04-19');
+    });
+
+    it('does not archive a file that was never written to', () => {
+      const filename = getUniqueTestFile();
+      store.loadForFile(filename);
+
+      store.resetForNewEvent();
+
+      const archived = readdirSync(join(tempDir, '.c123-server', 'checks')).filter((f) =>
+        f.includes('archived')
+      );
+      expect(archived).toHaveLength(0);
     });
 
     it('emits checks-reset when archiving', () => {
@@ -802,7 +834,6 @@ describe('ChecksStore', () => {
       store.loadForFile(filename);
       store.setScheduleFingerprint('A@2026-04-19');
       store.setCheck('A', '1', 1, 2);
-      store.flush();
 
       store.resetForNewEvent();
 

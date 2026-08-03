@@ -225,17 +225,28 @@ export class ChecksStore extends EventEmitter<ChecksStoreEvents> {
       return;
     }
 
-    if (fs.existsSync(this.currentFilePath)) {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const archivePath = this.currentFilePath.replace(
-        '.checks.json',
-        `.checks.archived-${timestamp}.json`
-      );
-      try {
-        fs.renameSync(this.currentFilePath, archivePath);
-        Logger.info('ChecksStore', `Archived to ${path.basename(archivePath)}`);
-      } catch (error) {
-        Logger.error('ChecksStore', `Error archiving checks file: ${error}`);
+    // Nothing worth keeping: a file that was never written to needs no archive.
+    const hasContent =
+      Object.keys(this.currentData.races).length > 0 || this.currentData.fingerprint !== null;
+
+    if (hasContent) {
+      // Write debounced changes out before moving the file aside. Writes are
+      // held for FLUSH_DEBOUNCE_MS, so a mismatch detected inside that window
+      // would otherwise discard the checks with no archive to recover from.
+      this.flush();
+
+      if (fs.existsSync(this.currentFilePath)) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const archivePath = this.currentFilePath.replace(
+          '.checks.json',
+          `.checks.archived-${timestamp}.json`
+        );
+        try {
+          fs.renameSync(this.currentFilePath, archivePath);
+          Logger.info('ChecksStore', `Archived to ${path.basename(archivePath)}`);
+        } catch (error) {
+          Logger.error('ChecksStore', `Error archiving checks file: ${error}`);
+        }
       }
     }
 
