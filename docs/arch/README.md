@@ -18,6 +18,8 @@ is intended to become permanent documentation.
 | `ARCHITECTURE.md` | Target state — domain model, deployable boundaries, data flow, principles traced to `EVIDENCE.md`, five scenario walkthroughs |
 | `CONTRACTS.md` | The primary deliverable — domain entities, the observation envelope, merge invariants, ranking, the derivability ledger, the on-site and live-ingest contracts |
 | `DECISIONS/` | Ten ADRs, `ADR-001` through `ADR-010` |
+| `TEST-ARCHITECTURE.md` | Four test tiers, the fixture format, and the clock-control requirement that makes presentation-layer timing assertable |
+| `schemas/` | JSON Schema for the two wire shapes reused everywhere: the observation envelope and the error response |
 
 ## Ground rules for this phase
 
