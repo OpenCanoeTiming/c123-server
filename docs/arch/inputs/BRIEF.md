@@ -23,6 +23,40 @@ to debug *against*: no component is wrong relative to a definition, because ther
 
 **Design the thing that has a definition.**
 
+### The stance you design from
+
+**Design the API that Canoe123 should have had.**
+
+Not the API that fits the messages Canoe123 happens to emit — the one a senior engineer would
+specify if they were building Canoe123 today and this interface were part of the product. Start
+from the sport: what a race is, what a run is, what is true about a competitor at a given moment,
+what an official needs to assert and what a spectator needs to read. Let the vocabulary come from
+canoe slalom, not from `Result Type="T"`.
+
+Then the constraint that makes this hard rather than pleasant: **it must be realisable from the
+data observable today, and we do not want to change Canoe123.** Changing it is not literally
+impossible, but it is to be avoided, and nothing may be predicated on it.
+
+So every element of your contract must survive one question: *can this be derived from the TCP
+push, the UDP broadcast, the XML file, CIS, and the commands we ourselves issue?* There are three
+honest outcomes and all three are acceptable:
+
+- **Derivable.** Say from what, and how confidently.
+- **Derivable only approximately.** Then the contract must say so in its own vocabulary — the
+  approximation becomes part of what the value asserts (§5.3), not a secret kept in the
+  implementation. This is the case that today's code handles by guessing quietly; it is the case
+  the contract exists to make honest.
+- **Not derivable.** Record it, with what it would take upstream and what we would gain. Do not
+  drop it silently, and do not design around a change nobody has agreed to.
+
+**That third list is a deliverable in its own right.** It tells the maintainer what he is paying
+for by not touching Canoe123 — a decision he can only take once somebody has costed it.
+
+**Why this stance rather than "tidy up what we have":** every contract in the system today is
+shaped by the artefacts of one vendor's wire format, and that is precisely the mechanism by which
+vendor quirks became four applications' business logic. A contract derived from the sport cannot be
+reshaped by the next upstream oddity, because the oddity has nowhere to attach itself.
+
 ## 2. What you must read, and in what order
 
 1. `CONSTRAINTS.md` — what is fixed, what is open, and the operating reality.
@@ -197,6 +231,10 @@ Three properties make it the primary deliverable rather than an appendix:
   clause cannot be turned into a failing test, it is prose — sharpen it or drop it.
 - **It is the thing we will actually hold each other to.** Precision over coverage: twelve things
   specified exactly beat forty specified approximately.
+
+Annotate every element with its derivability from today's sources, per the three outcomes in §1.
+An element marked *approximate* must carry the approximation in its own semantics; elements marked
+*not derivable* collect into the costed list of what the upstream freeze is buying us.
 
 **`ARCHITECTURE.md`** — the target state that the contract implies. What the domain model is; where
 interpretation lives and why there; the boundary and responsibility of each of the five deployable
