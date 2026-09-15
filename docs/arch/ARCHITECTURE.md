@@ -79,6 +79,18 @@ line):
 - **Non-domain filtering conveniences** — "show only my club's competitors" changes nothing about
   what is true.
 
+**Display-lifetime code must re-evaluate on a clock tick, not only when new data arrives — a
+requirement on the client's own architecture, not a stylistic preference.** Found necessary under
+`TEST-ARCHITECTURE.md`'s review, not designed in from the start: a component that only recomputes
+"is this still inside its grace period" when a dispatched action triggers a re-render has no path by
+which pure elapsed time — no new data, just the clock moving — can be observed, tested, or, in
+production, acted on promptly. *Client-owned* (the point of this whole section) was never meant to
+mean *only reactive to new data*; a finisher whose grace period lapses between two unrelated updates
+must still be evicted when it lapses, not only whenever some other update happens to arrive and
+trigger a recompute. This is what makes `TEST-ARCHITECTURE.md` §3.3's fake-clock harness able to
+assert grace-period and stale-eviction behaviour at all, rather than only whatever a client happens
+to recompute when a fixture step lands.
+
 **Federation-specific matter is separable by construction, not by policy.** Ranking-point schemes,
 age-class coding, and "what counts official" differ by federation (`CONSTRAINTS.md` §1.8). This
 design never computes any of them: `Standing.rank` is mechanical arithmetic over `Attempt.outcome`
