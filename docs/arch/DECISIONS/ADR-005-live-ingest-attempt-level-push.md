@@ -63,3 +63,17 @@ a second interpretation effort.
 
 Any future "just push the file, we'll sort it out downstream" shortcut — `CONTRACTS.md` §8.6 refuses
 raw vendor payloads and any push that doesn't name its target entity by id at every level.
+
+## Revision — child-entity ids were never stated as event-scoped
+
+An adversarial pass (two organisers, same event name, shared cloud instance) found that this ADR's
+own collision-proofing (`eventId` opaque and organiser-scoped, §1.7) stopped one level too shallow.
+`categoryId`, `phaseId` (Canoe123's own `RaceId`), and `entryId` are all Canoe123-derived tokens, and
+Canoe123's identifiers are not organiser-safe — `RaceId` is deterministic from class, phase, and day
+number, so two independent venues running the same class on the same numbered day mint the identical
+one. E3: the contradiction is with this ADR's own stated goal, not an external fact. **Fix, in
+`CONTRACTS.md` §8.1:** every id below `Event` is unique only within its event; the cloud store's
+actual key for any such entity is always the compound `(eventId, localId)`, regardless of whether a
+wire path repeats `eventId` at that segment — supplied by the authenticated key for writes (§8.3) and
+already present in the path for public reads (§8.4). No endpoint shape changed; what changed is an
+explicit statement of what the storage layer must key on, which nothing before this said outright.

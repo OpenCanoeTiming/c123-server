@@ -402,6 +402,17 @@ with the two others audited in `EVIDENCE.md` Exhibit 7. That third fingerprint's
 domain layer's own `(phaseId, bib)` identity already answers exactly. Reusing it removes the need
 for a third scheme to exist at all, rather than reconciling it with the other two.
 
+**`VerificationState` must be durable across a server restart — this is the one part of domain state
+where that is not optional.** Everything else a restart empties is, in the ordinary case, recoverable
+from Canoe123 itself: TCP's `Results` rotation cycles through every race seen this session, including
+ones completed hours or a calendar day earlier, and a fresh XML read is fully cumulative for the
+running event, not a rolling window — both checked directly against real multi-hour, multi-day
+recordings, not assumed. `VerificationState` has no such backstop: it records a judge's own act of
+comparison, a fact that exists nowhere in Canoe123, so a restart that loses it loses it permanently,
+with nothing upstream to reconstruct it from. It must be written to durable storage on every change,
+the same discipline `c123-server/CLAUDE.md` already states for `AppSettingsManager`, not merely held
+in the same in-memory domain state as everything else.
+
 ### 2.11 Worked example — the observation envelope through Scenario A
 
 `Attempt` for bib 9, `K1M_ST_BR2_6`, run 2 beating run 1, at three points on the timeline walked in
@@ -421,9 +432,14 @@ for a third scheme to exist at all, rather than reconciling it with the other tw
 }
 
 // t+10s — CIS poll corroborates (this deployment has CIS configured)
-// outcome.value unchanged; observedAt: '…T10:14:11.400Z', source: 'cis',
-// confidence: 'authoritative', provisional: false — cis now outranks tcp for this
-// field-category (§4 INV-2) and has reported, so its observation is what's presented
+// outcome.value unchanged; observedAt: '…T10:14:11.400Z', eventTime: '…T10:14:02.070Z'
+// (CIS's own FinishDayTime for this run — confirmed a real field, not our invention),
+// source: 'cis', confidence: 'authoritative', provisional: false — cis now outranks
+// tcp for this field-category (§4 INV-2) and has reported, so its observation is what's
+// presented. Had this poll instead returned a stale answer — an eventTime earlier than
+// tcp's own T10:14:02.079Z above — INV-2c would refuse it regardless of cis's rank; a
+// fresher observedAt from a better source is not enough on its own to supersede a fact
+// whose more recent truth is already known.
 
 // t+30s — the TCP Results rotation lands. Per §4 INV-2, this updates tcp's own
 // retained slot only — it does not touch what's presented, because cis remains
@@ -472,6 +488,18 @@ client (`EVIDENCE.md` Exhibit 10).
 answer A7 — **does not require passing back through `unofficial`**), any state `→ protested`,
 `protested → unofficial | official`, `scheduled → cancelled | postponed`. No transition target is
 final: `official` is not an end state the contract locks, because corrections happen.
+
+**A client must never infer that a correction happened from watching this field.** Canoe123 sets
+`RaceStatus` only from direct operator action on its own UI — checked against the decompiled source:
+every site that assigns it sits inside a GUI event handler driven by a toolbar control, and neither
+`PenaltyCorrection` nor the totals-recalculation it triggers ever touches it. So `official → revised`
+is a legal transition this contract admits, not one anything guarantees will fire — an operator who
+corrects a penalty without also relabelling the race in Canoe123's own UI leaves `Phase.status` at
+`official` while the numbers underneath have already changed. This matches the maintainer directly
+(§ maintainer answer A7: "C123's status vocabulary is not used for this... do not rely on `RaceStatus`
+to detect corrections"). The reliable signal that a Phase's results changed is what already carries
+it: a contributing `Attempt`'s `outcome` (or `gates`, or `upstreamRank`) presenting a newer
+`observedAt` than `Standing.asOf` last reported — ordinary field-level merge (§4), not this field.
 
 ### 3.2 `Attempt.status`
 
@@ -560,6 +588,18 @@ contract constrains.
   that only ever reaches us through a lower-ranked channel: a `PenaltyCorrection` entered over TCP
   against a closed Phase still forces a fresh CIS read rather than sitting invisibly behind a CIS
   observation nobody asked to refresh.
+- **INV-2c (a stale top-ranked observation does not displace a fresher one it disagrees with).**
+  Ranking alone is not sufficient: a poll can return content that was already old *when the source
+  produced it*, with a perfectly fresh `observedAt` because that only records when *we* received it.
+  Where both the presented value and a candidate observation carry an `eventTime` — true for a
+  finished slalom Attempt's `outcome`, since both TCP's `dtFinish`-derived value and CIS's
+  `FinishDayTime`-derived one describe the same real-world moment, confirmed by checking CIS's actual
+  response shape — the candidate does **not** supersede the presented value if its `eventTime` is
+  strictly earlier, regardless of source rank. This is a floor beneath INV-2's table, not a
+  replacement for it: it exists specifically for the case a rank alone cannot distinguish, a
+  top-ranked source answering a question about the past. Where a candidate carries no `eventTime`
+  (most fields, and every Cross fact — `operator-assertion` values are outside the table entirely,
+  §4 above), this rule does not apply and INV-2's ranking governs alone, as before.
 - **INV-3 (`unavailable` is asserted, never defaulted).** `unavailable{reason}` is set only by an
   explicit domain-layer determination that no configured source can supply the field right now
   (e.g. gate detail for a superseded run 1, with CIS not configured). It is never the default state
@@ -572,16 +612,29 @@ contract constrains.
   required for the live-ingest contract to accept safe retries and for a correction pushed by an
   organiser directly against the cloud store (§8.5) to compose safely with a bridge that might also
   still be pushing.
+- **INV-6 (ordering is a monotonic sequence, never the wall clock).** `observedAt` is a wall-clock
+  timestamp (§1.2), and a venue laptop's wall clock is not guaranteed monotonic — an NTP correction,
+  a DST transition, or an operator fixing a wrong clock mid-event can move it, including backward.
+  Every "newer"/"strictly newer" comparison in INV-2, INV-2c, and INV-5 above is therefore defined
+  over an internal, strictly-increasing sequence the domain layer assigns at the same ingest instant
+  it captures `observedAt` — never over a raw comparison of `observedAt` values. This is not the
+  wire sequence number `CONSTRAINTS.md` §1.1 correctly rules out inventing (that would mean adding
+  one to Canoe123's own protocol, which we do not control); it is purely internal to the domain
+  layer's own merge, assigned by us, at our own boundary, and never exposed on the wire — clients
+  still see the presented value's ordinary `observedAt`, which remains wall-clock for display and
+  staleness computation, just no longer for ordering. A clock jump during live operation therefore
+  cannot corrupt a merge decision, and cannot make a genuinely later observation lose to an earlier
+  one merely because the clock moved between them.
 
-These six invariants are what "verifiability" (`CONSTRAINTS.md` §4) reduces to in practice: given
-the same sequence of ingested messages, each carrying its true `observedAt` timestamp and known
-source, the resulting state is a pure function of that sequence — replaying a recording is
-deterministic because nothing in the merge depends on wall-clock time at the moment of replay, and
-nothing in it depends on which source shouted last, only on the ranking table above and the
-`observedAt` values captured at original ingest. Determinism was the property INV-2's freshness-only
+These eight invariants are what "verifiability" (`CONSTRAINTS.md` §4) reduces to in practice: given
+the same sequence of ingested messages, each carrying its true `observedAt` timestamp, its assigned
+ingest sequence, and known source, the resulting state is a pure function of that sequence —
+replaying a recording is deterministic because nothing in the merge depends on wall-clock time at the
+moment of replay, and nothing in it depends on which source shouted last, only on the ranking table
+above and the sequence captured at original ingest. Determinism was the property INV-2's freshness-only
 first draft also had — the authority gate does not trade it away; a re-query triggered by INV-2b is
-itself just another observation in the sequence, with its own `observedAt`, replayable exactly like
-any other.
+itself just another observation in the sequence, with its own `observedAt` and ingest sequence
+number, replayable exactly like any other.
 
 ---
 
@@ -677,6 +730,16 @@ ecosystem has never seen and has not been asked to support.
 REST is always a full current snapshot for a fresh client; the socket never re-sends what hydration
 already established.
 
+**A client must open its delta subscription before requesting the snapshot, never after.** A snapshot
+fetched first and a subscription opened afterward leaves a real gap: any update that lands between
+the two is neither in the snapshot (too early) nor on the socket (subscribed too late), and the two
+sides of a REST-then-WS client have no way to detect the loss — a genuine defect, worth naming
+because nothing above stated it, not because a scout was needed to find it. The two client
+applications this tier serves must subscribe first, buffer anything that arrives before the snapshot
+response, then apply the snapshot, then apply the buffer — standard for any snapshot-plus-delta feed,
+stated once here because §5.6 asks whether an implementer would have to guess, and this specific
+ordering is exactly the kind of thing they would.
+
 **Writes (REST):**
 
 - `POST /api/attempts/{phaseId}/{bib}/penalty { gate, value }` → `WriteRequest`
@@ -699,6 +762,21 @@ today, kept and formalised (`CURRENT-STATE.md`: "the event resolved by API key..
 A key authorises writes to that event's resources only. No request identifies its target event by a
 client-supplied id checked against the key — the key *is* the scope, which is what makes isolation a
 contract property rather than an access-control list someone must remember to configure correctly.
+
+**Every id below `Event` is unique only within its event — `eventId` is the only id in this
+contract with any claim to global uniqueness.** `categoryId`, `phaseId` (= Canoe123's `RaceId`),
+`entryId`, and `bib` are all, directly or indirectly, Canoe123-derived tokens, and Canoe123's own
+identifiers are not organiser-safe: `RaceId` is deterministic from class, phase, and day number
+(`DOMAIN-FACTS.md` §6), so two independent venues running the same class on the same numbered day —
+an ordinary Saturday, not an edge case — will mint the identical `RaceId`, and common ICF class codes
+(`K1M-ST` and the like) recur across clubs by convention, not by accident. **The cloud store's actual
+storage key for every such entity is always the compound `(eventId, localId)`, even though a wire
+path below it does not repeat `eventId` at every segment** — `PUT /ingest/v2/categories/{categoryId}`
+(§8.3) is scoped by the authenticated key, not by anything in the path, and a public read under
+`/public/events/{eventId}/...` (§8.4) carries `eventId` in the path itself. An implementation that
+uses a bare `categoryId`/`phaseId`/`entryId` as a global table key across the shared multi-tenant
+store, without also keying by `eventId`, will silently merge two different organisers' data the first
+time their class codes or `RaceId`s coincide — which, given the determinism above, is when, not if.
 
 ### 8.2 Identity provenance invariance
 

@@ -57,3 +57,18 @@ one deployment shape.
 Any future feature that assumes CIS is present without checking — the contract has no field that
 silently degrades to a wrong number when CIS doesn't answer; it degrades to an honestly-marked
 `unavailable` or lower-confidence value instead.
+
+## One more source, addressed explicitly rather than left silent
+
+`DOMAIN-FACTS.md` §1 lists a fourth interface this ADR had not named: Canoe123's own UDP broadcast of
+`VIEWER_MAIN` (UDP:27333), carrying the same content as the TCP push, guaranteed present. Distinct
+from our own UDP autodiscovery (`CONSTRAINTS.md` §1.3, a different protocol, unrelated purpose) — this
+is Canoe123 broadcasting the same feed a second way. Today's code already answers whether to use it:
+`UdpDiscovery.ts` treats it as discovery-only and never parses its payload into state
+(`CURRENT-STATE.md`, confirmed by its own audit citation, `server.ts:667-683` subscribing only to
+`discovered`) — E2 evidence, our own code, not upstream behaviour. **This design makes the same
+choice, deliberately, not by omission:** TCP's push already meets the on-course latency requirement
+(`DOMAIN-FACTS.md` §3), and consuming a second, connectionless copy of the identical feed would only
+buy a redundancy path for exactly the case TCP disconnects — at the cost of a second per-message
+consistency question (does the UDP copy of a given fact ever race ahead of or behind its TCP twin) that
+nothing today shows a need to answer. Not used; recorded as a decision rather than an absence.

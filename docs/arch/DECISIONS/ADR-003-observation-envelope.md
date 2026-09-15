@@ -31,7 +31,7 @@ newer observation.** Chosen.
 
 ## Decision
 
-C, specified as six invariants (`CONTRACTS.md` §4) rather than a merge algorithm, per the brief's
+C, specified as eight invariants (`CONTRACTS.md` §4) rather than a merge algorithm, per the brief's
 instruction to state what the contract constrains and stop there. `observedAt` is captured at the
 ingest boundary — the moment a message is received and parsed — never at outbound serialisation,
 which is the literal fix for Exhibit 1's `factory.ts` bug.
@@ -92,3 +92,38 @@ each observation's `(source, observedAt)` are both fixed at ingest — nothing i
 depends on wall-clock time at replay, only on facts captured once, same as before. What changed is
 only that "the same input sequence" now includes which source each observation came from, not only
 when we received it.
+
+## Revision 2 — two gaps found under an adversarial pass, both in the fix above
+
+Instructed to attack the contract rather than extend it, and to require an evidence class for every
+finding (E1 upstream-verified, E2 our-own-code-verified, E3 internal contradiction, E4 unevidenced),
+review turned up two more defects, both inside the authority gate the first revision added, before
+either could be found live.
+
+**Gap 1 (E3, confirmed E1) — ranking alone cannot tell a top-ranked source's stale content from its
+fresh content.** A CIS poll can return an answer that was already old when Canoe123 produced it, with
+an `observedAt` that is perfectly fresh because that only records when *we* received the reply. Since
+INV-2 ranks by source alone, such a reply would still displace a correct, fresher TCP-derived value —
+the same class of defect Revision 1 fixed, recurring one layer down, inside the fix itself. This is
+E3 by itself (the contradiction is with INV-1's own promise, and with the reason `eventTime` exists in
+the envelope at all — §1.2 built it to answer exactly "as of when," then §4 never consulted it). It is
+also now E1: CIS's actual response was checked, not assumed — `GetResult` carries genuine per-
+competitor upstream timestamps (`FinishDayTime`, `StartDayTime`, `GateTimes`), confirmed both in the
+protocol documentation and in live SOAP traffic from a real recorded race, which is what makes the fix
+below implementable rather than aspirational. **Fix: INV-2c** — where both the presented value and a
+candidate carry an `eventTime`, a candidate with a strictly earlier `eventTime` never supersedes,
+regardless of rank. A floor beneath the table, not a replacement for it.
+
+**Gap 2 (E3) — `observedAt` orders the merge and is wall-clock, and a venue laptop's clock is not
+guaranteed monotonic.** An NTP correction, a DST transition, or an operator fixing a wrong clock
+mid-event can move it, possibly backward — nothing in INV-2 as revised accounted for this, despite
+depending entirely on "strictly newer `observedAt`" throughout. **Fix: INV-6** — every ordering
+comparison in this section is now defined over an internal, strictly-increasing sequence assigned at
+the same ingest instant as `observedAt`, never over `observedAt` itself. This is not the wire sequence
+number `CONSTRAINTS.md` §1.1 rules out (that would mean instrumenting Canoe123's own protocol); it is
+assigned by us, at our own boundary, and never leaves the domain layer — `observedAt` keeps its
+original job, display and staleness, and only that job.
+
+Both fixes are additive to the invariant list (`CONTRACTS.md` §4 now states eight, not six) and change
+nothing about which values are exposed on the wire — the correction is entirely inside how the domain
+layer decides what to present, exactly where Revision 1's fix also lived.
