@@ -47,7 +47,16 @@ instance** serving all of them. Event identity must therefore be unique across o
 never coordinate, and isolation and authorisation are contract concerns rather than deployment
 details.
 
-### 1.8 The cloud tier is genuinely remote
+### 1.8 Unknown adopters are likely
+These are public MIT tools under the OpenCanoeTiming organisation, and adoption by an entirely
+different paddling community is considered likely. The user base includes people nobody here will
+meet, in other countries, under other federations, who cannot ask the maintainer what something
+means and whose first contact with the design is these documents. Federation-specific matter —
+ranking schemes, category and age-class coding, naming conventions, what counts as official — must
+be separable from the domain core, and presentation language must never reach a contract value
+(`EVIDENCE.md` Exhibit 8 records it doing exactly that today).
+
+### 1.9 The cloud tier is genuinely remote
 `live-mini-server` runs on Railway, is publicly reachable, and **must survive losing its link to
 the on-site server**. It cannot be modelled as a thin view over an always-available upstream.
 
@@ -98,8 +107,9 @@ file as the unit of transfer. Redesigning it as a vendor-neutral contract is in 
 - **Development is agentic.** Future work is done by the maintainer together with Claude Code.
   Design choices that lower the cost of agentic development — explicit contracts, narrow modules,
   decisions recorded rather than inferred — carry real weight, and this is a stated priority.
-- **Several organiser groups, one maintainer.** The software has users beyond its author, on
-  deployments he does not operate and cannot inspect when something looks wrong.
+- **Users beyond reach.** Several organiser groups already run this, on deployments the author
+  does not operate and cannot inspect when something looks wrong — and adopters outside this
+  community are expected. For them the documents are the only support channel.
 - **One maintainer.** Any design whose correctness depends on sustained coordination across four
   codebases by several people is not viable.
 

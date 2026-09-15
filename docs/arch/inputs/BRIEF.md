@@ -25,7 +25,15 @@ to debug *against*: no component is wrong relative to a definition, because ther
 
 ### The stance you design from
 
-**Design the API that Canoe123 should have had.**
+**Design the API that Canoe123 should have had — in fact, the API canoe slalom timing should
+have.**
+
+These are public MIT tools and adoption by an entirely different paddling community is considered
+likely (`CONSTRAINTS.md` §1.8), so the vocabulary must be one another community could take up
+without renegotiating what the terms mean. Federation-specific matter — ranking schemes, category
+coding, what counts as official — attaches somewhere other than the core, and you decide where.
+Presentation language never reaches a contract value; `EVIDENCE.md` Exhibit 8 shows a Czech string
+being generated inside a mapper today.
 
 Not the API that fits the messages Canoe123 happens to emit — the one a senior engineer would
 specify if they were building Canoe123 today and this interface were part of the product. Start
