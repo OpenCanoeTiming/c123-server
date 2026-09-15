@@ -287,8 +287,11 @@ of truth for who is racing) is in `DECISIONS/ADR-006-identity-provenance-invaria
 
 Unchanged from the direction accepted in round one, now final: no event bus, no message broker, no
 sixth "domain service" repository, no merging of the five repositories (`CONSTRAINTS.md` §1.4
-forbids the last outright), no event-sourced log. All five deployables stay five; WebSocket and REST
-stay WebSocket and REST. What changed since round one is entirely inside the domain model — the
+forbids the last outright), no event-sourced log. All five deployables stay five; every wire
+protocol in `CONTRACTS.md` §7/§8 is REST plus one push mechanism — WebSocket on-site, Server-Sent
+Events for the public tier (§8.4, pinned down under wire-precision review; the two never needed to
+match, since only the on-site tier's clients ever write anything back). What changed since round one
+is entirely inside the domain model — the
 entity spine, the observation envelope, and the `(phaseId, bib)` identity correction — not the
 technology or topology around it. `DECISIONS/ADR-007` states plainly what is given up by *not*
 generalising the on-site contract to be vendor-neutral as well: a third-party adopter's bridge gets

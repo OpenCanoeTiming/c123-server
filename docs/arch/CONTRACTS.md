@@ -92,6 +92,46 @@ Field meanings, precisely:
   `provisional` answers "might this still move"; `confidence` answers "how was it produced." A
   client needs both and must not conflate them.
 
+**Wire encoding.** `state` is a JSON string discriminant, present on every envelope. A `known`
+envelope carries exactly `value`, `observedAt`, `source`, `confidence`, `provisional`, always
+present and never `null`, plus `eventTime` — **present only when applicable, otherwise the key is
+omitted entirely, never sent as `null`.** `not-yet` and `unavailable` carry no other key except
+`unavailable`'s `reason`. This omission rule is deliberate and is the direct fix for `EVIDENCE.md`
+Exhibit 5, stated precisely enough to test: a decoder that treats a missing `eventTime` key and an
+explicit `eventTime: null` as the same thing is still correct (both mean "no event time"), but an
+encoder must never emit the key with a `null` value — the two must not become interchangeable on the
+wire, because `Gate.penalty`'s `null` (§2.6) is a real, meaningful value elsewhere in this same
+contract, and a schema that treats every `null` as "absent" would collapse the two apart from context.
+
+```json
+// known, both a real event time and a good example of full field presence
+{ "state": "known", "value": 82.36, "observedAt": "2026-09-15T10:14:02.083Z",
+  "eventTime": "2026-09-15T10:14:02.079Z", "source": "tcp", "confidence": "inferred",
+  "provisional": true }
+
+// known, no event time applicable — the key is absent, not null
+{ "state": "known", "value": "K1M-ST", "observedAt": "2026-09-15T09:00:00.000Z",
+  "source": "tcp", "confidence": "authoritative", "provisional": false }
+
+// not-yet and unavailable carry nothing else
+{ "state": "not-yet" }
+{ "state": "unavailable", "reason": "not-observed-live-and-cis-unavailable" }
+```
+
+`reason` is a closed set, not free text — a test asserts against these three values, never a
+message string: `'not-configured'` (the source that would carry this isn't set up for this
+deployment — no CIS licence), `'source-unreachable'` (it's configured but not answering right now),
+`'not-observed-live-and-cis-unavailable'` (the specific run-1-superseded case, §6). A `value` that is
+itself a discriminated union (`Outcome`, §2.6) nests its own `kind` field inside `value` exactly as
+declared in TypeScript — no special-casing at the envelope level:
+
+```json
+"outcome": { "state": "known",
+  "value": { "kind": "duration", "runSeconds": 82.36, "penaltySeconds": 0, "totalSeconds": 82.36 },
+  "observedAt": "2026-09-15T10:14:02.083Z", "source": "tcp", "confidence": "inferred",
+  "provisional": true }
+```
+
 **The trichotomy** (§5.3's *unknown* / *not yet* / *zero*):
 
 - `not-yet` — the fact does not exist yet. An `Attempt` before it starts; a `Phase` before it is
@@ -117,6 +157,97 @@ Field meanings, precisely:
   keyed on the identifier, in whatever language and register the client chooses. This is the
   structural generalisation of the fix for `EVIDENCE.md` Exhibit 8 — not "don't emit Czech," but
   "don't emit language, in any language, from the domain layer, ever."
+
+### 1.4 Errors
+
+One envelope, shared by §7 and §8, so a bridge or client author handles rejection once, not per
+endpoint:
+
+```json
+{ "error": { "code": "phase-not-found", "message": "no Phase K1M_ST_BR3_6 in this event" } }
+```
+
+**`code` is the contract; `message` is not.** `code` is a closed, kebab-case identifier — a test
+asserts against it, and it cannot change without a breaking-change bump. `message` is for logs and a
+human reading them; it may be reworded at any time without that being a breaking change, and no
+client may parse it. Codes used anywhere in §7 or §8, each with the HTTP status it always carries:
+
+| `code` | HTTP status | Where |
+|---|---|---|
+| `event-not-found` | 404 | §7 (no event configured yet), §8.4 |
+| `category-not-found` | 404 | §7, §8.4 |
+| `phase-not-found` | 404 | §7, §8.4 |
+| `attempt-not-found` | 404 | §7 writes — `phaseId`/`bib` don't resolve to a known Attempt |
+| `write-not-found` | 404 | §7 |
+| `validation-failed` | 400 | both — malformed body; carries `error.details: [{field, issue}]` |
+| `vendor-payload-rejected` | 400 | §8.6 — a raw vendor export where a structured resource was required |
+| `unauthorized` | 401 | §8 — missing or unrecognised `X-API-Key` |
+| `forbidden` | 403 | §8 — key recognised but revoked or suspended |
+| `rate-limited` | 429 | §8.3 — carries an HTTP `Retry-After` header, seconds |
+
+§7 has no `unauthorized`/`forbidden` — the on-site network is trusted (`CONSTRAINTS.md` §1.2, venue
+LAN), and no operation in §7 requires a credential, matching today's precedent.
+
+### 1.5 Idempotency
+
+**`PUT` (§8.3) is idempotent by construction, per INV-5 — no header, no special casing.** Retrying an
+identical body any number of times is always safe: the domain layer retains it per-source and merges
+by the ranking table regardless of how many times the same observation arrives. A retried `PUT`
+returns `200` with the current resolved resource every time, whether the body was new, a duplicate,
+or superseded by something else in the interim — a client never needs to distinguish these cases to
+know the retry was safe.
+
+**`POST` (§7 writes) is not naturally idempotent — each call means "submit a new correction" — so it
+requires a client-supplied `Idempotency-Key` header,** an opaque string the client generates once per
+correction attempt (a UUID is sufficient). The server retains the mapping from key to the
+`WriteRequest` it produced for at least 24 hours. A retry with the **same** key returns `200` with
+that same `WriteRequest`, whatever its current `status`, and never submits a second command upstream.
+A **different** key is always a new correction, even against the same field — a judge revising their
+own just-submitted correction is a second legitimate `WriteRequest`, not a retry, and gets its own.
+
+### 1.6 Snapshot and subscription ordering
+
+Every push-capable stream (§7's WebSocket, §8.4's public feed) assigns each outbound message a
+connection-scoped, strictly increasing integer, `seq` — drawn from the same internal ingest sequence
+INV-6 (§4) requires, but exposed here for a narrower purpose than INV-2's precedence: `seq` only lets
+a client tell whether it has already incorporated a given update, the way a log offset or a database
+WAL position would. It carries no ranking or authority information and a client must not treat it as
+one — precedence among sources is entirely the domain layer's decision (§4), settled before anything
+reaches the wire.
+
+**The handshake this fixes** (found in adversarial review, not designed in from the start): a
+snapshot fetched over REST and a subscription opened afterward leaves a gap — any update landing
+between the two calls is in neither. So every hydration/snapshot response carries a top-level
+`asOfSeq: number`, and the required sequence is:
+
+1. Open the stream connection first.
+2. Buffer every message received, by `seq`, without applying it yet.
+3. Request the snapshot.
+4. On the snapshot response, discard every buffered message with `seq ≤ asOfSeq` — already reflected
+   — and apply the rest, in `seq` order.
+5. Apply every subsequent message as it arrives, ordinarily.
+
+Both on-site client applications and the public spectator client are required to implement this; §7
+and §8.4 each restate only the connection-specific detail, not this sequence.
+
+### 1.7 Machine-readable schemas — scoped narrowly, deliberately
+
+`docs/arch/schemas/observed.schema.json` and `error.schema.json` are real JSON Schema, not
+illustration — every envelope and every error response in §7 and §8 validates against one of them.
+They exist because these two shapes appear in nearly every response either contract sends, so a
+single machine-checkable definition of each is worth more than the same prose repeated at every use
+site staying in sync by discipline alone.
+
+**Deliberately not done: a full OpenAPI document for every operation in §7 and §8.** Every endpoint
+below is already a table — method, path, request shape, response shape, status codes — precise enough
+to write a test from without reading an implementation, which is the bar this pass was set. A parallel
+OpenAPI file would restate that same information a second time, in a second format, before a line of
+server code exists to generate it from — and this design has already been revised three times under
+active review in the course of one week; a second representation of every endpoint is a second place
+each future revision must land correctly, across five separate repositories, for a benefit (schema-
+driven test/client generation) nobody has asked for as a deliverable. If that changes once server-side
+implementation begins, generating OpenAPI *from* the implementation's route definitions is the better
+order to do it in — describing what was built, rather than a second hand-maintained forecast of it.
 
 ---
 
@@ -620,11 +751,13 @@ contract constrains.
   it captures `observedAt` — never over a raw comparison of `observedAt` values. This is not the
   wire sequence number `CONSTRAINTS.md` §1.1 correctly rules out inventing (that would mean adding
   one to Canoe123's own protocol, which we do not control); it is purely internal to the domain
-  layer's own merge, assigned by us, at our own boundary, and never exposed on the wire — clients
-  still see the presented value's ordinary `observedAt`, which remains wall-clock for display and
-  staleness computation, just no longer for ordering. A clock jump during live operation therefore
-  cannot corrupt a merge decision, and cannot make a genuinely later observation lose to an earlier
-  one merely because the clock moved between them.
+  layer's own merge, assigned by us, at our own boundary. It is exposed on the wire in exactly one
+  narrow role, added under the same review that found this gap: `seq` (§1.6), for a client to tell
+  whether it has already seen an update, never for a client to judge which of two facts is truer —
+  that comparison stays entirely server-side. The presented value's ordinary `observedAt` remains
+  wall-clock for display and staleness computation, just no longer for ordering. A clock jump during
+  live operation therefore cannot corrupt a merge decision, and cannot make a genuinely later
+  observation lose to an earlier one merely because the clock moved between them.
 
 These eight invariants are what "verifiability" (`CONSTRAINTS.md` §4) reduces to in practice: given
 the same sequence of ingested messages, each carrying its true `observedAt` timestamp, its assigned
@@ -710,43 +843,77 @@ Serves clients that exist to display *this* timing system (`BRIEF.md` §5.7's as
 in `DECISIONS/ADR-007`). Uses Canoe123-native tokens (`RoundKind`, `phaseId` = `RaceId`) directly —
 justified because Canoe123 is this tier's only possible upstream by fixed topology, and inventing a
 vendor-neutral abstraction here would be designing around a variety of on-site protocol this
-ecosystem has never seen and has not been asked to support.
+ecosystem has never seen and has not been asked to support. **No authentication** — the venue network
+is trusted (`CONSTRAINTS.md` §1.2); every response below carries no auth-related status code.
 
-**Hydration (REST, snapshot):**
+### 7.1 Hydration (REST, snapshot)
 
-- `GET /api/events/current` → `Event`, `Category[]`
-- `GET /api/categories/{categoryId}/phases` → `Phase[]`
-- `GET /api/phases/{phaseId}/attempts` → `Attempt[]` (full envelope-wrapped state)
-- `GET /api/categories/{categoryId}/standing` → `Standing`
-- `GET /api/oncourse` → `Attempt[]` — every Attempt currently `on-course`, across every currently-
-  running Phase. **Plural by construction**, not a singleton "current competitor" — this is what
-  admits Kayak Cross's four-at-once without a structural change (§5 of `ARCHITECTURE.md`).
-- `GET /api/sources` → `SourceStatus` (admin-facing)
+Every response below wraps its payload with `asOfSeq: number` (§1.6) at the top level.
 
-**Live updates (WebSocket, delta):** after hydration, the socket carries per-entity deltas only —
-`attempt.updated { attemptId, fields }`, `phase.updated { phaseId, fields }`,
-`standing.updated { categoryId, entries }`, `write.updated { writeId, status }`,
-`sources.updated { ... }`. This resolves `CONSTRAINTS.md` §2.2 (snapshot-vs-delta) explicitly:
-REST is always a full current snapshot for a fresh client; the socket never re-sends what hydration
-already established.
+| Method & path | 200 body | Error |
+|---|---|---|
+| `GET /api/events/current` | `{ asOfSeq, event: Event, categories: Category[] }` | `404 event-not-found` — no event configured yet |
+| `GET /api/categories/{categoryId}/phases` | `{ asOfSeq, phases: Phase[] }` | `404 category-not-found` |
+| `GET /api/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }` | `404 phase-not-found` |
+| `GET /api/categories/{categoryId}/standing` | `{ asOfSeq, standing: Standing }` | `404 category-not-found` |
+| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[] }` — every Attempt currently `on-course`, across every currently-running Phase. **Plural by construction**, not a singleton "current competitor" — admits Kayak Cross's four-at-once without a structural change. Empty array is a valid response, never an error. | — |
+| `GET /api/sources` | `SourceStatus`, unwrapped — this is connectivity status, not part of the merge-ordered entity stream, so it carries no `asOfSeq` | — |
 
-**A client must open its delta subscription before requesting the snapshot, never after.** A snapshot
-fetched first and a subscription opened afterward leaves a real gap: any update that lands between
-the two is neither in the snapshot (too early) nor on the socket (subscribed too late), and the two
-sides of a REST-then-WS client have no way to detect the loss — a genuine defect, worth naming
-because nothing above stated it, not because a scout was needed to find it. The two client
-applications this tier serves must subscribe first, buffer anything that arrives before the snapshot
-response, then apply the snapshot, then apply the buffer — standard for any snapshot-plus-delta feed,
-stated once here because §5.6 asks whether an implementer would have to guess, and this specific
-ordering is exactly the kind of thing they would.
+### 7.2 Live updates (WebSocket `/ws`, delta)
 
-**Writes (REST):**
+Every message carries `seq: number` (§1.6). `attempt.updated` and `phase.updated` carry only the
+fields that changed — an omitted field is untouched, never reset, the wire-level restatement of
+INV-1. `standing.updated`, `write.updated`, and `sources.updated` always carry the whole resource:
+each is small and replacing it whole is simpler than diffing it, a size-driven choice, not a
+principle.
 
-- `POST /api/attempts/{phaseId}/{bib}/penalty { gate, value }` → `WriteRequest`
-- `POST /api/attempts/{phaseId}/{bib}/status { status }` → `WriteRequest`
+```json
+{ "seq": 1044, "type": "attempt.updated", "attemptId": "K1M_ST_BR2_6:9",
+  "fields": { "outcome": { "state": "known", "value": {"kind":"duration", ...}, ... } } }
+{ "seq": 1045, "type": "phase.updated", "phaseId": "K1M_ST_BR2_6",
+  "fields": { "status": { "state": "known", "value": "revised", ... } } }
+{ "seq": 1046, "type": "standing.updated", "categoryId": "K1M-ST", "standing": { ...Standing... } }
+{ "seq": 1047, "type": "write.updated", "write": { ...WriteRequest... } }
+{ "seq": 1048, "type": "sources.updated", "sources": { ...SourceStatus... } }
+```
 
-Both accept any `phaseId`, including a closed one (§2.9). Neither is restricted to "the current
-race." `GET /api/writes/{writeId}` polls a specific write; `write.updated` also pushes it.
+Clients **must** follow §1.6's subscribe-before-snapshot sequence: open `/ws`, buffer by `seq`, then
+call the relevant §7.1 endpoint, discard anything with `seq ≤ asOfSeq`, apply the rest in order.
+
+### 7.3 Writes (REST)
+
+Both require an `Idempotency-Key` header (§1.5). Neither is restricted to "the current race" —
+`phaseId` may name a closed Phase (§2.9); Canoe123's `PenaltyCorrection` (unlike `Scoring`) accepts
+this directly.
+
+| Method & path | Body | First response | Retry (same key) | Error |
+|---|---|---|---|---|
+| `POST /api/attempts/{phaseId}/{bib}/penalty` | `{ "gate": number, "value": 0\|2\|50 }` | `202`, `Location: /api/writes/{writeId}`, body = `WriteRequest{status:'pending'}` | `200`, current `WriteRequest` | `404 attempt-not-found`; `400 validation-failed` (`value` not in `{0,2,50}`, or `gate` outside this Phase's known gate count) |
+| `POST /api/attempts/{phaseId}/{bib}/status` | `{ "status": "dns"\|"dnf"\|"dsq"\|"cap" }` | as above | as above | as above (no `value` check; `400 validation-failed` for any other status string) |
+| `GET /api/writes/{writeId}` | — | `200 WriteRequest` | — | `404 write-not-found` |
+
+**The confirmation lifecycle over the wire** (§2.9, `DECISIONS/ADR-010`), concretely — the same
+`WriteRequest` resource, three snapshots of it in time:
+
+```json
+// the 202 response, the instant the correction is submitted
+{ "writeId": "w-8f3a", "target": { "phaseId": "K1M_ST_BR1_6", "bib": "9", "field": "gate-penalty" },
+  "requestedValue": { "gate": 4, "value": 2 }, "submittedAt": "2026-09-15T14:02:11.000Z",
+  "status": "pending" }
+
+// GET /api/writes/w-8f3a once Canoe123's echo matches
+{ "writeId": "w-8f3a", "target": { ... }, "requestedValue": { "gate": 4, "value": 2 },
+  "submittedAt": "2026-09-15T14:02:11.000Z", "status": "confirmed",
+  "confirmedValue": { "gate": 4, "value": 2 }, "confirmedAt": "2026-09-15T14:02:14.500Z" }
+
+// or, if the echo disagrees with what was requested
+{ ..., "status": "mismatched", "confirmedValue": { "gate": 4, "value": 50 },
+  "confirmedAt": "2026-09-15T14:02:14.500Z" }
+```
+
+No field ever encodes a timeout or a deadline — per `DECISIONS/ADR-010`, `pending` persists until an
+echo arrives, however long that takes; a client computes "pending for how long" itself from
+`submittedAt`, and the contract asserts no threshold at which that becomes a problem.
 
 ---
 
@@ -762,6 +929,13 @@ today, kept and formalised (`CURRENT-STATE.md`: "the event resolved by API key..
 A key authorises writes to that event's resources only. No request identifies its target event by a
 client-supplied id checked against the key — the key *is* the scope, which is what makes isolation a
 contract property rather than an access-control list someone must remember to configure correctly.
+
+Every write operation in §8.3/§8.5: missing or unrecognised key → `401 unauthorized`; a recognised
+but revoked or suspended key → `403 forbidden`; pushing faster than this deployment's configured
+throttle → `429 rate-limited` with an HTTP `Retry-After` header in seconds (today's `LivePusher`
+already runs a circuit breaker on repeated failure, `CURRENT-STATE.md`; this contract states that a
+throttle exists and how a bridge is told about it, not the exact numbers, which stay implementation-
+tunable). §8.4's public reads carry none of these — no key, no throttle by identity, by design.
 
 **Every id below `Event` is unique only within its event — `eventId` is the only id in this
 contract with any claim to global uniqueness.** `categoryId`, `phaseId` (= Canoe123's `RaceId`),
@@ -790,19 +964,38 @@ calls it, and where the opaque strings originally came from, differs. Costed ful
 
 ### 8.3 Push — resource-based, Attempt-level
 
-Every push is an idempotent upsert by identity (§4 INV-5), not an append:
+Every push is an idempotent `PUT` upsert by identity (§1.5, §4 INV-5), not an append, always
+`200 { <resource> }` on success — the current resolved resource, whether the body created it, changed
+it, or repeated what was already known. `400 validation-failed` for a malformed body (`error.details`
+names the field). Auth/rate-limit errors per §8.1.
 
-- `PUT /ingest/v2/categories/{categoryId}` — `{ code, discipline }`
-- `PUT /ingest/v2/phases/{phaseId}` — `{ categoryId, date, status, multiRun, scoringKind }` — note:
-  **no `roundKind`.** The live contract carries only the structural flags a renderer needs
-  (`multiRun`, `scoringKind`); a vendor-specific round token would be exactly the kind of thing
-  `CONSTRAINTS.md` §1.8 asks us not to bake in — a different timing system's round names would not
-  fit a Canoe123-shaped enum, and the on-site tier, which does need `roundKind`, already has it
-  (§7). This is the asymmetry the brief asks us to weigh, kept deliberately (`DECISIONS/ADR-007`).
-- `PUT /ingest/v2/entries/{entryId}` — `{ categoryId, bib, name }`
-- `PUT /ingest/v2/attempts/{phaseId}/{bib}` — the full `Attempt` shape (§2.6), envelope-wrapped,
-  **including `gates`.** This is the direct fix for `EVIDENCE.md` Exhibit 9's dead ingest branch:
-  gate-by-gate detail for every completed Attempt is part of the push, not a schema nobody sends to.
+| Method & path | Body | Notes |
+|---|---|---|
+| `PUT /ingest/v2/categories/{categoryId}` | `{ "code": string, "discipline": "slalom"\|"cross" }` | — |
+| `PUT /ingest/v2/phases/{phaseId}` | `{ "categoryId": string, "date": "YYYY-MM-DD", "status": PhaseStatus, "multiRun": boolean, "scoringKind": "duration"\|"ordinal" }` | **No `roundKind`** — see below |
+| `PUT /ingest/v2/entries/{entryId}` | `{ "categoryId": string, "bib": string, "name": string }` | — |
+| `PUT /ingest/v2/attempts/{phaseId}/{bib}` | any non-empty subset of `{ entry, status, outcome, gates, upstreamRank }`, each `Observed`-wrapped per §1.2 | **Partial by design** |
+
+**No `roundKind` on `Phase`.** The live contract carries only the structural flags a renderer needs
+(`multiRun`, `scoringKind`); a vendor-specific round token would be exactly the kind of thing
+`CONSTRAINTS.md` §1.8 asks us not to bake in — a different timing system's round names would not fit
+a Canoe123-shaped enum, and the on-site tier, which does need `roundKind`, already has it (§7). The
+asymmetry the brief asks us to weigh, kept deliberately (`DECISIONS/ADR-007`).
+
+**`Attempt` pushes are partial, and an omitted field is untouched — never reset to `not-yet` or
+`unavailable`.** Forcing a bridge to resend every field on every change would reintroduce file-level
+pushing by another name; this is the wire-level statement of INV-1, made explicit because a bridge
+author reading only this table could otherwise assume `PUT` means "replace." Sending `{"gates": {...}}`
+alone updates only `gates`; `status`, `outcome`, `entry`, `upstreamRank` keep whatever the store
+already had for this Attempt. **Every completed Attempt's `gates` must eventually be pushed** — this
+is the direct fix for `EVIDENCE.md` Exhibit 9's dead ingest branch, not optional detail.
+
+**A `Phase` may reference a `categoryId` that hasn't been pushed yet, and vice versa is not required
+either.** The store creates a minimal stub (just the id) on first reference and fills it in whenever
+the real `PUT` for it arrives, rather than rejecting an out-of-order push — a bridge under `DOMAIN-
+FACTS.md` §3's unsynchronised cadences cannot generally guarantee it discovers a Category before the
+first Phase within it, and a contract that required that ordering would be asking for a coordination
+guarantee this ecosystem's own upstream doesn't provide.
 
 The unit of transfer is one Attempt (or one Phase, Category, Entry) changing — never a file, never a
 whole day, never a whole event. This is the direct answer to the brief's §5.7 granularity complaint:
@@ -812,12 +1005,63 @@ Saturday's and Sunday's races push independently, tagged by their own Phase's `d
 
 ### 8.4 Read — public, unauthenticated
 
-- `GET /public/events` — **the calendar** (§ maintainer answer A4): every organiser's events,
-  visible to every viewer, no per-organiser access policy to configure. `[{eventId, organiserName,
-  name, dateRange, status}]`.
-- `GET /public/events/{eventId}` → `Category[]`, `Phase[]` summary
-- `GET /public/events/{eventId}/categories/{categoryId}/standing` → `Standing`
-- Push mirrors §7's delta model, over the transport live-mini already uses.
+No `X-API-Key`, no per-organiser access policy — every resource below is visible to every viewer,
+by design (§ maintainer answer A4).
+
+**`GET /public/events?status=live|upcoming|past|all&cursor=&limit=`** — **the calendar**: several
+organisers' events, running in parallel, each visibly carrying live results, exactly as asked for.
+
+```json
+{ "asOfSeq": 88213,
+  "events": [
+    { "eventId": "evt_9f2a", "organiserName": "TJ Slalom Praha", "name": "Jarní pohár 2026",
+      "dateRange": { "start": "2026-09-19", "end": "2026-09-20" }, "status": "live" },
+    { "eventId": "evt_1c04", "organiserName": "KK Troja", "name": "Podzimní závod",
+      "dateRange": { "start": "2026-09-26", "end": "2026-09-26" }, "status": "upcoming" }
+  ],
+  "nextCursor": "eyJvZmZzZXQiOjUwfQ==" }
+```
+
+`status` is derived, not asserted by anyone — computed purely from ingest recency, never from
+`Phase.status` (consistent with F5: Canoe123's own status vocabulary is not reliable for this, and an
+organiser's event-level "is it live" question shouldn't depend on it either): **`live`** — at least
+one ingest push received for this event within the last 5 minutes; **`past`** — at least one push
+ever received, none within the last 5 minutes; **`upcoming`** — zero pushes ever received. The
+5-minute window is a named constant, not a magic number, and is the only clock this resource
+consults. `limit` defaults to 50, maximum 200; omitting `status` returns `all`, ordered live first,
+then upcoming (soonest `dateRange.start` first), then past (most recent `dateRange.end` first). `404`
+is not a response this endpoint can give — an empty `events` array is the correct answer to "no
+events match."
+
+`organiserName` is set once when an organiser's credential is provisioned — an out-of-band
+administrative action, not an operation this contract defines (`DECISIONS/ADR-006` — this project
+does not design the registry that would eventually own it).
+
+| Method & path | 200 body | Error |
+|---|---|---|
+| `GET /public/events/{eventId}` | `{ asOfSeq, event: Event, categories: Category[], phases: Phase[] }` | `404 event-not-found` |
+| `GET /public/events/{eventId}/categories/{categoryId}/standing` | `{ asOfSeq, standing: Standing }` | `404 event-not-found` if the event itself is unknown, else `404 category-not-found` |
+
+**Push transport: Server-Sent Events, not WebSocket.** `GET /public/events/{eventId}/stream`,
+`Accept: text/event-stream`. Chosen deliberately over WS for this one tier, unlike §7: this feed is
+one-directional (a spectator never writes anything back), served to anonymous public connections at
+whatever scale the calendar attracts, and SSE's native browser reconnect (`EventSource`) and plain-
+HTTP transport cope better with the mobile networks and intermediary proxies spectators' phones sit
+behind than a WebSocket upgrade does. `/ws` stays on the on-site tier, where the client set is small,
+known, and LAN-local, and a write channel (§7.3) already justifies a bidirectional socket.
+
+```
+event: attempt.updated
+data: {"seq":9981,"attemptId":"K1M_ST_BR2_6:9","fields":{"outcome":{...}}}
+
+event: standing.updated
+data: {"seq":9982,"categoryId":"K1M-ST","standing":{...}}
+```
+
+Only `attempt.updated`, `phase.updated`, `standing.updated` cross to this tier — `write.updated` and
+`sources.updated` are on-site/admin-facing bookkeeping a spectator has no business seeing and are
+never sent here. §1.6's subscribe-before-snapshot sequence applies identically: open the stream,
+buffer by `seq`, then call the relevant `GET` above, reconcile against its `asOfSeq`.
 
 ### 8.5 Corrections after the on-site session has ended
 
@@ -837,13 +1081,16 @@ destructive overwrite of the other's slot.
 
 ### 8.6 What this contract refuses
 
-- A raw vendor payload of any kind (no "push the file").
-- A push that does not name its target entity by id at every level.
+- A raw vendor payload of any kind (no "push the file") — `400 vendor-payload-rejected`.
+- A push whose body doesn't match one of §8.3's shapes, including one missing a required identity
+  field — `400 validation-failed`, `error.details` names what's missing. There is no endpoint that
+  accepts an unattributed blob to begin with; every path in §8.3 already names its target's id.
 - A non-idempotent operation — there is no "append a result," only "assert the current value of a
   field," which is what makes replay-safety and multi-caller composition (§8.5) hold without extra
   machinery.
-- A vendor-specific round or status token (§8.3) — the closed vocabularies of §2–§3 are what a
-  different timing system's bridge must translate into, not extend.
+- A vendor-specific round or status token (§8.3) — `400 validation-failed` for any `discipline`,
+  `scoringKind`, or status value outside the closed vocabularies of §2–§3, which a different timing
+  system's bridge must translate into, not extend.
 
 **What a different timing system would have to supply** to use this contract: entries, phases
 (with `multiRun`/`scoringKind`, not a round name), and attempts carrying an outcome, a status, and

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opencanoetiming.org/schemas/error.schema.json",
+  "title": "Error",
+  "description": "The error envelope shared by the on-site contract (CONTRACTS.md §7) and the live ingest contract (§8), defined once in §1.4. `code` is the contract and MUST be one of the closed values below; `message` is advisory only, for logs and humans, and may be reworded without that being a breaking change — no client or test may assert against it.",
+  "type": "object",
+  "properties": {
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "enum": [
+            "event-not-found",
+            "category-not-found",
+            "phase-not-found",
+            "attempt-not-found",
+            "write-not-found",
+            "validation-failed",
+            "vendor-payload-rejected",
+            "unauthorized",
+            "forbidden",
+            "rate-limited"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "description": "Not part of the contract. Never parsed by a client."
+        },
+        "details": {
+          "type": "array",
+          "description": "Present only on validation-failed.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field": { "type": "string" },
+              "issue": { "type": "string" }
+            },
+            "required": ["field", "issue"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["code", "message"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["error"],
+  "additionalProperties": false
+}
