@@ -247,6 +247,7 @@ type Attempt = {
   status: Observed<AttemptStatus>         // [D]/[A] — see §3.2
   outcome: Observed<Outcome>
   gates: Observed<Gate[]>
+  upstreamRank: Observed<number>           // Canoe123's or CIS's own Rank — input to §5, never presented directly as Standing.rank
 }
 
 type AttemptStatus = 'not-started' | 'on-course' | 'finished' | 'dns' | 'dnf' | 'dsq' | 'cap' | 'other'
@@ -505,6 +506,7 @@ contract constrains.
   |---|---|
   | On-course position / running time (`Attempt.status = 'on-course'`) | `tcp` > `cis` |
   | Finished slalom `Attempt.outcome` / `Attempt.gates` | `cis` > `tcp` > `xml` (CIS configured) — `tcp` > `xml` (not configured) |
+  | `Attempt.upstreamRank` | `cis` > `tcp` — same discipline as the row above; §5 consumes this field's presented value, never a raw pass-through of whichever of Canoe123's or CIS's own `Rank` last arrived |
   | `Phase.status` | `tcp` > `xml` |
 
   A source that is not currently top-ranked-and-available still has its own observation retained —
@@ -595,16 +597,22 @@ and an upstream-asserted one disagree, and what happens on a tie upstream doesn'
 2. **Equal outcome values receive equal rank** (standard skip ranking: 1, 2, 2, 4) by default. We do
    not invent a tie-break rule — per the maintainer, federation-specific rules like this must not be
    baked into the domain core (`CONSTRAINTS.md` §1.8).
-3. **When Canoe123 or CIS asserts an explicit `Rank` that differentiates entries our mechanical
-   comparison ties,** that assertion is treated as a tie-break authority (it reflects a competition
-   rule we are told not to reimplement) and resolves the tie: the tied group is reordered by the
-   upstream `Rank`, receiving sequential (non-skip) ranks, with `StandingEntry` carrying no separate
-   provenance field for this — the resolved `rank` is simply asserted, as any other value is.
-4. **When an upstream `Rank` disagrees with a *non-tied* mechanical ordering,** the mechanical
-   ordering is what the contract asserts — it is independently checkable, upstream `Rank` is not —
-   and the disagreement is recorded in `Standing.anomalies`, never silently overridden in either
-   direction. This is the target-state descendant of `EVIDENCE.md` Exhibit 3's arithmetic
+3. **When `Attempt.upstreamRank` differentiates entries our mechanical comparison ties,** its
+   *presented* value (§4's authority-gated precedence, never a raw pass-through of whichever of
+   Canoe123's or CIS's own `Rank` field last arrived) is treated as a tie-break authority — it
+   reflects a competition rule we are told not to reimplement — and resolves the tie: the tied group
+   is reordered by it, receiving sequential (non-skip) ranks, with `StandingEntry` carrying no
+   separate provenance field for this — the resolved `rank` is simply asserted, as any other value
+   is. This is one precedence discipline throughout, not two: `upstreamRank` is a field like any
+   other, subject to the same per-source retention and ranking as `outcome`.
+4. **When the presented `upstreamRank` disagrees with a *non-tied* mechanical ordering,** the
+   mechanical ordering is what the contract asserts — it is independently checkable, `upstreamRank`
+   is not — and the disagreement is recorded in `Standing.anomalies`, never silently overridden in
+   either direction. This is the target-state descendant of `EVIDENCE.md` Exhibit 3's arithmetic
    consistency check: kept as a diagnostic, never again as a mechanism for silently picking a value.
+   Distinct from §4 INV-2b's disagreement handling, which operates one layer down, on a single
+   field's competing source observations before `upstreamRank` is even presented — this step only
+   ever sees the one value INV-2 already resolved.
 5. **Entries with a `no-result` outcome (`dns`/`dnf`/`dsq`/`cap`/`other`) receive `rank: null`** —
    never a fabricated numeric rank — and are listed by `status` with a stable secondary order (by
    `bib`) for deterministic list position only. This is not a federation-specific choice: a

@@ -61,3 +61,21 @@ Any implementation, on-site or in `live-mini`, treating an upstream `Rank` field
 authoritative. This directly resolves `live-mini`'s open tie-aware-ranking issue by giving it one
 precise rule to implement rather than leaving it to invent its own — which is exactly how its current
 independent ranking logic came to exist (`EVIDENCE.md` Exhibit 9).
+
+## Revision — `upstreamRank` given the same precedence discipline as every other field
+
+`ADR-003`'s review found that the merge invariant this ADR depends on (`CONTRACTS.md` §4 INV-2) was
+freshness-gated but not authority-gated — a real gap, fixed there by ranking sources per
+field-category rather than by raw recency. That fix exposed an inconsistency here: this ADR's
+"upstream `Rank`" was never itself modelled as an `Observed` field, so nothing said which source's
+`Rank` governs when Canoe123's own and CIS's disagree, or on what timing. Left alone, decision step 3
+above would have been the one place in the whole contract still comparing sources by whichever
+arrived last — the exact defect just removed everywhere else.
+
+**Fix:** `Attempt.upstreamRank` is now an explicit `Observed<number>` field (`CONTRACTS.md` §2.6),
+subject to the same per-source retention and the same ranking table as `outcome`/`gates` — `cis` over
+`tcp` for a finished entry, once CIS is configured and has reported. Steps 3 and 4 above now read
+`upstreamRank`'s *presented* value, never a raw pass-through of whichever source's `Rank` field
+arrived most recently. This costs one more row in `CONTRACTS.md` §4's table and nothing else — no new
+mechanism, since `upstreamRank` was always conceptually a value with provenance, just not one written
+down as such before the review that found this.
