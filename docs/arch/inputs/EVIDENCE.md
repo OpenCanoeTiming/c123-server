@@ -1,6 +1,6 @@
 # Evidence — Where Interpretation Lives Today, and Where It Disagrees With Itself
 
-Ten exhibits from the current code. Each is a concrete, cited symptom. The design being
+Eleven exhibits from the current code. Each is a concrete, cited symptom. The design being
 commissioned will be judged on whether it makes these impossible, not merely fixed.
 
 Every claim carries a `file:line` reference, valid as of 2026-09-15. The most load-bearing ones
@@ -51,6 +51,14 @@ Three consequences follow directly from arrival-order-only sequencing:
 **Why it matters:** "assembling the correct temporal sequence" is not a hard problem being solved
 imperfectly here. It is not attempted. Every component that needs ordering invents a proxy for it,
 and each invents a different one. This is the root from which most other exhibits grow.
+
+**Correction, made during the design engagement.** The defect is stated more precisely as a
+*boundary* error than an absence: what is missing is not timestamps as such but a timestamp taken
+where it means something. An observation's time should be captured at the **ingest boundary** — the
+moment a message is received and parsed — not at outbound serialisation, which is where
+`factory.ts` takes it and which answers a question no consumer asks. A second caution follows: the
+remedy is not to invent our own sequence numbers on a wire we do not control, but to capture true
+ingest time and merge per field.
 
 **What the design must answer:** whether this system needs its own notion of event time, what it
 would be a function of, and what becomes possible once it exists.
@@ -262,7 +270,16 @@ finish-detection bug in the obvious place would change nothing observable.
 The third carries a comment claiming it mirrors `EventState`; it does not mirror
 `checks/fingerprint`. One of the three decides event identity by **fuzzy match at a 50 % threshold**.
 
-**Why it matters:** event identity is a domain concept with three implementations and no owner.
+**Correction, made during the design engagement.** This exhibit conflates two different concerns
+under one name, and the conflation is the auditor's, not the code's. *"Is the connected Canoe123
+still describing the same session"* — did the operator swap XML files, did C123 restart — is
+operational continuity, a technical concern belonging entirely on site. *"Event identity"* in the
+sense of `CONSTRAINTS.md` §1.7 — unique across organisers who never coordinate — is a business
+concern belonging to the live ingest contract. They deserve two mechanisms, not one canonical
+fingerprint.
+
+**Why it matters:** three implementations, no owner, and — as the correction above shows — not even
+agreement about which question they answer.
 
 ---
 
@@ -320,7 +337,27 @@ for display, and one of them is copy-pasted. A reader looking for the rules woul
 
 ---
 
-## What these ten have in common
+## Exhibit 11 — Values that appear and disappear
+
+Reported by the maintainer from live operation rather than found by audit: in the public live
+client, values flicker — present for a moment, absent the next, present again. He states the
+remedy as a principle, and it is sharper than anything the audit produced:
+
+> Incompleteness is *local in time*. Results build up progressively, and a message lacking a value
+> does not mean the value was unknown a second ago. It is more correct to show a value stale for
+> tens of seconds than to flicker, and better than either to nag about incompleteness.
+
+This is the same root as Exhibit 1, seen from the user's side: because `Results` replaces the whole
+object (`SRV/state/EventState.ts:193,208`) and no layer distinguishes *absent from this message*
+from *not known*, a row missing from one snapshot erases what was already true.
+
+**Why it matters:** it converts the temporal defect from an internal untidiness into something a
+spectator sees. It also supplies the governing rule the design is measured against — **knowledge is
+monotonic: a value once asserted ages, it does not vanish.**
+
+---
+
+## What these eleven have in common
 
 Not carelessness. Each is a locally reasonable decision made by someone who needed an answer and
 had nowhere to look it up. The system has no place where the answer lives, so every component

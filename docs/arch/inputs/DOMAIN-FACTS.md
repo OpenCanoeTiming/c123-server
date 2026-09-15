@@ -160,7 +160,19 @@ scoreboard and live-mini.
 | Extra fields | — | `PrevRnk`, `RoundNr`, `Qualified`, `RecordType` |
 
 Two load-bearing slalom assumptions fail outright: finish detection via `dtFinish` (the field does
-not exist) and "`Time` is a duration" (it is an ordinal). Any design that treats the slalom shape
+not exist) and "`Time` is a duration" (it is an ordinal).
+
+**This understates the first.** Verified against a recorded Cross heat during the design
+engagement: there is no OnCourse-side finish signal at all — no `dtStart`, `dtFinish`, `chFinish`
+or `Completed` transition. The only reliable signal is the `Results` stream's `Rank`/`Time`
+populating for a bib: **a different channel**, on a materially coarser cadence than slalom's
+sub-second OnCourse, and OnCourse clears for the whole heat at once rather than per competitor. So
+"on course" cannot be a singleton.
+
+Further, from the maintainer: **the heat order is asserted by the Canoe123 operator** after
+speaking to the finish judge. It is not an event to detect but an upstream human assertion arriving
+on human latency — and it carries a deadline, since it must be published before the next heat
+starts or there is nowhere left to show it. Any design that treats the slalom shape
 as *the* domain model will need structural change to admit Cross, not merely new fields.
 
 ## 9. Writing back to C123
