@@ -148,8 +148,10 @@ These are the acceptance criteria. A design that reads well but cannot answer th
    Give the merge rule as far as the contract constrains it — the observable semantics any
    implementation must satisfy — and stop there. Implementation is ours.
 
-4. **Source selection and degradation.** We hold the CIS licence, so the richest upstream
-   interface is genuinely available — and it carries both runs of a two-run race and gate-by-gate
+4. **Source selection and degradation.** *We* hold the CIS licence, so the richest upstream
+   interface is genuinely available to us — but several independent organiser groups run this
+   ecosystem on their own isolated deployments (`CONSTRAINTS.md` §1.7) and may not hold it. The
+   source set genuinely varies. The richest interface — and it carries both runs of a two-run race and gate-by-gate
    passage times, which nothing else does (`DOMAIN-FACTS.md` §2). The present code does not use it
    at all, and most of its reconstruction machinery exists for that reason. Decide deliberately
    which interfaces the architecture consumes and why. Then say what happens, and how anyone finds
@@ -187,8 +189,15 @@ These are the acceptance criteria. A design that reads well but cannot answer th
    vendor-neutral ingest contract means the on-site bridge must translate rather than forward, and
    that work has to land somewhere.
 
-   Note the asymmetry and decide whether it is right: the on-site contract serves clients that
-   exist to display *this* timing system, while the live contract was meant to outlive it.
+   It is also a **multi-tenancy** question. The expectation is one shared live instance serving
+   all organiser groups (`CONSTRAINTS.md` §1.7), so event identity must be collision-proof across
+   organisers who never coordinate, and isolation and authorisation belong in the contract. A
+   vendor-neutral ingest contract is not an aesthetic preference here; it is what a shared instance
+   requires to be coherent.
+
+   Note the asymmetry and decide whether it is right: on site, isolated and per-organiser, serving
+   clients that exist to display *this* timing system; in the cloud, shared and long-lived, meant
+   to outlive it. Those two tiers may not deserve the same contract.
 
 ## 6. Four scenarios your design must survive
 

@@ -39,7 +39,15 @@ not an aspiration.
 plus the live-mini server are in scope. `timing-design-system`, `c123-xml-tools` and
 `c123-protocol-docs` are context, not subjects.
 
-### 1.7 The cloud tier is genuinely remote
+### 1.7 Several organiser groups, isolated on site, shared in the cloud
+The ecosystem is used by **several independent organiser groups**. On site they are fully
+isolated: own venue, own server, own LAN, own Canoe123, no coupling. The cloud tier is the
+opposite — multiple live instances are possible, but the expectation is **a single shared
+instance** serving all of them. Event identity must therefore be unique across organisers who
+never coordinate, and isolation and authorisation are contract concerns rather than deployment
+details.
+
+### 1.8 The cloud tier is genuinely remote
 `live-mini-server` runs on Railway, is publicly reachable, and **must survive losing its link to
 the on-site server**. It cannot be modelled as a thin view over an always-available upstream.
 
@@ -68,7 +76,8 @@ it, and how it is versioned and consumed across separate repositories.
 given 1.6.
 
 **2.6 Which upstream interfaces to use.** Today TCP plus the XML file; CIS is not used at all.
-**The CIS licence is held**, so it is genuinely available — and it is the only interface carrying
+**We hold the CIS licence**, so it is genuinely available to us — though other organiser groups
+(§1.7) may not hold it, so the available source set really does vary by deployment — and it is the only interface carrying
 both runs of a two-run race and gate passage times. Whether to depend on it, and how to behave
 when it does not answer, is an open design question with large consequences (`DOMAIN-FACTS.md` §2).
 
@@ -89,6 +98,8 @@ file as the unit of transfer. Redesigning it as a vendor-neutral contract is in 
 - **Development is agentic.** Future work is done by the maintainer together with Claude Code.
   Design choices that lower the cost of agentic development — explicit contracts, narrow modules,
   decisions recorded rather than inferred — carry real weight, and this is a stated priority.
+- **Several organiser groups, one maintainer.** The software has users beyond its author, on
+  deployments he does not operate and cannot inspect when something looks wrong.
 - **One maintainer.** Any design whose correctness depends on sustained coordination across four
   codebases by several people is not viable.
 
