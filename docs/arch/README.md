@@ -15,9 +15,9 @@ is intended to become permanent documentation.
 | `inputs/DOMAIN-FACTS.md` | What Canoe123 is as a data source — unequal interfaces, cadences, known data loss |
 | `inputs/CURRENT-STATE.md` | Map of what the four components do today |
 | `inputs/CONSTRAINTS.md` | What is fixed, what is open, operating reality |
-| `ARCHITECTURE.md` | *(to come)* Target state |
-| `CONTRACTS.md` | *(to come)* The primary deliverable — what is asserted, and as of when |
-| `DECISIONS/` | *(to come)* ADRs |
+| `ARCHITECTURE.md` | Target state — domain model, deployable boundaries, data flow, principles traced to `EVIDENCE.md`, five scenario walkthroughs |
+| `CONTRACTS.md` | The primary deliverable — domain entities, the observation envelope, merge invariants, ranking, the derivability ledger, the on-site and live-ingest contracts |
+| `DECISIONS/` | Ten ADRs, `ADR-001` through `ADR-010` |
 
 ## Ground rules for this phase
 

@@ -1,0 +1,60 @@
+# ADR-005: The live ingest contract pushes Attempts, not files; tenancy is a public calendar
+
+## Context
+
+The live tier's ingest contract was meant to be a generalised interface any canoe timing software
+could push results into. It has drifted into pushing the raw Canoe123 XML file as the unit of
+transfer — the whole Saturday file goes up while Sunday's race runs, and separating the two days
+today requires creating two separate events on a service that, per `CONSTRAINTS.md` §1.7, is shared
+across every organiser using this ecosystem, not just one. `EVIDENCE.md` Exhibit 9 shows the
+consequence downstream: fields sent and ignored, a whole `gates` ingest branch that nothing ever
+populates, ranking recomputed independently rather than relayed.
+
+## Options considered
+
+**A — Keep file-level push, add day-separation metadata to the file envelope.** Reduces the
+`BRIEF.md` §5.7 symptom without removing its cause: the unit of transfer stays an artefact of
+Canoe123's own export shape (`c123-xml-tools`' domain, not ours to redesign) rather than a decision
+made about what the *contract* should carry.
+
+**B — Category-level push (one message per category's current standing).** Closer, but still
+coarser than what `CONTRACTS.md` §2.6 needs: a single Attempt correction (Scenario B, or a
+maintainer-described week-later dispute) would have to be expressed as "resend the whole category,"
+which reintroduces whole-object replace at the network boundary — exactly what ADR-003 removes at
+the domain layer.
+
+**C — Attempt-level push, with Category/Phase/Entry as their own smaller resources pushed on their
+own change, every push an idempotent upsert by identity.** Chosen (`CONTRACTS.md` §8.3).
+
+## Decision
+
+C. The unit of push is one Attempt (or one Category, Phase, or Entry) changing. Every push is an
+idempotent `PUT`, never an append — required both for safe retry and for `CONTRACTS.md` §8.5's
+requirement that a direct organiser correction and a possibly-still-live bridge push compose safely
+without special-casing which one "wins" (the later `observedAt` always does, §4 INV-2/INV-5).
+
+**Tenancy is a public calendar, not a visibility policy per organiser.** The maintainer's answer,
+given directly: organisers should be visible to each other, modelled as a shared calendar of
+parallel events (§ maintainer answer A4). `GET /public/events` (`CONTRACTS.md` §8.4) is therefore a
+first-class, unauthenticated read resource, not an access-control decision layered on top of
+per-event visibility. Isolation still applies fully to *writes*: the `X-API-Key` scoping
+(`CONTRACTS.md` §8.1) is unchanged by this — only reads of the calendar are public by design.
+
+## Why
+
+Multi-day separation (`ARCHITECTURE.md` Scenario E) falls out of this for free: a Phase's `date` is
+fixed once, independent of when any particular push happens to arrive, so Saturday's and Sunday's
+races push under the same `eventId` throughout, without the operator creating two events.
+
+## What it costs
+
+The on-site bridge must translate, not forward — a real increase in what `c123-server` must do
+compared with today's "push the file" (`ARCHITECTURE.md` §4). This is not extra scope invented for
+vendor-neutrality's own sake: it is the same domain-layer output ADR-002 already requires for the
+on-site contract, serialised a second way, so the marginal cost is the translation layer itself, not
+a second interpretation effort.
+
+## What it forecloses
+
+Any future "just push the file, we'll sort it out downstream" shortcut — `CONTRACTS.md` §8.6 refuses
+raw vendor payloads and any push that doesn't name its target entity by id at every level.
