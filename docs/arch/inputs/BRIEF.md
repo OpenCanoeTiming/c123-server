@@ -76,10 +76,15 @@ and is in `CURRENT-STATE.md` and `EVIDENCE.md`.
 
 **You may distrust the audit, and you should.** It was produced by another model and has blind
 spots. When a design decision turns on a fact you are not willing to take on faith, dispatch a
-scout: an `Agent` call with `model: "opus"` or `model: "sonnet"`, asking **one** question, with
-the instruction *"answer only what is asked, cite file:line, hard cap 150 lines"*. Scouts are free;
-your own context is not. Record every place you disagreed with the audit — that list is a required
-part of your output.
+scout: an `Agent` call asking **one** question, with the instruction *"answer only what is asked,
+cite file:line, hard cap 150 lines"*. Record every place you disagreed with the audit — that list
+is a required part of your output.
+
+**Scouts are cheap but not free, and the budget is real.** Use `model: "sonnet"`; reserve
+`model: "opus"` for a question that genuinely needs judgement rather than retrieval. **Spend at
+most six scouts across the whole engagement.** They draw on a quota shared with the orchestrator,
+and exhausting it starts consuming the budget reserved for you. Before dispatching, check whether
+the answer is already in the dossier — it usually is.
 
 **Upstream behaviour is checkable.** Authoritative reference material for what Canoe123 actually
 does is held locally (`DOMAIN-FACTS.md` §10). Where a design decision turns on upstream behaviour,
