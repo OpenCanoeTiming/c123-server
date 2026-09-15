@@ -160,10 +160,15 @@ it computes `totalSeconds` itself from OnCourse's own `Time` and per-gate penalt
   second computation.
 - **t+10s:** if CIS is configured, its poll has likely already corroborated: `confidence` flips to
   `authoritative`, `provisional` to `false`, value unchanged in the ordinary case.
-- **t+30s:** TCP `Results` rotates round regardless of CIS. If it agrees (the ordinary case),
-  `provisional` clears the same way. If it disagrees, the newer `observedAt` still governs (§4
-  INV-2) and the disagreement is recorded as an anomaly (`CONTRACTS.md` §5) — never silently
-  resolved either direction.
+- **t+30s:** TCP `Results` rotates round regardless of CIS. While CIS is configured and has already
+  reported, `cis` outranks `tcp` for this field-category (`CONTRACTS.md` §4 INV-2), so this message
+  updates `tcp`'s own retained slot only — the presented value is unchanged whether the rotation
+  agrees or not, and never oscillates on the rotation period. If it disagrees, that disagreement is
+  surfaced as a diagnostic and triggers a fresh, targeted CIS read for this bib rather than being
+  adopted from TCP directly or silently discarded (§4 INV-2b). Without CIS configured, `tcp` is the
+  top-ranked available source throughout, so the rotation's own value *is* what's presented — still
+  never a regression, since it is that same source correcting itself, not a lower-ranked source
+  overriding a better one.
 - **The scoreboard at t+1s already shows the correct leader**, not Canoe123's own stale value; the
   30-second rotation window this scenario is built to expose never produces a visible wrong answer,
   only a `provisional` flag a client may or may not choose to render.

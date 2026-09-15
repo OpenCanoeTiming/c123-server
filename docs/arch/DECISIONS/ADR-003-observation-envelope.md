@@ -31,7 +31,7 @@ newer observation.** Chosen.
 
 ## Decision
 
-C, specified as five invariants (`CONTRACTS.md` §4) rather than a merge algorithm, per the brief's
+C, specified as six invariants (`CONTRACTS.md` §4) rather than a merge algorithm, per the brief's
 instruction to state what the contract constrains and stop there. `observedAt` is captured at the
 ingest boundary — the moment a message is received and parsed — never at outbound serialisation,
 which is the literal fix for Exhibit 1's `factory.ts` bug.
@@ -48,13 +48,47 @@ captured once, at original ingest.
 ## What it costs
 
 Every domain value is a small tagged structure, not a bare number or string — more verbose on the
-wire and in code than today's flat DTOs. Every field needs its own freshness comparison rather than
-one whole-object version check, which is real implementation surface, paid once in the domain layer
-(`c123-server`) and once more in `live-mini` (which must apply the same invariants — `CONTRACTS.md`
-§4 is explicitly not on-site-specific).
+wire and in code than today's flat DTOs. Every field needs its own precedence comparison — recency
+*and*, since the revision below, source authority — rather than one whole-object version check, paid
+once in the domain layer (`c123-server`) and once more in `live-mini` (which must apply the same
+invariants — `CONTRACTS.md` §4 is explicitly not on-site-specific). Concretely, a field's merge state
+is now a small per-source map (one retained observation per source that has ever reported it), not a
+single mutable slot — more storage and more comparison logic than the freshness-only version, in
+exchange for the correctness argued in the revision below.
 
 ## What it forecloses
 
 Any future shortcut of replacing a whole entity's state wholesale on message arrival — which is
 precisely the shortcut that produced Exhibit 1. A write's optimistic value (Scenario B) can no longer
-be silently reverted by an unrelated message that happens to omit the field it touched.
+be silently reverted by an unrelated message that happens to omit the field it touched. As of the
+revision below, it also forecloses a source with a worse answer for a field displacing a source with
+a better one merely by arriving later in ingest order.
+
+## Revision — an authority gate added after review
+
+The original decision above specified INV-2 as freshness-only: a `known` field replaced by any
+strictly newer `observedAt`, with no regard to which source produced either observation. Review
+caught that this is unsound: recency of *our own receipt* is not evidence of quality, and a source
+with a coarser or slower-updating answer for a given field can still out-arrive, in ingest-time terms,
+a source that already gave the right answer. On a two-run race, a CIS-confirmed total could be pushed
+back out by the next TCP `Results` rotation and pulled back at the following CIS poll — a value
+oscillating on the rotation period between right and wrong, reproducing the maintainer's own named
+symptom (§ maintainer answer A1's flicker) at a slower, harder-to-notice cadence, inside the very
+mechanism built to remove it.
+
+**Fix:** INV-2 is now authority-gated, not freshness-only — a field's merge state retains the latest
+observation *per source*, and the presented value is the latest observation from the highest-ranked
+*available* source for that field's category (a small, explicit table, `CONTRACTS.md` §4 — never one
+global order, since no single order is correct for every field). A companion invariant, INV-2b,
+prevents this from permanently hiding a genuine correction that only ever arrives through a
+lower-ranked channel: a disagreement between a lower-ranked source and the presented value triggers a
+targeted re-query of the top-ranked source rather than being discarded or adopted directly. Optimistic
+writes and Cross's operator-asserted heat order (both already a form of direct human assertion) sit
+outside the ranking table entirely, by necessity — Scenario B requires a write to be visible the
+instant it is submitted, before any ranking comparison could apply.
+
+This still satisfies the "why" above: replay determinism is unchanged, because the ranking table and
+each observation's `(source, observedAt)` are both fixed at ingest — nothing in the presentation rule
+depends on wall-clock time at replay, only on facts captured once, same as before. What changed is
+only that "the same input sequence" now includes which source each observation came from, not only
+when we received it.

@@ -60,6 +60,10 @@ type SourceTag = 'tcp' | 'cis' | 'xml' | 'operator-write' | 'operator-assertion'
 type Timestamp = string   // ISO-8601, always a wall clock, never "ms since start"
 ```
 
+A field's envelope, as delivered to a client, holds the single value the domain layer currently
+*presents* for it — chosen by the precedence rule in §4, which weighs source authority as well as
+recency. It is not simply whichever observation arrived last; §4 states exactly why not.
+
 Field meanings, precisely:
 
 - **`observedAt`** — when *our own ingest boundary* captured this observation. Captured the moment
@@ -417,16 +421,28 @@ for a third scheme to exist at all, rather than reconciling it with the other tw
 
 // t+10s — CIS poll corroborates (this deployment has CIS configured)
 // outcome.value unchanged; observedAt: '…T10:14:11.400Z', source: 'cis',
-// confidence: 'authoritative', provisional: false — the only fields that moved
+// confidence: 'authoritative', provisional: false — cis now outranks tcp for this
+// field-category (§4 INV-2) and has reported, so its observation is what's presented
 
-// run 1's own Attempt, "K1M_ST_BR1_6:9", is untouched throughout this sequence —
+// t+30s — the TCP Results rotation lands. Per §4 INV-2, this updates tcp's own
+// retained slot only — it does not touch what's presented, because cis remains
+// top-ranked-and-available for this field-category and has already reported.
+// outcome (presented) is UNCHANGED from t+10s: still source: 'cis', observedAt:
+// '…T10:14:11.400Z' — not overwritten by the t+30s message's own, later observedAt.
+// If the rotation's value disagrees with cis's, that disagreement is surfaced as a
+// diagnostic and triggers a fresh CIS GetResult for this bib (§4 INV-2b); it is never
+// adopted from tcp directly, and it never oscillates on the 30-second rotation period.
+
+// run 1's own Attempt, "K1M_ST_BR1_6:9", is untouched throughout this entire sequence —
 // still 'known', still the value observed when it finished, still not provisional,
 // because nothing in run 2's messages ever mentions it (§4 INV-1)
 ```
 
 No field of run 1's `Attempt` is touched by anything in run 2's timeline — not because the domain
 layer special-cases two-run races, but because nothing in §4's invariants gives a later message the
-power to alter a field it doesn't mention.
+power to alter a field it doesn't mention. And no field of run 2's `Attempt` oscillates once a
+higher-ranked source has reported it — not because the domain layer special-cases the rotation, but
+because §4 INV-2 never lets recency substitute for authority.
 
 ---
 
@@ -477,15 +493,71 @@ contract constrains.
   of absence of the fact — this is the maintainer's own framing, and it is why merge is per-field,
   never whole-object: `EVIDENCE.md` Exhibit 1's "Results replaces the whole object" is exactly the
   violation this invariant exists to make structurally impossible, not merely discouraged.
-- **INV-2 (freshness-gated replace).** A `known` field is replaced only by a strictly newer
-  `observedAt`. This is what lets a correction land — including one that arrives a week later,
-  against a Phase whose `status` is already `official` (§ maintainer answer A7) — while an
-  out-of-order or duplicate message changes nothing.
-  - Slalom scenario A's "late rotation" is this invariant in action: OnCourse's `dtFinish` transition
-    (sub-second) sets `Attempt.outcome` at `t+1s` with `confidence: inferred, provisional: true`;
-    when the up-to-30-second `Results` rotation or a CIS poll confirms it, that later `observedAt`
-    replaces the value (usually with the same number) and flips `confidence`/`provisional`
-    accordingly. Nothing is ever un-known in between.
+- **INV-2 (authority-gated replace).** A field is not one mutable slot compared only by recency. The
+  domain layer retains the latest `known` observation received *from each source* that has reported
+  the field; the value the contract presents is the latest observation from the **highest-ranked
+  source, among those `SourceStatus` (§2.8) currently reports available, that has reported this
+  specific field.** Ranking is **per field-category**, never one global order over `SourceTag` —
+  no single order is correct for every field (§6: `tcp` beats `cis` on timeliness for on-course
+  facts; `cis` beats `tcp` on completeness for a finished Attempt once one exists):
+
+  | Field category | Ranking, highest first |
+  |---|---|
+  | On-course position / running time (`Attempt.status = 'on-course'`) | `tcp` > `cis` |
+  | Finished slalom `Attempt.outcome` / `Attempt.gates` | `cis` > `tcp` > `xml` (CIS configured) — `tcp` > `xml` (not configured) |
+  | `Phase.status` | `tcp` > `xml` |
+
+  A source that is not currently top-ranked-and-available still has its own observation retained —
+  so it can surface later, see INV-2b — but does not change what's presented while a higher-ranked
+  source remains available and has reported. A *later* observation from the **currently-presented
+  source itself** always supersedes its own earlier one; an ordinary correction from an authoritative
+  source needs no special case, since presentation always reads that source's newest entry for as
+  long as it stays top-ranked-and-available — which is what still lets a correction land, including
+  one that arrives a week later against a Phase whose `status` is already `official`
+  (§ maintainer answer A7).
+
+  **`operator-write` and `operator-assertion` sit outside this table**, in two variants: **(a)
+  `provisional: true`** — an optimistic write awaiting one specific expected echo (a gate-penalty
+  correction we just issued, §2.9); presented the instant it is submitted, and the very next
+  observation of that field, from *any* source, unconditionally supersedes it, confirming or
+  `mismatched` — this is Scenario B's mechanism, unchanged. **(b) `provisional: false`** — an
+  assertion with no echo expected: a Kayak Cross operator's heat-order call (§2.6 — it is already the
+  final word, nothing confirms it further) or a direct correction entered against the cloud store
+  with no live on-site session to echo through (§8.5). Presented immediately; superseded only by a
+  *later* assertion of the same kind, or by the top-ranked automated source's own fresh, specifically
+  triggered report (INV-2b) — never by an incidental report from a lower-ranked automated source.
+
+  **This correction was made in review of an earlier draft**, which specified freshness only —
+  replace on strictly newer `observedAt`, full stop, no authority gate. That rule was unsound: a
+  message from a source with a worse answer for a given field could still displace a source with a
+  better one purely by arriving later in our own ingest order. Concretely, on a two-run race, a
+  CIS-confirmed total at `t=10s` could be pushed back out by a TCP `Results` rotation landing at
+  `t=25s` and pulled back at the next CIS poll — a value oscillating on the rotation period between
+  right and wrong, which is exactly the flicker the maintainer named as the reason monotonic merge
+  was wanted (§ maintainer answer A1), now slower, and worse for being harder to notice. Worth
+  recording precisely, since the *specific* illustration doesn't survive a check against
+  `DOMAIN-FACTS.md` §4 unchanged: when run 2 is genuinely better, TCP's own `Total` field already
+  equals run 2's value once Canoe123 has finished computing it, so this is not "TCP asserts the wrong
+  run's number forever." The real exposure is a source's content being transiently stale relative to
+  what a better source has already told us — rounding, a computation-in-progress window on Canoe123's
+  own side, or simply two sources answering the same question to different precision — and pure
+  recency-of-arrival has no defence against any of it. Slalom scenario A's "late rotation" walks the
+  fixed version: OnCourse's `dtFinish` transition (sub-second) sets `Attempt.outcome` at `t+1s`,
+  `source: tcp`, because `tcp` is the only source that has reported yet; a CIS poll at `t+10s`, if
+  configured, outranks it and becomes presented; the `t+30s` `Results` rotation updates `tcp`'s own
+  retained slot only, changing nothing presented — agreement or not, and regardless of which arrived
+  more recently.
+
+- **INV-2b (disagreement triggers a re-query, never a silent override).** When a lower-ranked
+  source's retained observation disagrees with the presented value, that disagreement is neither
+  discarded nor adopted directly — it is surfaced as a diagnostic (the same admin-facing audience as
+  `SourceStatus`) and, where the top-ranked source supports an on-demand query for that specific fact
+  (CIS's `GetResult`, for one race and bib, does), triggers one. The presented value changes only
+  from the top-ranked source's *own response* to that query, never from the lower-ranked source
+  directly. This is what stops INV-2's authority gate from permanently hiding a genuine correction
+  that only ever reaches us through a lower-ranked channel: a `PenaltyCorrection` entered over TCP
+  against a closed Phase still forces a fresh CIS read rather than sitting invisibly behind a CIS
+  observation nobody asked to refresh.
 - **INV-3 (`unavailable` is asserted, never defaulted).** `unavailable{reason}` is set only by an
   explicit domain-layer determination that no configured source can supply the field right now
   (e.g. gate detail for a superseded run 1, with CIS not configured). It is never the default state
@@ -499,11 +571,15 @@ contract constrains.
   organiser directly against the cloud store (§8.5) to compose safely with a bridge that might also
   still be pushing.
 
-These five invariants are what "verifiability" (`CONSTRAINTS.md` §4) reduces to in practice: given
-the same sequence of ingested messages with their true `observedAt` timestamps, the resulting state
-is a pure function of that sequence — replaying a recording is deterministic because nothing in the
-merge depends on wall-clock time at the moment of replay, only on the `observedAt` values captured
-at original ingest.
+These six invariants are what "verifiability" (`CONSTRAINTS.md` §4) reduces to in practice: given
+the same sequence of ingested messages, each carrying its true `observedAt` timestamp and known
+source, the resulting state is a pure function of that sequence — replaying a recording is
+deterministic because nothing in the merge depends on wall-clock time at the moment of replay, and
+nothing in it depends on which source shouted last, only on the ranking table above and the
+`observedAt` values captured at original ingest. Determinism was the property INV-2's freshness-only
+first draft also had — the authority gate does not trade it away; a re-query triggered by INV-2b is
+itself just another observation in the sequence, with its own `observedAt`, replayable exactly like
+any other.
 
 ---
 
@@ -663,9 +739,15 @@ The maintainer's answer on corrections (§ maintainer answer A7: disputes and mi
 to a week later) implies the on-site laptop is very likely no longer running by the time a
 correction is needed. **The ingest contract does not assume its caller is the bridge.** Any request
 authenticated for an event's organiser may `PUT` a correction directly against the cloud store —
-the endpoint shapes in §8.3 are exactly the ones used; INV-5's idempotent-upsert semantics are what
-let a direct organiser correction and a (possibly still-live) bridge push compose safely without
-special-casing which one "wins" — the one with the later `observedAt` does, always.
+the endpoint shapes in §8.3 are exactly the ones used, `source: 'operator-write'`,
+`provisional: false` — no echo is ever expected once the on-site session may be long over (§4 INV-2's
+carve-out (b)). It is presented immediately and composes safely with a possibly-still-live bridge
+push without special-casing which one "wins": a routine bridge push for the same field is an
+automated-source observation ranked below it and does not displace it (§4 INV-2); only a later human
+assertion, or a specifically-triggered fresh read from the top-ranked automated source (§4 INV-2b),
+ever supersedes a standing correction. INV-5's idempotent-upsert semantics are what let the two
+callers compose without a distributed lock — each `PUT` is retained per its own source, never a
+destructive overwrite of the other's slot.
 
 ### 8.6 What this contract refuses
 

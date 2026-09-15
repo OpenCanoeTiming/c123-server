@@ -30,8 +30,13 @@ own change, every push an idempotent upsert by identity.** Chosen (`CONTRACTS.md
 
 C. The unit of push is one Attempt (or one Category, Phase, or Entry) changing. Every push is an
 idempotent `PUT`, never an append — required both for safe retry and for `CONTRACTS.md` §8.5's
-requirement that a direct organiser correction and a possibly-still-live bridge push compose safely
-without special-casing which one "wins" (the later `observedAt` always does, §4 INV-2/INV-5).
+requirement that a direct organiser correction and a possibly-still-live bridge push compose safely.
+"Wins" is not decided by recency alone (§4 INV-2, amended after review — see `ADR-003`): a direct
+correction is asserted `provisional: false`, ranks above an automated bridge push for its field, and
+is superseded only by a later human assertion or a specifically-triggered re-read of the top-ranked
+automated source (§4 INV-2b) — never by a routine push arriving after it. INV-5's idempotent-upsert
+semantics are what let both callers compose without a distributed lock, each retained per its own
+source rather than overwriting the other's slot.
 
 **Tenancy is a public calendar, not a visibility policy per organiser.** The maintainer's answer,
 given directly: organisers should be visible to each other, modelled as a shared calendar of
