@@ -161,11 +161,16 @@ place doing the arithmetic, because there is no second domain layer to do it in.
 ### A — The late rotation
 
 Run 2 beats run 1. The domain layer does not wait for Canoe123's `Total`/`Pen` fields to say so —
-it computes `totalSeconds` itself from OnCourse's own `Time` and per-gate penalties the moment
-`dtFinish` transitions, because that arithmetic is ours to do and needs no upstream confirmation.
+it computes `totalSeconds` itself from OnCourse's own `Time` and per-gate penalties, because that
+arithmetic is ours to do and needs no upstream confirmation. **Not as a single computation at the
+instant `dtFinish` transitions** — `DERIVATIONS.md` §4.3 corrects that: real recordings show gate
+judging can still be catching up for several seconds after `dtFinish` fires, sometimes changing the
+total materially. The computation is ongoing, recomputed on each subsequent OnCourse message for the
+same Attempt, until the gate count is complete or `Results`/CIS supersedes it.
 
 - **t+1s:** `Attempt.outcome` set — `confidence: inferred`, `provisional: true` (TCP Results'
-  independently-sourced `Total`/`Pen`, or CIS, haven't corroborated yet). `Standing` recomputes
+  independently-sourced `Total`/`Pen`, or CIS, haven't corroborated yet, and the mechanical total may
+  still be revised by a trailing gate judgement, per `DERIVATIONS.md` §4.3). `Standing` recomputes
   immediately: this Entry's best total now beats their run 1 (retained in domain state by monotonic
   knowledge — see Scenario C for what backs it), so rank changes. `attempt.updated` and
   `standing.updated` push on-site and, in the same step, translate into the live-ingest push — not a

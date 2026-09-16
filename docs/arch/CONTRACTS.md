@@ -550,7 +550,10 @@ in the same in-memory domain state as everything else.
 `ARCHITECTURE.md` §6.A (values illustrative):
 
 ```ts
-// t+1s — dtFinish just transitioned; totalSeconds computed by us from OnCourse Time + gates
+// t+1s — dtFinish just transitioned; totalSeconds computed by us from OnCourse Time + gates.
+// Shown here as settled for a clean run with all gates already confirmed — DERIVATIONS.md §4.3
+// is the precise version: this computation is ongoing, not a single evaluation at this instant,
+// because real recordings show gate judging can still be in flight when dtFinish fires.
 {
   attemptId: "K1M_ST_BR2_6:9",
   entry: { state: 'known', value: { entryId: '30034.K1M_ST' }, observedAt: '…T10:14:02.100Z',
@@ -810,7 +813,10 @@ and an upstream-asserted one disagree, and what happens on a tie upstream doesn'
 
 The brief's required third list: what today's sources genuinely cannot supply, and what CIS buys
 where it is configured. **Availability of CIS is a deployment variable, not a project-wide given**
-(`CONSTRAINTS.md` §2.6) — every line below states its behaviour both with and without CIS.
+(`CONSTRAINTS.md` §2.6) — every line below states its behaviour both with and without CIS. This
+table says *whether*; `DERIVATIONS.md` says *how* — the actual source field, transformation,
+conditionality, and resulting envelope for every value below, checked against real recorded data
+rather than left as a claim.
 
 | Value | With CIS | Without CIS |
 |---|---|---|
