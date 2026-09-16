@@ -21,6 +21,7 @@ is intended to become permanent documentation.
 | `TEST-ARCHITECTURE.md` | Four test tiers, the fixture format, and the clock-control requirement that makes presentation-layer timing assertable |
 | `DERIVATIONS.md` | For every value `CONTRACTS.md` asserts: the exact upstream source field, transformation, conditionality, and resulting envelope — checked against real recorded data, not left as a claim |
 | `schemas/` | JSON Schema for the two wire shapes reused everywhere: the observation envelope and the error response |
+| `CONFORMANCE-VECTORS.md` + `vectors/tier1-conformance.json` | The tier-1 hand-authored conformance vectors `TEST-ARCHITECTURE.md` §3.1 calls for — format, coverage map, and what could not be written |
 
 ## Ground rules for this phase
 

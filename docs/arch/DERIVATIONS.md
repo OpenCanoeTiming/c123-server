@@ -241,7 +241,15 @@ live during BR1.** Envelope: unchanged from whatever §4.3/§4.4 already assigne
 `source`/`confidence`/`provisional` do not change just because a sibling Phase later completed.
 **Failure mode: `unavailable{reason: 'not-observed-live-and-cis-unavailable'}`** if this server was
 not running during BR1 *and* CIS is not configured for this deployment — the one case truly requiring
-external help.
+external help. **The precise trigger for this determination, made explicit here because writing a
+conformance vector for it exposed that it had not been stated:** this is `unavailable`, not `not-yet`,
+only once the domain layer can conclude the fact *should* exist and cannot be supplied — concretely,
+once BR2's own outcome has itself been observed (BR2 cannot exist without BR1 having already run) and
+neither a cached BR1 record nor a reachable CIS can supply it. Before BR2 has been observed at all,
+the correct state is still `not-yet` — the domain layer cannot yet distinguish "BR1 hasn't happened"
+from "BR1 happened but wasn't cached," and INV-1 requires it not to guess. `not-yet` and this
+`unavailable` case would otherwise look like the same absence from a distance; they are not, and the
+distinguishing condition is BR2's own arrival.
 
 **(b) CIS, queried against the superseded run's own `RaceId` specifically — checked, not assumed.**
 `CIS.GetResult(<BR1's RaceId>, bib)` remains fully and correctly queryable **indefinitely** after BR2
@@ -400,6 +408,12 @@ possibility, needed settling:
    constant.** The derivation in §4.6(b) is written to derive the width from the known gate count
    rather than hard-coding a number that the dossier itself only offers as an approximation —
    avoiding a latent bug rather than one already found.
+4. **§4.5(a)'s `unavailable` failure mode had no stated trigger, found while writing a conformance
+   vector for it, not while writing this document the first time.** `not-yet` (never observed) and
+   `unavailable` (observed to be absent) look identical from outside until the exact condition that
+   separates them is named: BR1's detail is `unavailable` only once BR2's own arrival lets the domain
+   layer conclude it *should* exist, never before. Added to §4.5(a) above. `docs/arch/vectors/
+   tier1-conformance.json`'s `two-run-br1-unavailable-no-cache-no-cis` is the vector that found this.
 
-No value marked `[D]` or `[A]` in `CONTRACTS.md` §6 turned out to be undeliverable; the two findings
-above are corrections to *how*, not reversals of *whether*.
+No value marked `[D]` or `[A]` in `CONTRACTS.md` §6 turned out to be undeliverable; the findings above
+are corrections to *how* and *when*, not reversals of *whether*.
