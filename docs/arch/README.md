@@ -28,3 +28,19 @@ is intended to become permanent documentation.
   piecemeal would destroy the evidence.
 - **Provenance of upstream behaviour stays in the private `c123-protocol-docs` repository.** This
   folder documents behaviour, not how it was established.
+
+## Deferred to implementation
+
+Recorded here rather than done now, because this branch is an architecture revision and
+nothing in it is merged or implemented yet.
+
+- **Retire `docs/SCOREBOARD-REQUIREMENTS.md` and `docs/INTEGRATION.md`.** These are the documents
+  in which the server tells clients how to interpret its data — Exhibit 6 of `inputs/EVIDENCE.md`,
+  and the clearest statement of the problem this revision exists to remove. The design obsoletes
+  them, but they accurately describe the system that is actually running, and `main` still has no
+  replacement. Deprecate them when the contract they are superseded by is implemented, not before:
+  pointing readers at a contract nothing implements would be worse than leaving them standing.
+- **An OpenAPI specification for §7 and §8.** Deliberately deferred as a derived artefact. If it is
+  ever written it must *replace* the `CONTRACTS.md` §7/§8 tables as the normative source rather
+  than sit alongside them — two sources of truth for one set of shapes is the disease this project
+  treats (`ADR-…`, and `CONTRACTS.md` §1.7 for the reasoning against writing it now).
