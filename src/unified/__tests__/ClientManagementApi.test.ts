@@ -377,5 +377,16 @@ describe('Client Management API', () => {
       expect(response.headers.get('Access-Control-Allow-Methods')).toContain('PUT');
       expect(response.headers.get('Access-Control-Allow-Methods')).toContain('DELETE');
     });
+
+    it('should advertise PATCH in Access-Control-Allow-Methods (regression #162)', async () => {
+      const response = await fetch(`${baseUrl}/api/clients/192.168.1.50/config`, {
+        method: 'OPTIONS',
+      });
+
+      expect(response.status).toBe(204);
+      // PATCH routes (e.g. /api/checks/:raceId/flag/:id, /api/live/config) are
+      // unreachable cross-origin unless the method is in the allow-list.
+      expect(response.headers.get('Access-Control-Allow-Methods')).toContain('PATCH');
+    });
   });
 });
