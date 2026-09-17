@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/OpenCanoeTiming/c123-server/compare/v0.12.0...v0.12.1) (2026-09-17)
+
+
+### Bug Fixes
+
+* add PATCH to CORS Access-Control-Allow-Methods ([#163](https://github.com/OpenCanoeTiming/c123-server/issues/163)) ([5953e39](https://github.com/OpenCanoeTiming/c123-server/commit/5953e398b2f8e8104c3f9e34109c2d2a0cf84dc5)), closes [#162](https://github.com/OpenCanoeTiming/c123-server/issues/162)
+
 ## [0.12.0](https://github.com/OpenCanoeTiming/c123-server/compare/v0.11.3...v0.12.0) (2026-08-03)
 
 
