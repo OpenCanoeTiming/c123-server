@@ -562,6 +562,7 @@ layer-implementation.md`, and the five named tools) — not the other way round.
 
 ## 10. Left open
 
+- ~~**The exact vector count and coverage for tier 1.**~~ **Resolved.** 35 vectors were written; the estimate did undercount, as the review suspected. Coverage map and the gaps that remain are in `CONFORMANCE-VECTORS.md` §2–§3. Original text follows for the record.
 - **The exact vector count and coverage for tier 1.** §3.1 gives a target range (~25–30) and method,
   not the vectors themselves — writing them is implementation, test-first, the same relationship
   `CONTRACTS.md` has to the server code it precedes. Raised directly under review: the §4 ranking
