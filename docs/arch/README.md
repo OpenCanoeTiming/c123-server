@@ -53,7 +53,9 @@ Its main outcomes:
 - CIS is no longer consumed;
 - standings relay Canoe123's own order;
 - re-runs are run generations;
-- `Category` is renamed `Class`, and age categories are first-class. Cross-references, section numbers, JSON validity and internal
+- `Category` is renamed `Class`, and age categories are first-class.
+
+Cross-references, section numbers, JSON validity and internal
 counts were mechanically verified. Hunting for internal inconsistency is largely spent ground.
 
 Where a human reviewer beats what has been done: whether the entity spine matches how officials

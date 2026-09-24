@@ -83,7 +83,7 @@ assembled `standing`, in order, plus `anomalies` (`CONTRACTS.md` §5).
 | INV-2 rule 1 (result row over inference) | `inv2-rule1-result-row-supersedes-inference`, `inv2-rule1-inference-never-supersedes-result-row` | 2 |
 | INV-2 rule 2 (TCP continuity) | `inv2-rule2-connected-tcp-beats-later-xml`, `-xml-takes-over-after-disconnect`, `-reconnect-does-not-restore-stale-tcp`, `-fresh-tcp-after-reconnect-wins`, `-xml-alone-at-cold-start` | 5 |
 | INV-2 rule 3 (single-source fields) | `inv2-rule3-single-source-field` | 1 |
-| INV-2 rule 4 (operator writes) | the six `operator-write-*` and `operator-assertion-*` vectors, including `superseded` | 6 |
+| INV-2 rule 4 (operator writes) | the six `operator-write-*` and `operator-correction-*` vectors, including `superseded` | 6 |
 | INV-2b (surfaced, never adopted) | `inv2b-disagreement-surfaced-not-adopted` | 1 |
 | INV-2c (older event refused) | `inv2c-older-event-refused`, `inv2c-does-not-apply-without-eventtime` | 2 |
 | INV-3 and the trichotomy | `trichotomy-known-zero-not-confused-with-absence`, `trichotomy-unavailable-persists-explicitly`, `inv3-not-applicable-external-id` | 3 |

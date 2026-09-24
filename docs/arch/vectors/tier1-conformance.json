@@ -1326,7 +1326,7 @@
       }
     },
     {
-      "id": "operator-assertion-not-displaced-by-redelivery",
+      "id": "operator-correction-not-displaced-by-redelivery",
       "invariant": "operator-write",
       "description": "A no-echo correction (provisional:false) is not displaced by a re-delivery of the value the source already held.",
       "given": [
@@ -1376,7 +1376,7 @@
       }
     },
     {
-      "id": "operator-assertion-displaced-by-changed-upstream-value",
+      "id": "operator-correction-displaced-by-changed-upstream-value",
       "invariant": "operator-write",
       "description": "A no-echo correction is displaced by a result observation that changes its source's retained value: a genuine later upstream correction.",
       "given": [
