@@ -21,7 +21,10 @@ hand-authored, with no shared runtime code (`DECISIONS/ADR-002`/`ADR-003`).
   - under review;
   - Cross placement.
 
-**55 vectors:** 47 merge vectors and 8 standing-assembly vectors. The number is what the coverage
+**Revision round 2** (`DECISIONS/ADR-015`) added 15 vectors for retraction, contradiction, marks over
+time, half-corrections, the re-baseline and the live tier's explicit reset.
+
+**70 vectors:** 62 merge vectors and 8 standing-assembly vectors. The number is what the coverage
 needed, not a target.
 
 ---
@@ -50,10 +53,18 @@ Each vector has:
 
   Observations are *resolved*: `DERIVATIONS.md` has already turned wire fields into these values.
   These vectors test the merge, not the derivation.
-- **Connection events.** Each has `ingestSeq`, `event` and `observedAt`. The events are
-  `tcp-disconnected`, `tcp-connected`, `xml-rewrite-detected`, `oncourse-empty` and `oncourse-left`
-  (this Attempt stopped being listed). They exist
-  because INV-2's rule 2 depends on TCP continuity.
+- **Connection and operator events.** Each has `ingestSeq`, `event` and `observedAt`. The events are
+  `tcp-disconnected`, `tcp-connected`, `xml-rewrite-detected`, `oncourse-empty`, `oncourse-left`
+  (this Attempt stopped being listed) and `rebaseline` (with `scope`). They exist because INV-2's
+  rule 2 depends on TCP continuity, INV-7's guard on the rewrite time, and the re-baseline is an
+  event in the ingest sequence.
+- **Scope snapshots** (INV-7). `{ ingestSeq, snapshot: { source, phaseId, mode, rows }, observedAt }`.
+  `mode` is `results` or `start-list`; each row carries `bib` and the resolved fields the row states
+  (`outcome`, `placement`, `pairTotal`, `status` for a mark, `finishTime`, `judgingComplete`, and
+  `timeEmpty` for a second-run row with no run-2 time). A row that carries nothing states no result.
+- **On-course listing.** An observation with `field: 'onCourse'` and
+  `value: { dtStart, dtFinish }` states what the on-course stream lists for the Attempt (INV-2d).
+- A `kind: 'fragment'` observation stands for any single-row, non-snapshot message.
 
 **`expect` is the presented state after the last given.**
 - An envelope field left out of `expect` is not asserted.
@@ -89,6 +100,12 @@ assembled `standing`, in order, plus `anomalies` (`CONTRACTS.md` §5).
 | INV-2 rule 1, `gates` cell-wise | `gates-blank-result-cell-keeps-judged-oncourse-cell`, `gates-result-vector-authoritative-after-leaving` | 2 |
 | INV-2 rule 2 exception (marks on silent paths) | `left-without-finish-then-mark-from-xml`, `xml-mark-does-not-override-tcp-finish` | 2 |
 | `left-without-finish` | `left-without-finish-observed-not-dnf` | 1 |
+| INV-7 (retraction) | `retraction-vanished-row-first-run`, `-dns-cleared-then-races`, `-start-list-mode-clears-all`, `-does-not-touch-inference`, `-second-run-time-empty-keeps-placement`, `-from-xml-row-cleared`; the guard: `retraction-xml-guard-rewrite-before-push` | 7 |
+| INV-1 against retraction (omission is not absence) | `retraction-not-from-fragment`, `retraction-not-in-other-race-snapshot` | 2 |
+| INV-2d (contradiction by the on-course stream) | `contradiction-oncourse-running-again` | 1 |
+| Marks over time; half-corrections | `status-overrides-time`, `half-correction-snapshot-duplicate-finish` | 2 |
+| Re-baseline | `rebaseline-discards-stale-tcp-and-rebuilds-from-xml`, `rebaseline-keeps-writes-and-generation` | 2 |
+| Live tier explicit reset | `live-explicit-not-yet-resets-field` | 1 |
 | INV-2 rule 3 (single-source fields) | `inv2-rule3-single-source-field` | 1 |
 | INV-2 rule 4 (operator writes) | the six `operator-write-*` and `operator-correction-*` vectors, including `superseded` | 6 |
 | INV-2b (surfaced, never adopted) | `inv2b-disagreement-surfaced-not-adopted` | 1 |
@@ -137,3 +154,9 @@ presented-state fact, covered by `inv2b-disagreement-surfaced-not-adopted`.
 3. **Unplaced entries needed a stated order** to be a well-formed vector. `CONTRACTS.md` §5 step 3
    now states it: `AttemptStatus` declaration order, then bib.
 4. **INV-2b needed a stated diagnostic shape.** `CONTRACTS.md` §4 and §7.1 now state it.
+5. **Scope snapshots needed their own `given` shape** (round 2). A retraction is a statement about a
+   whole race, not about one field, so a per-field observation could not express "this row is
+   absent". The `snapshot` element is that shape; its `mode` is what makes start-list mode
+   expressible.
+6. **The XML write-time guard needed the poll interval in `context`** (`xmlPollIntervalSeconds`),
+   because the guard is defined in terms of it.
