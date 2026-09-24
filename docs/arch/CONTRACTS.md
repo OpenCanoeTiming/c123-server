@@ -1085,6 +1085,12 @@ value of its own: every presented value still carries `tcp` or `xml`. It is as c
 snapshot it reads, and that snapshot can capture half a correction; the response reports the
 snapshot's write time, and the action is safe to repeat once the correction is complete.
 
+The re-baseline is an admin action only; venue boards do not expose it. While a half-correction
+stands, clients present what upstream states, with no hiding and no marking. A duplicate finish is
+an admin diagnostic only. The upstream operator's own remedy is to force an XML save in Canoe123
+after the correction. The file watch picks up the new snapshot within one poll interval, and it
+applies as a scope snapshot under INV-7.
+
 **Determinism.** Given the same sequence of ingested observations, each carrying its source, kind,
 run generation and ingest sequence, plus the same TCP connection events and re-baseline events, the
 presented state is a pure function of that sequence. Nothing depends on wall-clock time at replay.
