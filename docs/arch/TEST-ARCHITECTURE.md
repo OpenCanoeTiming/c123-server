@@ -83,7 +83,7 @@ exactly where the maintainer warned it would.
 
 ### 3.1 Tier 1 — Contract conformance
 
-**What it proves:** an implementation of the merge rule (`CONTRACTS.md` §4's eight invariants and the
+**What it proves:** an implementation of the merge rule (`CONTRACTS.md` §4's ten invariants and the
 precedence rules) is correct, in isolation, with no recording and no running server.
 
 **Who this applies to:** exactly the two components that implement the merge rule —

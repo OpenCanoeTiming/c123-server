@@ -212,6 +212,7 @@ client may parse it. Codes used anywhere in §7 or §8, each with the HTTP statu
 | `unauthorized` | 401 | §8 — missing or unrecognised `X-API-Key` |
 | `forbidden` | 403 | §8 — key recognised but revoked or suspended |
 | `rate-limited` | 429 | §8.3 — carries an HTTP `Retry-After` header, seconds |
+| `source-unavailable` | 409 | §7.1 re-baseline — the XML snapshot is not configured, not readable, or did not validate; `error.details` says which |
 
 §7 has no `unauthorized`/`forbidden` — the on-site network is trusted (`CONSTRAINTS.md` §1.2, venue
 LAN), and no operation in §7 requires a credential, matching today's precedent.
@@ -591,9 +592,37 @@ removed the athlete, and no finish exists.
   terminal, on paths that push nothing on TCP (observed upstream behaviour). Of 145 recorded status
   transitions, 45% reached TCP only on another athlete's push or by rotation: median 20–52 s, worst
   about 600 s.
-- **Where the reason comes from.** The mark follows from the XML snapshot at about 35 s (§4 INV-2,
-  rule 2's exception), or from TCP's next push of the race, whichever comes first.
+- **Where the reason comes from.** The mark follows from the XML snapshot at the next save (§4
+  INV-2, rule 2's exception; one save cycle, 35 s at the recorded venue), or from TCP's next push of
+  the race, whichever comes first. A late DNS is acceptable (maintainer answer, round 2): the athlete
+  never reached the course.
 - Kayak Cross never uses this status: a whole heat leaves the list together, by design.
+
+**Retraction** (`DECISIONS/ADR-015`; §4 INV-7). Results move. A DNS is cleared when the athlete turns
+up, a result is deleted, a finish is moved to the right bib. Upstream states such a removal only as
+absence in a complete statement of the race: a row missing from a TCP result push, or a row emptied
+in the XML snapshot. The domain layer turns that absence into an explicit retraction:
+- the retracted fields become `not-yet`, and the change is pushed like any other;
+- `status` returns to what the on-course stream currently shows for the Attempt (`at-start`,
+  `on-course`), else `not-started`;
+- an on-course inference is never retracted by a result push, because a race's push can precede the
+  row being written.
+
+**A stale finish is contradicted by the on-course stream** (§4 INV-2d). Taking a finish away on
+upstream's on-course grid does not clear the stored result, so later pushes keep carrying it. Two
+recorded cases showed a false leader for 31 s and 71 s. The only immediate evidence is the on-course
+stream listing the bib running again, with the same start and no finish. When that happens:
+- `status` returns to `on-course`, `outcome` to `running`, and `placement` to `not-yet`;
+- rows carrying the contradicted finish time stay unpresented until a row carries a different
+  finish, a mark or a retraction, or the on-course stream shows a finish again;
+- the contradiction is surfaced as a `contradicted-finish` diagnostic (§7.1).
+
+**A mark overrides a time.** A result row can carry a mark and a time at once; a duplicate finish
+was once resolved by marking one athlete DNF while both rows kept the same finish for hours. A row
+with a mark presents `no-result`, whatever time it carries.
+
+**Duplicate finishes are surfaced, never resolved by us.** Two Attempts of one Phase presenting the
+same finish time raise a `duplicate-finish` diagnostic. The operator resolves it upstream.
 
 **Marks.**
 - `status` carries upstream's full result-mark vocabulary (`DERIVATIONS.md` §4.1).
@@ -698,6 +727,13 @@ type ConnState = 'connected' | 'reconnecting' | 'unreachable'
 states it. Switching to a backup instance is the timekeeper's manual work: the server is re-pointed by
 hand (maintainer answer Q8). Automatic failover is **out of scope**. The field exists only so the
 admin UI can show which instance is live.
+
+**`xml.lastRewriteDetectedAt`** is the moment the last change of the file was detected. The file is
+written on a timer whose interval is a venue setting (65 s by default; 35 s at the recorded NKZ), and
+only when upstream has flagged a change: an operator edit, an import, or a slalom rank change. It is
+never written in upstream's offline mode. The Kayak Cross heat ranking sets no such flag, so Cross
+heat results reached the file 1.5–10 min late in a recording. For Cross, TCP is the only fast source.
+Readers validate every read and retry: the write is a copy over the file, not an atomic rename.
 
 **`timingClockOffsetSeconds`** is the offset of Canoe123's timing clock from the server clock,
 measured from upstream's once-a-second time-of-day message. It is a diagnostic only. Nothing is ever
@@ -870,6 +906,12 @@ reliable signal that a Phase's results changed is ordinary field-level change: a
 - **Post-finish decisions and corrections:**
   - `finished → non-ranked | dsq | dsq-r | dqb | ral | other`;
   - any no-result status `→ finished`, when a mark is withdrawn.
+- **Retraction and contradiction** (`DECISIONS/ADR-015`), all routine in-race corrections:
+  - `finished → on-course`, when the on-course stream lists the Attempt with its start and no
+    finish: the finish was taken away (§4 INV-2d);
+  - `finished | non-ranked` or any no-result status `→ not-started | at-start | on-course`, on a
+    retraction (§4 INV-7): the row vanished, or a DNS was cleared; the target is what the on-course
+    stream currently shows, else `not-started`.
 - **Re-run** (`DECISIONS/ADR-013`): `finished` or any no-result status `→ at-start | on-course`,
   **only together with a `run` increment.** This is the one transition that retracts known facts. It
   is explicit and observed, never inferred from omission.
@@ -884,17 +926,23 @@ reverts its status.
 These are the contract's answer to `EVIDENCE.md` Exhibit 1. They are invariants a merge
 implementation must satisfy, not an algorithm.
 
-**Kinds of observation.** Every observation of an Attempt fact is one of three kinds:
+**Kinds of observation.** Every observation of an Attempt fact is one of four kinds:
 - an **on-course inference**, computed by the domain layer from the TCP on-course stream;
 - a **results-table observation**: a TCP result push, or an XML snapshot row. Both are renderings of
   Canoe123's own results table;
+- a **scope snapshot**: a complete statement of one race's results table. Exactly two messages are
+  scope snapshots: a TCP result push, for the race it names, and an XML snapshot, for every race in
+  it. Nothing else is. An on-course message describes one participant; a UDP fragment describes one
+  row and is not consumed at all (`DECISIONS/ADR-011`); a disconnected source says nothing. A TCP
+  result push was complete in 17,496 of 17,496 recorded messages;
 - an **operator write** (`operator-write`).
 
-- **INV-1 (monotonic knowledge, per run generation).** A field's `state` never regresses from `known`
-  to `not-yet` or `unavailable` because a later message omits it. Merge is per field, never
-  whole-object. The single exception is a new run generation (`DECISIONS/ADR-013`). It retracts the
-  run-scoped fields (§2.6) explicitly, on observed upstream evidence of a re-run, and is pushed as an
-  ordinary change.
+- **INV-1 (monotonic knowledge against omission, per run generation).** A field's `state` never
+  regresses from `known` to `not-yet` or `unavailable` because a message **omits** it. Omission is:
+  a non-snapshot message that does not mention the field, a source that is missing or disconnected,
+  or a scope snapshot of *another* race. Merge is per field, never whole-object. Two things are not
+  omission and do retract, explicitly and pushed: a scope snapshot's stated absence (INV-7) and a
+  new run generation (`DECISIONS/ADR-013`).
 - **INV-2 (precedence).** The domain layer retains the latest observation *per source* for each field.
   The presented value is chosen as follows:
   1. **A results-table observation supersedes an on-course inference** of the same run generation, and
@@ -929,8 +977,9 @@ implementation must satisfy, not an algorithm.
 
      So an `xml` observation of `status` carrying a no-result mark supersedes a presented `tcp` status
      of `not-started`, `at-start` or `left-without-finish`. None of those is a mark, and none can be a
-     finish. This is how the reason for `left-without-finish` arrives at about 35 s, not at TCP's next
-     incidental push (§2.6). **Otherwise the later-ingested observation
+     finish. This is how the reason for `left-without-finish` arrives at the next save, not at TCP's
+     next incidental push (§2.6). The write-time guard of INV-7 applies: the snapshot must have been
+     written after the `tcp` observation it displaces. **Otherwise the later-ingested observation
      wins.** This covers two cases:
      - During an outage, a snapshot rewrite *detected after the disconnect* takes over.
      - After reconnection, TCP's pre-outage observations no longer outrank a snapshot that was read
@@ -955,7 +1004,9 @@ implementation must satisfy, not an algorithm.
   can disagree with the presented one after both have settled. Such a disagreement is surfaced as an
   admin diagnostic,
   `{ kind: 'source-disagreement'; attemptId: string; field: string; sources: SourceTag[] }`, served by
-  `GET /api/diagnostics` (§7.1), the same audience as `SourceStatus`. It never changes the presented
+  `GET /api/diagnostics` (§7.1), the same audience as `SourceStatus`. Two further diagnostic kinds
+  live there: `{ kind: 'contradicted-finish'; attemptId; finishTime }` (INV-2d) and
+  `{ kind: 'duplicate-finish'; phaseId; finishTime; bibs: string[] }` (§2.6). It never changes the presented
   value by itself. There is no
   re-query: no on-demand source remains (`DECISIONS/ADR-011`), and neither remaining source can hold
   a correction back.
@@ -963,6 +1014,42 @@ implementation must satisfy, not an algorithm.
   both carry an `eventTime`, a candidate with a strictly earlier `eventTime` never supersedes,
   whatever rule 2 says. In practice this protects a re-run: the re-run's finish is later than the run
   it replaces, so a stale row describing the replaced run cannot come back (`DECISIONS/ADR-013`).
+- **INV-2d (the on-course stream contradicts a stale finish).** When the on-course stream lists an
+  Attempt with the current generation's start and no finish, after a finish was presented for it
+  from a results-table observation, that finish is **contradicted**:
+  - `status` returns to `on-course`, `outcome` to the on-course `running` value, `placement`,
+    `pairTotal` and `countingRun` to `not-yet`;
+  - every results-table observation of this Attempt whose finish time equals the contradicted one
+    stays retained and unpresented;
+  - the contradiction is lifted by a results-table observation carrying a different finish time, a
+    mark, or a retraction (INV-7), or by the on-course stream listing the Attempt with a finish again.
+
+  Evidence: taking a finish away on upstream's on-course grid does not clear the stored result, so
+  later pushes keep carrying it. Seven recorded cases; two of them showed a false leader for 31 s and
+  71 s. Kayak Cross is exempt: its on-course stream never shows a finish (§2.6).
+- **INV-7 (a scope snapshot's stated absence is a retraction).** For an Attempt whose presented
+  result fields came from results-table observations, a scope snapshot of its race that states no
+  result is a retraction observation:
+  - **TCP, first-run or single-run race:** the row is absent, or the message is in start-list mode
+    (no row carries a placement or a mark; upstream falls back to that mode exactly when nobody is
+    ranked, which is what "delete all results" produces). Retracted: `outcome`, `gates`,
+    `placement`, `underReview`, `qualified`, and any mark in `status`.
+  - **TCP, paired second run:** the row is absent: as above, plus `pairTotal` and `countingRun`. The
+    row is present with an empty time and no mark: `outcome` and `gates` of run 2 are retracted;
+    `placement` and `pairTotal` follow the row, since an athlete with only a first-run result is
+    listed that way.
+  - **XML:** the row carries no time, no finish time and no mark: as the TCP first-run case.
+  - **Never retracted:** an on-course inference, `entry`, `bib`, `startOrder`, `heat`, `startLane`,
+    `run`, or a field whose Attempt was never present in a results-table observation.
+  - **XML retractions are guarded by write time.** The snapshot lags TCP by up to a save cycle, so a
+    snapshot written before a result push must not undo it. An XML retraction, and the mark
+    exception of rule 2, apply to a `tcp` observation only when the rewrite was detected more than
+    one poll interval after that observation was ingested. Otherwise the snapshot is ignored for that
+    field, and the next snapshot settles it. This is a content-age guard on our own clock, like
+    INV-2c, not an ordering rule; INV-6 still orders the merge.
+  - A retraction is an explicit observation with its own ingest sequence, pushed as `not-yet`
+    values. It is the routine case of a cleared DNS, a deleted result, or a finish moved to the
+    right bib.
 - **INV-3 (`unavailable` is asserted, never defaulted).** `unavailable{reason}` is set only by an
   explicit determination that the fact cannot be supplied, or does not apply. It is never the default
   for "this message did not include the field".
@@ -977,9 +1064,30 @@ implementation must satisfy, not an algorithm.
   cannot reorder a merge decision. The sequence is exposed on the wire only as `seq` (§1.6), for
   reconciliation.
 
+**The operator re-baseline** (`DECISIONS/ADR-015`; §7.1). What no message will ever clear, the
+operator can: a stale row upstream keeps sending, or a half-correction that never completed. The
+re-baseline, per Phase or per Event:
+1. discards every retained upstream observation (`tcp` and `xml`), every contradiction record and
+   every diagnostic for the scope's result fields: `status` marks, `outcome`, `gates`, `splits`,
+   `faults`, `placement`, `pairTotal`, `countingRun`, `underReview`, `qualified`. Identities,
+   `entry`, `bib`, `startOrder`, `heat`, `startLane`, `run`, `VerificationState` and every
+   `WriteRequest` survive; a pending write stays pending;
+2. reads the current XML snapshot, validated, and ingests it as a scope snapshot with a fresh ingest
+   sequence. If no valid snapshot can be read, the action fails with `409 source-unavailable` and
+   changes nothing;
+3. lets the on-course stream and the next TCP push of each race in scope refill the `tcp` slots.
+   Under rule 2 the `xml` observation is presented until then, because the `tcp` slots are empty;
+4. pushes the whole scope to every on-site client as `scope.replaced` (§7.2), and to live as a Phase
+   replace (§8.3).
+
+The re-baseline is an event in the ingest sequence, so replay stays deterministic. It asserts no
+value of its own: every presented value still carries `tcp` or `xml`. It is as correct as the
+snapshot it reads, and that snapshot can capture half a correction; the response reports the
+snapshot's write time, and the action is safe to repeat once the correction is complete.
+
 **Determinism.** Given the same sequence of ingested observations, each carrying its source, kind,
-run generation and ingest sequence, plus the same TCP connection events, the presented state is a
-pure function of that sequence. Nothing depends on wall-clock time at replay.
+run generation and ingest sequence, plus the same TCP connection events and re-baseline events, the
+presented state is a pure function of that sequence. Nothing depends on wall-clock time at replay.
 
 ---
 
@@ -1056,11 +1164,12 @@ and nothing below depends on it. `DERIVATIONS.md` says *how* each value is produ
 | Slalom finish | [D] finish-time transition, TCP, authoritative |
 | Result, penalties, class placement, combined placement | [D] TCP result push, median 0.14–0.41 s after the finish impulse (1,533 finishes). Also [D] from the XML snapshot, the complete record at cold start |
 | A second run's own time, penalties and gates, including when run 1 is the better run | [D] TCP result push. The time and the gate cells are run 2's own; penalty = sum of the cells. Upstream's `Pen`/`Total` on that row describe the counting run and are never used for run 2. Matched the snapshot in 982 of 982 second-run finishes |
+| A retraction: a cleared DNS, a deleted result, a finish moved to the right bib | [D] TCP result push, immediate when the correction was made in the results grid; at the race's next push or rotation (up to ~10 min) when made on a silent path; the XML snapshot at one save cycle. A finish taken away on the on-course grid is never cleared upstream: it is contradicted by the on-course stream at once (§4 INV-2d), and cleared for good only by the operator's re-baseline |
 | Result marks (DNS, DNF, DSQ, …) | [D] Immediate when entered in the results grid, by the scoring session, or after a finish. Late when entered on the silent paths (start-terminal DNS, removal before a finish): then from the XML snapshot at ~35 s, or TCP's next push of the race. The fact that the athlete *left without a finish* is immediate, and carries no reason (§2.6) |
 | Whether the result may still move | [D] from gate completeness against the course layout, plus run closure (§1.2) |
 | Run 1's detail, once run 2 has superseded it on TCP | [D] XML snapshot, unconditionally. Also from this server's own retained observation of run 1 |
 | Age-category standing | [D] assembled from class placement and the entry's category, at class-rank latency. The snapshot's own category ranks follow ~20 s later, as a check |
-| Kayak Cross heat order | [D] operator assertion via the result push, as upstream placement |
+| Kayak Cross heat order | [D] operator assertion via the result push, as upstream placement. TCP only in practice: the XML snapshot carried Cross heat results 1.5–10 min late, because the Cross ranking never triggers a save |
 | Event metadata: title, venue, dates | [D] XML snapshot. Dates are operator-entered and fallible |
 | Multi-day grouping | [D] from each Phase's own date. The *identity* of a multi-day event is asserted, never derived (§2.2) |
 | Members, club, nation, age category, birth date | [D] XML snapshot. Club and name are also in TCP result rows |
@@ -1097,9 +1206,14 @@ Every response except `/api/sources` carries `asOfSeq: number` (§1.6) at the to
 | `GET /api/classes/{classId}/entries` | `{ asOfSeq, entries: Entry[] }` | `404 class-not-found` |
 | `GET /api/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }` | `404 phase-not-found` |
 | `GET /api/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`: every scope of §5, for the whole class and per age category | `404 class-not-found` |
-| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[] }`: every Attempt currently on upstream's on-course list with status `at-start` or `on-course`, across every running Phase. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid | — |
+| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null }`: every Attempt currently on upstream's on-course list with status `at-start` or `on-course`, across every running Phase. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8) | — |
 | `GET /api/sources` | `SourceStatus`, unwrapped | — |
-| `GET /api/diagnostics` | `{ asOfSeq, diagnostics: Diagnostic[] }`: current INV-2b source disagreements. Admin audience only | — |
+| `GET /api/diagnostics` | `{ asOfSeq, diagnostics: Diagnostic[] }`: current source disagreements, contradicted finishes and duplicate finishes (§4). Admin audience only | — |
+| `POST /api/rebaseline` | body `{ "scope": { "kind": "phase", "phaseId": string } \| { "kind": "event" } }`. `200 { asOfSeq, scope, snapshotWrittenAt, snapshotDetectedAt, attempts: number }`: the operator re-baseline (§4). Admin audience only; safe to repeat | `404 phase-not-found`; `409 source-unavailable` |
+
+**Which competitor to feature** is a presentation decision (`ARCHITECTURE.md` §2). The default the
+maintainer named is the athlete next to pass the finish: the first Attempt in this list.
+`featuredByUpstream` is offered as an optional alternative, never as the default.
 
 Membership of the on-course list is tracked from the on-course stream.
 - An Attempt leaves the list when:
@@ -1119,6 +1233,11 @@ Every message carries `seq` (§1.6).
   fields. An omitted field is untouched, never reset. A run-generation change is sent as explicit
   `not-yet` values (INV-1).
 - `standing.updated`, `course.updated`, `write.updated` and `sources.updated` carry the whole resource.
+- **A retraction** (§4 INV-7) or a contradiction (INV-2d) is sent as `attempt.updated` with explicit
+  `not-yet` values, never by omission.
+- **`scope.replaced`** carries every Attempt and every Standing of a scope after a re-baseline
+  (§4). A client applies it as a **replace**: Attempts of that scope absent from the message are
+  removed. It is never merged.
 
 ```json
 { "seq": 1044, "type": "attempt.updated", "attemptId": "K1M_BR2_6:9",
@@ -1128,6 +1247,11 @@ Every message carries `seq` (§1.6).
               "placement": { "state": "not-yet" }, "status": { "state": "known", "value": "on-course", ... } } }
 { "seq": 1046, "type": "standing.updated", "standing": { "standingKey": "pair:K1M_BR2_6/all", ... } }
 { "seq": 1047, "type": "write.updated", "write": { ...WriteRequest... } }
+{ "seq": 1048, "type": "attempt.updated", "attemptId": "K1W_BR1_19:53",
+  "fields": { "status": { "state": "known", "value": "not-started", ... }, "outcome": { "state": "not-yet" },
+              "placement": { "state": "not-yet" } } }
+{ "seq": 1049, "type": "scope.replaced", "scope": { "kind": "phase", "phaseId": "K1M_BR1_19" },
+  "attempts": [ ...Attempt... ], "standings": [ ...Standing... ] }
 ```
 
 Clients **must** follow §1.6's subscribe-before-snapshot sequence.
@@ -1203,13 +1327,18 @@ with `error.details` naming the field.
 | `PUT /ingest/v2/courses/{courseId}` | `{ "gates": [{ "number": number, "kind": "downstream"\|"upstream" }], "sectorEndsAfterGate": number[], "splitsAfterGate": number[] }` |
 | `PUT /ingest/v2/phases/{phaseId}` | `{ "classId": string, "kind": "race"\|"classification", "scoringKind": "duration"\|"ordinal", "pair": { "role": "first"\|"second", "siblingPhaseId": string, "combination": "best"\|"sum" } \| null, "heats": boolean, "date": "YYYY-MM-DD", "courseId": string \| null, "scheduledStart": Timestamp \| null, "programmeOrder": number \| null, "title": string \| null, "status": PhaseStatus }` |
 | `PUT /ingest/v2/entries/{entryId}` | `{ "classId": string, "displayName": string, "club": string \| null, "nation": string \| null, "ageCategoryId": string \| null, "eventBib": string \| null, "members": [{ "givenName": string, "familyName": string, "birthDate"?: "YYYY-MM-DD", "externalId": { "scheme": string, "value": string } \| null }] }` |
-| `PUT /ingest/v2/attempts/{phaseId}/{bib}` | any non-empty subset of the `Observed` fields of §2.6, each wrapped per §1.2 |
+| `PUT /ingest/v2/attempts/{phaseId}/{bib}` | any non-empty subset of the `Observed` fields of §2.6, each wrapped per §1.2. **An explicit `{ "state": "not-yet" }` resets that field** |
+| `DELETE /ingest/v2/attempts/{phaseId}/{bib}` | no body. `204` whether or not the Attempt existed; the Attempt and its standing entries are removed |
+| `PUT /ingest/v2/phases/{phaseId}/attempts` | `{ "attempts": [ { "bib": string, ...the Observed fields of §2.6 } ] }`: **replaces every Attempt of the Phase**; Attempts absent from the body are removed. This is what an on-site re-baseline (§4) emits |
 
 - **No format token on `Phase`.** The live contract carries only the structural properties of the
   format: `kind`, `scoringKind`, `pair` and `heats`. A vendor's round names would not fit a
   Canoe123-shaped vocabulary (`DECISIONS/ADR-007`).
-- **Attempt pushes are partial. An omitted field is untouched.** A run-generation change is pushed as
-  `run` together with explicit `not-yet` for the retracted fields. **Every completed Attempt's `gates`
+- **Attempt pushes are partial. An omitted field is untouched; an explicit `not-yet` resets it.** A
+  run-generation change, a retraction and a contradiction (§4) are all pushed as explicit `not-yet`
+  values. A store that cannot reset a field, delete an Attempt or replace a Phase cannot carry a
+  correction at all: today's live path is upsert-only, and no clear ever reaches it
+  (`EVIDENCE.md` Exhibit 12). **Every completed Attempt's `gates`
   must eventually be pushed:** that is the fix for `EVIDENCE.md` Exhibit 9.
 - **`externalId` is a required key per member, with `null` allowed.** Omitting it is
   `400 validation-failed`. So is a bare string, or an object without `scheme`. In the store, a `null`
@@ -1259,7 +1388,8 @@ out-of-band.
 
 **Push transport: Server-Sent Events.** `GET /public/events/{eventId}/stream`, with
 `Accept: text/event-stream`. It carries `attempt.updated`, `phase.updated`, `entry.updated`,
-`class.updated`, `course.updated` and `standing.updated`, in §7.2's shapes. It never carries
+`class.updated`, `course.updated`, `standing.updated` and `scope.replaced`, in §7.2's shapes. A
+`scope.replaced` is applied as a replace, exactly as on-site. The stream never carries
 `write.updated` or `sources.updated`. §1.6's subscribe-before-snapshot sequence applies.
 
 ### 8.5 Corrections after the on-site session has ended
@@ -1279,7 +1409,8 @@ This is also how a mis-bibbed run is corrected: `entry` is re-pointed (INV-4).
 - A raw vendor payload of any kind: `400 vendor-payload-rejected`.
 - A body that matches none of §8.3's shapes, including one missing a required identity key:
   `400 validation-failed`.
-- Any non-idempotent operation. There is no "append a result", only "assert the current value".
+- Any non-idempotent operation. There is no "append a result", only "assert the current value",
+  "reset this field", "delete this Attempt" and "replace this Phase's Attempts", each idempotent.
 - A value outside the closed vocabularies: `400 validation-failed`. This covers `discipline`,
   `scoringKind`, `kind`, `combination`, statuses and marks. A different timing system's bridge
   translates into these vocabularies; it does not extend them.

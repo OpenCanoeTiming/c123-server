@@ -20,7 +20,8 @@
             "vendor-payload-rejected",
             "unauthorized",
             "forbidden",
-            "rate-limited"
+            "rate-limited",
+            "source-unavailable"
           ]
         },
         "message": {
