@@ -233,8 +233,23 @@ which may be a start-list row a day ahead.
 - Every `OnCourse` message carries one participant, its `@Position` (`courseOrder`), and `@Total`,
   the number on course.
 - A bare `<OnCourse Total="0" Position="0"/>` with no children is upstream's explicit "course empty".
-- An Attempt leaves the list when upstream stops listing it, or on "course empty". This never changes
-  its status (`CONTRACTS.md` §7.1).
+- An Attempt leaves the list when upstream stops listing it, or on "course empty". OnCourse re-sends
+  every listed athlete at least once a second, so "stopped listing" is detectable within about a
+  second.
+
+**`left-without-finish`, slalom only.**
+- **The rule.** An Attempt that leaves the list with `dtFinish` never observed becomes
+  `left-without-finish`, `confidence: 'authoritative'`. What is asserted is that upstream removed the
+  athlete; no reason is inferred.
+- **Why a separate status.** Removal before a finish with DNF or DSQ, and DNS from the start judge's
+  terminal, push nothing on TCP (observed upstream behaviour). Of 145 recorded transitions:
+  - 59 arrived in their own immediate push;
+  - 21 at run closure, about 20 s later;
+  - 57 on another athlete's push: median 20–52 s, worst 522 s;
+  - 8 only by rotation, up to about 600 s.
+- **Where the mark comes from.** The XML snapshot at about 35 s (INV-2, rule 2's exception), or TCP's
+  next push of the race.
+- Kayak Cross never uses it.
 
 **Result marks, closed-set mapping.**
 - Sources:
@@ -248,9 +263,11 @@ which may be a start-list row a day ahead.
   - `*` means `underReview: true`, with the run otherwise `finished`.
   - Empty with a time means `finished`.
   - Any other value maps to `other`.
-- **No-results arrive only here.**
-  - They come at result-push latency, event-driven, because a removal with a mark recalculates the
-    race.
+- **No-results arrive only here, and not always promptly.**
+  - A mark typed in the results grid, set by the scoring session, set after a finish, or set at run
+    closure is pushed immediately.
+  - A mark set on the silent paths (start-terminal DNS, removal before a finish) reaches TCP only with
+    the race's next push or its rotation. See `left-without-finish` above.
   - The earlier "from `RemoveFromCourse.Reason`" was wrong. That is *our own* terminal command, not a
     message upstream sends.
 - **On a second-run row, a mark describes run 2 only.** `placement` and `pairTotal` still come from
@@ -305,12 +322,28 @@ which may be a start-list row a day ahead.
 **TCP, single run or the first run of a pair.** `runSeconds = Results.Result@Time`,
 `penaltySeconds = @Pen`, `totalSeconds = @Total`.
 
-**TCP, the second run of a pair.**
-- `runSeconds = @Time` is run 2's own time.
-- `penaltySeconds` is `Σ` over run 2's own `@Gates`, per §4.6(b). `@Pen` and `@Total` on this row
-  describe the **counting** run, whichever it is.
-- `totalSeconds` is their sum.
+**TCP, the second run of a pair.** The recipe was traced in the source and confirmed on recordings.
+On the second-run row, `Time`, `Gates` and `IRM` are run 2's own. `Pen`, `Total` and `Rank` are the
+combined values.
+- `runSeconds`:
+  - from the first on-course message with `dtFinish` set, `OnCourse.Result[T]@Time`;
+  - then from `Results.Result@Time` when the row arrives. The two values are identical.
+- **Gate cells** are merged from `OnCourse.Result[C]@Gates` and `Results.Result@Gates`, per §4.6(e).
+- `penaltySeconds` is the sum of the merged, judged cells. It is final when no cell is blank, or when
+  the run is closed.
+- `totalSeconds = runSeconds + penaltySeconds`.
 - `pairTotal = @Total`.
+- **Never use `@Pen` or `@Total` for run 2.** They describe the *counting* run: when run 1 is better,
+  they are run 1's figures. Run 1 was better in 41% of recorded second-run finishes. They are not a
+  reliable run-1 source either. Run 1 comes from its own first-run row, or from the XML's `Prev*`
+  fields.
+- **Evidence.** The final TCP row matched the XML's run-2 time and gate cells in 982 of 982
+  second-run finishes, across six recordings: 407 of them with run 1 better. Every penalty change
+  pushes the row immediately, even when run 1 stays the better run, because the push is triggered by
+  run 2's own total. All 24 recorded corrections made after the athlete had left the on-course list
+  arrived the same way.
+- **Today's code does not do this.** It reconstructs run 2's penalty from an on-course cache, the XML
+  or the combined `Pen`, and never reads the gate cells (`inputs/EVIDENCE.md`, Exhibit 3 addendum).
 
 **XML, any row.**
 - `runSeconds = Time/1000`, `penaltySeconds = Pen`, `totalSeconds = Total/1000`.
@@ -383,6 +416,16 @@ rank in the previous round, not a previous run, and is not modelled (§9).
 - `faults` comes from `XML.Results.NrFLT` (the count), `FLT` (`FLT(2,4,5)`, the gate captions) and
   `LastCleanGate`.
 - Whether TCP carries the same in Cross is open (§10).
+
+**(e) Merging on-course and result-row gate cells** (`CONTRACTS.md` §4, INV-2 rule 1).
+- Keep one value per gate, updated in receive order from both vectors.
+- A newer judged value overwrites an older one.
+- **A blank result-row cell never overwrites a judged on-course cell while the Attempt is still on the
+  on-course list.** Upstream sends no result push when the last missing gate is judged clean, so for
+  up to about 20 s, until the run closes, the row shows that cell blank while the on-course stream
+  shows `0`.
+- Once the Attempt has left the list, the result row's vector is authoritative whole. That is how
+  later corrections land.
 
 All encodings produce `Gate[]` with exactly the course's gate count. The encoding is recorded only in
 `source`.
@@ -523,6 +566,12 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
 10. **The Results cadence is two mechanisms**, event-driven and rotation. The ~30 s rotation carries
     none of the latency-relevant values (§0).
 11. **CIS paths removed** (`DECISIONS/ADR-011`). Their facts are all available from TCP or the XML.
+12. **A second run's own outcome comes from time plus the sum of the gate cells**, with the cells
+    merged across the on-course and result streams (§4.4, §4.6(e)). This settles a recurring
+    maintainer complaint without CIS: run 2's detail is complete on TCP within a second, even when run
+    1 is the better run.
+13. **Result marks are not always pushed**, and `left-without-finish` is the honest interim state
+    (§4.1).
 
 ---
 
@@ -598,5 +647,9 @@ These are E4: recorded here, not used to make rules.
 8. After a TCP disconnect, the first snapshot rewrite detected afterwards takes over (INV-2, rule 2).
    If that rewrite happened in the few seconds *before* the disconnect, its content can predate TCP's
    last push. The window is bounded by the file-watch interval. Accepted as residual.
-9. The cause of the 11–27 s late-finish outliers. The finish message itself was late; a manually
+9. Rule 2's exception lets an XML mark supersede a TCP `at-start`. If a DNS is *cleared* in the grid,
+   which pushes immediately, and the athlete is staged again within one snapshot interval, a
+   snapshot written before the clearing can show DNS for up to about 35 s. This is rare, and accepted
+   as residual.
+10. The cause of the 11–27 s late-finish outliers. The finish message itself was late; a manually
    entered finish is suspected.

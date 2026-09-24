@@ -116,3 +116,24 @@ paths. `TEST-ARCHITECTURE.md` §9's two CIS emulator bugs stop blocking anything
 
 Re-introducing CIS needs a new ADR. That ADR must name a fact, or a latency, that TCP and the XML
 snapshot demonstrably cannot supply.
+
+## Revision — reopened and re-confirmed on the second-run question (2026-09-24)
+
+The maintainer reopened this decision on a recurring pain point. In a best-of-two race where run 1 is
+the better one, TCP's result push after run 2 appeared to lose run 2's own time, penalties and gates.
+The rule given: if CIS can deliver run 2's detail immediately where nothing else can, use it. Both
+sides were checked, as observed upstream behaviour (E1):
+
+- **TCP carries run 2's detail.** The second-run row carries run 2's own time, gate cells and mark.
+  Run 2's penalty is exactly the sum of the cells. The final row matched the XML in 982 of 982
+  second-run finishes, 407 of them with run 1 better. Every penalty change pushes the row at once,
+  and so did all 24 recorded later corrections. The median delay is 0.14–0.35 s. The earlier
+  impression of loss came from reading `Pen`/`Total`, which describe the counting run.
+- **CIS adds nothing here.** Its second-run row carries run 2's time, penalty, total and gates. It is
+  refreshed by the same recalculation that triggers TCP's push. Its sparse gate string omits an
+  unjudged gate exactly as a clean one: that happened in 4 of 70 recorded cases. A status set on a
+  silent path (start-terminal DNS, removal before a finish) refreshes CIS no more than it pushes TCP.
+
+The Decision stands. `DERIVATIONS.md` §4.4 and §4.6(e) carry the TCP recipe. The one real gap is run
+1's detail after a cold start, and the XML snapshot is the path for that (§4.5).
+

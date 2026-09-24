@@ -525,7 +525,7 @@ type Attempt = {
 }
 
 type AttemptStatus =
-  | 'not-started' | 'at-start' | 'on-course' | 'finished' | 'non-ranked'
+  | 'not-started' | 'at-start' | 'on-course' | 'left-without-finish' | 'finished' | 'non-ranked'
   | 'dns' | 'dnf' | 'dsq' | 'dsq-r' | 'dqb' | 'cap' | 'ral' | 'other'
 
 type Outcome =
@@ -568,7 +568,13 @@ and the run is raced again. Meanwhile, it looks as if the athlete never did that
   (#166). It is displayed as upstream displays it, including upstream's split-hold behaviour
   (`DERIVATIONS.md` §4.3).
 - **`duration`:** a slalom run's own time, penalties and total. On a second run of a pair, this is
-  **run 2's own** figures. The combined result is `pairTotal`.
+  **run 2's own** figures:
+  - the time is run 2's own;
+  - the penalties are the sum of run 2's own gate cells.
+
+  Upstream's `Pen` and `Total` on a second-run result row describe the *counting* run. When run 1 is
+  better, which was 41% of recorded second runs, they are run 1's figures, so they are never used
+  for run 2. The combined result is `pairTotal`.
 - **`ordinal`:** Cross. The athlete's order within the heat, **taken from upstream's placement, never
   from `Time`.** Athletes with faults rank after every clean finisher, whatever their finish order
   (`DECISIONS/ADR-009` addendum).
@@ -576,6 +582,18 @@ and the run is raced again. Meanwhile, it looks as if the athlete never did that
 - The earlier draft's gap, where running time had no shape (#166), is closed by the `running`
   variant. A client never has to cross-reference `status` to know whether a value is still
   accruing.
+
+**Left without a finish.** In slalom, an athlete can leave upstream's on-course list without a finish
+ever being recorded. `status` is then `left-without-finish`. This is an observed fact: upstream
+removed the athlete, and no finish exists.
+- **The reason is not yet known**, and `outcome` stays `pending`. It is **never** inferred as `dnf`.
+- **Why a separate status.** Upstream enters DNF or DSQ mid-run, and DNS from the start judge's
+  terminal, on paths that push nothing on TCP (observed upstream behaviour). Of 145 recorded status
+  transitions, 45% reached TCP only on another athlete's push or by rotation: median 20–52 s, worst
+  about 600 s.
+- **Where the reason comes from.** The mark follows from the XML snapshot at about 35 s (§4 INV-2,
+  rule 2's exception), or from TCP's next push of the race, whichever comes first.
+- Kayak Cross never uses this status: a whole heat leaves the list together, by design.
 
 **Marks.**
 - `status` carries upstream's full result-mark vocabulary (`DERIVATIONS.md` §4.1).
@@ -843,6 +861,12 @@ reliable signal that a Phase's results changed is ordinary field-level change: a
 - **No-results:**
   - `not-started | at-start → dns`;
   - `on-course → dnf | dsq | dsq-r | dqb | cap | ral | other`.
+- **Left without a finish** (slalom only, §2.6):
+  - `at-start | on-course → left-without-finish`, observed when the Attempt leaves upstream's
+    on-course list with no finish recorded;
+  - `left-without-finish → dns | dnf | dsq | dsq-r | dqb | cap | other`, when the mark arrives;
+  - `left-without-finish → finished`, when a finish is recorded afterwards (a manually entered
+    finish).
 - **Post-finish decisions and corrections:**
   - `finished → non-ranked | dsq | dsq-r | dqb | ral | other`;
   - any no-result status `→ finished`, when a mark is withdrawn.
@@ -876,15 +900,37 @@ implementation must satisfy, not an algorithm.
   1. **A results-table observation supersedes an on-course inference** of the same run generation, and
      is never superseded by one. The inference exists only for the fraction of a second before the
      result push arrives (`DECISIONS/ADR-011` gives the measured latency).
+
+     **`gates` is the exception: it is merged cell by cell.**
+     - While the Attempt is on upstream's on-course list, each gate cell takes the newest *judged*
+       value from either kind of observation.
+     - A cell that is blank in a result row never overwrites a cell the on-course stream has already
+       judged. Upstream pushes nothing when the last missing gate is judged clean, so for up to about
+       20 s its result row shows that cell blank while the on-course stream already shows `0`
+       (observed upstream behaviour).
+     - Once the Attempt has left the list, the result row's gate vector is authoritative whole. That
+       includes later corrections.
+     - `outcome.penaltySeconds` of a second run is the sum of the merged cells (§2.6,
+       `DERIVATIONS.md` §4.4).
   2. **Between `tcp` and `xml` results-table observations of the same field, `tcp` wins while TCP has
-     stayed connected since that `tcp` observation was ingested.** Canoe123 pushes every change to its
+     stayed connected since that `tcp` observation was ingested.** Canoe123 pushes these changes to its
      results table on TCP immediately:
-     - finish, every penalty change, and the last gate judged;
+     - finish and every penalty change;
      - corrections, including to closed races;
      - closure of a run;
-     - the paired second race whenever the first changes.
+     - the paired second race whenever the first changes;
+     - result marks typed in the results grid or set by the online-scoring session.
 
-     So a connected TCP is never behind the snapshot. **Otherwise the later-ingested observation
+     For all of these, a connected TCP is never behind the snapshot.
+
+     **The one exception is a result mark set on a silent path.** Upstream sends no TCP push for:
+     - a DNS entered from the start judge's terminal;
+     - a DNF or DSQ entered by removing the athlete from the course before a finish.
+
+     So an `xml` observation of `status` carrying a no-result mark supersedes a presented `tcp` status
+     of `not-started`, `at-start` or `left-without-finish`. None of those is a mark, and none can be a
+     finish. This is how the reason for `left-without-finish` arrives at about 35 s, not at TCP's next
+     incidental push (§2.6). **Otherwise the later-ingested observation
      wins.** This covers two cases:
      - During an outage, a snapshot rewrite *detected after the disconnect* takes over.
      - After reconnection, TCP's pre-outage observations no longer outrank a snapshot that was read
@@ -1009,6 +1055,8 @@ and nothing below depends on it. `DERIVATIONS.md` says *how* each value is produ
 | On-course state, running time, on-course order, time to beat | [D] TCP, ~2 messages/s |
 | Slalom finish | [D] finish-time transition, TCP, authoritative |
 | Result, penalties, class placement, combined placement | [D] TCP result push, median 0.14–0.41 s after the finish impulse (1,533 finishes). Also [D] from the XML snapshot, the complete record at cold start |
+| A second run's own time, penalties and gates, including when run 1 is the better run | [D] TCP result push. The time and the gate cells are run 2's own; penalty = sum of the cells. Upstream's `Pen`/`Total` on that row describe the counting run and are never used for run 2. Matched the snapshot in 982 of 982 second-run finishes |
+| Result marks (DNS, DNF, DSQ, …) | [D] Immediate when entered in the results grid, by the scoring session, or after a finish. Late when entered on the silent paths (start-terminal DNS, removal before a finish): then from the XML snapshot at ~35 s, or TCP's next push of the race. The fact that the athlete *left without a finish* is immediate, and carries no reason (§2.6) |
 | Whether the result may still move | [D] from gate completeness against the course layout, plus run closure (§1.2) |
 | Run 1's detail, once run 2 has superseded it on TCP | [D] XML snapshot, unconditionally. Also from this server's own retained observation of run 1 |
 | Age-category standing | [D] assembled from class placement and the entry's category, at class-rank latency. The snapshot's own category ranks follow ~20 s later, as a check |
@@ -1058,9 +1106,11 @@ Membership of the on-course list is tracked from the on-course stream.
   - its status becomes `finished` or a no-result status;
   - upstream stops listing it;
   - upstream sends its explicit "course empty" message.
-- Leaving the list never changes `status` by itself. A Kayak Cross heat leaves the list together,
-  before the operator has asserted the order, and so stays `on-course` until that assertion
-  arrives through its result row (`DERIVATIONS.md` §4.1).
+- **In slalom**, an Attempt that leaves the list with no finish recorded becomes
+  `left-without-finish` (§2.6). It is never inferred as DNF.
+- **In Kayak Cross**, leaving the list never changes `status`. A heat leaves together, before the
+  operator has asserted the order, and so stays `on-course` until that assertion arrives through its
+  result row (`DERIVATIONS.md` §4.1).
 
 ### 7.2 Live updates (WebSocket `/ws`, delta)
 

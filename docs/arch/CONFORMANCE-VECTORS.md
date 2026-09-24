@@ -15,10 +15,13 @@ hand-authored, with no shared runtime code (`DECISIONS/ADR-002`/`ADR-003`).
   - re-run generations;
   - age-category assembly;
   - second-run marks;
+  - left the course without a finish;
+  - result marks set on upstream's silent paths;
+  - cell-wise gate merging for a second run's own penalty;
   - under review;
   - Cross placement.
 
-**50 vectors:** 42 merge vectors and 8 standing-assembly vectors. The number is what the coverage
+**55 vectors:** 47 merge vectors and 8 standing-assembly vectors. The number is what the coverage
 needed, not a target.
 
 ---
@@ -48,7 +51,8 @@ Each vector has:
   Observations are *resolved*: `DERIVATIONS.md` has already turned wire fields into these values.
   These vectors test the merge, not the derivation.
 - **Connection events.** Each has `ingestSeq`, `event` and `observedAt`. The events are
-  `tcp-disconnected`, `tcp-connected`, `xml-rewrite-detected` and `oncourse-empty`. They exist
+  `tcp-disconnected`, `tcp-connected`, `xml-rewrite-detected`, `oncourse-empty` and `oncourse-left`
+  (this Attempt stopped being listed). They exist
   because INV-2's rule 2 depends on TCP continuity.
 
 **`expect` is the presented state after the last given.**
@@ -82,6 +86,9 @@ assembled `standing`, in order, plus `anomalies` (`CONTRACTS.md` §5).
 | INV-1 (monotonic knowledge) | `inv1-untouched-field-not-regressed`, `inv1-never-observed-stays-not-yet` | 2 |
 | INV-2 rule 1 (result row over inference) | `inv2-rule1-result-row-supersedes-inference`, `inv2-rule1-inference-never-supersedes-result-row` | 2 |
 | INV-2 rule 2 (TCP continuity) | `inv2-rule2-connected-tcp-beats-later-xml`, `-xml-takes-over-after-disconnect`, `-reconnect-does-not-restore-stale-tcp`, `-fresh-tcp-after-reconnect-wins`, `-xml-alone-at-cold-start` | 5 |
+| INV-2 rule 1, `gates` cell-wise | `gates-blank-result-cell-keeps-judged-oncourse-cell`, `gates-result-vector-authoritative-after-leaving` | 2 |
+| INV-2 rule 2 exception (marks on silent paths) | `left-without-finish-then-mark-from-xml`, `xml-mark-does-not-override-tcp-finish` | 2 |
+| `left-without-finish` | `left-without-finish-observed-not-dnf` | 1 |
 | INV-2 rule 3 (single-source fields) | `inv2-rule3-single-source-field` | 1 |
 | INV-2 rule 4 (operator writes) | the six `operator-write-*` and `operator-correction-*` vectors, including `superseded` | 6 |
 | INV-2b (surfaced, never adopted) | `inv2b-disagreement-surfaced-not-adopted` | 1 |
@@ -101,7 +108,8 @@ assembled `standing`, in order, plus `anomalies` (`CONTRACTS.md` §5).
 
 ## 3. What these vectors do not cover
 
-- **Derivation from raw wire fields.** Gate-string parsing, units, sentinels, the fabricated-course
+- **Derivation from raw wire fields.** The second-run outcome (time plus the sum of run 2's own cells, never
+  the row's `Pen`/`Total`), gate-string parsing, units, sentinels, the fabricated-course
   signatures and generation triggers are all Tier 2's job, against real recordings.
   `DERIVATIONS.md` §4 is the specification.
 - **Timing.** These vectors say nothing about speed. The measured push latency is evidence for the

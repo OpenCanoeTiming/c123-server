@@ -111,7 +111,11 @@ In a second run, C123's TCP stream sends:
   Rank="1" />
 ```
 
-`Time` and `Gates` describe run 2. `Pen`, `Total` and `Rank` describe whichever run is better.
+`Time` and `Gates` describe run 2. `Pen`, `Total` and `Rank` describe whichever run is better. *(Consolidated revision: run 2's own penalty is exactly the sum of its `Gates`
+cells. `Gates` is fixed-width, 3 characters per cell, 30 cells. It matched the XML in 982 of 982
+recorded second-run finishes. The row is pushed immediately on every penalty change, even when run 1
+stays the better one. So run 2's full detail is on TCP within a second; what TCP lacks is only run 1's
+detail on this row. `IRM` on this row is run 2's own.)*
 
 | Scenario | Run 2 recoverable from this TCP message | Run 1 recoverable from this TCP message |
 |----------|-------------------|-------------------|

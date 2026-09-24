@@ -185,7 +185,9 @@ switched on.
 - **t+0.3 s: the result push.** Canoe123 recalculates the race and pushes it immediately
   (`Current="Y"`, median 0.14–0.41 s). This is a results-table observation, so it supersedes the
   inference (`CONTRACTS.md` §4 INV-2, rule 1). The Attempt now carries:
-  - its own run-2 figures;
+  - its own run-2 figures: the time, and the penalty as the sum of run 2's own gate cells. This
+    holds even when run 1 stays the better run, where upstream's `Pen`/`Total` on this row are run
+    1's;
   - `pairTotal`, the combined better-run total;
   - `placement`, the combined rank, already tie-broken upstream.
 
@@ -290,7 +292,18 @@ An athlete is obstructed, and the jury grants a re-run.
 - **Writes and checks.** A pending penalty write against run 1 resolves to `superseded`. Judges' checks
   of run 1's gates do not carry over.
 
-### G — A result under review
+### G — Left the course without a finish
+
+A slalom athlete is removed from the course mid-run.
+- **What TCP shows.** The athlete disappears from the on-course list at once. Upstream sends no push
+  with the reason: a removal before the finish is one of its silent paths.
+- **The domain layer** sets `status: left-without-finish` immediately. This is an observed fact with
+  no reason, never inferred as DNF.
+- **The reason** (DNF, DSQ) follows from the XML snapshot at about 35 s, or earlier if another
+  athlete's push carries it. The scoreboard can show "off course" at once, and the mark when it is
+  known.
+
+### H — A result under review
 
 The operator marks a result as under review, shown as an asterisk on upstream's own output.
 

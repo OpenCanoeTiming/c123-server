@@ -220,6 +220,21 @@ treated that file as more than a change-detection source and a REST backend. Sta
 confidence, not certainty: this is an inference from what both exhibits describe, not a claim
 verified against the running code.
 
+**Addendum to Exhibit 3, consolidated revision (2026-09-24): the fact being guessed was on the wire
+all along.** On a second-run row, TCP's `Results` message carries run 2's own `Time` and run 2's own
+gate cells. Only `Pen`, `Total` and `Rank` are the counting run's. Run 2's penalty is exactly the sum
+of those cells: the final TCP row matched the XML's run-2 time and cells in 982 of 982 second-run
+finishes. The row is pushed immediately on every penalty change and correction. Yet three components
+each guess run 2's penalty instead, and none reads the gate cells:
+- the server's live path, `SRV/live/LiveTransformer.ts:196-221`: an on-course cache, then the XML,
+  then the combined `Pen`;
+- the scoreboard, `SB/…/br1br2Merger.ts:192-229`: the same chain;
+- live-mini, `LM/…/BrCombinedService.ts:97-127`: drops it.
+
+This is E2, reported by the orchestrator's scout and not re-read here. It is the same
+duplicated-interpretation pattern as the rest of this file. Run 1 was the better run in 41% of
+recorded second-run finishes, and in exactly those cases the guess is wrong.
+
 ---
 
 ## Exhibit 5 — `null` is silently destroyed at the cloud boundary

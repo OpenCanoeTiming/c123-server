@@ -1572,6 +1572,241 @@
       }
     },
     {
+      "id": "left-without-finish-observed-not-dnf",
+      "invariant": "left-without-finish",
+      "description": "A slalom athlete leaving the on-course list with no finish becomes left-without-finish; the reason is not inferred.",
+      "context": {
+        "discipline": "slalom"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "status",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:00:00.000Z",
+          "value": "on-course",
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 2,
+          "event": "oncourse-left",
+          "observedAt": "2026-09-15T10:00:40.000Z"
+        }
+      ],
+      "expect": {
+        "status": {
+          "state": "known",
+          "value": "left-without-finish",
+          "source": "tcp"
+        },
+        "outcome": {
+          "state": "not-yet"
+        }
+      }
+    },
+    {
+      "id": "left-without-finish-then-mark-from-xml",
+      "invariant": "INV-2 rule 2 exception",
+      "description": "A no-result mark set on a silent path arrives in the snapshot and supersedes the TCP left-without-finish, while TCP stays connected.",
+      "context": {
+        "discipline": "slalom",
+        "tcpConnectedThroughout": true
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "status",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:00:40.000Z",
+          "value": "left-without-finish",
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 2,
+          "field": "status",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:01:10.000Z",
+          "value": "dnf",
+          "confidence": "authoritative"
+        }
+      ],
+      "expect": {
+        "status": {
+          "state": "known",
+          "value": "dnf",
+          "source": "xml"
+        }
+      }
+    },
+    {
+      "id": "xml-mark-does-not-override-tcp-finish",
+      "invariant": "INV-2 rule 2 exception",
+      "description": "The exception is narrow: an XML mark never supersedes a TCP status that is itself a finish or a mark.",
+      "context": {
+        "tcpConnectedThroughout": true
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "status",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:00:40.000Z",
+          "value": "finished",
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:00:39.500Z"
+        },
+        {
+          "ingestSeq": 2,
+          "field": "status",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:01:10.000Z",
+          "value": "dns",
+          "confidence": "authoritative"
+        }
+      ],
+      "expect": {
+        "status": {
+          "state": "known",
+          "value": "finished",
+          "source": "tcp"
+        }
+      }
+    },
+    {
+      "id": "gates-blank-result-cell-keeps-judged-oncourse-cell",
+      "invariant": "INV-2 rule 1 gates",
+      "description": "While the Attempt is on the on-course list, a blank result-row cell never overwrites a cell the on-course stream has judged.",
+      "context": {
+        "onCourseList": true
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "gates",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:14:02.083Z",
+          "value": [
+            {
+              "number": 22,
+              "penalty": 2
+            },
+            {
+              "number": 23,
+              "penalty": 0
+            }
+          ],
+          "confidence": "inferred"
+        },
+        {
+          "ingestSeq": 2,
+          "field": "gates",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:02.400Z",
+          "value": [
+            {
+              "number": 22,
+              "penalty": 2
+            },
+            {
+              "number": 23,
+              "penalty": null
+            }
+          ],
+          "confidence": "authoritative"
+        }
+      ],
+      "expect": {
+        "gates": {
+          "state": "known",
+          "value": [
+            {
+              "number": 22,
+              "penalty": 2
+            },
+            {
+              "number": 23,
+              "penalty": 0
+            }
+          ],
+          "source": "tcp"
+        },
+        "note": "the last gate was judged clean on the on-course stream; upstream sends no result push for that until the run closes (~20 s)."
+      }
+    },
+    {
+      "id": "gates-result-vector-authoritative-after-leaving",
+      "invariant": "INV-2 rule 1 gates",
+      "description": "After the Attempt has left the on-course list, the result row's gate vector is authoritative whole: a later correction lands.",
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "gates",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:14:02.083Z",
+          "value": [
+            {
+              "number": 22,
+              "penalty": 2
+            },
+            {
+              "number": 23,
+              "penalty": 0
+            }
+          ],
+          "confidence": "inferred"
+        },
+        {
+          "ingestSeq": 2,
+          "event": "oncourse-left",
+          "observedAt": "2026-09-15T10:14:22.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "field": "gates",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:20:00.000Z",
+          "value": [
+            {
+              "number": 22,
+              "penalty": 0
+            },
+            {
+              "number": 23,
+              "penalty": 0
+            }
+          ],
+          "confidence": "authoritative",
+          "judgingComplete": true
+        }
+      ],
+      "expect": {
+        "gates": {
+          "state": "known",
+          "value": [
+            {
+              "number": 22,
+              "penalty": 0
+            },
+            {
+              "number": 23,
+              "penalty": 0
+            }
+          ],
+          "source": "tcp",
+          "provisional": false
+        }
+      }
+    },
+    {
       "id": "under-review-independent-of-provisional",
       "invariant": "under-review",
       "description": "underReview and provisional are independent fields.",
