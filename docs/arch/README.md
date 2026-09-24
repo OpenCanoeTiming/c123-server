@@ -15,17 +15,17 @@ is intended to become permanent documentation.
 | `inputs/DOMAIN-FACTS.md` | What Canoe123 is as a data source — unequal interfaces, cadences, known data loss |
 | `inputs/CURRENT-STATE.md` | Map of what the four components do today |
 | `inputs/CONSTRAINTS.md` | What is fixed, what is open, operating reality |
-| `ARCHITECTURE.md` | Target state — domain model, deployable boundaries, data flow, principles traced to `EVIDENCE.md`, five scenario walkthroughs |
+| `ARCHITECTURE.md` | Target state — domain model, deployable boundaries, data flow, principles traced to `EVIDENCE.md`, seven scenario walkthroughs (A–G) |
 | `CONTRACTS.md` | The primary deliverable — domain entities, the observation envelope, merge invariants, ranking, the derivability ledger, the on-site and live-ingest contracts |
-| `DECISIONS/` | Ten ADRs, `ADR-001` through `ADR-010` |
+| `DECISIONS/` | Fourteen ADRs, `ADR-001` through `ADR-014`. `ADR-004` and `ADR-008` are superseded by `ADR-011` and `ADR-012`; their original text is kept |
 | `TEST-ARCHITECTURE.md` | Four test tiers, the fixture format, and the clock-control requirement that makes presentation-layer timing assertable |
-| `DERIVATIONS.md` | For every value `CONTRACTS.md` asserts: the exact upstream source field, transformation, conditionality, and resulting envelope — checked against real recorded data, not left as a claim |
+| `DERIVATIONS.md` | For every value `CONTRACTS.md` asserts: the exact upstream source field, transformation, conditionality, and resulting envelope. §9 lists every upstream field deliberately *not* modelled, and why; §10 lists open technical questions |
 | `schemas/` | JSON Schema for the two wire shapes reused everywhere: the observation envelope and the error response |
 | `CONFORMANCE-VECTORS.md` + `vectors/tier1-conformance.json` | The tier-1 hand-authored conformance vectors `TEST-ARCHITECTURE.md` §3.1 calls for — format, coverage map, and what could not be written |
 
 ## Where to start
 
-The contract is 1,100 lines and the test architecture 600. Nobody should read this folder front
+The contract is 1,250 lines and the test architecture 600. Nobody should read this folder front
 to back. Depending on what you are here to judge:
 
 | You are reviewing | Read, in order |
@@ -36,10 +36,24 @@ to back. Depending on what you are here to judge:
 | **The test strategy** | `TEST-ARCHITECTURE.md`, then `CONFORMANCE-VECTORS.md` |
 | **In one hour** | `ARCHITECTURE.md`, then `CONTRACTS.md` §1.2 (the observation envelope) and §4 (the merge invariants). Those two sections are the design; everything else follows from them |
 
-**What has already been checked, so a reviewer need not repeat it.** The design went through an
-independent review pass, an adversarial pass under an evidence standard, a wire-precision pass and
-a derivation pass that validated the ledger's own claims. Fifteen defects were found and fixed
-before anything was implemented. Cross-references, section numbers, JSON validity and internal
+**What has already been checked, so a reviewer need not repeat it.** The design went through these
+passes, and fifteen defects were found and fixed before anything was implemented:
+- an independent review pass;
+- an adversarial pass under an evidence standard;
+- a wire-precision pass;
+- a derivation pass that validated the ledger's own claims.
+
+**The consolidated revision** (2026-09-24, `DECISIONS/ADR-011`–`014`) then absorbed four inputs:
+- a reverse pass over every field Canoe123 emits on TCP, in the XML snapshot and on CIS;
+- a finish-to-result latency measurement;
+- the maintainer's answers to eight operational questions;
+- the gaps #165, #166 and #171.
+
+Its main outcomes:
+- CIS is no longer consumed;
+- standings relay Canoe123's own order;
+- re-runs are run generations;
+- `Category` is renamed `Class`, and age categories are first-class. Cross-references, section numbers, JSON validity and internal
 counts were mechanically verified. Hunting for internal inconsistency is largely spent ground.
 
 Where a human reviewer beats what has been done: whether the entity spine matches how officials
@@ -55,8 +69,8 @@ reader can see the whole set at once.
 
 | Question | Where |
 |---|---|
-| Whether Kayak Cross ever emits a missed-gate penalty at all. A full day's Cross recording shows touches but no instance either way, and the documentation states no Cross-specific vocabulary. `Gate.penalty`'s type accommodates both answers, so nothing depends on resolving it. | Raised in the adversarial pass; recorded here, having been omitted from the documents themselves |
-| INV-2b's re-query *trigger* is untested, and untestable as a conformance vector without deciding an interface the contract does not define. Reached independently from the tooling side and the vector-writing side. | `CONFORMANCE-VECTORS.md` §4, `TEST-ARCHITECTURE.md` §9 |
+| Open technical questions from the reverse pass: the terminal reset, the layout letters `D`/`E`, other classification tokens, further upstream pairings, the base class of a sub-class, per-gate marks in Kayak Cross, the timing of a re-run's row clearing, the residual XML takeover window, and late-finish outliers. | `DERIVATIONS.md` §10 |
+| Every upstream field deliberately not modelled, and why. | `DERIVATIONS.md` §9 |
 | Whether `recordings-cli.js`'s versioning composes with the second axis a domain-state fixture needs. | `TEST-ARCHITECTURE.md` §10 |
 | Whether re-implementing the tier-3 harness driver in three client repos is cheaper than the mock-server porting it replaces, or relocates the same cost. | `TEST-ARCHITECTURE.md` §10 |
 | What the tier-1 vectors deliberately do not cover. | `CONFORMANCE-VECTORS.md` §3 |
