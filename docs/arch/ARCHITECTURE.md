@@ -85,6 +85,9 @@ line):
   definition.
 - **Non-domain filtering conveniences** — "show only my club's competitors" changes nothing about
   what is true.
+- **Which competitor to feature.** The default is the athlete next to pass the finish, the first
+  Attempt of the on-course list. Canoe123's own TV selection is offered as an optional alternative
+  (`CONTRACTS.md` §7.1); a scoreboard may follow either.
 
 **Display-lifetime code must re-evaluate on a clock tick, not only when new data arrives — a
 requirement on the client's own architecture, not a stylistic preference.** Found necessary under
@@ -313,6 +316,41 @@ The operator marks a result as under review, shown as an asterisk on upstream's 
   `provisional` means judging may still move it. They are independent, and a client shows each as it
   chooses.
 - **Clearing.** When the operator clears the mark, the next push sets `underReview: false`.
+
+### I — In-race corrections, and the re-baseline
+
+Results move during a race day (`DECISIONS/ADR-015`). Four routine cases, each walked through the
+contract:
+
+- **A DNS cleared when the athlete turns up.** The operator clears the mark in the results grid.
+  Upstream pushes the race at once, and the athlete's row is simply absent from a first-run race's
+  push. That absence in a complete statement is a retraction (§4 INV-7): `status` returns to
+  `not-started`, the mark's `no-result` outcome to `not-yet`, and the change is pushed as explicit
+  `not-yet` values. The athlete then starts, races and finishes normally. Recorded three times, and
+  all three raced. Had the DNS come from the start judge's terminal instead, upstream would have
+  pushed nothing, and the retraction would come from the XML at the next save, guarded so that a
+  snapshot written before the push cannot undo a later result.
+- **A finish given to the wrong bib.** Bib 55 is shown as leader with 48.64 s. The operator takes
+  the finish away on the on-course grid and gives it to bib 56. Upstream never clears bib 55's stored
+  row, and keeps pushing it. But the on-course stream lists bib 55 running again, with its start and
+  no finish. That contradicts the finish (§4 INV-2d): bib 55 returns to `on-course` and drops out of
+  the placed part of the standing at once, and a `contradicted-finish` diagnostic appears. Bib 56's
+  new row is presented normally. Both rows carry the same finish time for a moment, so a
+  `duplicate-finish` diagnostic is raised too. When bib 55 finishes for real, 40 s later, its row
+  carries a different finish time, and the contradiction is lifted. Without INV-2d the board would
+  have shown a false leader for 31 s.
+- **Several results shifted back.** Three athletes were credited with each other's finishes, then
+  corrected one by one. Each correction is a results-grid edit, pushed immediately; each push is a
+  complete statement of the race, so each athlete's row is replaced by its own value as the operator
+  reaches it. In between, the standing shows exactly what upstream's table shows. The XML snapshot
+  written mid-correction shows two bibs with one finish; that is presented as upstream's state, with
+  a diagnostic, and the next push resolves it.
+- **A stale value that nothing clears.** A wrong result stays in upstream's table on a path that
+  pushes nothing, and the athlete never finishes again. The operator opens the admin UI and runs the
+  re-baseline for that race (§4). The domain layer discards what it retained for the race, reads the
+  current XML snapshot, presents it, and pushes the race to every scoreboard and to live as a
+  replace. The next TCP push refills the TCP slots. The response shows the snapshot's write time, so
+  the operator knows whether the correction was already in it, and the action is safe to repeat.
 
 ---
 

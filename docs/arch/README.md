@@ -15,9 +15,9 @@ is intended to become permanent documentation.
 | `inputs/DOMAIN-FACTS.md` | What Canoe123 is as a data source — unequal interfaces, cadences, known data loss |
 | `inputs/CURRENT-STATE.md` | Map of what the four components do today |
 | `inputs/CONSTRAINTS.md` | What is fixed, what is open, operating reality |
-| `ARCHITECTURE.md` | Target state — domain model, deployable boundaries, data flow, principles traced to `EVIDENCE.md`, eight scenario walkthroughs (A–H) |
+| `ARCHITECTURE.md` | Target state — domain model, deployable boundaries, data flow, principles traced to `EVIDENCE.md`, nine scenario walkthroughs (A–I) |
 | `CONTRACTS.md` | The primary deliverable — domain entities, the observation envelope, merge invariants, ranking, the derivability ledger, the on-site and live-ingest contracts |
-| `DECISIONS/` | Fourteen ADRs, `ADR-001` through `ADR-014`. `ADR-004` and `ADR-008` are superseded by `ADR-011` and `ADR-012`; their original text is kept |
+| `DECISIONS/` | Fifteen ADRs, `ADR-001` through `ADR-015`. `ADR-004` and `ADR-008` are superseded by `ADR-011` and `ADR-012`; their original text is kept |
 | `TEST-ARCHITECTURE.md` | Four test tiers, the fixture format, and the clock-control requirement that makes presentation-layer timing assertable |
 | `DERIVATIONS.md` | For every value `CONTRACTS.md` asserts: the exact upstream source field, transformation, conditionality, and resulting envelope. §9 lists every upstream field deliberately *not* modelled, and why; §10 lists open technical questions |
 | `schemas/` | JSON Schema for the two wire shapes reused everywhere: the observation envelope and the error response |
@@ -54,6 +54,11 @@ Its main outcomes:
 - standings relay Canoe123's own order;
 - re-runs are run generations;
 - `Category` is renamed `Class`, and age categories are first-class.
+
+**Revision round 2** (2026-09-24, `DECISIONS/ADR-015`) made retraction first-class: a TCP result push
+and an XML snapshot are complete statements of a race, their stated absence retracts, the on-course
+stream contradicts a stale finish, and an operator re-baseline rebuilds a race or event and pushes
+it everywhere as a replace.
 
 Cross-references, section numbers, JSON validity and internal
 counts were mechanically verified. Hunting for internal inconsistency is largely spent ground.
