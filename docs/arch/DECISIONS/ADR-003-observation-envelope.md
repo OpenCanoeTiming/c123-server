@@ -127,3 +127,40 @@ original job, display and staleness, and only that job.
 Both fixes are additive to the invariant list (`CONTRACTS.md` §4 now states eight, not six) and change
 nothing about which values are exposed on the wire — the correction is entirely inside how the domain
 layer decides what to present, exactly where Revision 1's fix also lived.
+
+## Revision 3 — two sources, content-aware precedence, honest provisionality (2026-09-24)
+
+1. **Sources.** CIS is no longer consumed (`ADR-011`). The automated sources are TCP and the XML
+   snapshot, and both render Canoe123's own results table. Precedence between them is no longer a
+   table of authority. TCP pushes every change to the results table immediately, so a TCP connection
+   that has stayed up is never behind the snapshot. The rule is:
+   - a `tcp` observation outranks an `xml` observation of the same field only while TCP has been
+     continuously connected since that `tcp` observation was ingested;
+   - otherwise the later-ingested observation wins.
+
+   This fixes a defect the reverse-pass assessment found in its own contract (R52). Under the old
+   rule, TCP's observations from before an outage outranked the snapshot again as soon as TCP
+   reconnected. A correction the snapshot had shown during the outage could then stay hidden until
+   TCP's rotation came round to that race, which takes up to ~15 minutes.
+2. **INV-2b loses its re-query.** Its only on-demand source was CIS. The re-query is also no longer
+   needed: neither remaining source can hold a correction back behind a source that never re-reports.
+   A disagreement between them is still surfaced as a diagnostic, and is never silently adopted.
+3. **`provisional` is redefined.** The old definition was: a more authoritative source *configured
+   for this deployment* has not yet reported. That misfired for a configured source that is reachable
+   but not serving the event: every outcome stayed provisional for a whole weekend. The new
+   definition is: **the value may still move.** A value is provisional while any of these holds:
+   - it is an on-course inference not yet superseded by a results-table observation;
+   - it is a result whose judging is incomplete (a course gate still blank) and whose run is not
+     closed;
+   - it is an optimistic write awaiting its echo.
+
+   This marks the state honestly whichever way an event runs Canoe123's "ranking with incomplete
+   penalties" setting:
+   - **setting on:** the first push can precede the last gate, and `provisional` stays `true` until
+     judging completes;
+   - **setting off:** the first push waits for the last gate, and arrives `provisional: false`.
+4. **`GateTimes` was cited above as a genuine upstream event timestamp. That was wrong.** Observed
+   upstream behaviour: each stamp is the official time at which a judge first entered a penalty for
+   the gate, minus 2 s. Gaps are back-filled in 2 s steps, and the order along the course is only
+   approximately monotonic. INV-2c rests only on the finish time, which is genuine. `GateTimes` is not
+   modelled (`DERIVATIONS.md` §9).

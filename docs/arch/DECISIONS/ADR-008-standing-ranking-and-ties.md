@@ -1,5 +1,8 @@
 # ADR-008: Standing is computed mechanically; upstream rank resolves only genuine ties
 
+> **Status: Decision superseded by `ADR-012` (2026-09-24).** Standing now relays Canoe123's own order.
+> Mechanical comparison survives only as an anomaly check. Original text kept for the record.
+
 ## Context
 
 Raised directly by the orchestrator as unresolved after round one: `Standing.rank` was described as
@@ -79,3 +82,17 @@ subject to the same per-source retention and the same ranking table as `outcome`
 arrived most recently. This costs one more row in `CONTRACTS.md` §4's table and nothing else — no new
 mechanism, since `upstreamRank` was always conceptually a value with provenance, just not one written
 down as such before the review that found this.
+
+## Revision 2 — superseded (2026-09-24)
+
+Step 3 above reads upstream `Rank` to break a mechanical tie. For a single run, `Rank` is shared by
+construction: the tie-broken sequence is in a separate order field. For a combined total, upstream
+breaks the tie by the run that did not count. Beyond ties, upstream's order embeds several rules:
+- `RAL` ranked last and `NON-RK` not ranked;
+- second-run marks that leave the combined rank intact;
+- Kayak Cross fault ranking;
+- summed-run formats.
+
+Each of these would have surfaced as a false anomaly, or as a wrong rank. All are E1, from recordings
+and source. `ADR-012` supersedes the Decision: order and rank are relayed; age-category standings are
+assembled from the class order; mechanical comparison is kept only as the anomaly check.

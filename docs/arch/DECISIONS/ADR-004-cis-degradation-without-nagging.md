@@ -1,5 +1,8 @@
 # ADR-004: CIS as a best-effort primary source; degradation is honest, never announced
 
+> **Status: Decision superseded by `ADR-011` (2026-09-24).** CIS is no longer consumed. The no-nagging
+> principle below still holds, and now applies to TCP and the XML snapshot. Original text kept for the record.
+
 ## Context
 
 CIS is the only interface carrying both runs of a two-run race and gate-by-gate passage times
@@ -104,3 +107,17 @@ confirmed or refuted.
 **Cost of the correction:** none to the architecture itself — CIS was already modelled as best-effort
 and never required, and that Decision is unchanged. What changes is the *reason* to keep polling it,
 and `CONTRACTS.md` §4's ranking table, which this revision brings into line with the evidence.
+
+## Revision 2 — superseded (2026-09-24)
+
+The Revision above left CIS one argument, on-demand immediacy, and one untested claim, an on-course
+pre-computed rank. The reverse pass and a latency measurement settled both, as observed upstream
+behaviour:
+- **Immediacy.** On the same recalculation trigger that re-feeds CIS, TCP pushes the race
+  immediately. The median delay was 0.14–0.41 s after the finish impulse, over 1,533 finishes.
+- **The on-course rank claim is false.** CIS leaves rank blank while a competitor is running, exactly
+  as TCP does.
+
+CIS also accepts unauthenticated overwrites from the LAN, and cannot show whether it is serving the
+current event. The Decision is superseded by `ADR-011`. The option-A/B/C analysis above is kept only
+as history.

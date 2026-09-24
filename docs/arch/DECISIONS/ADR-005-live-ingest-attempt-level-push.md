@@ -77,3 +77,11 @@ actual key for any such entity is always the compound `(eventId, localId)`, rega
 wire path repeats `eventId` at that segment — supplied by the authenticated key for writes (§8.3) and
 already present in the path for public reads (§8.4). No endpoint shape changed; what changed is an
 explicit statement of what the storage layer must key on, which nothing before this said outright.
+
+## Revision 2 — what the live tier receives after the consolidated revision (2026-09-24)
+
+- **Placement is pushed, standings are not.** Each Attempt carries upstream's `placement`, and the
+  store assembles standings exactly as the on-site server does (`ADR-012`). live-mini ranks nothing.
+- **New resources and fields.** Courses become their own resource. Entries carry members, club,
+  nation, age category and birth date. Attempts carry a run generation.
+- **The unit of push is unchanged:** one resource changing.

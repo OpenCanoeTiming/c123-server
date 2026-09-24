@@ -58,3 +58,19 @@ only registering a new strategy against a new `discipline` value. It also forecl
 implementation from ever treating Cross's `Gates`-fill progress as authoritative for anything beyond
 optional, explicitly-non-authoritative presentation (a "checkpoint progress" indicator, if a client
 chooses to show one) — it must never drive `Attempt.status` or `outcome`.
+
+## Addendum — completing the Cross model (2026-09-24)
+
+This ADR made `/api/oncourse` plural so it could hold four competitors at once. That was necessary
+but not sufficient. The consolidated revision adds the rest:
+- **`Attempt.courseOrder`**, from upstream's on-course position. Without it the four competitors in a
+  heat cannot be ordered; in Cross nothing else distinguishes them.
+- **`Attempt.heat` and `startLane`.** One Cross race holds several heats, and each heat's order
+  restarts at 1 (`ADR-014`).
+- **The ordinal is upstream's placement, never `Time`.** Athletes with faults rank after clean
+  finishers whatever their finish order, and the heat order restarts in every heat. So neither form
+  of dividing `Time` is right: TCP already formats the order as `1.00`, and the snapshot stores it in
+  milliseconds (E1).
+
+The operator-assertion framing above is unchanged. It is the operator's entry that populates the
+placement in the result push.

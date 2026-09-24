@@ -83,3 +83,21 @@ fields, never decomposed from the opaque key. `CONTRACTS.md` §2.5 carries this 
 `entryId`, so this closes a door nobody had opened, not a door in active use. Its value is
 precautionary: a future implementer reading only the type (`entryId: string`) would have no reason to
 know parsing it was ever unsafe, absent this being written down.
+
+## Revision 2 — the spine survives the reverse pass; three things inside it move (2026-09-24)
+
+A field-by-field pass over everything Canoe123 emits left the spine standing. Three things inside it
+change:
+
+- **`Category` is renamed `Class`** (`ADR-014`). "Category" now means an age category inside a class.
+- **The bib is an Attempt fact.** With per-race bib handling, upstream issues a new bib each round:
+  all 124 competitors of one Kayak Cross event changed bib between rounds. A single `Entry.bib`
+  therefore flips or goes stale. `Attempt` identity `(phaseId, bib)` is unaffected: a per-race bib
+  is still unique within its phase, and the key never claimed stability across phases, which is the
+  `entry` pointer's job. The bib is normalised at ingest, because upstream pads result-table bibs to
+  four characters. `Entry.eventBib` stays, optional, for events with event-wide bibs.
+- **An Attempt carries a run generation** (`ADR-013`). A re-run replaces the recorded result inside
+  the same Attempt. It does not create a second Attempt.
+
+`Entry` becomes a list of 1 to N members (`ADR-014` point 7). The `Id` stays opaque and is never
+parsed (Revision 1).

@@ -53,3 +53,10 @@ Any future "smart" retry-or-timeout heuristic being folded into this contract as
 of the asserted fact. Such a thing remains buildable as an admin-UI convenience layered on top of the
 observable `pending`/`submittedAt` state — the contract commits to none of it, deliberately, so that
 convenience can change without being a contract-breaking change.
+
+## Revision — a fourth terminal status, `superseded` (2026-09-24)
+
+A write can target a run that stops counting: a re-run starts a new generation (`ADR-013`) while the
+write is still `pending`. Such a write resolves to `superseded`, and is never matched against the
+re-run's penalties. This is still not a timeout. It is an observed upstream transition, and the
+person who submitted the write sees it resolve.

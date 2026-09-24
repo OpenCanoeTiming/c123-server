@@ -123,3 +123,18 @@ carries the fix (`ExternalId = {scheme, value}`, required together, a bare value
 *some* stable field exists for a future registry to attach to without a second contract migration.
 Naming its actual shape — qualified, not bare — is the same kind of precision this revision's
 predecessor already added, one layer further in.
+
+## Revision 3 — external identity per person; birth date on the live wire (2026-09-24)
+
+- **External identity attaches to each person.** `Entry.members` (`ADR-014`) replaces `icfId`/`icfId2`
+  on `Entry`. Each member carries its own `externalId: ExternalId | null`, required-with-null on the
+  live wire, under exactly the scheme rule of Revision 2. A crew's second member is simply
+  `members[1]`, and team members come from upstream's member references.
+- **A team's synthetic registry number is not carried.** Upstream patrols use one synthetic number
+  for the whole team. It references no registry, so it gives nothing a registry could bind to.
+- **Birth date is carried on the live ingest wire, as entered.** This reverses the reverse-pass
+  proposal to never carry it. Per the maintainer, the ingest contract transmits it. Whether the live
+  store keeps it, and whether it is ever published, is live-client configuration and not a contract
+  rule. Organisers often enter only a year (as `1.1.<year>`), and the year is what places an athlete
+  in an age category. The on-site contract carries the birth year only: no on-site consumer needs the
+  day, and the venue LAN is a poor place to spread personal data it does not need.
