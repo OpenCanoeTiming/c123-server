@@ -85,3 +85,12 @@ explicit statement of what the storage layer must key on, which nothing before t
 - **New resources and fields.** Courses become their own resource. Entries carry members, club,
   nation, age category and birth date. Attempts carry a run generation.
 - **The unit of push is unchanged:** one resource changing.
+
+## Revision 3 — deletion and scope replacement on the wire (2026-09-24)
+
+An upsert-only ingest cannot carry a retraction, and today's live path is upsert-only
+(`EVIDENCE.md` Exhibit 12, E2). The live contract now has three ways to remove knowledge, all
+idempotent: an explicit `not-yet` inside a partial Attempt push resets that field; `DELETE` removes
+an Attempt; a whole-Phase `PUT` replaces every Attempt of that Phase, which is what the on-site
+re-baseline (`ADR-015`) emits. The unit of push is unchanged; the vocabulary of what a push can say
+is completed.

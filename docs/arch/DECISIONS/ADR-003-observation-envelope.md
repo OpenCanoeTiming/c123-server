@@ -164,3 +164,14 @@ layer decides what to present, exactly where Revision 1's fix also lived.
    the gate, minus 2 s. Gaps are back-filled in 2 s steps, and the order along the course is only
    approximately monotonic. INV-2c rests only on the finish time, which is genuine. `GateTimes` is not
    modelled (`DERIVATIONS.md` §9).
+
+## Revision 4 — monotonic against omission, not against a full-state statement (2026-09-24)
+
+INV-1 was written against a partial message wiping state (`EVIDENCE.md` Exhibit 1). Real corrections
+showed its other edge: it froze a wrong value against upstream's explicit statement that the value
+is gone, and would have kept a cleared DNS and a deleted result on the board. `ADR-015` narrows INV-1
+to omission and adds a fourth observation kind, the scope snapshot, whose explicit absence is a
+retraction (INV-7). The envelope itself is unchanged: a retracted field is `not-yet`, pushed
+explicitly, exactly as a run-generation change already was. Two more things sit next to INV-2 now:
+a contradiction rule (INV-2d), which lets the on-course stream withdraw a stale finish, and a
+write-time guard on XML retractions, so a snapshot written before a TCP push cannot undo it.

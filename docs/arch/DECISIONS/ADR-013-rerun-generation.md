@@ -79,3 +79,15 @@ only when the re-run finishes. The rule works either way:
 An operator who stages a finished bib and removes it again without starting it triggers neither
 condition, unless Canoe123 cleared the row. In that case the contract shows what Canoe123 itself
 then holds.
+
+## Revision — retraction and generation are separate (2026-09-24)
+
+Trigger (b) above, "the results-table row observed cleared", is not a generation change. It is a
+**retraction** (`ADR-015`): the result is gone, the run may or may not be raced again, and the
+Attempt returns to `not-started` or to whatever the on-course stream currently shows. A generation
+increments only on trigger (a): a start observed for this bib that is not the current generation's
+start. A re-run therefore appears as a retraction (often invisible on TCP, since the re-run wizard
+pushes nothing) followed by a new start. A finish taken away from an athlete who is still running is
+neither: the on-course stream shows the same start with no finish, and `ADR-015`'s contradiction
+rule applies, within the same generation. `VerificationState` and pending `WriteRequest`s are still
+scoped to the generation and untouched by a retraction.
