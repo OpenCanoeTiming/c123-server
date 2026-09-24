@@ -8,33 +8,69 @@
       "title": "known",
       "type": "object",
       "properties": {
-        "state": { "const": "known" },
+        "state": {
+          "const": "known"
+        },
         "value": {},
-        "observedAt": { "$ref": "#/$defs/timestamp" },
-        "eventTime": { "$ref": "#/$defs/timestamp" },
-        "source": { "$ref": "#/$defs/sourceTag" },
-        "confidence": { "enum": ["authoritative", "inferred"] },
-        "provisional": { "type": "boolean" }
+        "observedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "eventTime": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "source": {
+          "$ref": "#/$defs/sourceTag"
+        },
+        "confidence": {
+          "enum": [
+            "authoritative",
+            "inferred"
+          ]
+        },
+        "provisional": {
+          "type": "boolean",
+          "description": "true while the value may still move (CONTRACTS.md SS1.2): an on-course inference not yet superseded by a result row; a result whose judging is incomplete and whose run is not closed; or an optimistic write awaiting its echo."
+        }
       },
-      "required": ["state", "value", "observedAt", "source", "confidence", "provisional"],
+      "required": [
+        "state",
+        "value",
+        "observedAt",
+        "source",
+        "confidence",
+        "provisional"
+      ],
       "additionalProperties": false,
       "description": "eventTime is OPTIONAL and, per CONTRACTS.md §1.2, MUST be omitted (key absent) rather than sent as null when there is no applicable event time. It is never appropriate to add eventTime to 'required' when refining this schema for a concrete field."
     },
     {
       "title": "not-yet",
       "type": "object",
-      "properties": { "state": { "const": "not-yet" } },
-      "required": ["state"],
+      "properties": {
+        "state": {
+          "const": "not-yet"
+        }
+      },
+      "required": [
+        "state"
+      ],
       "additionalProperties": false
     },
     {
       "title": "unavailable",
       "type": "object",
       "properties": {
-        "state": { "const": "unavailable" },
-        "reason": { "$ref": "#/$defs/unavailableReason" }
+        "state": {
+          "const": "unavailable"
+        },
+        "reason": {
+          "$ref": "#/$defs/unavailableReason"
+        }
       },
-      "required": ["state", "reason"],
+      "required": [
+        "state",
+        "reason"
+      ],
       "additionalProperties": false
     }
   ],
@@ -45,12 +81,21 @@
       "description": "ISO-8601, always wall-clock, always with an explicit offset or Z. Never used for merge ordering (CONTRACTS.md §4 INV-6) — display and staleness computation only."
     },
     "sourceTag": {
-      "enum": ["tcp", "cis", "xml", "operator-write", "operator-assertion"],
-      "description": "operator-write and operator-assertion sit outside the §4 ranking table (INV-2's carve-out) — see CONTRACTS.md §4 for how they are presented."
+      "enum": [
+        "tcp",
+        "xml",
+        "operator-write",
+        "operator-assertion"
+      ],
+      "description": "CIS is not consumed (DECISIONS/ADR-011). operator-write and operator-assertion sit outside INV-2's rules 1-3 (rule 4, CONTRACTS.md SS4)."
     },
     "unavailableReason": {
-      "enum": ["not-configured", "source-unreachable", "not-observed-live-and-cis-unavailable", "not-applicable"],
-      "description": "Closed vocabulary. Never free text — CONTRACTS.md §1.2/§1.4. 'not-applicable' is distinct in kind from the other three: the fact does not exist for this entity at all, permanently, not a temporary source failure (e.g. a forerunner's ICFId, CONTRACTS.md §2.5)."
+      "enum": [
+        "not-configured",
+        "source-unreachable",
+        "not-applicable"
+      ],
+      "description": "Closed vocabulary, never free text (CONTRACTS.md SS1.2). 'not-applicable' differs in kind from the other two: the fact does not exist for this entity at all, permanently. Examples: a person with no registry identity, a heat number in a race without heats."
     }
   }
 }

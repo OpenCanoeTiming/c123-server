@@ -11,7 +11,8 @@
         "code": {
           "enum": [
             "event-not-found",
-            "category-not-found",
+            "class-not-found",
+            "course-not-found",
             "phase-not-found",
             "attempt-not-found",
             "write-not-found",

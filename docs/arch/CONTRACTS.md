@@ -1,29 +1,50 @@
 # Contracts — c123 Ecosystem
 
-The primary deliverable. Everything in `ARCHITECTURE.md` and `DECISIONS/` exists to justify and
-explain what is stated here. Every clause is written to be testable before any implementation
-exists: if a clause cannot be turned into a failing test, it has been sharpened or cut.
+This is the primary deliverable. Everything in `ARCHITECTURE.md` and `DECISIONS/` exists to justify
+and explain what is stated here. Every clause is written to be testable before any implementation
+exists. If a clause could not be turned into a failing test, it has been sharpened or cut.
 
-Vocabulary comes from canoe slalom and Kayak Cross, not from Canoe123's wire format. Where a value
-is shaped the way it is because of what Canoe123 happens to emit, that is stated explicitly as a
-derivability note, not left implicit.
+The vocabulary comes from canoe slalom and Kayak Cross, not from Canoe123's wire format. Where a value
+is shaped by what Canoe123 happens to emit, that is stated explicitly as a derivability note, never
+left implicit.
+
+**Consolidated revision, 2026-09-24.** This version absorbs four sets of input:
+- the reverse pass, which checked every field Canoe123 emits against this contract;
+- a latency measurement from finish to result;
+- the maintainer's answers to eight operational questions;
+- the open contract gaps #165 (course structure), #166 (per-competitor fields, running time,
+  on-course position) and #171 (identity).
+
+The decisions behind it are `DECISIONS/ADR-011` to `ADR-014`, plus dated revisions to earlier ADRs.
+Review history that used to live inline in this document now lives in those ADRs. This document
+states the contract as it now stands.
 
 ---
 
 ## 0. How to read this document
 
-Each entity section states: identity, fields with their derivability, invariants that hold for
-that entity, and legal state transitions where relevant. §1 defines vocabulary used everywhere
-else — read it first. §7 and §8 are the two wire contracts (on-site, live); everything before them
-is the domain model both are built from. §6 is the standalone costed list the brief asks for: what
-depending on CIS buys, and what nothing today can buy.
+Each entity section states the entity's identity, its fields with their derivability, the invariants
+that hold for it, and its legal state transitions where relevant.
+- §1 defines vocabulary used everywhere else. Read it first.
+- §2–§6 are the domain model that both wire contracts are built from.
+- §7 is the on-site wire contract; §8 is the live wire contract.
+- §6 is the list of what today's sources cannot supply.
+- `DERIVATIONS.md` says how each value here is produced from upstream fields. Its §9 lists every
+  upstream field deliberately *not* modelled, with the reason.
 
 Derivability tags, used throughout:
 
-- **[D]** Derivable — stated with its source.
-- **[A]** Derivable only approximately — the approximation is part of the value's own semantics,
+- **[D]** Derivable. Stated with its source.
+- **[A]** Derivable only approximately. The approximation is part of the value's own semantics and is
   carried in its envelope, never a silent implementation guess.
-- **[N]** Not derivable from any source available today — collected in §6.
+- **[N]** Not derivable from any source available today. Collected in §6.
+
+**Sources.** Canoe123 is read through exactly two interfaces:
+- the **TCP push** (`tcp`), which carries on-course state and event-driven result pushes;
+- the **XML snapshot file** (`xml`), which carries the complete record, including facts TCP never
+  carries.
+
+CIS is not consumed (`DECISIONS/ADR-011`).
 
 ---
 
@@ -33,132 +54,136 @@ Derivability tags, used throughout:
 
 Every entity below has an identity field. Two rules apply to all of them:
 
-**On-site, identity may be Canoe123-derived.** Canoe123 is the sole on-site upstream by fixed
-topology (`CONSTRAINTS.md` §1.1); nothing is lost by letting on-site identity lean on it.
+**On-site, identity may be derived from Canoe123.** Canoe123 is the only on-site upstream, by fixed
+topology (`CONSTRAINTS.md` §1.1). Nothing is lost by letting on-site identity lean on it.
 
 **In the live/ingest contract, identity is opaque and provenance-neutral.** A field like `entryId`
-or `eventId` is a stable string the contract can key on; the contract does not know or care whether
-it was minted by the on-site bridge (true today) or issued by a future central registry (true
-later, if one is built). See `DECISIONS/ADR-006-identity-provenance-invariance.md` for the full
-argument and its cost. This document states the resulting rule wherever it bites: never derive a
-live-contract identity field's *meaning* from how it was produced.
+or `eventId` is a stable string the contract can key on. The contract does not know or care whether
+it was minted by the on-site bridge (true today) or issued by a future central registry (possible
+later). The full argument and its cost are in `DECISIONS/ADR-006`. The resulting rule, stated
+wherever it bites: never derive the *meaning* of a live-contract identity field from how it was
+produced. On-site identifiers taken from Canoe123 (`Id`, `RaceId`) are used verbatim and never
+parsed.
 
 ### 1.2 The observation envelope
 
-This is the answer to §5.3 of the brief: what a value asserts, and as of when. Every value in this
-contract that comes from the outside world — as opposed to a structural field like an entity's own
-id — is wrapped:
+Every value in this contract that comes from the outside world is wrapped. A structural field, such
+as an entity's own id, is not.
 
 ```ts
 type Observed<T> =
   | { state: 'known'; value: T; observedAt: Timestamp; eventTime?: Timestamp;
       source: SourceTag; confidence: 'authoritative' | 'inferred'; provisional: boolean }
   | { state: 'not-yet' }
-  | { state: 'unavailable'; reason: string }
+  | { state: 'unavailable'; reason: UnavailableReason }
 
-type SourceTag = 'tcp' | 'cis' | 'xml' | 'operator-write' | 'operator-assertion'
-type Timestamp = string   // ISO-8601, always a wall clock, never "ms since start"
+type SourceTag = 'tcp' | 'xml' | 'operator-write' | 'operator-assertion'
+type UnavailableReason = 'not-configured' | 'source-unreachable' | 'not-applicable'
+type Timestamp = string   // ISO-8601 with an explicit offset or Z
 ```
 
-A field's envelope, as delivered to a client, holds the single value the domain layer currently
-*presents* for it — chosen by the precedence rule in §4, which weighs source authority as well as
-recency. It is not simply whichever observation arrived last; §4 states exactly why not.
+A field's envelope, as delivered, holds the single value the domain layer currently *presents* for
+it. §4 defines how that value is chosen. It is not simply whichever observation arrived last.
 
-Field meanings, precisely:
+The fields, precisely:
 
-- **`observedAt`** — when *our own ingest boundary* captured this observation. Captured the moment
-  a TCP/UDP/CIS/XML message is received and parsed, never at outbound serialisation. This is the
-  direct fix for `EVIDENCE.md` Exhibit 1: today's `timestamp` is minted when a message is built for
-  a client, which answers a question nobody asks. `observedAt` answers "as of when do we believe
-  this."
-- **`eventTime`** — present only when Canoe123 gives a real event timestamp for this fact:
-  `dtStart`, `dtFinish`, or an operator-assertion timestamp (Kayak Cross heat order, §2.6). Absent
-  for everything else — an on-course time-of-day snapshot, for instance, has no better event time
-  than its `observedAt`, and the contract says so by omission rather than faking one.
-- **`source`** — which upstream channel produced this specific observation. Not decoration: it is
-  what lets a consumer (or an operator, or a test) ask "would this be different with CIS
-  connected," without needing to know anything else about how the value was produced.
-- **`confidence`** — `authoritative` when the source directly states the fact (Canoe123's own
-  `dtFinish`, an operator's Cross heat-order entry, CIS's explicit two-run totals); `inferred` when
-  our domain layer derived it from a signal that is evidence of the fact rather than an assertion of
-  it (the `Time`-format-change finish signal; the arithmetic `Total − Pen` reconstruction of a
-  superseded run 1). This is not a numeric score — it is closed to exactly these two values, because
-  a numeric confidence would invite a client to make its own threshold judgement, which is exactly
-  the kind of domain decision §5 asks us to remove.
-- **`provisional`** — `true` only while a strictly more-authoritative source *configured for this
-  deployment* has not yet reported on this specific field. If no more-authoritative source is
-  configured (no CIS licence at this venue), the value is `provisional: false` — it is as final as
-  this deployment will ever produce, even though its `confidence` may still read `inferred`.
-  `provisional` answers "might this still move"; `confidence` answers "how was it produced." A
+- **`observedAt`.** When *our own ingest boundary* captured the observation: the moment a TCP message
+  or an XML snapshot is received and parsed, never at outbound serialisation. This is the direct fix
+  for `EVIDENCE.md` Exhibit 1. It is used for display and staleness only. Merge ordering uses the
+  ingest sequence instead (INV-6).
+- **`eventTime`.** Present only when Canoe123 gives a real event time for the fact: a start or finish
+  time, or an operator-assertion time. Upstream sends every event time as a bare time of day on
+  Canoe123's own timing clock, with no date and no zone. `eventTime` is built by
+  `DERIVATIONS.md` §0.2's rule: the owning Phase's `date`, plus that time of day, plus the venue's
+  configured zone. It is expressed on Canoe123's clock and never shifted to the server's clock.
+  Canoe123's clock is the official time, and this contract never compares `eventTime` with
+  `observedAt`. The gate-judging stamps upstream calls `GateTimes` are **not** event times
+  (`DERIVATIONS.md` §9).
+- **`source`.** The upstream channel that produced this observation.
+- **`confidence`.** Two values only:
+  - `authoritative`: the source states the fact directly. Examples are a result-table row, a finish
+    time, an operator's entry.
+  - `inferred`: the domain layer derived the value from evidence of the fact rather than from an
+    assertion of it. Examples are a total computed from on-course time plus gate penalties before any
+    result row exists, and a finish recognised from the on-course stream.
+
+  It is deliberately not a numeric score. A numeric score would invite each client to choose its own
+  threshold, which is exactly the kind of domain decision this design removes from clients.
+- **`provisional`.** `true` while **the value may still move**. That is the case while any of these
+  holds:
+  - it is an on-course inference not yet superseded by a results-table observation of the same run;
+  - it is a result whose judging is incomplete (at least one gate of the Phase's course is still
+    blank) and whose run is not yet closed;
+  - it is an optimistic write still awaiting its echo (§2.9).
+
+  Otherwise it is `false`. This marks the state honestly in either mode of Canoe123's "ranking with
+  incomplete penalties" setting:
+  - **setting on:** the first result push can precede the last gate's judgement, and the value stays
+    provisional until judging completes;
+  - **setting off:** the first push already follows the last gate.
+
+  `provisional` answers "might this still move". `confidence` answers "how was this produced". A
   client needs both and must not conflate them.
 
-**Wire encoding.** `state` is a JSON string discriminant, present on every envelope. A `known`
-envelope carries exactly `value`, `observedAt`, `source`, `confidence`, `provisional`, always
-present and never `null`, plus `eventTime` — **present only when applicable, otherwise the key is
-omitted entirely, never sent as `null`.** `not-yet` and `unavailable` carry no other key except
-`unavailable`'s `reason`. This omission rule is deliberate and is the direct fix for `EVIDENCE.md`
-Exhibit 5, stated precisely enough to test: a decoder that treats a missing `eventTime` key and an
-explicit `eventTime: null` as the same thing is still correct (both mean "no event time"), but an
-encoder must never emit the key with a `null` value — the two must not become interchangeable on the
-wire, because `Gate.penalty`'s `null` (§2.6) is a real, meaningful value elsewhere in this same
-contract, and a schema that treats every `null` as "absent" would collapse the two apart from context.
+**Wire encoding.** `state` is a JSON string discriminant, present on every envelope.
+- A `known` envelope always carries `value`, `observedAt`, `source`, `confidence` and `provisional`,
+  never `null`. It carries `eventTime` **only when applicable. Otherwise the key is omitted entirely,
+  never sent as `null`.**
+- `not-yet` carries no other key. `unavailable` carries only `reason`.
+
+The omission rule is deliberate. A decoder may treat a missing `eventTime` and an explicit `null` the
+same way. An encoder must never emit the `null`: `null` is a real, meaningful value elsewhere in this
+contract (`Gate.penalty`, §2.6). This is the direct fix for `EVIDENCE.md` Exhibit 5.
 
 ```json
-// known, both a real event time and a good example of full field presence
 { "state": "known", "value": 82.36, "observedAt": "2026-09-15T10:14:02.083Z",
-  "eventTime": "2026-09-15T10:14:02.079Z", "source": "tcp", "confidence": "inferred",
-  "provisional": true }
-
-// known, no event time applicable — the key is absent, not null
-{ "state": "known", "value": "K1M-ST", "observedAt": "2026-09-15T09:00:00.000Z",
-  "source": "tcp", "confidence": "authoritative", "provisional": false }
-
-// not-yet and unavailable carry nothing else
+  "eventTime": "2026-09-15T10:14:02.079Z", "source": "tcp", "confidence": "authoritative",
+  "provisional": false }
+{ "state": "known", "value": "K1M", "observedAt": "2026-09-15T09:00:00.000Z",
+  "source": "xml", "confidence": "authoritative", "provisional": false }
 { "state": "not-yet" }
-{ "state": "unavailable", "reason": "not-observed-live-and-cis-unavailable" }
+{ "state": "unavailable", "reason": "not-applicable" }
 ```
 
-`reason` is a closed set, not free text — a test asserts against these four values, never a
-message string: `'not-configured'` (the source that would carry this isn't set up for this
-deployment — no CIS licence), `'source-unreachable'` (it's configured but not answering right now),
-`'not-observed-live-and-cis-unavailable'` (the specific run-1-superseded case, §6), and
-`'not-applicable'` — the fact does not exist for this entity at all, permanently and by nature, not
-because of a temporary source failure (a forerunner with no ICF registration, §2.5). A `value` that is
-itself a discriminated union (`Outcome`, §2.6) nests its own `kind` field inside `value` exactly as
-declared in TypeScript — no special-casing at the envelope level:
+`reason` is a closed set, never free text:
+- `'not-configured'`: the source that would carry this is not set up. For example, no XML path is
+  configured, or no course is defined for the Phase.
+- `'source-unreachable'`: the source is configured but not answering right now.
+- `'not-applicable'`: the fact does not exist for this entity, permanently and by its nature. For
+  example, a forerunner has no registry identity (§2.5), and a heat number does not apply to a race
+  without heats.
 
-```json
-"outcome": { "state": "known",
-  "value": { "kind": "duration", "runSeconds": 82.36, "penaltySeconds": 0, "totalSeconds": 82.36 },
-  "observedAt": "2026-09-15T10:14:02.083Z", "source": "tcp", "confidence": "inferred",
-  "provisional": true }
-```
+A `value` that is itself a discriminated union (`Outcome`, §2.6) nests its own `kind` inside `value`,
+with no special-casing at the envelope level.
 
-**The trichotomy** (§5.3's *unknown* / *not yet* / *zero*):
+**The trichotomy**, *unknown* / *not yet* / *zero*:
 
-- `not-yet` — the fact does not exist yet. An `Attempt` before it starts; a `Phase` before it is
-  scheduled. Not an error, not missing data — the honest state of a thing that hasn't happened.
-- `unavailable { reason }` — the fact exists, or will, but nothing currently configured can supply
-  it. Reserved strictly for this case. **Never** used because the latest message simply didn't
-  mention the field — see the monotonic merge rule, §4, which is the maintainer's own answer to
-  this exact question and overrides any weaker reading elsewhere in this document.
-- `known { value: 0, ... }` — a real, asserted zero. Structurally distinct from both of the above by
-  construction (it is a variant of `known`), which is the direct fix for `EVIDENCE.md` Exhibit 5:
-  the transport can never again collapse `null` into `0`, because there is no code path where the
-  absence of a `known` observation can be mistaken for one.
+- **`not-yet`.** The fact does not exist yet. Examples: an `Attempt` before its start; the run-scoped
+  fields of a new run generation (§2.6).
+- **`unavailable { reason }`.** Nothing configured can supply the fact, or it does not apply. This
+  state is reserved for exactly that. It is **never** used because the latest message simply did not
+  mention the field (INV-1, INV-3).
+- **`known { value: 0 }`.** A real, asserted zero. It is structurally distinct from both of the
+  above, which is the fix for `EVIDENCE.md` Exhibit 5.
 
 ### 1.3 Units and encodings
 
-- All durations in **seconds**, decimal, never centiseconds or a mix (today's `Time`/`Pen`/`Total`
-  fields are seconds already; CIS fields are not re-verified here — the domain layer normalises at
-  ingest, once).
-- All dates `YYYY-MM-DD`, all timestamps full ISO-8601 with an explicit offset or `Z`.
-- Gate penalties: `0 | 2 | 50 | null`. `null` means not yet judged/passed — never coerced to `0`.
-- No field in any contract value carries natural-language text describing domain state. Status,
-  round, and discipline are closed identifiers; a human-readable label is a client-side lookup
-  keyed on the identifier, in whatever language and register the client chooses. This is the
-  structural generalisation of the fix for `EVIDENCE.md` Exhibit 8 — not "don't emit Czech," but
-  "don't emit language, in any language, from the domain layer, ever."
+- **Durations** are in **seconds**, decimal. Upstream units differ by interface. TCP sends formatted
+  seconds. The XML snapshot sends integer milliseconds for times and totals, and integer seconds for
+  penalties. The domain layer normalises at ingest, once (`DERIVATIONS.md` §0.1).
+- **Dates** are `YYYY-MM-DD`. **Timestamps** are full ISO-8601 with an explicit offset or `Z`.
+- **Bibs** are strings, trimmed of upstream's padding before they are used anywhere. Result-table bibs
+  arrive padded to four characters (`DERIVATIONS.md` §0.1).
+- **Gate penalties** are an integer number of seconds, or `null` for not yet judged or passed. `null`
+  is never coerced to `0`. A single-crew boat's value is always `0`, `2` or `50`. A team's value is
+  the sum over its members (§2.6).
+- **No field carries natural-language text describing domain state.** Status, format, round and
+  discipline are closed or opaque identifiers. A human-readable label is a client-side lookup, in
+  whatever language the client chooses. This generalises the fix for `EVIDENCE.md` Exhibit 8.
+  **Organiser-authored text is different.** An event title, a class name or a race title is data the
+  organiser typed, like a competitor's name. It is carried verbatim and never generated by the domain
+  layer. Canoe123's own localised labels, such as round subtitles and warnings, are not carried
+  (`DERIVATIONS.md` §9).
 
 ### 1.4 Errors
 
@@ -177,7 +202,8 @@ client may parse it. Codes used anywhere in §7 or §8, each with the HTTP statu
 | `code` | HTTP status | Where |
 |---|---|---|
 | `event-not-found` | 404 | §7 (no event configured yet), §8.4 |
-| `category-not-found` | 404 | §7, §8.4 |
+| `class-not-found` | 404 | §7, §8.4 |
+| `course-not-found` | 404 | §7, §8.4 |
 | `phase-not-found` | 404 | §7, §8.4 |
 | `attempt-not-found` | 404 | §7 writes — `phaseId`/`bib` don't resolve to a known Attempt |
 | `write-not-found` | 404 | §7 |
@@ -193,8 +219,8 @@ LAN), and no operation in §7 requires a credential, matching today's precedent.
 ### 1.5 Idempotency
 
 **`PUT` (§8.3) is idempotent by construction, per INV-5 — no header, no special casing.** Retrying an
-identical body any number of times is always safe: the domain layer retains it per-source and merges
-by the ranking table regardless of how many times the same observation arrives. A retried `PUT`
+identical body any number of times is always safe: the domain layer retains it per source and merges
+it by §4's precedence rules regardless of how many times the same observation arrives. A retried `PUT`
 returns `200` with the current resolved resource every time, whether the body was new, a duplicate,
 or superseded by something else in the interim — a client never needs to distinguish these cases to
 know the retry was safe.
@@ -255,415 +281,519 @@ order to do it in — describing what was built, rather than a second hand-maint
 
 ## 2. Domain entities
 
+```
+Organiser (cloud tenant only)
+  └─ Event
+       ├─ Course            (referenced by Phases, §2.12)
+       └─ Class             (K1M, C1W… carries discipline and its age categories)
+            ├─ Entry        (one competitor or crew within the Class, 1..N members)
+            └─ Phase        (one Canoe123 race: a run, a round, or a classification)
+                 └─ Attempt (keyed by phaseId + bib; carries a run generation)
+Standing — assembled per scope (phase, pair, heat, classification) × (whole class | one age category)
+```
+
 ### 2.1 Organiser
 
-The cloud-tier tenant boundary (`CONSTRAINTS.md` §1.7). Not modelled on-site at all — an on-site
+The cloud-tier tenant boundary (`CONSTRAINTS.md` §1.7). It is not modelled on-site at all: an on-site
 deployment is single-tenant by fixed topology.
 
 ```ts
-type Organiser = {
-  organiserId: string   // opaque; a credential subject, not a display name
-  name: string
-}
+type Organiser = { organiserId: string; name: string }
 ```
 
-**Invariant:** every `Event` belongs to exactly one `Organiser`. Authorisation for every write to
-that event's data is scoped by the credential that resolves to this `organiserId` — see §8.1.
-Isolation is a contract property, not a deployment detail: nothing in the read-side public contract
-(§8.4) ever requires knowing which organiser owns an event to read its public results, and nothing
-in the write-side contract ever accepts a write without a credential resolving to the target
-organiser.
+**Invariant:** every `Event` belongs to exactly one `Organiser`. Every write to an event's data is
+authorised by a credential that resolves to that organiser (§8.1). The public read contract (§8.4)
+never requires knowing which organiser owns an event.
 
 ### 2.2 Event
 
 ```ts
 type Event = {
-  eventId: string        // opaque — see §1.1
-  organiserId: string
-  name: string            // e.g. "Jarní pohár 2026" — organiser-supplied, opaque to the domain layer
+  eventId: string                  // opaque, §1.1
+  organiserId: string              // cloud tier only
+  name: string                     // organiser-authored title
+  details: Observed<EventDetails>  // [D] xml
+}
+type EventDetails = {
+  subtitle?: string; venue?: string; facility?: string
+  startDate: string; endDate: string   // as the organiser entered them in Canoe123 — fallible
 }
 ```
 
-**[N] An Event spanning multiple days is not derivable from Canoe123 at all.** Canoe123 has no
-concept of a multi-day event; each racing day is, from its perspective, a fresh export. Event
-identity is established by the on-site bridge (persisted locally, reused across days by default —
-see Scenario E in `ARCHITECTURE.md`) or, in the future, by a central registry — either way, it is
-asserted, never discovered. This is the sharpest instance of the brief's third derivability outcome:
-recorded here as what the current data genuinely cannot tell us, not designed around silently.
+**Event identity is asserted, never discovered.** The on-site bridge mints `eventId` and persists it
+across days (Scenario E, `ARCHITECTURE.md`). A future central registry could issue it instead
+(`DECISIONS/ADR-006`).
 
-**Invariant:** `Event.eventId`, once minted, never changes and is never reused for a different
-competition. A fresh competition on the same laptop is a deliberate operator action (§ Scenario E),
-never inferred from a changed XML/TCP source.
+- **The event title** defaults to the snapshot's own title. It is organiser-authored text (§1.3).
+- **Upstream's own event id** in the snapshot is **not** exposed. It is an input to the operational
+  check "is this still the same Canoe123 event" (`ARCHITECTURE.md` Scenario E), never an identity.
 
-### 2.3 Category
+**Both file layouts must work.** An organiser may keep one Canoe123 file per race day, or one file for
+a whole multi-day event. The snapshot of a multi-day file carries the event's date range and dated
+races for every day. It carries the next day's start lists the evening before. Nothing in this
+contract assumes either layout.
+
+- **Day grouping** comes from each Phase's own `date` (§2.4), never from `details.startDate`/`endDate`.
+  Those are operator-entered, and one recorded event's range was off by a day.
+
+**Invariant:** `eventId`, once minted, never changes and is never reused for a different competition.
+Starting a genuinely new competition on the same laptop is a deliberate operator action, never
+inferred from a changed source.
+
+### 2.3 Class
+
+A class of boat and competitor, such as K1M or C1W. It is exactly one Canoe123 class. **Renamed from
+`Category`** (`DECISIONS/ADR-014`): in both Canoe123 and ICF usage, "category" means an age band, and
+here it means only that.
 
 ```ts
-type Category = {
-  categoryId: string       // derived from Canoe123 Class token — [D] TCP/CIS
+type Class = {
+  classId: string                          // = Canoe123 ClassId, verbatim — [D]
   eventId: string
-  code: string              // raw Canoe123 class string, e.g. "K1M-ST" — opaque, not translated
-  discipline: 'slalom' | 'cross'   // [D] structural — from which Phase roundKinds appear under it
+  code: string                             // = classId; opaque, never translated
+  name: Observed<string>                   // organiser-authored class title — [D] xml, tcp
+  discipline: 'slalom' | 'cross'           // [D] structural, from the formats of its Phases
+  ageCategories: Observed<AgeCategory[]>   // [D] xml; empty list where the event uses none
 }
+type AgeCategory = { ageCategoryId: string; name: string }   // Canoe123 CatId and its name
 ```
 
-`discipline` is exposed explicitly rather than left for a client to infer from `roundKind` tokens,
-because two structurally different things hang off it: which `Attempt.outcome` variant applies
-(§2.6) and which finish-detection strategy the domain layer used to produce `Attempt.status`
-(`ARCHITECTURE.md` §2, `DECISIONS/ADR-009`).
+- **`classId` is read from Canoe123's class field, never from a `RaceId` prefix.** For a hyphenated
+  class the two differ (`K1M-ST` against `K1M_ST`).
+- **Canoe123 lists pseudo-classes, which are never Classes.** One means "not assigned". The race
+  staged with the literal id `<unassigned>` is likewise never a Phase (`DERIVATIONS.md` §0.3).
+- **`discipline`** is exposed explicitly, because two structurally different things hang off it: the
+  `Outcome` variant (§2.6), and the finish strategy (`DECISIONS/ADR-009`).
+
+**Age categories are relayed, never computed** (`DECISIONS/ADR-014`). At national events every class
+contains age categories. Canoe123 assigns each entry to one, from its own year-based rule. The rule is
+federation matter and is not ours to apply. Age-category standings are official results and
+first-class: they are shown *alongside* the class standing, not instead of it (§5).
 
 ### 2.4 Phase
 
-One scored round within a Category — exactly one Canoe123 `RaceId`. This is the entity `EVIDENCE.md`
-found missing: today "Race" conflates Category and Phase, and every client re-derives the split by
-regex (Exhibit 8).
+One Canoe123 race: exactly one `RaceId`. A Phase is a run, a round, or a classification.
 
 ```ts
 type Phase = {
-  phaseId: string            // = Canoe123 RaceId, adopted directly — [D]
-  categoryId: string
-  roundKind: RoundKind        // [D] TCP/XML `DisId`
-  date: string                 // YYYY-MM-DD, assigned once, immutable — see §4 INV-5
-  status: Observed<PhaseStatus> // [D]/[A] — see §3.1
-  multiRun: boolean             // true for BR1/BR2-style pairs — [D] structural, from roundKind
-  scoringKind: 'duration' | 'ordinal'  // [D] structural, from Category.discipline
+  phaseId: string                     // = Canoe123 RaceId, verbatim — [D]
+  classId: string
+  format: string                      // upstream's format token, verbatim, open vocabulary — [D]
+  kind: 'race' | 'classification'     // [D] structural, from format
+  scoringKind: 'duration' | 'ordinal' // [D] structural, from format
+  pair: PairRole | null               // [D] structural, from format and schedule
+  heats: boolean                      // [D] structural, from format
+  date: string                        // YYYY-MM-DD, assigned once, immutable — INV-5
+  courseId: Observed<string>          // [D] xml; not-applicable for a classification
+  scheduledStart: Observed<Timestamp> // [D] xml, the scheduled start
+  programmeOrder: Observed<number>    // [D] tcp, xml — position in the event's running order
+  title: Observed<string>             // organiser-authored race title, where set — [D] xml
+  status: Observed<PhaseStatus>       // [D] — §3.1
 }
-
-type RoundKind = 'BR1' | 'BR2' | 'QUA' | 'SEM' | 'FIN' | 'XT' | 'X4' | 'XS' | 'XF' | 'XER'
-  // open-ended in practice: an unrecognised token is carried through as an opaque string
-  // rather than rejected. This is a known-value set, not a hard enum — Canoe123 is immutable
-  // upstream (CONSTRAINTS.md §1.1) but not exhaustively documented.
+type PairRole = { role: 'first' | 'second'; siblingPhaseId: string; combination: 'best' | 'sum' }
 ```
 
-**`date` is assigned once, from the Phase's first observation or its scheduled slot, and never
-changes** — even if a correction to this Phase's results is pushed a week later (§ maintainer
-answer A7). This is what makes multi-day aggregation (Scenario E) correct under late correction:
-the Phase's place in the calendar is fixed at the moment it becomes known, not at the moment any
-particular push happens to arrive.
+**`format` is open** (maintainer answer Q6; `DECISIONS/ADR-014`). Every format Canoe123 supports is
+representable, even where live results do not implement it yet. The known tokens map to structural
+properties as follows. All of this is E1, from the upstream format vocabulary and upstream's own
+pairing and combination behaviour.
 
-**Invariant:** a `Phase` with `multiRun: true` always has exactly one sibling `Phase` in the same
-`Category` with the complementary run number. `Standing` for a multiRun category (§2.7) is computed
-across the pair, never a single Phase in isolation.
+| Upstream format tokens | `kind` | `pair` | `scoringKind` | `heats` |
+|---|---|---|---|---|
+| `BR1`/`BR2` (best-run slalom), `HT1`/`HT2` (international heats), `EL1`/`EL2`, `TR1`/`TR2` | race | first / second, `combination: 'best'` | duration | no |
+| `NHT2` | race | second of a pair where upstream defines one, `'best'` | duration | no |
+| `SR1`/`SR2` and any other paired second run | race | first / second, `combination: 'sum'` | duration | no |
+| `QF`, `SF`, `SFB`, `FI`, `FIB`, `SP1`, `SP2`, `SPF`, `TSR`, `XT`, `XT1`, `XT2` and single-run tokens generally | race | `null` | duration | no |
+| `X8`, `X4`, `XS`, `XF` (Kayak Cross head-to-head) | race | `null` | ordinal | yes |
+| `XER` (Kayak Cross final classification) | classification | `null` | ordinal | no |
+| any unknown token | race | `null` | duration | no |
+
+**Pairing.**
+- A second run names its first by class and format: `BR2` pairs with the same class's `BR1` on the
+  same day, and likewise for `HT`, `EL`, `TR` and `SR`.
+- `combination` is `'best'` exactly for `BR2`, `HT2`, `NHT2`, `EL2` and `TR2`. Upstream sums both runs
+  for every other second run.
+- The tokens `QUA`/`SEM`/`FIN`, which appeared in an earlier draft of this contract and in the
+  protocol documentation, **do not exist upstream**.
+- Two further pairings exist upstream: a super-final following a second run, and a final following a
+  semi-final under a legacy-finals setting. Neither is modelled yet. This is recorded as an open
+  technical question (`DERIVATIONS.md` §10).
+
+**`XER` is a classification, not a round.** Its rows are upstream's final classification of the whole
+Cross event. Each row says which round decided that athlete's place. A classification Phase holds no
+Attempts; it feeds a `classification` Standing (§2.7). Other upstream tokens that look like event
+rankings (`RXER`, `SLER`, `WWER`) stay "unknown" until checked (E4, `DERIVATIONS.md` §10).
+
+**`date` is assigned once and never changes**, even if a correction to the Phase's results is pushed a
+week later. That is what keeps multi-day grouping correct under late correction.
 
 ### 2.5 Entry
 
-A competitor within a Category — one athlete/boat, persistent across every Phase of that Category.
+A competitor within a Class: one athlete, crew or team, persistent across every Phase of that Class.
 
 ```ts
-type ExternalId = { scheme: string; value: string }
-// scheme is an open string, not a closed enum (CONSTRAINTS.md §1.8) — 'icf' is the one documented
-// convention (the genuine ICF global registry); a national federation's own registry (a Czech 'cz-rgc',
-// for instance) is equally valid and just as legitimate a value — see the note below on why a bare
-// value is never enough.
+type ExternalId = { scheme: string; value: string }   // scheme: open string, e.g. 'icf', 'cz-rgc'
+
+type Person = {
+  givenName: string
+  familyName: string
+  birthDate?: string                  // YYYY-MM-DD as entered upstream; see "Birth date" below
+  externalId: ExternalId | null       // null = no registry identity at all (not-applicable)
+}
 
 type Entry = {
-  entryId: string             // opaque — see §1.1. On-site, derived from Canoe123 Id, verbatim, never parsed
-  categoryId: string
-  bib: Observed<string>       // [D] — display number; correctable, see §2.6's binding note
-  name: Observed<string>      // [D] — athlete/boat display name, raw, not translated
-  icfId: Observed<ExternalId> // [D]/[N] — external identity; required on the live ingest contract, §8.3
-  icfId2: Observed<ExternalId> // [D]/[N] — a crew's second member; a minimal, additive stand-in, not the full crew-shape answer — see below
+  entryId: string                     // opaque, §1.1 — on-site, Canoe123 Id verbatim, never parsed
+  classId: string
+  displayName: Observed<string>       // upstream's pre-assembled name, or a team's name — [D]
+  members: Observed<Person[]>         // 1..N — [D] xml
+  club: Observed<string>              // [D] xml, tcp
+  nation: Observed<string>            // [D] xml — see "Nation" below
+  ageCategoryId: Observed<string>     // [D] xml; not-applicable where the class has no age categories
+  eventBib: Observed<string>          // [D] xml; not-applicable where bibs are issued per race
 }
 ```
 
-**`entryId` is opaque, full stop — never parsed for class, category, or crew, and this is now a
-stated rule, not an implicit habit.** Checked exhaustively, not sampled: 1,483 real `<Participants>`
-records, every one carrying `ICFId`/`ClassId` to validate an `Id` against, found the field's actual
-composition — `{ICFId}["."{ICFId2}]"."{ClassId, transformed}["."{CatId}]` — holds in 97.3% of cases
-and fails in the rest four separate ways: 14 records have no `ICFId` at all and an `Id` with no
-separator (`FR51`, a forerunner: `ClassId=FR` + `EventBib=51`); 8 have a genuine `.{CatId}` tail,
-making a three-segment `Id` ambiguous three ways (hyphenated class, crew, or category); 6 carry a
-class token disagreeing with the record's own `ClassId`; segment count is not even a reliable
-discriminator, since a doubles `Id` is three-part and a team `Id` is two-part for unrelated reasons
-(patrols use one synthetic `ICFId` and carry their crew in `Member1/2/3` instead). `ClassId`, `CatId`,
-`ICFId`, and `ICFId2` exist as their own elements and are correct in all 1,483 records — `entryId`
-is derived from `Id` for on-site identity exactly as before, but nothing is ever recovered *from* it
-by parsing; every one of those facts is read from its own field.
-
-**Derivability note on `entryId` stability.** Confirmed directly: Canoe123's `Id` field is
-identical for the same competitor's BR1 and BR2 entries (a matched pair was checked). For
-QUA→SEM→FIN specifically, no direct sample exists; the equivalent Cross elimination chain
-(XT→X4→XS→XF→XER) shows the same stability, and `Id`'s own composition (ICF registration code +
-class, with no phase component) makes cross-phase stability the structural default rather than an
-accident. Treated as **[D]** for BR1/BR2 and Cross elimination, **[A]** — inferred, not directly
-observed — for QUA/SEM/FIN. Flagged as a residual risk, not a blocker: even if wrong, the failure
-mode is a spurious new `Entry` rather than silent data corruption, and is visible (a competitor
-would appear to have zero prior-phase attempts). **`entryId`'s stability is scoped to one event,
-never across events** — the class token embedded in `Id` means the same athlete is a different `Id`
-at an event that structures categories differently (`11078.C1W` where classes are plain, `11078.C1W.ZS`
-where the same class is split by category). `entryId` identifies a competitor *within this event*,
-never a person — which is exactly why `icfId`, not `entryId`, is what the live contract carries for
-cross-event identity (`§8.3`, `DECISIONS/ADR-006`).
-
-**`icfId`/`icfId2`, precisely.** Source: Canoe123's own `ICFId`/`ICFId2` elements, read directly,
-never derived from `Id`. `ICFId` is frozen at registration and can disagree with who is actually
-racing — 12 records in the same corpus carry a crew substitution the `Id` was never updated to
-reflect, while the record's own `ICFId2` is current; **for external identity, the record's own
-field is authoritative, never the embedded number inside `Id`.** Envelope: `source: 'tcp'` or `'xml'`
-per the usual rules, `confidence: 'authoritative'`. **Failure mode: `unavailable{reason:
-'not-applicable'}`, not an error and not `not-yet`**, for the 14-in-1,483 case with no `ICFId` at all
-— forerunners, proxies, course-openers. Decided here rather than left to whoever implements the
-ingest contract first: such an entry is **accepted**, not rejected, and is representable with an
-event-scoped identity only (`entryId`, exactly as any other `Entry`) — refusing to carry a forerunner
-at all would make a real, already-existing category of participant unrepresentable on the live tier
-for no gain, and a permanently-absent external identity is an honest fact this contract already has a
-state for, not a reason to reject the push. **This remains true unchanged by the correction below —
-an entry with no registry identity at all is exactly as fully renderable as one with one, in whatever
-order the event seeds it; `icfId` being unavailable was never coupled to anything else about an
-`Entry`, and the fix below does not touch that.**
-
-**`ICFId` is not one namespace, found under review, not designed in from the start.** `value` alone
-is not a fact — it is a reference *into a registry*, and which registry is a matter of the
-organiser's own practice, not of the field. The maintainer's own operating description: a Czech
-national race fills `ICFId` with the Czech federation's own RGC numbers for domestic entrants, while
-a foreign entrant at that same event may carry a genuine ICF code, or nothing at all — the same field,
-two different registries, inside one event. This is not misuse of the field; it is how these events
-actually run, the identity equivalent of the federation-specific naming and coding `CONSTRAINTS.md`
-§1.8 already names for ranking schemes and age-class conventions — the principle turns out to apply
-to identity, not only to rules. **The consequence that matters:** the live tier is one shared cloud
-instance serving organisers who never coordinate (`CONSTRAINTS.md` §1.7). Organiser A's Czech RGC
-`12345` and organiser B's genuine ICF `12345` are different people; a contract keying on a bare
-`icfId` string merges them, silently, in exactly the tier whose purpose is to outlive one federation.
-**Fix:** `icfId`/`icfId2` carry their scheme, not just their value (`ExternalId`, above) — two values
-are the same external identity only when both `scheme` and `value` match. A bare string is not a
-valid `icfId` at all; a push submitting one gets `400 validation-failed` (§8.3), not a silent
-coercion — the namespace cannot be got wrong by omission, only by a bridge author actively declaring
-the wrong one, which is a configuration error to catch at that bridge, not something this contract
-can derive from Canoe123's own data (the wire format never disambiguates a genuine ICF code from a
-national registry number filled into the same element — recorded as **[N]**, `§6`).
-
-`icfId2` is a minimal, additive field for a two-person
-crew's second member — **it is not the full answer to whether `Entry` should represent one person or
-1–N**, which is a separate, structural question, deliberately deferred to its own piece of work.
+- **`entryId` is opaque, full stop.** It is never parsed for class, category or crew (#171).
+  - It is stable only within one event. The same athlete can have a different `Id` at an event that
+    splits classes differently.
+  - It identifies a competitor within this event, never a person. Cross-event identity is each
+    member's `externalId`.
+- **Members.** `members` is the crew shape the earlier `icfId`/`icfId2` pair stood in for
+  (`DECISIONS/ADR-014` point 7).
+  - A single boat has one member.
+  - A two-person crew has two. The second member's names, birth date and registry number come from
+    the participant record's own second-member fields.
+  - A team or patrol has its members resolved from upstream's member references against the
+    participant records. The references are ids in the snapshot, and are never parsed.
+  - A team's own registry number is synthetic, references no registry, and is not carried.
+- **External identity, per person** (#171, `DECISIONS/ADR-006`, Revisions 1–3).
+  - It is read from the participant record's own registry-number elements, never from inside `Id`.
+    `Id` is frozen at registration and can disagree with who is actually in the boat.
+  - It is always qualified by `scheme`, because the same element holds different registries at
+    different events. A Czech national race fills it with national registry numbers, while a foreign
+    entrant may carry an ICF code.
+  - Which registry a value belongs to is **[N]** from Canoe123's data. The operator of the bridge
+    asserts it from configuration (§6).
+  - A person with no registry identity at all has `externalId: null`. This applies to forerunners,
+    placeholders, and unregistered or foreign entrants. Such a person is an ordinary participant, fully
+    renderable in seeding order, never a degraded one.
+- **Birth date** (maintainer answer Q4). The on-site contract (§7) carries only the **birth year**:
+  no venue consumer needs the day, and the year is what places an athlete in an age category. The
+  live ingest contract (§8.3) carries the birth date as entered, often `YYYY-01-01` with only the year
+  meaningful. Whether the live store keeps it, and whether it is ever published, is live-client
+  configuration, not a contract rule.
+- **Nation.** Upstream's nation code, relayed as a string. At events where the competing units are
+  regions, organisers legitimately fill it with regional codes. At national events, a foreign
+  entrant's country may appear only inside the club name. A client must not assume `nation` is always
+  a country, for example by rendering it as a flag.
+- **Club and nation suppression.** Upstream's on-course stream blanks club or nation according to the
+  event's club-usage setting. The results stream and the snapshot do not. `club` and `nation` are
+  therefore derived from the snapshot and results rows only (`DERIVATIONS.md` §3).
+- **Bibs.**
+  - `eventBib` is present only where the event issues bibs event-wide. Where bibs are issued per race,
+    it is `unavailable{not-applicable}`: all 124 competitors of one recorded Cross event changed bib
+    between rounds.
+  - The bib that identifies a run is always `Attempt.bib` (§2.6).
 
 ### 2.6 Attempt
 
-One Entry's participation in one Phase. The unit with a lifecycle: on-course state, timing, gate
-penalties.
+One Entry's participation in one race Phase: the unit with a lifecycle.
 
 ```ts
 type Attempt = {
-  attemptId: string          // = `${phaseId}:${bib}` — stable identity, see the binding note below
+  attemptId: string                    // = `${phaseId}:${bib}`
   phaseId: string
-  entry: Observed<{ entryId: string }>   // mutable pointer — see below
-  status: Observed<AttemptStatus>         // [D]/[A] — see §3.2
+  bib: string                          // this race's bib, trimmed — structural identity
+  entry: Observed<{ entryId: string }> // mutable pointer (INV-4)
+  run: Observed<number>                // run generation, 1-based — DECISIONS/ADR-013
+  startOrder: Observed<number>         // [D] tcp, xml
+  scheduledStart: Observed<Timestamp>  // [D] slalom; not-applicable in Cross
+  heat: Observed<number>               // [D] Cross heats; not-applicable otherwise
+  startLane: Observed<number>          // [D] Cross heats; not-applicable otherwise
+  status: Observed<AttemptStatus>      // §3.2
   outcome: Observed<Outcome>
-  gates: Observed<Gate[]>
-  upstreamRank: Observed<number>           // Canoe123's or CIS's own Rank — input to §5, never presented directly as Standing.rank
+  gates: Observed<Gate[]>              // not-applicable in Cross (see faults)
+  splits: Observed<Split[]>            // [D] where splits are armed; not-applicable otherwise
+  faults: Observed<Faults>             // Cross only; not-applicable in slalom
+  courseOrder: Observed<number>        // on course only: 1 = closest to the finish — [D] tcp
+  timeToBeat: Observed<TimeToBeat>     // on course only — [D] tcp
+  placement: Observed<Placement>       // upstream's rank and order — §5
+  pairTotal: Observed<number | null>   // second run of a pair only: the combined result, seconds
+  countingRun: Observed<1 | 2>         // second run of a 'best' pair only: which run counts
+  underReview: Observed<boolean>       // upstream's "under review" mark
+  qualified: Observed<boolean>         // progression mark (Q); not-applicable where unused
 }
 
-type AttemptStatus = 'not-started' | 'on-course' | 'finished' | 'dns' | 'dnf' | 'dsq' | 'cap' | 'other'
+type AttemptStatus =
+  | 'not-started' | 'at-start' | 'on-course' | 'finished' | 'non-ranked'
+  | 'dns' | 'dnf' | 'dsq' | 'dsq-r' | 'dqb' | 'cap' | 'ral' | 'other'
 
 type Outcome =
-  | { kind: 'pending' }
-  | { kind: 'duration'; runSeconds: number; penaltySeconds: number; totalSeconds: number }  // slalom
-  | { kind: 'ordinal'; order: number }                                                       // cross
-  | { kind: 'no-result'; status: 'dns' | 'dnf' | 'dsq' | 'cap' | 'other' }
+  | { kind: 'pending' }                                                    // nothing yet
+  | { kind: 'running'; elapsedSeconds: number; penaltySeconds: number }   // on course, ticking
+  | { kind: 'duration'; runSeconds: number; penaltySeconds: number; totalSeconds: number }
+  | { kind: 'ordinal'; order: number }                                     // Cross, within heat
+  | { kind: 'no-result'; status: 'dns' | 'dnf' | 'dsq' | 'dsq-r' | 'dqb' | 'cap' | 'ral' | 'other' }
 
-type Gate = { number: number; penalty: 0 | 2 | 50 | null }
+type Gate = { number: number; penalty: number | null; memberPenalties?: (number | null)[] }
+type Split = { number: number; elapsedSeconds: number }
+type Faults = { count: number; gates: string[]; lastCleanGate: number }  // gate captions as upstream names them
+type TimeToBeat = { mode: 'target' | 'delta'; seconds: number; holder?: string }
+type Placement = { rank: number | null; order: number }
 ```
 
-**Attempt identity is `(phaseId, bib)`, not `(phaseId, entryId)`.** This is a deliberate revision
-from the working hypothesis this design started with. The reason is the maintainer's answer on
-corrections (§ maintainer answer A7): it can emerge, up to a week after a race, that a different
-person raced under a given bib. What is structurally stable is the physical fact — someone wearing
-bib 9 went down the course in `K1M_ST_BR2_6` — and *who that was* is the correctable assertion, not
-the identity key. Keying `Attempt` on `bib` and carrying `entry` as an `Observed` pointer makes that
-correction a normal field update (a new, newer-`observedAt` `known` observation) rather than a
-structural rebind that would orphan every downstream reference to the old `attemptId`.
+**Identity is `(phaseId, bib)`.** What is physically stable is the fact that whoever wore bib 9 went
+down the course in this race. *Who* that was is the correctable assertion `entry`: a competitor can
+turn out, even a week later, to have raced under the wrong bib.
+- The bib is this race's bib. Per-race bib issue does not disturb the key, because the key never
+  claimed stability across Phases.
+- Two kinds of collision cannot happen:
+  - Kayak Cross's four simultaneous competitors are the same Phase with different bibs;
+  - two classes reusing a bib number are different Phases.
 
-This is also the direct fix for `EVIDENCE.md` Exhibit 1's on-course collision: on-course state is
-keyed by `(phaseId, bib)`, never `bib` alone, so Kayak Cross's four simultaneous competitors — same
-Phase, different bibs — never collide, and two categories that happen to reuse a bib number never
-collide either, because they are different `phaseId`s.
+**Run generation** (`DECISIONS/ADR-013`, maintainer answer Q2). A re-run deletes the recorded result,
+and the run is raced again. Meanwhile, it looks as if the athlete never did that run.
+- `run` increments on explicit upstream evidence of a re-run. That is either a new start observed
+  for a bib whose run was already recorded, or the recorded result row cleared.
+- On increment, every run-scoped field becomes `not-yet`, and the change is pushed:
+  - `status`, `outcome`, `gates` and `splits`;
+  - `faults`, `placement`, `pairTotal` and `countingRun`;
+  - `underReview`, `qualified`, `courseOrder` and `timeToBeat`.
+- The old result is **not** shown while the re-run happens. A client that wants to say "re-run" reads
+  `run > 1`.
 
-**`gates` is position-correct by construction.** The domain layer owns gate-number assignment
-centrally, from whichever wire encoding it received (comma-separated in OnCourse, fixed-width in
-Results — `DOMAIN-FACTS.md` §6); a client never sees either raw string. This retires
-`EVIDENCE.md` Exhibit 2 by removing the two independently-wrong client parsers' reason to exist,
-not by fixing either of them.
+**Outcome, by phase of the run.**
+- **`pending`:** nothing yet.
+- **`running`:** on course. It carries upstream's own ticking running time and penalties so far
+  (#166). It is displayed as upstream displays it, including upstream's split-hold behaviour
+  (`DERIVATIONS.md` §4.3).
+- **`duration`:** a slalom run's own time, penalties and total. On a second run of a pair, this is
+  **run 2's own** figures. The combined result is `pairTotal`.
+- **`ordinal`:** Cross. The athlete's order within the heat, **taken from upstream's placement, never
+  from `Time`.** Athletes with faults rank after every clean finisher, whatever their finish order
+  (`DECISIONS/ADR-009` addendum).
+- **`no-result`:** a result mark that removes the run from the ranking.
+- The earlier draft's gap, where running time had no shape (#166), is closed by the `running`
+  variant. A client never has to cross-reference `status` to know whether a value is still
+  accruing.
 
-**Finish detection is a per-discipline strategy, not one rule.** For slalom: primary signal is the
-`dtFinish` transition (`eventTime` present, `confidence: authoritative`); `Time`-format change and
-`HighlightBib` are corroborating, lower-confidence fallbacks (`confidence: inferred`) used only when
-`dtFinish` is not yet observed. For Cross: **there is no per-competitor OnCourse finish signal at
-all** — checked directly against a recorded Cross heat: `chStart`, `chFinish`, `dtStart`, `dtFinish`
-and `Completed` never transition per-competitor; the whole heat clears from OnCourse together, well
-after the fact. The authoritative signal is the `Results` stream's `Rank`/`Time` field for that bib
-becoming non-empty — and per the maintainer, **this is not a detected signal at all: it is an
-operator's assertion**, entered after conferring with the finish judge, arriving at human latency.
-`Attempt.outcome` for Cross therefore carries `source: 'operator-assertion'`, `confidence:
-authoritative` — never `inferred` — once the Results stream reports it; before that, `outcome` is
-`{ state: 'not-yet' }` for as long as the heat runs, structurally correctly, because we genuinely
-have nothing better.
+**Marks.**
+- `status` carries upstream's full result-mark vocabulary (`DERIVATIONS.md` §4.1).
+  - `non-ranked` raced and has a time, but is excluded from the ranking.
+  - `ral` is placed last; placement says where.
+  - `dsq-r` and `dqb` are distinct disqualifications that the earlier draft lost into `other`.
+- **In a second run of a pair, a mark describes run 2 only.** The athlete keeps a combined placement
+  from run 1. For example, one athlete was marked `dns` for run 2 and ranked 110th. `placement` and
+  `pairTotal` carry that, independently of `status`.
+- **`underReview`** is upstream's "under review" mark, shown as an asterisk on upstream's own output.
+  It is first-class (maintainer answer Q7): clients show it on the scoreboard and in live results.
+  It is independent of `provisional`:
+  - `underReview` means an official is holding the result;
+  - `provisional` means judging may still move it.
 
-**Deadline consequence (§6.D in `ARCHITECTURE.md`):** the domain layer pushes an operator-asserted
-Cross outcome the instant it is ingested — no debounce, no batching, no waiting for a rotation. This
-is the server's half of the maintainer's "publish before the next heat starts" requirement; the
-other half — how long that result stays visible once the next heat is already running — is display
-policy, owned by the client (§3 of `ARCHITECTURE.md`).
+  Both can be true at once.
+
+**`gates` is position-correct by construction.** Upstream encodes gate penalties in two different
+string formats (`DERIVATIONS.md` §4.6). The domain layer owns gate numbering centrally, and a client
+never sees a raw string. `gates` has exactly the Phase's course gate count. Where no course is
+configured, `gates` is `unavailable{not-configured}`: upstream then fabricates a 25- or 30-gate grid
+(§2.12), and relaying it would invent gates. `outcome.penaltySeconds` still carries upstream's own
+penalty sum. A team boat's `penalty` is the sum over its members, with `memberPenalties` alongside.
+
+**On-course facts.**
+- **`courseOrder`** is upstream's on-course position: 1 is closest to the finish (#166).
+  `/api/oncourse` is ordered by it (§7.1). It is the only way to order Kayak Cross's four
+  simultaneous competitors (`DECISIONS/ADR-009` addendum).
+- **`timeToBeat`** is upstream's comparison with the leader:
+  - an unsigned **target** time on approach to a split or the finish;
+  - a signed **delta** at a split, at the finish, or at the start of a second run;
+  - `holder` is the leader's short display name, organiser data.
+
+  It is **not** a rank.
+- Upstream's on-course rank field is not used for `placement`. At the start of a second run it
+  carries the *first* run's rank.
+
+**Finish is a per-discipline strategy** (`DECISIONS/ADR-009`).
+- **Slalom:** the finish-time transition on the on-course stream. The authoritative source is
+  Canoe123's own finish time. There is no fallback. Upstream shows a split time with decimals during
+  a split hold, so a whole-seconds-to-decimals change is not a finish, and the downstream highlight
+  signal is our own derivative, not an upstream one.
+- **Cross:** no per-competitor finish signal exists on the on-course stream. The outcome is an
+  operator's assertion (`source: 'operator-assertion'`, `confidence: 'authoritative'`), entered after
+  conferring with the finish judge. It arrives in the result push and is pushed on, un-debounced, the
+  moment it is ingested.
 
 ### 2.7 Standing
 
-Derived, not primary state — the current ranking view for a Category (or, for a `multiRun` Phase
-pair, across both). Recomputed by the domain layer whenever a contributing `Attempt` changes.
+Assembled, not primary state, and never ranked by us (`DECISIONS/ADR-012`). §5 specifies the
+assembly precisely.
 
 ```ts
 type Standing = {
-  categoryId: string
+  standingKey: string          // stable key of (scope, ageCategoryId) — §5
+  classId: string
+  scope: { kind: 'phase'; phaseId: string }
+       | { kind: 'pair'; firstPhaseId: string; secondPhaseId: string }
+       | { kind: 'heat'; phaseId: string; heat: number }
+       | { kind: 'classification'; phaseId: string }
+  ageCategoryId: string | null // null = the whole class
   asOf: Timestamp
   entries: StandingEntry[]
-  anomalies: Anomaly[]     // never silently dropped — see §5
+  anomalies: Anomaly[]
 }
 
 type StandingEntry = {
   entryId: string
-  rank: number | null       // null for no-result entries — see §5
-  outcome: Outcome           // the resolved outcome this rank is based on
+  bib: string
+  rank: number | null          // relayed; age-category rank assembled — §5
+  order: number | null         // null until placed
+  result: Outcome              // the Attempt's own outcome (for a pair: the second run's own)
+  pairTotalSeconds?: number | null // pair scope only: the combined result the placement is based on
+  behindSeconds: number | null // this entry's ranked value minus the leader's; duration scopes only
   provisional: boolean
+  underReview: boolean
+  decidedIn?: string           // classification scope only: the format of the round that placed the athlete
 }
 
-type Anomaly = { kind: 'rank-disagreement'; entryId: string; ourRank: number; upstreamRank: number }
+type Anomaly =
+  | { kind: 'order-disagreement'; entryId: string; aheadOfEntryId: string }
+  | { kind: 'category-rank-disagreement'; entryId: string; assembled: number; upstream: number }
 ```
-
-The ranking algorithm is specified in §5, precisely enough to test independently of any
-implementation.
 
 ### 2.8 Source status
 
-Diagnostic, not spectator-facing — the maintainer was explicit that a missing source must not nag
-(§ maintainer answer A1).
+Diagnostic and admin-facing only. Per maintainer answer A1, a missing source must not nag.
 
 ```ts
 type SourceStatus = {
-  tcp: ConnState
-  cis: ConnState | 'not-configured'
-  xml: ConnState
+  tcp: { state: ConnState; upstreamInstance: 'main' | 'backup' | 'offline' | null;
+         timingClockOffsetSeconds: number | null }
+  xml: { state: ConnState | 'not-configured'; lastRewriteDetectedAt: Timestamp | null }
 }
 type ConnState = 'connected' | 'reconnecting' | 'unreachable'
 ```
 
-Consumed by the on-site admin UI. Not pushed to scoreboard/penalty-check/spectator surfaces as an
-alert — its only effect on those surfaces is indirect, through `unavailable{reason}` on the specific
-values it affects (§6).
+**`upstreamInstance`** reports which Canoe123 instance the TCP feed comes from. Every upstream message
+states it. Switching to a backup instance is the timekeeper's manual work: the server is re-pointed by
+hand (maintainer answer Q8). Automatic failover is **out of scope**. The field exists only so the
+admin UI can show which instance is live.
+
+**`timingClockOffsetSeconds`** is the offset of Canoe123's timing clock from the server clock,
+measured from upstream's once-a-second time-of-day message. It is a diagnostic only. Nothing is ever
+corrected by it (§1.2 `eventTime`).
 
 ### 2.9 Write request
 
-The contract's answer to Scenario B and to the maintainer's answer A6 (no timeout policy).
+The contract's answer to Scenario B and to maintainer answer A6: there is no timeout policy
+(`DECISIONS/ADR-010`).
 
 ```ts
 type WriteRequest = {
   writeId: string
-  target: { phaseId: string; bib: string; field: 'gate-penalty' | 'status' }
+  target: { phaseId: string; bib: string; run: number; field: 'gate-penalty' | 'status' }
   requestedValue: unknown
   submittedAt: Timestamp
-  status: 'pending' | 'confirmed' | 'mismatched'
+  status: 'pending' | 'confirmed' | 'mismatched' | 'superseded'
   confirmedValue?: unknown
   confirmedAt?: Timestamp
 }
 ```
 
-**No timeout field exists, deliberately.** `pending` persists until an upstream observation for the
-same field arrives with a later `observedAt`; if it matches, `confirmed`; if it differs,
-`mismatched`. A `WriteRequest` never times out into a failure state on its own — per the maintainer,
-a lost echo is a failed write that must be surfaced and resolved by a person, not guessed at by a
-duration threshold. `submittedAt` is always present, so any client that wants to show "pending for
-Ns" computes it locally; the contract does not define what duration should worry anyone.
+- **`pending` persists until an echo of the same field, for the same run generation, is ingested.**
+  - If the echo matches, the status is `confirmed`.
+  - If it differs, the status is `mismatched`.
+  - If the targeted generation is replaced by a re-run first, the status is `superseded`
+    (`DECISIONS/ADR-013`).
+- No state is reached by the passage of time alone. A client may compute "pending for N s" from
+  `submittedAt`.
 
-**Writes target `(phaseId, bib)` explicitly, including a closed Phase.** Nothing in this contract
-restricts writes to the "current" phase. This is required directly by the maintainer (§ maintainer
-answer A2): penalty-check must be able to open a completed run 1 and correct it. Upstream, this is
-carried by Canoe123's `PenaltyCorrection` terminal command, which takes an explicit `RaceId`
-parameter and is documented for post-completion use — unlike `Scoring`, which has no race-targeting
-parameter and is necessarily current-race-only. The contract does not depend on which upstream
-command the domain layer chooses; it only requires that closed-phase writes are accepted and
-tracked identically to current-phase ones.
+**Writes may target a closed Phase** (maintainer answer A2). Canoe123's correction command carries an
+explicit race id and works after completion. The contract only requires that closed-phase writes are
+accepted and tracked identically to current-phase ones.
 
-### 2.10 Verification state (penalty-check's own workflow bookkeeping)
+### 2.10 Verification state
 
-Not a sport-domain fact — a judge checking a displayed penalty against a paper protocol changes
-nothing about what happened on the water. Kept as its own namespace, server-persisted because
-multiple tablets must see the same check-off state, but deliberately outside §2.1–§2.9: its wrong
-value is a worse workflow, never a wrong fact, so it sits on the client side of the line in §2 of
-`ARCHITECTURE.md` even though it happens to be stored on the server for sharing, not rendering.
+Penalty-check's own workflow bookkeeping: whether a judge has compared a displayed penalty against
+the paper protocol. It is not a sport-domain fact. It is stored on the server so every tablet shares
+it.
 
 ```ts
 type VerificationState = {
-  attemptId: string     // = the domain's own (phaseId, bib) — see below
-  gate: number
-  checked: boolean
-  checkedBy?: string
-  checkedAt?: Timestamp
+  attemptId: string; run: number; gate: number
+  checked: boolean; checkedBy?: string; checkedAt?: Timestamp
 }
 ```
 
-**Keyed on the domain layer's own `attemptId`, not a separate fingerprint.** Today,
-`checks/fingerprint.ts` computes its own event-identity fingerprint, independent of and disagreeing
-with the two others audited in `EVIDENCE.md` Exhibit 7. That third fingerprint's actual job was never
-"is this the same event" — it was "which attempt does this checked gate belong to," a question the
-domain layer's own `(phaseId, bib)` identity already answers exactly. Reusing it removes the need
-for a third scheme to exist at all, rather than reconciling it with the other two.
+- **It is keyed on the domain's own identity, plus the run generation.** A check of an earlier run's
+  penalty never carries over to a re-run (`DECISIONS/ADR-013`).
+- **It must be durable across restart.** Nothing upstream can reconstruct it. Everything else is
+  recoverable from the XML snapshot in one read.
 
-**`VerificationState` must be durable across a server restart — this is the one part of domain state
-where that is not optional.** Everything else a restart empties is, in the ordinary case, recoverable
-from Canoe123 itself: TCP's `Results` rotation cycles through every race seen this session, including
-ones completed hours or a calendar day earlier, and a fresh XML read is fully cumulative for the
-running event, not a rolling window — both checked directly against real multi-hour, multi-day
-recordings, not assumed. `VerificationState` has no such backstop: it records a judge's own act of
-comparison, a fact that exists nowhere in Canoe123, so a restart that loses it loses it permanently,
-with nothing upstream to reconstruct it from. It must be written to durable storage on every change,
-the same discipline `c123-server/CLAUDE.md` already states for `AppSettingsManager`, not merely held
-in the same in-memory domain state as everything else.
+### 2.11 Worked example: the envelope through a finish
 
-### 2.11 Worked example — the observation envelope through Scenario A
-
-`Attempt` for bib 9, `K1M_ST_BR2_6`, run 2 beating run 1, at three points on the timeline walked in
-`ARCHITECTURE.md` §6.A (values illustrative):
+Take `Attempt` `K1M_BR2_6:9`, a second run that beats the first. The event runs Canoe123 with ranking
+on incomplete penalties (values illustrative).
 
 ```ts
-// t+1s — dtFinish just transitioned; totalSeconds computed by us from OnCourse Time + gates.
-// Shown here as settled for a clean run with all gates already confirmed — DERIVATIONS.md §4.3
-// is the precise version: this computation is ongoing, not a single evaluation at this instant,
-// because real recordings show gate judging can still be in flight when dtFinish fires.
-{
-  attemptId: "K1M_ST_BR2_6:9",
-  entry: { state: 'known', value: { entryId: '30034.K1M_ST' }, observedAt: '…T10:14:02.100Z',
-           source: 'tcp', confidence: 'authoritative', provisional: false },
-  status: { state: 'known', value: 'finished', observedAt: '…T10:14:02.083Z',
-            eventTime: '…T10:14:02.079Z', source: 'tcp', confidence: 'authoritative', provisional: false },
-  outcome: { state: 'known',
-             value: { kind: 'duration', runSeconds: 82.36, penaltySeconds: 0, totalSeconds: 82.36 },
-             observedAt: '…T10:14:02.083Z', source: 'tcp', confidence: 'inferred', provisional: true },
-}
+// t+0.0s — on-course finish-time transition. Our computation from on-course time + gates so far.
+outcome:   { state:'known', value:{kind:'duration', runSeconds:82.36, penaltySeconds:0, totalSeconds:82.36},
+             observedAt:'…T10:14:02.083Z', eventTime:'…T10:14:02.079Z',
+             source:'tcp', confidence:'inferred', provisional:true }
+status:    { state:'known', value:'finished', eventTime:'…T10:14:02.079Z', source:'tcp',
+             confidence:'authoritative', provisional:false, … }
 
-// t+10s — CIS poll corroborates (this deployment has CIS configured)
-// outcome.value unchanged; observedAt: '…T10:14:11.400Z', eventTime: '…T10:14:02.070Z'
-// (CIS's own FinishDayTime for this run — confirmed a real field, not our invention),
-// source: 'cis', confidence: 'authoritative', provisional: false — cis now outranks
-// tcp for this field-category (§4 INV-2) and has reported, so its observation is what's
-// presented. Had this poll instead returned a stale answer — an eventTime earlier than
-// tcp's own T10:14:02.079Z above — INV-2c would refuse it regardless of cis's rank; a
-// fresher observedAt from a better source is not enough on its own to supersede a fact
-// whose more recent truth is already known.
+// t+0.3s — event-driven result push for this race (Current="Y"). A results-table observation now
+// supersedes the inference (INV-2). Gate 14 is still blank, so it stays provisional.
+outcome:   { …, source:'tcp', confidence:'authoritative', provisional:true }
+placement: { state:'known', value:{ rank:3, order:3 }, source:'tcp', confidence:'authoritative',
+             provisional:true }                       // the combined better-run rank
+pairTotal: { state:'known', value:82.36, … provisional:true }
 
-// t+30s — the TCP Results rotation lands. Per §4 INV-2, this updates tcp's own
-// retained slot only — it does not touch what's presented, because cis remains
-// top-ranked-and-available for this field-category and has already reported.
-// outcome (presented) is UNCHANGED from t+10s: still source: 'cis', observedAt:
-// '…T10:14:11.400Z' — not overwritten by the t+30s message's own, later observedAt.
-// If the rotation's value disagrees with cis's, that disagreement is surfaced as a
-// diagnostic and triggers a fresh CIS GetResult for this bib (§4 INV-2b); it is never
-// adopted from tcp directly, and it never oscillates on the 30-second rotation period.
+// t+2.1s — the judge enters gate 14 = 2. Upstream recalculates and pushes again.
+outcome:   { value:{…, penaltySeconds:2, totalSeconds:84.36}, provisional:false, … }
+placement: { value:{ rank:4, order:4 }, provisional:false, … }
 
-// run 1's own Attempt, "K1M_ST_BR1_6:9", is untouched throughout this entire sequence —
-// still 'known', still the value observed when it finished, still not provisional,
-// because nothing in run 2's messages ever mentions it (§4 INV-1)
+// t+~35s — the XML snapshot is rewritten with the same row. TCP has stayed connected since t+2.1s,
+// so the tcp observation remains presented (INV-2). No change, no push.
+
+// Run 1's Attempt "K1M_BR1_6:9" is untouched throughout (INV-1). Its own fields are never mentioned
+// by run 2's messages.
 ```
 
-No field of run 1's `Attempt` is touched by anything in run 2's timeline — not because the domain
-layer special-cases two-run races, but because nothing in §4's invariants gives a later message the
-power to alter a field it doesn't mention. And no field of run 2's `Attempt` oscillates once a
-higher-ranked source has reported it — not because the domain layer special-cases the rotation, but
-because §4 INV-2 never lets recency substitute for authority.
+### 2.12 Course (#165)
+
+A course layout. It is referenced by Phases, not owned by one: several races run on one course.
+
+```ts
+type Course = {
+  courseId: string                       // Canoe123 course number — [D] xml only
+  eventId: string
+  layout: Observed<string>               // upstream's layout string, one char per element
+  gates: Observed<{ number: number; kind: 'downstream' | 'upstream' }[]>
+  sectorEndsAfterGate: Observed<number[]>
+  splitsAfterGate: Observed<number[]>
+  captions: Observed<string[]>           // [D] tcp only, current course only
+}
+```
+
+**The layout string is the single truth.** Everything else is derived from it (`DERIVATIONS.md`
+§2.3):
+- **Gates:** `N` is a downstream gate and `R` an upstream gate.
+- **`S` marks a sector boundary**, not a split.
+- **`I` marks a split (intermediate) timing point**, not a sector. Upstream reports separately whether
+  splits are armed; an unarmed split yields no split times.
+
+Settled against observed upstream behaviour, after three wrong readings of a recording (#165).
+
+- **Gate count comes from the layout. Upstream's transmitted gate count is ignored.** The stream
+  fabricates a 25- or 30-gate course, silently and lastingly, when no layout is configured.
+- A Phase whose course has an empty layout has `Course.gates` as `unavailable{not-configured}`, and so
+  does its Attempts' `gates` (§2.6).
+- **Only the snapshot carries course numbers.** TCP describes only the currently selected course,
+  without its number. It is used only to refresh that course, and for the captions, which only TCP
+  sends.
+- The meaning of the layout letters `D` and `E` for gate numbering is an open technical question
+  (`DERIVATIONS.md` §10). Until it is settled, they are carried in `layout` only.
 
 ---
 
@@ -671,10 +801,10 @@ because §4 INV-2 never lets recency substitute for authority.
 
 ### 3.1 `Phase.status`
 
-Collapses Canoe123's 14-value `RaceStatus` into a closed set, once, centrally — never left to each
+Canoe123's 14-value race status is collapsed into a closed set, once, centrally, never left to each
 client (`EVIDENCE.md` Exhibit 10).
 
-| Closed value | Canoe123 `RaceStatus` values mapped |
+| Closed value | Canoe123 race status values mapped |
 |---|---|
 | `scheduled` | 0 Scheduled, 1 StartList, 8 GettingReady, 12 Rescheduled |
 | `running` | 3 InProgress |
@@ -685,571 +815,420 @@ client (`EVIDENCE.md` Exhibit 10).
 | `protested` | 10 Protested |
 | `postponed` | 13 Postponed |
 | `cancelled` | 7 Cancelled |
-| `other` | any value not in the 14 documented today |
+| `other` | any value outside the 14 |
 
-**Legal transitions:** `scheduled → running`, `running ⇄ paused`, `running → unofficial`,
-`unofficial ⇄ revised`, `unofficial → official`, `official → revised` (a correction, §maintainer
-answer A7 — **does not require passing back through `unofficial`**), any state `→ protested`,
-`protested → unofficial | official`, `scheduled → cancelled | postponed`. No transition target is
-final: `official` is not an end state the contract locks, because corrections happen.
+**Legal transitions:**
+- `scheduled → running`, `running ⇄ paused`, `running → unofficial`;
+- `unofficial ⇄ revised`, `unofficial → official`, `official → revised` (without passing back
+  through `unofficial`);
+- any state `→ protested`, and `protested → unofficial | official`;
+- `scheduled → cancelled | postponed`.
 
-**A client must never infer that a correction happened from watching this field.** Canoe123 sets
-`RaceStatus` only from direct operator action on its own UI — checked against the decompiled source:
-every site that assigns it sits inside a GUI event handler driven by a toolbar control, and neither
-`PenaltyCorrection` nor the totals-recalculation it triggers ever touches it. So `official → revised`
-is a legal transition this contract admits, not one anything guarantees will fire — an operator who
-corrects a penalty without also relabelling the race in Canoe123's own UI leaves `Phase.status` at
-`official` while the numbers underneath have already changed. This matches the maintainer directly
-(§ maintainer answer A7: "C123's status vocabulary is not used for this... do not rely on `RaceStatus`
-to detect corrections"). The reliable signal that a Phase's results changed is what already carries
-it: a contributing `Attempt`'s `outcome` (or `gates`, or `upstreamRank`) presenting a newer
-`observedAt` than `Standing.asOf` last reported — ordinary field-level merge (§4), not this field.
+No state is final.
+
+**A client must never infer a correction from this field.** Upstream sets race status only by direct
+operator action in its own UI. Penalty corrections never touch it (observed upstream behaviour). The
+reliable signal that a Phase's results changed is ordinary field-level change: an Attempt's `outcome`,
+`gates` or `placement` presenting a newer observation.
 
 ### 3.2 `Attempt.status`
 
-`not-started → on-course → finished`, or `not-started → dns`, or `on-course → dnf | dsq | cap`, or
-(rarely) `finished → dsq` (post-finish disqualification). **Monotonic per §4**: once `finished` (or
-a terminal non-result status), a later message that simply doesn't mention this Attempt never
-reverts it to `not-started` or `on-course` — only an explicit newer observation changes it, and per
-§4 that is always a correction, never a reversion-by-omission.
+- **The normal path:** `not-started → at-start → on-course → finished`.
+  - `at-start`: staged in the start gate, armed for the start impulse and not yet started. It is 8% of
+    on-course traffic in recordings, and #166 had no status for it.
+  - `not-started → on-course` directly is legal too, when staging is not observed.
+- **No-results:**
+  - `not-started | at-start → dns`;
+  - `on-course → dnf | dsq | dsq-r | dqb | cap | ral | other`.
+- **Post-finish decisions and corrections:**
+  - `finished → non-ranked | dsq | dsq-r | dqb | ral | other`;
+  - any no-result status `→ finished`, when a mark is withdrawn.
+- **Re-run** (`DECISIONS/ADR-013`): `finished` or any no-result status `→ at-start | on-course`,
+  **only together with a `run` increment.** This is the one transition that retracts known facts. It
+  is explicit and observed, never inferred from omission.
+
+**Monotonic within a run generation** (§4 INV-1). A message that does not mention this Attempt never
+reverts its status.
 
 ---
 
 ## 4. Merge and time invariants
 
-This is the contract's answer to `EVIDENCE.md` Exhibit 1, stated as invariants a merge
-implementation must satisfy — not an algorithm, per the brief's instruction to stop at what the
-contract constrains.
+These are the contract's answer to `EVIDENCE.md` Exhibit 1. They are invariants a merge
+implementation must satisfy, not an algorithm.
 
-- **INV-1 (monotonic knowledge).** A field's `state` never regresses from `known` to `not-yet` or
-  `unavailable` because a later message omits it. Absence of a value in one message is not evidence
-  of absence of the fact — this is the maintainer's own framing, and it is why merge is per-field,
-  never whole-object: `EVIDENCE.md` Exhibit 1's "Results replaces the whole object" is exactly the
-  violation this invariant exists to make structurally impossible, not merely discouraged.
-- **INV-2 (authority-gated replace).** A field is not one mutable slot compared only by recency. The
-  domain layer retains the latest `known` observation received *from each source* that has reported
-  the field; the value the contract presents is the latest observation from the **highest-ranked
-  source, among those `SourceStatus` (§2.8) currently reports available, that has reported this
-  specific field.** Ranking is **per field-category**, never one global order over `SourceTag` —
-  no single order is correct for every field, and, as of this revision, not even for every case
-  within one field (§6: `tcp` beats `cis` on timeliness for on-course facts; for a finished Attempt's
-  own run `tcp` still leads; only for a *superseded sibling run's* detail — which `tcp` never carries
-  at all, at any configuration — does `xml` lead):
+**Kinds of observation.** Every observation of an Attempt fact is one of three kinds:
+- an **on-course inference**, computed by the domain layer from the TCP on-course stream;
+- a **results-table observation**: a TCP result push, or an XML snapshot row. Both are renderings of
+  Canoe123's own results table;
+- an **operator observation** (`operator-write` or `operator-assertion`).
 
-  | Field category | Ranking, highest first |
-  |---|---|
-  | On-course position / running time (`Attempt.status = 'on-course'`) | `tcp` > `cis` |
-  | Finished slalom `Attempt.outcome`/`Attempt.gates` — the Attempt's **own**, never-superseded run | `tcp` > `cis` > `xml` (CIS configured) — `tcp` > `xml` (not configured) |
-  | Finished slalom `Attempt.outcome`/`Attempt.gates` — a **superseded sibling run's** own detail (`DOMAIN-FACTS.md` §4) | `xml` > `cis` — `tcp` is not a candidate here at all: it never carries this fact once superseded, licensed or not |
-  | `Attempt.upstreamRank` | `cis` > `tcp` > `xml` — same discipline as the row above; §5 consumes this field's presented value, never a raw pass-through of whichever of Canoe123's, CIS's, or the XML snapshot's own `Rank` last arrived |
-  | `Phase.status` | `tcp` > `xml` |
+- **INV-1 (monotonic knowledge, per run generation).** A field's `state` never regresses from `known`
+  to `not-yet` or `unavailable` because a later message omits it. Merge is per field, never
+  whole-object. The single exception is a new run generation (`DECISIONS/ADR-013`). It retracts the
+  run-scoped fields (§2.6) explicitly, on observed upstream evidence of a re-run, and is pushed as an
+  ordinary change.
+- **INV-2 (precedence).** The domain layer retains the latest observation *per source* for each field.
+  The presented value is chosen as follows:
+  1. **A results-table observation supersedes an on-course inference** of the same run generation, and
+     is never superseded by one. The inference exists only for the fraction of a second before the
+     result push arrives (`DECISIONS/ADR-011` gives the measured latency).
+  2. **Between `tcp` and `xml` results-table observations of the same field, `tcp` wins while TCP has
+     stayed connected since that `tcp` observation was ingested.** Canoe123 pushes every change to its
+     results table on TCP immediately:
+     - finish, every penalty change, and the last gate judged;
+     - corrections, including to closed races;
+     - closure of a run;
+     - the paired second race whenever the first changes.
 
-  **The superseded-run row is new, found under review, not designed in from the start.** The earlier
-  single row put `xml` beneath both automated sources for a finished Attempt, universally — reasonable
-  when `xml` was believed to be a slow backstop, wrong once checked: a real two-day event, analysed
-  after the fact, had CIS unreachable for its entire duration — 61,000 polls, every response empty,
-  the operator never having performed "Init Event to CIS" — and a server starting cold, having
-  observed nothing live, reconstructed complete two-run detail for every finisher of the weekend from
-  the XML snapshot alone: 397 completed BR1 runs and 384 completed BR2 runs, gate penalties and (all
-  but one row of 738) gate passage times included. The snapshot's own `BetterRunNr` field states
-  outright which run won; `Prev*` fields (`PrevTime`, `PrevPen`, `PrevTotal`, `PrevRnk`, and others)
-  give the superseded run's full summary directly, on the very row that would otherwise, per
-  `DOMAIN-FACTS.md` §4, be the one place that information is lost. That section's claim is true of
-  the TCP wire stream specifically, and only of it.
+     So a connected TCP is never behind the snapshot. **Otherwise the later-ingested observation
+     wins.** This covers two cases:
+     - During an outage, a snapshot rewrite *detected after the disconnect* takes over.
+     - After reconnection, TCP's pre-outage observations no longer outrank a snapshot that was read
+       later.
 
-  **Why `xml` outranks `cis` for this one case, given both are complete once available:** not because
-  `xml`'s content is somehow more correct — where both report the same settled fact, there is no
-  reason to expect disagreement — but because `xml` is the source every deployment has. `cis` needs a
-  licence, the right OS privileges, and an operator having performed "Init Event to CIS" that morning,
-  any of which can fail (`DOMAIN-FACTS.md` §2); `xml` needs only a configured path, "guaranteed
-  present" per that same section. Preferring the source available to every organiser (`CONSTRAINTS.md`
-  §2.6) over one several will not have, when both give the same answer, is the more defensible default.
-
-  **Why the snapshot's own ~35 s rewrite cadence — measured, not the recording tool's polling
-  interval, which would have overstated it — does not threaten the case this row exists for.** A
-  35-second lag sounds like it should matter for exactly this scenario. It does not, because the lag
-  is relative to *now*, not to *when the value is next needed*. The moment anyone asks "what was run
-  1's total" is after run 2 has finished — and run 1's own row, frozen the instant run 1 itself
-  finished, has by then typically been stable for as long as run 2 took to run: minutes, not seconds.
-  The freshness bound is real and stated here rather than hidden, but the specific case this row
-  answers is nearly always one where it has already been satisfied by the time anyone asks.
-
-  A source that is not currently top-ranked-and-available still has its own observation retained —
-  so it can surface later, see INV-2b — but does not change what's presented while a higher-ranked
-  source remains available and has reported. A *later* observation from the **currently-presented
-  source itself** always supersedes its own earlier one; an ordinary correction from an authoritative
-  source needs no special case, since presentation always reads that source's newest entry for as
-  long as it stays top-ranked-and-available — which is what still lets a correction land, including
-  one that arrives a week later against a Phase whose `status` is already `official`
-  (§ maintainer answer A7).
-
-  **`operator-write` and `operator-assertion` sit outside this table**, in two variants: **(a)
-  `provisional: true`** — an optimistic write awaiting one specific expected echo (a gate-penalty
-  correction we just issued, §2.9); presented the instant it is submitted, and the very next
-  observation of that field, from *any* source, unconditionally supersedes it, confirming or
-  `mismatched` — this is Scenario B's mechanism, unchanged. **(b) `provisional: false`** — an
-  assertion with no echo expected: a Kayak Cross operator's heat-order call (§2.6 — it is already the
-  final word, nothing confirms it further) or a direct correction entered against the cloud store
-  with no live on-site session to echo through (§8.5). Presented immediately; superseded only by a
-  *later* assertion of the same kind, or by the top-ranked automated source's own fresh, specifically
-  triggered report (INV-2b) — never by an incidental report from a lower-ranked automated source.
-
-  **This correction was made in review of an earlier draft**, which specified freshness only —
-  replace on strictly newer `observedAt`, full stop, no authority gate. That rule was unsound: a
-  message from a source with a worse answer for a given field could still displace a source with a
-  better one purely by arriving later in our own ingest order. Concretely, on a two-run race, a
-  CIS-confirmed total at `t=10s` could be pushed back out by a TCP `Results` rotation landing at
-  `t=25s` and pulled back at the next CIS poll — a value oscillating on the rotation period between
-  right and wrong, which is exactly the flicker the maintainer named as the reason monotonic merge
-  was wanted (§ maintainer answer A1), now slower, and worse for being harder to notice. Worth
-  recording precisely, since the *specific* illustration doesn't survive a check against
-  `DOMAIN-FACTS.md` §4 unchanged: when run 2 is genuinely better, TCP's own `Total` field already
-  equals run 2's value once Canoe123 has finished computing it, so this is not "TCP asserts the wrong
-  run's number forever." The real exposure is a source's content being transiently stale relative to
-  what a better source has already told us — rounding, a computation-in-progress window on Canoe123's
-  own side, or simply two sources answering the same question to different precision — and pure
-  recency-of-arrival has no defence against any of it. Slalom scenario A's "late rotation" walks the
-  fixed version: OnCourse's `dtFinish` transition (sub-second) sets `Attempt.outcome` at `t+1s`,
-  `source: tcp`, because `tcp` is the only source that has reported yet; a CIS poll at `t+10s`, if
-  configured, outranks it and becomes presented; the `t+30s` `Results` rotation updates `tcp`'s own
-  retained slot only, changing nothing presented — agreement or not, and regardless of which arrived
-  more recently.
-
-- **INV-2b (disagreement triggers a re-query, never a silent override).** When a lower-ranked
-  source's retained observation disagrees with the presented value, that disagreement is neither
-  discarded nor adopted directly — it is surfaced as a diagnostic (the same admin-facing audience as
-  `SourceStatus`) and, where the top-ranked source supports an on-demand query for that specific fact
-  (CIS's `GetResult`, for one race and bib, does), triggers one. The presented value changes only
-  from the top-ranked source's *own response* to that query, never from the lower-ranked source
-  directly. This is what stops INV-2's authority gate from permanently hiding a genuine correction
-  that only ever reaches us through a lower-ranked channel: a `PenaltyCorrection` entered over TCP
-  against a closed Phase still forces a fresh CIS read rather than sitting invisibly behind a CIS
-  observation nobody asked to refresh.
-- **INV-2c (a stale top-ranked observation does not displace a fresher one it disagrees with).**
-  Ranking alone is not sufficient: a poll can return content that was already old *when the source
-  produced it*, with a perfectly fresh `observedAt` because that only records when *we* received it.
-  Where both the presented value and a candidate observation carry an `eventTime` — true for a
-  finished slalom Attempt's `outcome`, since both TCP's `dtFinish`-derived value and CIS's
-  `FinishDayTime`-derived one describe the same real-world moment, confirmed by checking CIS's actual
-  response shape — the candidate does **not** supersede the presented value if its `eventTime` is
-  strictly earlier, regardless of source rank. This is a floor beneath INV-2's table, not a
-  replacement for it: it exists specifically for the case a rank alone cannot distinguish, a
-  top-ranked source answering a question about the past. Where a candidate carries no `eventTime`
-  (most fields, and every Cross fact — `operator-assertion` values are outside the table entirely,
-  §4 above), this rule does not apply and INV-2's ranking governs alone, as before.
+     The second case fixes a defect in the previous rule. There, a correction visible in the snapshot
+     during an outage stayed hidden until TCP's rotation came round again, which takes up to ~15 min.
+  3. **Facts only one source carries** use that source alone:
+     - on-course facts, `courseOrder`, `timeToBeat`: TCP only;
+     - the superseded run's summary, age categories, members, event details, course numbers:
+       the XML only.
+  4. **`operator-write` and `operator-assertion` sit outside rules 1–3.**
+     - **`provisional: true`** is an optimistic write awaiting one specific echo (§2.9). It is
+       presented the instant it is submitted. The very next results-table observation of that field,
+       for that run generation, supersedes it.
+     - **`provisional: false`** is an assertion with no echo expected. Examples are a direct
+       correction against the cloud store after the on-site session ended (§8.5), and Kayak Cross's
+       operator order once pushed. A later assertion of the same kind supersedes it. So does a
+       results-table observation that **changes** its own source's retained value after the
+       assertion: genuinely new upstream information. A re-delivery of the value that source already
+       held never displaces an assertion (INV-5).
+- **INV-2b (disagreement is surfaced, never silently adopted).** A retained, non-presented observation
+  can disagree with the presented one after both have settled. Such a disagreement is surfaced as an
+  admin diagnostic, like `SourceStatus`. It never changes the presented value by itself. There is no
+  re-query: no on-demand source remains (`DECISIONS/ADR-011`), and neither remaining source can hold
+  a correction back.
+- **INV-2c (an older event does not displace a newer one).** Where the presented value and a candidate
+  both carry an `eventTime`, a candidate with a strictly earlier `eventTime` never supersedes,
+  whatever rule 2 says. In practice this protects a re-run: the re-run's finish is later than the run
+  it replaces, so a stale row describing the replaced run cannot come back (`DECISIONS/ADR-013`).
 - **INV-3 (`unavailable` is asserted, never defaulted).** `unavailable{reason}` is set only by an
-  explicit domain-layer determination that no configured source can supply the field right now
-  (e.g. gate detail for a superseded run 1, with CIS not configured). It is never the default state
-  for "this message's shape didn't include the field."
-- **INV-4 (identity bindings carry the same envelope).** `Attempt.entry` is `Observed`, exactly like
-  any other field — a correction to who raced under a bib is a normal `known → known` transition,
-  not a structural rebind (§2.6).
-- **INV-5 (idempotent supersession).** Re-delivering an identical observation — same `value`, same
-  `observedAt` — is a no-op: it must not re-trigger a client-visible change notification. This is
-  required for the live-ingest contract to accept safe retries and for a correction pushed by an
-  organiser directly against the cloud store (§8.5) to compose safely with a bridge that might also
-  still be pushing.
-- **INV-6 (ordering is a monotonic sequence, never the wall clock).** `observedAt` is a wall-clock
-  timestamp (§1.2), and a venue laptop's wall clock is not guaranteed monotonic — an NTP correction,
-  a DST transition, or an operator fixing a wrong clock mid-event can move it, including backward.
-  Every "newer"/"strictly newer" comparison in INV-2, INV-2c, and INV-5 above is therefore defined
-  over an internal, strictly-increasing sequence the domain layer assigns at the same ingest instant
-  it captures `observedAt` — never over a raw comparison of `observedAt` values. This is not the
-  wire sequence number `CONSTRAINTS.md` §1.1 correctly rules out inventing (that would mean adding
-  one to Canoe123's own protocol, which we do not control); it is purely internal to the domain
-  layer's own merge, assigned by us, at our own boundary. It is exposed on the wire in exactly one
-  narrow role, added under the same review that found this gap: `seq` (§1.6), for a client to tell
-  whether it has already seen an update, never for a client to judge which of two facts is truer —
-  that comparison stays entirely server-side. The presented value's ordinary `observedAt` remains
-  wall-clock for display and staleness computation, just no longer for ordering. A clock jump during
-  live operation therefore cannot corrupt a merge decision, and cannot make a genuinely later
-  observation lose to an earlier one merely because the clock moved between them.
+  explicit determination that the fact cannot be supplied, or does not apply. It is never the default
+  for "this message did not include the field".
+- **INV-4 (identity bindings carry the same envelope).** `Attempt.entry` is `Observed`, like any other
+  field. A correction to who raced under a bib is an ordinary `known → known` change.
+- **INV-5 (idempotent supersession).** Re-delivering an identical observation, with the same `value`
+  from the same source for the same run generation, is a no-op and triggers no client-visible
+  notification. `Phase.date` is assigned once and is never re-derived.
+- **INV-6 (ordering is a monotonic ingest sequence, never the wall clock).** Every "later" or "newer"
+  above is defined over an internal, strictly increasing sequence, assigned at the ingest boundary
+  together with `observedAt`. It is never defined by comparing `observedAt` values. A clock jump
+  cannot reorder a merge decision. The sequence is exposed on the wire only as `seq` (§1.6), for
+  reconciliation.
 
-These eight invariants are what "verifiability" (`CONSTRAINTS.md` §4) reduces to in practice: given
-the same sequence of ingested messages, each carrying its true `observedAt` timestamp, its assigned
-ingest sequence, and known source, the resulting state is a pure function of that sequence —
-replaying a recording is deterministic because nothing in the merge depends on wall-clock time at the
-moment of replay, and nothing in it depends on which source shouted last, only on the ranking table
-above and the sequence captured at original ingest. Determinism was the property INV-2's freshness-only
-first draft also had — the authority gate does not trade it away; a re-query triggered by INV-2b is
-itself just another observation in the sequence, with its own `observedAt` and ingest sequence
-number, replayable exactly like any other.
+**Determinism.** Given the same sequence of ingested observations, each carrying its source, kind,
+run generation and ingest sequence, plus the same TCP connection events, the presented state is a
+pure function of that sequence. Nothing depends on wall-clock time at replay.
 
 ---
 
-## 5. Standing computation
+## 5. Standing assembly
 
-Answers the orchestrator's open question directly: what happens when a mechanically-derived rank
-and an upstream-asserted one disagree, and what happens on a tie upstream doesn't resolve.
+Standings **relay** Canoe123's own order and rank. They are assembled identically on both tiers, and
+no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
 
-1. Entries with a numeric `Outcome` (`duration.totalSeconds` or `ordinal.order`) are sorted
-   ascending by that value. This is mechanical arithmetic, independently verifiable by us — it is
-   never delegated to an upstream `Rank` field, precisely to avoid the two-sources-of-truth problem
-   this question raises.
-2. **Equal outcome values receive equal rank** (standard skip ranking: 1, 2, 2, 4) by default. We do
-   not invent a tie-break rule — per the maintainer, federation-specific rules like this must not be
-   baked into the domain core (`CONSTRAINTS.md` §1.8).
-3. **When `Attempt.upstreamRank` differentiates entries our mechanical comparison ties,** its
-   *presented* value (§4's authority-gated precedence, never a raw pass-through of whichever of
-   Canoe123's or CIS's own `Rank` field last arrived) is treated as a tie-break authority — it
-   reflects a competition rule we are told not to reimplement — and resolves the tie: the tied group
-   is reordered by it, receiving sequential (non-skip) ranks, with `StandingEntry` carrying no
-   separate provenance field for this — the resolved `rank` is simply asserted, as any other value
-   is. This is one precedence discipline throughout, not two: `upstreamRank` is a field like any
-   other, subject to the same per-source retention and ranking as `outcome`.
-4. **When the presented `upstreamRank` disagrees with a *non-tied* mechanical ordering,** the
-   mechanical ordering is what the contract asserts — it is independently checkable, `upstreamRank`
-   is not — and the disagreement is recorded in `Standing.anomalies`, never silently overridden in
-   either direction. This is the target-state descendant of `EVIDENCE.md` Exhibit 3's arithmetic
-   consistency check: kept as a diagnostic, never again as a mechanism for silently picking a value.
-   Distinct from §4 INV-2b's disagreement handling, which operates one layer down, on a single
-   field's competing source observations before `upstreamRank` is even presented — this step only
-   ever sees the one value INV-2 already resolved.
-5. **Entries with a `no-result` outcome (`dns`/`dnf`/`dsq`/`cap`/`other`) receive `rank: null`** —
-   never a fabricated numeric rank — and are listed by `status` with a stable secondary order (by
-   `bib`) for deterministic list position only. This is not a federation-specific choice: a
-   non-existent time cannot be ranked, in any ruleset.
+1. **Scopes.** Each class publishes:
+   - one `phase` standing per race Phase;
+   - one `pair` standing per second-run Phase, keyed by the second Phase;
+   - one `heat` standing per heat of a heat Phase;
+   - one `classification` standing per classification Phase.
 
-**Considered directly and rejected: letting the XML snapshot's `BetterRunNr` field decide which run
-counts, in place of step 1's mechanical comparison.** The snapshot states outright which run of a
-pair is better — a real, useful fact (`§4`'s ranking table, `DERIVATIONS.md` §4.5) — but using it to
-*decide* rather than to *corroborate* would trade an independently-checkable computation for trust in
-a single field, exactly the two-sources-of-truth problem step 1 exists to avoid. Mechanical
-comparison of resolved outcomes stays the rule; `BetterRunNr` is a cross-check available to the same
-diagnostic surface as `upstreamRank`'s disagreements (step 4), never a replacement for computing the
-answer ourselves. Recorded here so the question is not re-opened by a future reader finding the field
-and wondering why it isn't used.
+   Each duration-scored `phase` or `pair` standing is published twice: once for the whole class, and
+   once per age category the class has.
+
+   `standingKey = "<scope.kind>:<phaseId>[:<heat>]/<ageCategoryId | 'all'>"`, with `phaseId` being the
+   second Phase for a pair.
+2. **Whole-class entries.**
+   - Each Attempt of the Phase with a `known` `placement` is an entry. It gets that `placement`'s
+     `rank` and `order`.
+   - Entries sort by `order`.
+   - In a heat Phase's `phase` standing, entries sort by `(heat, order)`, as upstream does.
+   - For a `pair`, the Attempts are the second Phase's. Their placement is already the combined one,
+     and upstream pushes it as soon as the *first* run changes. `result` is the second run's own
+     outcome, and `pairTotalSeconds` is `pairTotal`.
+   - A `classification` takes its rows from the classification Phase's rows (`DERIVATIONS.md` §4.10).
+3. **Unplaced entries** are listed after all placed ones, with `rank: null`, `order: null`, ordered by
+   `status` then `bib`, for a deterministic list position only.
+   - There is **no server-computed display rank**. Upstream places a finisher a median 0.14–0.41 s
+     after the finish impulse (`DECISIONS/ADR-011`). A computed rank shown for half a second, then
+     replaced wherever it differs, would be flicker.
+   - Relayed marks keep upstream's placement. A `ral` athlete is placed last. A second-run `dns` keeps
+     the combined placement from run 1.
+4. **Age-category entries** (maintainer answer Q3; `DECISIONS/ADR-014`). Take the whole-class
+   standing's placed entries whose Entry has this `ageCategoryId`, in class order. Then:
+   - `rank = 1 +` the number of entries in the same category with a strictly smaller class `rank`;
+   - `order` = position in that filtered list.
+
+   This reproduced upstream's own category ranks, single-run and combined, exactly: 1,855 rows,
+   0 mismatches. It makes category standings available at class-rank latency. Upstream's own category
+   ranks reach only the snapshot, a median of ~20 s after the finish. When the snapshot's category
+   rank arrives and differs from the assembled one, a `category-rank-disagreement` anomaly is
+   recorded. The assembled rank stays presented.
+5. **`provisional` and `underReview`** are copied from the entry's own Attempt. They are `true` if any
+   of `outcome`, `placement` or `pairTotal` is provisional.
+6. **`behindSeconds`** is the entry's ranked value minus the first-ordered entry's, for duration
+   scopes. The ranked value is `pairTotalSeconds` for a pair, and `result.totalSeconds` otherwise. It
+   is `null` otherwise, and `null` for entries without a numeric ranked value.
+7. **Anomaly check, the one mechanical comparison** (`order-disagreement`). It applies in a
+   duration-scored `phase` or `pair` standing, among placed entries with a numeric result and no
+   no-result mark. An anomaly is recorded when an entry is ordered ahead of another whose result is
+   strictly smaller. Ties are never flagged, because upstream breaks them legitimately: a combined tie
+   by the run that did not count, and a single-run tie by its own order field. Cross scopes are never
+   checked. Anomalies go to the admin audience only. They never reorder anything.
+
+**Considered and rejected: deciding which run of a pair counts from upstream's `BetterRunNr`.** It is
+not needed. The pair's combined total and placement are relayed. `countingRun` carries
+`BetterRunNr`'s fact for display.
 
 ---
 
 ## 6. Derivability ledger
 
-The brief's required third list: what today's sources genuinely cannot supply, and what CIS buys
-where it is configured. **Availability of CIS is a deployment variable, not a project-wide given**
-(`CONSTRAINTS.md` §2.6) — every line below states its behaviour both with and without CIS. This
-table says *whether*; `DERIVATIONS.md` says *how* — the actual source field, transformation,
-conditionality, and resulting envelope for every value below, checked against real recorded data
-rather than left as a claim.
+What today's sources can and cannot supply. One column: CIS is not consumed (`DECISIONS/ADR-011`),
+and nothing below depends on it. `DERIVATIONS.md` says *how* each value is produced.
 
-| Value | With CIS | Without CIS |
-|---|---|---|
-| On-course position/time | [D] TCP, ~500ms | same — CIS is poll-based and never faster than TCP here |
-| Slalom finish | [D] `dtFinish` transition, TCP, authoritative | same |
-| Run-2 outcome when run 1 was better | [D] mechanical, `Total − Pen`, from the wire | same |
-| Run-2 outcome when run 2 was better, run-1 total | [D] — CIS `GetResult` (both runs explicit), **or** the XML snapshot's own frozen run-1 `<Results>` row, **or** run-2's own `Prev*`/`BetterRunNr` fields; any one suffices | [D] — the XML snapshot alone is enough, unconditionally: confirmed against a full two-day event where CIS never answered a single poll and every finisher's run-1 total was still recovered |
-| Run-1 gate-by-gate detail, once superseded | [D] — CIS `GateTimes`/`GetResult`, **or** the XML snapshot's own frozen `Gates`/`GateTimes` on run 1's own row (near-universal: one row of 738 in the same event carried `Gates` without `GateTimes`) | [D] — same, XML alone, unconditionally |
-| Cross heat order | [D] operator assertion via Results stream — same either way; CIS does not change this | same |
-| Event spanning multiple days | **[N]** in both cases — never in Canoe123's data; always asserted by the bridge/operator (§2.2) | same |
-| Athlete directory / event metadata | [D] CIS `GetAthletes`/`GetEvent` | [A] names embedded piecemeal in other messages |
-| Tie-break beyond arithmetic equality | [D] only as an upstream `Rank` relay (§5.3) — never independently computed | same |
-| Registry-verified identity (nationality, spelling) | **[N]** in both cases — out of scope; Canoe123 is the only identity source that exists | same |
-| Which registry an `icfId` value references | **[N]** in both cases — Canoe123's wire data never disambiguates a genuine ICF code from a national federation's own registry number filled into the same element; asserted by whoever operates the on-site bridge, from configuration, never derived (§2.5). What it would take upstream: an explicit field naming the registry per participant, or a fixed convention Canoe123 itself enforced rather than leaving to each organiser's practice. What it would buy: correct scheme-tagging without trusting bridge configuration, and a way to catch a misconfigured bridge instead of trusting it silently | same |
+| Value | Derivability |
+|---|---|
+| On-course state, running time, on-course order, time to beat | [D] TCP, ~2 messages/s |
+| Slalom finish | [D] finish-time transition, TCP, authoritative |
+| Result, penalties, class placement, combined placement | [D] TCP result push, median 0.14–0.41 s after the finish impulse (1,533 finishes). Also [D] from the XML snapshot, the complete record at cold start |
+| Whether the result may still move | [D] from gate completeness against the course layout, plus run closure (§1.2) |
+| Run 1's detail, once run 2 has superseded it on TCP | [D] XML snapshot, unconditionally. Also from this server's own retained observation of run 1 |
+| Age-category standing | [D] assembled from class placement and the entry's category, at class-rank latency. The snapshot's own category ranks follow ~20 s later, as a check |
+| Kayak Cross heat order | [D] operator assertion via the result push, as upstream placement |
+| Event metadata: title, venue, dates | [D] XML snapshot. Dates are operator-entered and fallible |
+| Multi-day grouping | [D] from each Phase's own date. The *identity* of a multi-day event is asserted, never derived (§2.2) |
+| Members, club, nation, age category, birth date | [D] XML snapshot. Club and name are also in TCP result rows |
+| Course layout and race→course binding | [D] XML snapshot. The current course is refreshed from TCP. Captions are TCP only |
+| Splits | [D] where upstream arms them. Not populated at any recorded event, because none had splits armed |
+| Registry-verified identity (spelling, nationality) | **[N]** Canoe123 is the only identity source that exists |
+| Which registry an external id belongs to | **[N]** Asserted by the bridge operator from configuration (§2.5). Upstream would need a registry field per participant. It would buy scheme tagging without trusting configuration |
+| Parent class of a sub-classified class (a juniors race run as its own class) | **[N]** The attribute is relayed on the Phase; the link to its base class is not stated upstream. Open technical question, `DERIVATIONS.md` §10 |
+| Tie-breaking | [D] relayed from upstream's order; never computed (§5) |
 
-**The statefulness requirement the two rows above previously carried — that the server must have
-observed run 1 live to recover it — does not survive in any narrowed form; it dissolves, checked
-against the exact case that would have exposed it if it were still real.** A server that had
-observed nothing live all weekend, with CIS unreachable throughout, reconstructed both runs and gate
-detail for every finisher from the XML snapshot alone. The old requirement existed to cover a fact
-that could vanish because nothing kept a copy of the one message that carried it. There is no such
-moment: the XML snapshot is that copy, kept continuously, by Canoe123 itself, independent of whether
-our own server was running to see the original event. The one thing that still bounds this is the
-snapshot's own rewrite cadence (~35 s median, measured) — real, and stated in `CONTRACTS.md` §4's
-revised ranking table, but nearly irrelevant to this specific case: the value is needed only after
-run 2 finishes, by which point run 1's own row has typically been stable for minutes.
-
-**What CIS retains, now that XML supplies completeness too: on-demand immediacy, not completeness.**
-TCP remains the on-course source of truth regardless of CIS availability — that was never in
-question. What CIS is good for is being askable *right now* rather than waited on for Canoe123's own
-~35 s rewrite or a TCP `Results` rotation of similar order — real, narrower value, called on directly
-by §4 INV-2b's re-query trigger and by any case needing an answer faster than either passive source
-delivers. It is not, as an earlier draft of this contract and of `DECISIONS/ADR-004` claimed, the
-only source of two-run completeness — checked against a full weekend where it supplied none at all,
-and the record was complete regardless (`DECISIONS/ADR-004`'s Revision).
-
-**How a deployment finds out which column it is in:** `SourceStatus.cis` (§2.8), plus the
-`unavailable{reason}` and `provisional` fields on the specific values affected. Never a spectator-
-facing banner (§ maintainer answer A1) — the honesty is in the contract, read by whoever needs it,
-not broadcast as an alert to whoever doesn't.
+**How a deployment sees which sources it has:** through `SourceStatus` (§2.8), and through
+`unavailable{reason}` and `provisional` on the specific values affected. There is never a
+spectator-facing banner (maintainer answer A1).
 
 ---
 
 ## 7. On-site contract — c123-server ↔ scoreboard / penalty-check
 
-Serves clients that exist to display *this* timing system (`BRIEF.md` §5.7's asymmetry, argued for
-in `DECISIONS/ADR-007`). Uses Canoe123-native tokens (`RoundKind`, `phaseId` = `RaceId`) directly —
-justified because Canoe123 is this tier's only possible upstream by fixed topology, and inventing a
-vendor-neutral abstraction here would be designing around a variety of on-site protocol this
-ecosystem has never seen and has not been asked to support. **No authentication** — the venue network
-is trusted (`CONSTRAINTS.md` §1.2); every response below carries no auth-related status code.
+This contract serves clients that exist to display *this* timing system (`DECISIONS/ADR-007`). It uses
+Canoe123-native tokens directly: `format`, and `phaseId` equal to `RaceId`. **There is no
+authentication:** the venue LAN is trusted (`CONSTRAINTS.md` §1.2).
+
+**Tier-specific serialisation.** `Person.birthDate` is replaced by `birthYear: number | null`. Every
+other shape is exactly §2's.
 
 ### 7.1 Hydration (REST, snapshot)
 
-Every response below wraps its payload with `asOfSeq: number` (§1.6) at the top level.
+Every response except `/api/sources` carries `asOfSeq: number` (§1.6) at the top level.
 
 | Method & path | 200 body | Error |
 |---|---|---|
-| `GET /api/events/current` | `{ asOfSeq, event: Event, categories: Category[] }` | `404 event-not-found` — no event configured yet |
-| `GET /api/categories/{categoryId}/phases` | `{ asOfSeq, phases: Phase[] }` | `404 category-not-found` |
+| `GET /api/events/current` | `{ asOfSeq, event: Event, classes: Class[], courses: Course[] }` | `404 event-not-found` |
+| `GET /api/classes/{classId}/phases` | `{ asOfSeq, phases: Phase[] }` | `404 class-not-found` |
+| `GET /api/classes/{classId}/entries` | `{ asOfSeq, entries: Entry[] }` | `404 class-not-found` |
 | `GET /api/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }` | `404 phase-not-found` |
-| `GET /api/categories/{categoryId}/standing` | `{ asOfSeq, standing: Standing }` | `404 category-not-found` |
-| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[] }` — every Attempt currently `on-course`, across every currently-running Phase. **Plural by construction**, not a singleton "current competitor" — admits Kayak Cross's four-at-once without a structural change. Empty array is a valid response, never an error. | — |
-| `GET /api/sources` | `SourceStatus`, unwrapped — this is connectivity status, not part of the merge-ordered entity stream, so it carries no `asOfSeq` | — |
+| `GET /api/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`: every scope of §5, for the whole class and per age category | `404 class-not-found` |
+| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[] }`: every Attempt currently on upstream's on-course list with status `at-start` or `on-course`, across every running Phase. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid | — |
+| `GET /api/sources` | `SourceStatus`, unwrapped | — |
+
+Membership of the on-course list is tracked from the on-course stream.
+- An Attempt leaves the list when:
+  - its status becomes `finished` or a no-result status;
+  - upstream stops listing it;
+  - upstream sends its explicit "course empty" message.
+- Leaving the list never changes `status` by itself. A Kayak Cross heat leaves the list together,
+  before the operator has asserted the order, and so stays `on-course` until that assertion
+  arrives through its result row (`DERIVATIONS.md` §4.1).
 
 ### 7.2 Live updates (WebSocket `/ws`, delta)
 
-Every message carries `seq: number` (§1.6). `attempt.updated` and `phase.updated` carry only the
-fields that changed — an omitted field is untouched, never reset, the wire-level restatement of
-INV-1. `standing.updated`, `write.updated`, and `sources.updated` always carry the whole resource:
-each is small and replacing it whole is simpler than diffing it, a size-driven choice, not a
-principle.
+Every message carries `seq` (§1.6).
+- `attempt.updated`, `phase.updated`, `entry.updated` and `class.updated` carry only the changed
+  fields. An omitted field is untouched, never reset. A run-generation change is sent as explicit
+  `not-yet` values (INV-1).
+- `standing.updated`, `course.updated`, `write.updated` and `sources.updated` carry the whole resource.
 
 ```json
-{ "seq": 1044, "type": "attempt.updated", "attemptId": "K1M_ST_BR2_6:9",
+{ "seq": 1044, "type": "attempt.updated", "attemptId": "K1M_BR2_6:9",
   "fields": { "outcome": { "state": "known", "value": {"kind":"duration", ...}, ... } } }
-{ "seq": 1045, "type": "phase.updated", "phaseId": "K1M_ST_BR2_6",
-  "fields": { "status": { "state": "known", "value": "revised", ... } } }
-{ "seq": 1046, "type": "standing.updated", "categoryId": "K1M-ST", "standing": { ...Standing... } }
+{ "seq": 1045, "type": "attempt.updated", "attemptId": "K1M_BR2_6:9",
+  "fields": { "run": { "state": "known", "value": 2, ... }, "outcome": { "state": "not-yet" },
+              "placement": { "state": "not-yet" }, "status": { "state": "known", "value": "on-course", ... } } }
+{ "seq": 1046, "type": "standing.updated", "standing": { "standingKey": "pair:K1M_BR2_6/all", ... } }
 { "seq": 1047, "type": "write.updated", "write": { ...WriteRequest... } }
-{ "seq": 1048, "type": "sources.updated", "sources": { ...SourceStatus... } }
 ```
 
-Clients **must** follow §1.6's subscribe-before-snapshot sequence: open `/ws`, buffer by `seq`, then
-call the relevant §7.1 endpoint, discard anything with `seq ≤ asOfSeq`, apply the rest in order.
+Clients **must** follow §1.6's subscribe-before-snapshot sequence.
 
 ### 7.3 Writes (REST)
 
-Both require an `Idempotency-Key` header (§1.5). Neither is restricted to "the current race" —
-`phaseId` may name a closed Phase (§2.9); Canoe123's `PenaltyCorrection` (unlike `Scoring`) accepts
-this directly.
+Both writes require an `Idempotency-Key` (§1.5). Both may target a closed Phase (§2.9). Both target
+the Attempt's run generation that is current at submission.
 
 | Method & path | Body | First response | Retry (same key) | Error |
 |---|---|---|---|---|
-| `POST /api/attempts/{phaseId}/{bib}/penalty` | `{ "gate": number, "value": 0\|2\|50 }` | `202`, `Location: /api/writes/{writeId}`, body = `WriteRequest{status:'pending'}` | `200`, current `WriteRequest` | `404 attempt-not-found`; `400 validation-failed` (`value` not in `{0,2,50}`, or `gate` outside this Phase's known gate count) |
-| `POST /api/attempts/{phaseId}/{bib}/status` | `{ "status": "dns"\|"dnf"\|"dsq"\|"cap" }` | as above | as above | as above (no `value` check; `400 validation-failed` for any other status string) |
+| `POST /api/attempts/{phaseId}/{bib}/penalty` | `{ "gate": number, "value": 0\|2\|50 }` | `202`, `Location: /api/writes/{writeId}`, body = `WriteRequest{status:'pending'}` | `200`, current `WriteRequest` | `404 attempt-not-found`; `400 validation-failed` (`value` not in `{0,2,50}`; `gate` outside the Phase's course gates; or the course is not configured) |
+| `POST /api/attempts/{phaseId}/{bib}/status` | `{ "status": "dns"\|"dnf"\|"dsq"\|"cap" }` | as above | as above | as above; any other status string is `400 validation-failed` |
 | `GET /api/writes/{writeId}` | — | `200 WriteRequest` | — | `404 write-not-found` |
 
-**The confirmation lifecycle over the wire** (§2.9, `DECISIONS/ADR-010`), concretely — the same
-`WriteRequest` resource, three snapshots of it in time:
+The four write statuses the contract accepts are the ones Canoe123's terminal removal command takes.
+Other marks, such as `dsq-r` and `ral`, are relayed but not writable here.
+
+**The confirmation lifecycle over the wire** (§2.9, `DECISIONS/ADR-010`). These are snapshots of the
+same `WriteRequest` over time:
 
 ```json
-// the 202 response, the instant the correction is submitted
-{ "writeId": "w-8f3a", "target": { "phaseId": "K1M_ST_BR1_6", "bib": "9", "field": "gate-penalty" },
-  "requestedValue": { "gate": 4, "value": 2 }, "submittedAt": "2026-09-15T14:02:11.000Z",
-  "status": "pending" }
-
-// GET /api/writes/w-8f3a once Canoe123's echo matches
-{ "writeId": "w-8f3a", "target": { ... }, "requestedValue": { "gate": 4, "value": 2 },
-  "submittedAt": "2026-09-15T14:02:11.000Z", "status": "confirmed",
-  "confirmedValue": { "gate": 4, "value": 2 }, "confirmedAt": "2026-09-15T14:02:14.500Z" }
-
-// or, if the echo disagrees with what was requested
-{ ..., "status": "mismatched", "confirmedValue": { "gate": 4, "value": 50 },
-  "confirmedAt": "2026-09-15T14:02:14.500Z" }
+{ "writeId": "w-8f3a", "target": { "phaseId": "K1M_BR1_6", "bib": "9", "run": 1, "field": "gate-penalty" },
+  "requestedValue": { "gate": 4, "value": 2 }, "submittedAt": "2026-09-15T14:02:11.000Z", "status": "pending" }
+{ ..., "status": "confirmed", "confirmedValue": { "gate": 4, "value": 2 }, "confirmedAt": "2026-09-15T14:02:14.500Z" }
+{ ..., "status": "mismatched", "confirmedValue": { "gate": 4, "value": 50 }, "confirmedAt": "2026-09-15T14:02:14.500Z" }
+{ ..., "status": "superseded" }
 ```
 
-No field ever encodes a timeout or a deadline — per `DECISIONS/ADR-010`, `pending` persists until an
-echo arrives, however long that takes; a client computes "pending for how long" itself from
-`submittedAt`, and the contract asserts no threshold at which that becomes a problem.
+No field ever encodes a timeout or a deadline.
 
 ---
 
 ## 8. Live ingest contract — bridge/organiser ↔ live-mini
 
 Designed to outlive Canoe123 (`BRIEF.md` §5.7). Nothing in this section names a Canoe123 field,
-message type, or wire quirk.
+message type or wire quirk. **live-mini assembles standings exactly as §5 does. It ranks nothing and
+recomputes nothing else** (`DECISIONS/ADR-012`).
 
 ### 8.1 Authentication and tenancy
 
-`X-API-Key` resolves to exactly one `(organiserId, eventId)` pair — the pattern already in use
-today, kept and formalised (`CURRENT-STATE.md`: "the event resolved by API key... deliberately").
-A key authorises writes to that event's resources only. No request identifies its target event by a
-client-supplied id checked against the key — the key *is* the scope, which is what makes isolation a
-contract property rather than an access-control list someone must remember to configure correctly.
+`X-API-Key` resolves to exactly one `(organiserId, eventId)` pair. **The key is the scope.** No request
+names its target event by a client-supplied id checked against the key.
 
-Every write operation in §8.3/§8.5: missing or unrecognised key → `401 unauthorized`; a recognised
-but revoked or suspended key → `403 forbidden`; pushing faster than this deployment's configured
-throttle → `429 rate-limited` with an HTTP `Retry-After` header in seconds (today's `LivePusher`
-already runs a circuit breaker on repeated failure, `CURRENT-STATE.md`; this contract states that a
-throttle exists and how a bridge is told about it, not the exact numbers, which stay implementation-
-tunable). §8.4's public reads carry none of these — no key, no throttle by identity, by design.
+Every write in §8.3 and §8.5 can fail with:
+- `401 unauthorized`: the key is missing or unrecognised;
+- `403 forbidden`: the key is revoked;
+- `429 rate-limited`: sent with `Retry-After`.
 
-**Every id below `Event` is unique only within its event — `eventId` is the only id in this
-contract with any claim to global uniqueness.** `categoryId`, `phaseId` (= Canoe123's `RaceId`),
-`entryId`, and `bib` are all, directly or indirectly, Canoe123-derived tokens, and Canoe123's own
-identifiers are not organiser-safe: `RaceId` is deterministic from class, phase, and day number
-(`DOMAIN-FACTS.md` §6), so two independent venues running the same class on the same numbered day —
-an ordinary Saturday, not an edge case — will mint the identical `RaceId`, and common ICF class codes
-(`K1M-ST` and the like) recur across clubs by convention, not by accident. **The cloud store's actual
-storage key for every such entity is always the compound `(eventId, localId)`, even though a wire
-path below it does not repeat `eventId` at every segment** — `PUT /ingest/v2/categories/{categoryId}`
-(§8.3) is scoped by the authenticated key, not by anything in the path, and a public read under
-`/public/events/{eventId}/...` (§8.4) carries `eventId` in the path itself. An implementation that
-uses a bare `categoryId`/`phaseId`/`entryId` as a global table key across the shared multi-tenant
-store, without also keying by `eventId`, will silently merge two different organisers' data the first
-time their class codes or `RaceId`s coincide — which, given the determinism above, is when, not if.
+§8.4's public reads carry none of these.
+
+**Every id below `Event` is unique only within its event.** `classId`, `phaseId`, `courseId`,
+`entryId` and `bib` are Canoe123-derived tokens. Two independent venues running the same class on the
+same numbered day mint the same `RaceId`. The store's key for every such entity is therefore always
+the compound `(eventId, localId)`. An implementation that keys on a bare `classId`/`phaseId`/
+`entryId` merges two organisers' data the first time they coincide.
 
 ### 8.2 Identity provenance invariance
 
-`eventId` and `entryId` are opaque strings to this contract (§1.1). Today, both are minted by the
-on-site bridge — the bridge self-issues its own API key at event creation and derives `entryId` from
-Canoe123's `Id` field. Nothing in the request or resource shapes below encodes that fact. If a
-central calendar/registry is built later (`CONSTRAINTS.md` §1.8, maintainer's stated ambition), it
-would issue these ids and keys instead — the shape of every endpoint below is unchanged; only who
-calls it, and where the opaque strings originally came from, differs. Costed fully in
-`DECISIONS/ADR-006`.
+`eventId` and `entryId` are opaque strings to this contract. Today the on-site bridge mints both. A
+future central registry could issue them. The shape of every endpoint below is the same either way
+(`DECISIONS/ADR-006`).
 
 ### 8.3 Push — resource-based, Attempt-level
 
-Every push is an idempotent `PUT` upsert by identity (§1.5, §4 INV-5), not an append, always
-`200 { <resource> }` on success — the current resolved resource, whether the body created it, changed
-it, or repeated what was already known. `400 validation-failed` for a malformed body (`error.details`
-names the field). Auth/rate-limit errors per §8.1.
+Every push is an idempotent `PUT` upsert by identity (§1.5, INV-5). A successful push returns
+`200 { <resource> }`, the current resolved resource. A malformed body gets `400 validation-failed`,
+with `error.details` naming the field.
 
-| Method & path | Body | Notes |
-|---|---|---|
-| `PUT /ingest/v2/categories/{categoryId}` | `{ "code": string, "discipline": "slalom"\|"cross" }` | — |
-| `PUT /ingest/v2/phases/{phaseId}` | `{ "categoryId": string, "date": "YYYY-MM-DD", "status": PhaseStatus, "multiRun": boolean, "scoringKind": "duration"\|"ordinal" }` | **No `roundKind`** — see below |
-| `PUT /ingest/v2/entries/{entryId}` | `{ "categoryId": string, "bib": string, "name": string, "icfId": {"scheme": string, "value": string} \| null, "icfId2"?: {"scheme": string, "value": string} }` | **`icfId` required in the body, `null` when genuinely absent, never omitted; a bare string instead of the object is `400 validation-failed`** |
-| `PUT /ingest/v2/attempts/{phaseId}/{bib}` | any non-empty subset of `{ entry, status, outcome, gates, upstreamRank }`, each `Observed`-wrapped per §1.2 | **Partial by design** |
+| Method & path | Body |
+|---|---|
+| `PUT /ingest/v2/classes/{classId}` | `{ "code": string, "name": string, "discipline": "slalom"\|"cross", "ageCategories": [{ "ageCategoryId": string, "name": string }] }` |
+| `PUT /ingest/v2/courses/{courseId}` | `{ "gates": [{ "number": number, "kind": "downstream"\|"upstream" }], "sectorEndsAfterGate": number[], "splitsAfterGate": number[] }` |
+| `PUT /ingest/v2/phases/{phaseId}` | `{ "classId": string, "kind": "race"\|"classification", "scoringKind": "duration"\|"ordinal", "pair": { "role": "first"\|"second", "siblingPhaseId": string, "combination": "best"\|"sum" } \| null, "heats": boolean, "date": "YYYY-MM-DD", "courseId": string \| null, "scheduledStart": Timestamp \| null, "programmeOrder": number \| null, "title": string \| null, "status": PhaseStatus }` |
+| `PUT /ingest/v2/entries/{entryId}` | `{ "classId": string, "displayName": string, "club": string \| null, "nation": string \| null, "ageCategoryId": string \| null, "eventBib": string \| null, "members": [{ "givenName": string, "familyName": string, "birthDate"?: "YYYY-MM-DD", "externalId": { "scheme": string, "value": string } \| null }] }` |
+| `PUT /ingest/v2/attempts/{phaseId}/{bib}` | any non-empty subset of the `Observed` fields of §2.6, each wrapped per §1.2 |
 
-**No `roundKind` on `Phase`.** The live contract carries only the structural flags a renderer needs
-(`multiRun`, `scoringKind`); a vendor-specific round token would be exactly the kind of thing
-`CONSTRAINTS.md` §1.8 asks us not to bake in — a different timing system's round names would not fit
-a Canoe123-shaped enum, and the on-site tier, which does need `roundKind`, already has it (§7). The
-asymmetry the brief asks us to weigh, kept deliberately (`DECISIONS/ADR-007`).
-
-**`Attempt` pushes are partial, and an omitted field is untouched — never reset to `not-yet` or
-`unavailable`.** Forcing a bridge to resend every field on every change would reintroduce file-level
-pushing by another name; this is the wire-level statement of INV-1, made explicit because a bridge
-author reading only this table could otherwise assume `PUT` means "replace." Sending `{"gates": {...}}`
-alone updates only `gates`; `status`, `outcome`, `entry`, `upstreamRank` keep whatever the store
-already had for this Attempt. **Every completed Attempt's `gates` must eventually be pushed** — this
-is the direct fix for `EVIDENCE.md` Exhibit 9's dead ingest branch, not optional detail.
-
-**`icfId` is a required key with an allowed `null`, not an optional one — deliberately, and unlike
-every other optional field in this contract.** `CONTRACTS.md` §1.2's omission rule (absent means "not
-applicable," used throughout the `Observed` envelope) is right for a field that is usually present
-and occasionally isn't. `icfId` is the opposite: its absence is rare (14 in 1,483 real entries) and,
-when it happens, is exactly the fact a bridge author must not be allowed to elide by silence — an
-omitted key here could mean "I don't have this yet" or "there genuinely is none," and only the second
-is true for a forerunner. Requiring the key, with `null` as its explicit value for that case, forces
-the distinction the omission convention would otherwise blur. **A submitted `null` becomes
-`icfId: { state: 'unavailable', reason: 'not-applicable' }` in the store** — stated here explicitly
-rather than left for an implementer to infer, since inference at exactly this kind of boundary is
-what produced `EVIDENCE.md` Exhibit 5. Such an entry is **accepted, not
-rejected** — refusing to carry a forerunner at all would make a real, already-existing category of
-participant unrepresentable on the live tier, for no gain (§2.5). `icfId2`, by contrast, stays
-genuinely optional: for the overwhelming majority of entries (single-person boats), it is not a
-notable absence worth marking, only the ordinary case. **`icfId`'s scheme requirement (§2.5) applies
-identically to both:** a bare string, or an object missing `scheme`, is `400 validation-failed`
-regardless of which field carries it.
-
-**A `Phase` may reference a `categoryId` that hasn't been pushed yet, and vice versa is not required
-either.** The store creates a minimal stub (just the id) on first reference and fills it in whenever
-the real `PUT` for it arrives, rather than rejecting an out-of-order push — a bridge under `DOMAIN-
-FACTS.md` §3's unsynchronised cadences cannot generally guarantee it discovers a Category before the
-first Phase within it, and a contract that required that ordering would be asking for a coordination
-guarantee this ecosystem's own upstream doesn't provide.
-
-The unit of transfer is one Attempt (or one Phase, Category, Entry) changing — never a file, never a
-whole day, never a whole event. This is the direct answer to the brief's §5.7 granularity complaint:
-Saturday's and Sunday's races push independently, tagged by their own Phase's `date`, under the same
-`eventId` throughout — separating two days never again requires two events (Scenario E,
-`ARCHITECTURE.md`).
+- **No format token on `Phase`.** The live contract carries only the structural properties of the
+  format: `kind`, `scoringKind`, `pair` and `heats`. A vendor's round names would not fit a
+  Canoe123-shaped vocabulary (`DECISIONS/ADR-007`).
+- **Attempt pushes are partial. An omitted field is untouched.** A run-generation change is pushed as
+  `run` together with explicit `not-yet` for the retracted fields. **Every completed Attempt's `gates`
+  must eventually be pushed:** that is the fix for `EVIDENCE.md` Exhibit 9.
+- **`externalId` is a required key per member, with `null` allowed.** Omitting it is
+  `400 validation-failed`. So is a bare string, or an object without `scheme`. In the store, a `null`
+  becomes `unavailable{reason:'not-applicable'}`. Such an entry is accepted and fully renderable
+  (§2.5).
+- **`birthDate` is optional, and carried as entered.** Whether the store keeps it, and whether it is
+  published, is live-client configuration (maintainer answer Q4). The contract only transports it.
+- **Forward references are allowed.** A Phase may name a `classId` or `courseId` not yet pushed. The
+  store creates a stub. A bridge cannot guarantee discovery order under upstream's unsynchronised
+  cadences.
+- **The unit of transfer is one resource changing.** It is never a file, a day or an event. Saturday's
+  and Sunday's races push independently under the same `eventId` (Scenario E).
 
 ### 8.4 Read — public, unauthenticated
 
-No `X-API-Key`, no per-organiser access policy — every resource below is visible to every viewer,
-by design (§ maintainer answer A4).
-
-**`GET /public/events?status=live|upcoming|past|all&cursor=&limit=`** — **the calendar**: several
-organisers' events, running in parallel, each visibly carrying live results, exactly as asked for.
+**`GET /public/events?status=live|upcoming|past|all&cursor=&limit=`** is the calendar: several
+organisers' events, running in parallel, each visibly carrying live results.
 
 ```json
 { "asOfSeq": 88213,
   "events": [
     { "eventId": "evt_9f2a", "organiserName": "TJ Slalom Praha", "name": "Jarní pohár 2026",
-      "dateRange": { "start": "2026-09-19", "end": "2026-09-20" }, "status": "live" },
-    { "eventId": "evt_1c04", "organiserName": "KK Troja", "name": "Podzimní závod",
-      "dateRange": { "start": "2026-09-26", "end": "2026-09-26" }, "status": "upcoming" }
-  ],
+      "dateRange": { "start": "2026-09-19", "end": "2026-09-20" }, "status": "live" } ],
   "nextCursor": "eyJvZmZzZXQiOjUwfQ==" }
 ```
 
-`status` is derived, not asserted by anyone — computed purely from ingest recency, never from
-`Phase.status` (consistent with F5: Canoe123's own status vocabulary is not reliable for this, and an
-organiser's event-level "is it live" question shouldn't depend on it either): **`live`** — at least
-one ingest push received for this event within the last 5 minutes; **`past`** — at least one push
-ever received, none within the last 5 minutes; **`upcoming`** — zero pushes ever received. The
-5-minute window is a named constant, not a magic number, and is the only clock this resource
-consults. `limit` defaults to 50, maximum 200; omitting `status` returns `all`, ordered live first,
-then upcoming (soonest `dateRange.start` first), then past (most recent `dateRange.end` first). `404`
-is not a response this endpoint can give — an empty `events` array is the correct answer to "no
-events match."
+`status` is derived purely from ingest recency, never from `Phase.status`:
+- `live`: at least one push in the last 5 minutes (a named constant);
+- `past`: at least one push ever, but none in the last 5 minutes;
+- `upcoming`: none ever.
 
-`organiserName` is set once when an organiser's credential is provisioned — an out-of-band
-administrative action, not an operation this contract defines (`DECISIONS/ADR-006` — this project
-does not design the registry that would eventually own it).
+`dateRange` spans the dates of the event's Phases. `limit` defaults to 50, with a maximum of 200.
+Omitting `status` returns every event:
+- live events first;
+- then upcoming ones, soonest start first;
+- then past ones, most recent end first.
+
+An empty list is the answer to "no events match", never a `404`. `organiserName` is provisioned
+out-of-band.
 
 | Method & path | 200 body | Error |
 |---|---|---|
-| `GET /public/events/{eventId}` | `{ asOfSeq, event: Event, categories: Category[], phases: Phase[] }` | `404 event-not-found` |
-| `GET /public/events/{eventId}/categories/{categoryId}/standing` | `{ asOfSeq, standing: Standing }` | `404 event-not-found` if the event itself is unknown, else `404 category-not-found` |
+| `GET /public/events/{eventId}` | `{ asOfSeq, event: Event, classes: Class[], phases: Phase[], courses: Course[] }` | `404 event-not-found` |
+| `GET /public/events/{eventId}/classes/{classId}/entries` | `{ asOfSeq, entries: Entry[] }` (birth date per live-client configuration) | `404 event-not-found`, else `404 class-not-found` |
+| `GET /public/events/{eventId}/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }` | as above |
+| `GET /public/events/{eventId}/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }` | `404 event-not-found`, else `404 phase-not-found` |
 
-**Push transport: Server-Sent Events, not WebSocket.** `GET /public/events/{eventId}/stream`,
-`Accept: text/event-stream`. Chosen deliberately over WS for this one tier, unlike §7: this feed is
-one-directional (a spectator never writes anything back), served to anonymous public connections at
-whatever scale the calendar attracts, and SSE's native browser reconnect (`EventSource`) and plain-
-HTTP transport cope better with the mobile networks and intermediary proxies spectators' phones sit
-behind than a WebSocket upgrade does. `/ws` stays on the on-site tier, where the client set is small,
-known, and LAN-local, and a write channel (§7.3) already justifies a bidirectional socket.
-
-```
-event: attempt.updated
-data: {"seq":9981,"attemptId":"K1M_ST_BR2_6:9","fields":{"outcome":{...}}}
-
-event: standing.updated
-data: {"seq":9982,"categoryId":"K1M-ST","standing":{...}}
-```
-
-Only `attempt.updated`, `phase.updated`, `standing.updated` cross to this tier — `write.updated` and
-`sources.updated` are on-site/admin-facing bookkeeping a spectator has no business seeing and are
-never sent here. §1.6's subscribe-before-snapshot sequence applies identically: open the stream,
-buffer by `seq`, then call the relevant `GET` above, reconcile against its `asOfSeq`.
+**Push transport: Server-Sent Events.** `GET /public/events/{eventId}/stream`, with
+`Accept: text/event-stream`. It carries `attempt.updated`, `phase.updated`, `entry.updated`,
+`class.updated`, `course.updated` and `standing.updated`, in §7.2's shapes. It never carries
+`write.updated` or `sources.updated`. §1.6's subscribe-before-snapshot sequence applies.
 
 ### 8.5 Corrections after the on-site session has ended
 
-The maintainer's answer on corrections (§ maintainer answer A7: disputes and mis-bibbing surface up
-to a week later) implies the on-site laptop is very likely no longer running by the time a
-correction is needed. **The ingest contract does not assume its caller is the bridge.** Any request
-authenticated for an event's organiser may `PUT` a correction directly against the cloud store —
-the endpoint shapes in §8.3 are exactly the ones used, `source: 'operator-write'`,
-`provisional: false` — no echo is ever expected once the on-site session may be long over (§4 INV-2's
-carve-out (b)). It is presented immediately and composes safely with a possibly-still-live bridge
-push without special-casing which one "wins": a routine bridge push for the same field is an
-automated-source observation ranked below it and does not displace it (§4 INV-2); only a later human
-assertion, or a specifically-triggered fresh read from the top-ranked automated source (§4 INV-2b),
-ever supersedes a standing correction. INV-5's idempotent-upsert semantics are what let the two
-callers compose without a distributed lock — each `PUT` is retained per its own source, never a
-destructive overwrite of the other's slot.
+A correction can surface up to a week later (maintainer answer A7), when the on-site laptop is long
+gone. Any request authenticated for the event's organiser may `PUT` a correction directly, using
+§8.3's shapes, with `source: 'operator-write'` and `provisional: false`.
+- It is presented immediately.
+- A routine bridge push of the same content does not displace it (§4 INV-2, rule 4).
+- It is displaced only by a later assertion of the same kind, or by a results-table observation that
+  changes the bridge's own retained value afterwards: a genuine later upstream correction.
+
+This is also how a mis-bibbed run is corrected: `entry` is re-pointed (INV-4).
 
 ### 8.6 What this contract refuses
 
-- A raw vendor payload of any kind (no "push the file") — `400 vendor-payload-rejected`.
-- A push whose body doesn't match one of §8.3's shapes, including one missing a required identity
-  field — `400 validation-failed`, `error.details` names what's missing. There is no endpoint that
-  accepts an unattributed blob to begin with; every path in §8.3 already names its target's id.
-- A non-idempotent operation — there is no "append a result," only "assert the current value of a
-  field," which is what makes replay-safety and multi-caller composition (§8.5) hold without extra
-  machinery.
-- A vendor-specific round or status token (§8.3) — `400 validation-failed` for any `discipline`,
-  `scoringKind`, or status value outside the closed vocabularies of §2–§3, which a different timing
-  system's bridge must translate into, not extend.
+- A raw vendor payload of any kind: `400 vendor-payload-rejected`.
+- A body that matches none of §8.3's shapes, including one missing a required identity key:
+  `400 validation-failed`.
+- Any non-idempotent operation. There is no "append a result", only "assert the current value".
+- A value outside the closed vocabularies: `400 validation-failed`. This covers `discipline`,
+  `scoringKind`, `kind`, `combination`, statuses and marks. A different timing system's bridge
+  translates into these vocabularies; it does not extend them.
 
-**What a different timing system would have to supply** to use this contract: entries, phases
-(with `multiRun`/`scoringKind`, not a round name), and attempts carrying an outcome, a status, and
-honest source/confidence — nothing that presumes TCP, UDP, CIS, or an XML file exists. **Cost, kept
-plain rather than hidden:** the on-site bridge must translate Canoe123's shape into this one; it
-cannot forward. That work is the same domain layer §7 already requires for the on-site contract, so
-it is not additional scope invented for vendor-neutrality's sake — it is the on-site domain layer's
-output, serialised a second way.
+**What a different timing system supplies** to use this contract:
+- classes, courses, phases (with structural format properties), entries;
+- attempts carrying outcome, status, placement and honest provenance.
+
+Nothing presumes TCP, an XML file or CIS exists. **The cost, stated plainly:** the on-site bridge must
+translate, not forward. It does this with the same domain layer §7 already requires.
