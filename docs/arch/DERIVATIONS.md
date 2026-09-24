@@ -62,7 +62,27 @@ Every upstream event time is a bare time of day on Canoe123's timing clock. The 
 - A race crossing midnight is not handled, and is not a real case.
 - **Failure mode:** no configured zone means `eventTime` is omitted, never guessed.
 
-### 0.3 Ingest filters
+### 0.3 Scope snapshots and the XML read
+
+**Scope snapshots** (`CONTRACTS.md` §4 INV-7). Two messages are complete statements of a race's
+results table, and only these two:
+- **A TCP `Results` message**, for the race it names. Upstream builds it from the stored table at that
+  moment, in both the event-driven and the rotation case. It is one `|`-terminated string, and none
+  of 17,496 recorded messages failed to parse. Its mode is read structurally: **results mode** when
+  any row carries a placement or a mark; **start-list mode** otherwise, when upstream lists the whole
+  start list in start order (its subtitle also gets a literal " - Start List" suffix, which is not
+  relied on). Upstream uses start-list mode exactly when nobody in the race is ranked, so a
+  start-list-mode message for a race that had results means every result was deleted.
+- **An XML snapshot**, for every race in it. Rows are never deleted from the file; a retraction shows
+  only as fields going empty.
+
+**The XML read.** The file is written as a temporary file copied over the event file, not an atomic
+rename. Readers validate every read (well-formed, root closing tag present) and retry on failure. No
+torn read was observed in 2,236 reads by a 5 s poller, but the window is real. The read is triggered
+when the file's modification time or size changes; the detection time is `xml.lastRewriteDetectedAt`
+(§5), and the write happened within one poll interval before it.
+
+### 0.4 Ingest filters
 
 These are never domain entities:
 - **The staged-without-race sentinel.** On-course rows or result rows with `RaceId="<unassigned>"`
@@ -251,7 +271,8 @@ which may be a start-list row a day ahead.
   next push of the race.
 - Kayak Cross never uses it.
 
-**Result marks, closed-set mapping.**
+**Result marks, closed-set mapping.** A row with a mark presents `outcome: no-result`, whatever time
+it carries: a DNF row can keep a time, even another athlete's finish (`CONTRACTS.md` §2.6).
 - Sources:
   - `Results.Result@IRM` on TCP, where upstream sends the `*` mark as empty;
   - `Results.Result@PP = "*"` on TCP;
@@ -469,6 +490,10 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
 
 - **`courseOrder`** is `OnCourse@Position`: 1 is closest to the finish. It is a property of the
   message, which carries one participant. Slalom showed up to 12 simultaneous positions.
+- **`featuredByUpstream`** (`CONTRACTS.md` §7.1) is the Attempt named by `TVS@Odd_Bib`/`@Odd_RaceId`
+  when that bib is on the on-course list, else by `@Even_Bib`/`@Even_RaceId`, else `null`. Upstream
+  alternates the two channels by starter. It is optional; the default featured competitor is the
+  first Attempt of the on-course list, the one next to pass the finish (maintainer answer, round 2).
 - **`timeToBeat`** comes from `OnCourse.Result[T]@TTBDiff`.
   - An unsigned value (`88.38`) is `mode: 'target'`.
   - A signed value (`+1.23`, `-0.40`) is `mode: 'delta'`.
@@ -499,14 +524,73 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
 **Upstream evidence of a re-run** (`DECISIONS/ADR-013`).
 - Upstream sets `OnCourse.Participant@Warning` to a localised "overwriting results" string when a bib
   is put on course in a race where it already has a result. The text is never carried.
-- **The generation increments on:**
-  - (a) an on-course observation for this `«phaseId,bib»` with a non-empty `dtStart` different from the
-    current generation's recorded start; or
-  - (b) a result row for this Attempt observed with `Time`, `Total` and the mark all empty after
-    having been known.
+- **The generation increments on exactly one trigger:** an on-course observation for this
+  `«phaseId,bib»` with a non-empty `dtStart` different from the current generation's recorded start.
+  A result row observed cleared is a **retraction** (§4.12), not a generation change
+  (`DECISIONS/ADR-013` Revision). A re-run therefore appears as a retraction, often invisible on TCP
+  because the re-run wizard pushes nothing, followed by a new start.
 - On increment, the run-scoped fields become `not-yet`, and the change is pushed.
 - A later result row whose `dtFinish` precedes the new generation's start describes the replaced run.
   It is retained as history and never presented.
+
+### 4.12 Retraction and contradiction (`DECISIONS/ADR-015`)
+
+**What upstream emits for each correction** (observed upstream behaviour, E1):
+
+| Operator action | On TCP |
+|---|---|
+| A status, time or penalty edited in the results grid, including set to empty; a paste; a finish impulse given, also after the fact; an on-course row relabelled to another bib once it has a total; a scoring-terminal correction; "delete all results" | immediate push of the race |
+| "Delete selected results"; a start or finish impulse deleted with the delete-impulse command; the re-run wizard; a start-terminal DNS; DNF or DSQ before the finish | **no push**; visible at the race's next push, at rotation, or in the XML |
+| A finish cleared or overwritten on the on-course grid; an on-course row relabelled *away* from a bib | **the stored row is not even cleared**; the old result stays in every later push until the athlete finishes again or the operator edits it |
+
+**Retraction from a TCP push** (INV-7). For each Attempt of the race whose presented result fields
+came from results-table observations:
+- **First-run or single-run race.** The row is absent, or the message is in start-list mode:
+  retract `outcome`, `gates`, `placement`, `underReview`, `qualified` and any mark in `status`.
+  Recorded: three cleared DNSs vanished this way, and all three athletes then raced.
+- **Paired second run.** The row is absent: retract as above plus `pairTotal` and `countingRun`. The
+  row is present with `Time` empty and `IRM` empty: retract run 2's `outcome` and `gates`; take
+  `placement` and `pairTotal` from the row, since an athlete with only a first-run result is listed
+  that way. Recorded: five DNSs and one CAP cleared in place.
+- **Never:** an Attempt whose outcome is still an on-course inference; an Attempt never present in a
+  results-table observation; a row that was never present.
+
+**Retraction from an XML snapshot.** The row carries no time, no finish time and no mark, for an
+Attempt previously known from a results-table observation: retract as the TCP first-run case.
+**Guard:** apply it against a `tcp` observation only when `xml.lastRewriteDetectedAt` minus the poll
+interval is later than that observation's `observedAt`. Otherwise the snapshot may predate the push,
+and it is ignored for that field until the next snapshot. The same guard applies to the mark
+exception of INV-2 rule 2. Recorded: the XML was five minutes *ahead* of TCP's rotation on one
+cleared wrong-race row, and 7 s behind TCP on a cleared DNS.
+
+**After a retraction,** `status` is what the on-course stream currently shows for the Attempt
+(`at-start`, `on-course`), else `not-started`.
+
+**Contradiction by the on-course stream** (INV-2d). Track per Attempt and generation the finish time
+last presented from a results-table observation. When an on-course message lists the Attempt with
+the generation's `dtStart` and an empty `dtFinish` after that:
+- record the contradicted finish time; present `status: on-course`, `outcome: running`,
+  `placement`/`pairTotal`/`countingRun: not-yet`; raise `contradicted-finish`;
+- keep every results-table row for the Attempt whose `dtFinish` equals the contradicted time
+  retained and unpresented;
+- lift the record when a row carries a different `dtFinish`, a mark, or a retraction, or when the
+  on-course stream lists the Attempt with a `dtFinish` again.
+
+Recorded: seven finishes withdrawn on the on-course grid; in two cases later pushes still carried
+the withdrawn time for 31 s and 71 s; in every case the row changed next only when the athlete's own
+real finish arrived, 2–94 s later.
+
+**Duplicate finishes.** Two Attempts of one Phase presenting the same `dtFinish` raise
+`duplicate-finish` with both bibs. Recorded on TCP six times (a finish given to one bib, then the
+other) and in the XML for hours once, resolved by a DNF. Nothing is auto-resolved.
+
+**Half-corrections in the XML.** A save can land between two operator actions. Recorded within one
+snapshot: the same finish on two bibs (three times), one run on two races for 70 s, a penalty on
+neither of two bibs for 35 s. Each such state is upstream's own table at that instant and is
+presented as such, with the diagnostics above. The next snapshot or push resolves it; the operator's
+re-baseline (`CONTRACTS.md` §4) is the remedy for one that never does.
+
+**Standing after a retraction or contradiction:** the entry is unplaced (`CONTRACTS.md` §5 step 3).
 
 ---
 
@@ -520,7 +604,12 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
 - **`tcp.timingClockOffsetSeconds`** is `TimeOfDay` (Canoe123's timing clock, once a second) minus the
   server clock at receipt. It is diagnostic only.
 - **`xml.lastRewriteDetectedAt`** is the moment a change of the file was last detected. This is what
-  INV-2's rule 2 means by "a rewrite detected after the disconnect".
+  INV-2's rule 2 means by "a rewrite detected after the disconnect", and what §4.12's write-time
+  guard subtracts the poll interval from. The file is written on a timer (a venue setting, 65 s by
+  default, 35 s at the recorded NKZ) and only when upstream has flagged a change: an operator edit,
+  an import, or a slalom rank change. A penalty correction that reorders nobody waits for the next
+  flagged change. The Kayak Cross heat ranking never flags one: Cross heat results reached the file
+  1.5–10 min late in a recording. Nothing is written in upstream's offline mode.
 
 ---
 
@@ -572,6 +661,10 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
     1 is the better run.
 13. **Result marks are not always pushed**, and `left-without-finish` is the honest interim state
     (§4.1).
+14. **Retraction is first-class** (§0.3, §4.12; `DECISIONS/ADR-015`). A TCP result push and an XML
+    snapshot are complete statements of a race; their stated absence retracts. The on-course stream
+    contradicts a finish taken away on the on-course grid, which upstream never clears. A mark
+    overrides a time. A result row observed cleared is a retraction, not a new run generation.
 
 ---
 
@@ -593,7 +686,7 @@ but no code path or recording ever filled it.
 | `Results.Result@Behind` | A formatted gap. Derived instead (`CONTRACTS.md` §5) |
 | `Results@Current` | Used at ingest as a freshness signal only |
 | `TimingInput` (all) | Raw hardware impulses, with no bib |
-| `TVS@Odd_Bib`, `@Even_Bib` and their race ids | Upstream's TV featured-competitor choice. Whether the venue board should follow it is an open business question |
+| `TVS@Odd_Bib`, `@Even_Bib` and their race ids | Carried as `featuredByUpstream` on the on-course response (§4.8), optional. The default featured competitor is the athlete next to pass the finish (maintainer answer, round 2) |
 
 **XML snapshot**
 
@@ -651,5 +744,13 @@ These are E4: recorded here, not used to make rules.
    which pushes immediately, and the athlete is staged again within one snapshot interval, a
    snapshot written before the clearing can show DNS for up to about 35 s. This is rare, and accepted
    as residual.
-10. The cause of the 11–27 s late-finish outliers. The finish message itself was late; a manually
+10. ~~The cause of the 11–27 s late-finish outliers.~~ Answered (maintainer, round 2): the operator
+    assigns a finish retroactively after a judge reports the passage, or swaps two athletes' finishes
+    noticed late. Both are corrections that §4.12 now models.
+11. Which operator action produced each recorded retraction cannot be read from the stream. The
+    "stale row survives" behaviour matches the on-course grid edit path. No recorded instance of
+    "delete selected results" exists; its no-push behaviour is from the source only.
+12. Whether today's live-mini XML ingest overwrites results that were cleared on TCP (E4).
+13. A penalty correction that reorders nobody, made after racing has ended, may never trigger an XML
+    write on its own. Not observable in the recordings. It reaches TCP immediately regardless. The finish message itself was late; a manually
    entered finish is suspected.

@@ -387,7 +387,30 @@ monotonic: a value once asserted ages, it does not vanish.**
 
 ---
 
-## What these eleven have in common
+## Exhibit 12 — No path for a retraction to reach any client
+
+Added in the consolidated revision (2026-09-24), E2 as reported by a scout and not re-read here.
+Upstream retracts a result by absence: a row missing from a `Results` push, a time emptied on a
+second-run row, a field emptied in the XML. Our code has no way to carry that:
+
+- `SRV/live/LiveTransformer.ts:170-240` converts only the rows present in a push, and
+  `LM/…/ResultIngestService.ts:86` upserts only. Together: a result cleared on TCP, whether a
+  vanished first-run row or a cleared status, is never removed on the live tier through the TCP path.
+  Whether the live-mini XML ingest (`IngestService.ts:337, :400`) later overwrites it is unverified.
+- `SRV/state/EventState.ts:196-197` replaces the whole results object with each `Current` push. On
+  site, a vanished row therefore disappears by accident, which is right, and a stale row survives
+  exactly as long as upstream keeps sending it, which is wrong: two recorded cases showed a false
+  leader for 31 s and 71 s.
+
+**Why it matters:** the maintainer's operating reality is that results move: a cleared DNS, a finish
+moved to the right bib, a deleted result, several results shifted back. An upsert-only pipeline can
+only ever add. The design's answer is `DECISIONS/ADR-015`: scope snapshots whose absence retracts,
+contradiction by the on-course stream, and an operator re-baseline that reaches every client and
+live as a replace.
+
+---
+
+## What these twelve have in common
 
 Not carelessness. Each is a locally reasonable decision made by someone who needed an answer and
 had nowhere to look it up. The system has no place where the answer lives, so every component

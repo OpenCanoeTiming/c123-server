@@ -86,6 +86,15 @@ the sharpest case: a category's results snapshot may be up to a full rotation ol
 data about the same competitors is 500 ms old.** *(Corrected: this holds for the rotation only. Every
 change to a race's results is also pushed immediately; see the table.)*
 
+*(Consolidated revision, 2026-09-24, two further corrections. A TCP `Results` message is a complete
+statement of one race's results table: none of 17,496 recorded messages was partial. A row absent
+from it, or a second-run time gone empty, is upstream's deliberate "no result". But several
+correction paths change the table with no push, and one path, taking a finish away on the on-course
+grid, never clears the stored result at all. The XML snapshot is written on a venue-set timer, only
+when a change is flagged, never in offline mode, and by copy rather than atomic rename; Kayak Cross
+heat results never flag a change and reached the file 1.5–10 min late. See `DERIVATIONS.md` §0.3 and
+§4.12.)*
+
 ## 4. Two-run races (BR1/BR2) lose data by design — on the TCP stream specifically
 
 **Correction, made during the design engagement, and load-bearing enough to state before anything
