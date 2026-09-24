@@ -77,7 +77,7 @@ type Observed<T> =
   | { state: 'not-yet' }
   | { state: 'unavailable'; reason: UnavailableReason }
 
-type SourceTag = 'tcp' | 'xml' | 'operator-write' | 'operator-assertion'
+type SourceTag = 'tcp' | 'xml' | 'operator-write'
 type UnavailableReason = 'not-configured' | 'source-unreachable' | 'not-applicable'
 type Timestamp = string   // ISO-8601 with an explicit offset or Z
 ```
@@ -92,7 +92,7 @@ The fields, precisely:
   for `EVIDENCE.md` Exhibit 1. It is used for display and staleness only. Merge ordering uses the
   ingest sequence instead (INV-6).
 - **`eventTime`.** Present only when Canoe123 gives a real event time for the fact: a start or finish
-  time, or an operator-assertion time. Upstream sends every event time as a bare time of day on
+  time. Upstream sends every event time as a bare time of day on
   Canoe123's own timing clock, with no date and no zone. `eventTime` is built by
   `DERIVATIONS.md` §0.2's rule: the owning Phase's `date`, plus that time of day, plus the venue's
   configured zone. It is expressed on Canoe123's clock and never shifted to the server's clock.
@@ -618,10 +618,13 @@ penalty sum. A team boat's `penalty` is the sum over its members, with `memberPe
   Canoe123's own finish time. There is no fallback. Upstream shows a split time with decimals during
   a split hold, so a whole-seconds-to-decimals change is not a finish, and the downstream highlight
   signal is our own derivative, not an upstream one.
-- **Cross:** no per-competitor finish signal exists on the on-course stream. The outcome is an
-  operator's assertion (`source: 'operator-assertion'`, `confidence: 'authoritative'`), entered after
-  conferring with the finish judge. It arrives in the result push and is pushed on, un-debounced, the
-  moment it is ingested.
+- **Cross:** no per-competitor finish signal exists on the on-course stream. The heat order is the
+  operator's assertion, entered after conferring with the finish judge. It reaches us as ordinary
+  results-table observations: `source` is the channel it arrived on, `tcp` or `xml`, with
+  `confidence: 'authoritative'`. It is pushed on, un-debounced, the moment it is ingested.
+  - An earlier draft tagged this `operator-assertion`, a source outside the merge rules. That was
+    wrong. It let a stale snapshot row, ingested later, displace a fresher TCP push of a corrected
+    order. The human origin of the fact is semantics, not a separate channel.
 
 ### 2.7 Standing
 
@@ -861,7 +864,7 @@ implementation must satisfy, not an algorithm.
 - an **on-course inference**, computed by the domain layer from the TCP on-course stream;
 - a **results-table observation**: a TCP result push, or an XML snapshot row. Both are renderings of
   Canoe123's own results table;
-- an **operator observation** (`operator-write` or `operator-assertion`).
+- an **operator write** (`operator-write`).
 
 - **INV-1 (monotonic knowledge, per run generation).** A field's `state` never regresses from `known`
   to `not-yet` or `unavailable` because a later message omits it. Merge is per field, never
@@ -893,13 +896,12 @@ implementation must satisfy, not an algorithm.
      - on-course facts, `courseOrder`, `timeToBeat`: TCP only;
      - the superseded run's summary, age categories, members, event details, course numbers:
        the XML only.
-  4. **`operator-write` and `operator-assertion` sit outside rules 1–3.**
+  4. **`operator-write` sits outside rules 1–3.**
      - **`provisional: true`** is an optimistic write awaiting one specific echo (§2.9). It is
        presented the instant it is submitted. The very next results-table observation of that field,
        for that run generation, supersedes it.
      - **`provisional: false`** is an assertion with no echo expected. Examples are a direct
-       correction against the cloud store after the on-site session ended (§8.5), and Kayak Cross's
-       operator order once pushed. A later assertion of the same kind supersedes it. So does a
+       correction against the cloud store after the on-site session ended (§8.5). A later assertion of the same kind supersedes it. So does a
        results-table observation that **changes** its own source's retained value after the
        assertion: genuinely new upstream information. A re-delivery of the value that source already
        held never displaces an assertion (INV-5).

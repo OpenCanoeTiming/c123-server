@@ -72,5 +72,8 @@ but not sufficient. The consolidated revision adds the rest:
   of dividing `Time` is right: TCP already formats the order as `1.00`, and the snapshot stores it in
   milliseconds (E1).
 
-The operator-assertion framing above is unchanged. It is the operator's entry that populates the
-placement in the result push.
+The operator-assertion framing above is unchanged as semantics: it is the operator's entry that
+populates the placement in the result push. As a **source tag** it is withdrawn. The assertion reaches
+us as ordinary result rows, on TCP and in the snapshot, and it must be merged by the same rules as
+every other result row. A separate tag outside the merge rules let a stale snapshot row displace a
+fresher TCP push of a corrected order.

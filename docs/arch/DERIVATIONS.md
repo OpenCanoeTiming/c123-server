@@ -1,468 +1,602 @@
 # Derivations — From Source to Contract
 
-`CONTRACTS.md` §6 says *whether* a value is derivable. This document says *how* — the actual
-transformation, precisely enough to implement without re-reading `DOMAIN-FACTS.md`, and precise
-enough that writing it down could show a claimed derivation does not actually work. Two of them did
-not, on inspection, and are fixed here and in `ARCHITECTURE.md` rather than left standing. Every
-derivation below is stated the same four ways, because a reader needs all four to implement any of
-them without guessing:
+`CONTRACTS.md` §6 says *whether* a value is derivable. This document says *how*: the actual
+transformation, precise enough to implement without re-reading `DOMAIN-FACTS.md`, and precise enough
+that writing it down can show a claimed derivation does not work. Every derivation is stated four
+ways:
+1. the **source expression**;
+2. its **conditionality**;
+3. the **resulting envelope**;
+4. the **failure mode**.
 
-1. **The source expression** — which upstream field, which interface, the exact transformation.
-2. **Its conditionality** — what must hold for the derivation to run at all.
-3. **The resulting envelope** — `source`, `confidence`, whether `eventTime` is present, what sets
-   `provisional`.
-4. **The failure mode** — what the value becomes when the derivation cannot run.
+**Consolidated revision, 2026-09-24.** Rewritten after the reverse pass, which checked every field
+Canoe123 emits on TCP, in the XML snapshot and on CIS, and after a latency measurement. The previous
+version read three TCP fields that do not exist or are never filled. It sliced result gate strings by
+the wrong width, gave no XML units, and derived the Cross order from `Time`. §8 records what changed.
 
-Covers what `CONTRACTS.md` asserts, not every field Canoe123 emits — the same discipline as
-everywhere else in this engagement.
-
----
-
-## 0. Notation
-
-- `OnCourse.<field>` / `Results.<field>` — a field on the TCP push message of that type, for a given
-  `(RaceId, Bib)`.
-- `CIS.GetResult(<RaceId>, <Bib>).<field>` — a field on a CIS `GetResult` response, explicit about
-  which RaceId was queried, since (§5.5 below) this matters and was not obvious in advance.
-- `«phaseId, bib»` — the Attempt this derivation targets, per `CONTRACTS.md` §2.6.
-- `→ known/not-yet/unavailable` — the resulting `Observed<T>` state (§1.2).
+**Scope.** §1–§6 cover every value the contract asserts. **§9 covers every upstream field the
+contract does *not* model, and why.** A field in neither place is a gap, and should be reported.
+Behaviour described as "observed upstream behaviour" was checked against the decompiled upstream
+source or recordings. That source is never quoted or named here.
 
 ---
 
-## 1. Category
+## 0. Conventions every derivation relies on
 
-**`categoryId`, `code`.** Source: `OnCourse.RaceId` or `Results.RaceId`, the class-identifying prefix
-before the phase marker (`K1M_ST` from `K1M_ST_BR2_6`) — `code` is that substring, unmodified;
-`categoryId` is the same string, scoped by `eventId` per `CONTRACTS.md` §8.1's compound-key
-requirement. Conditionality: none — present on every message. Envelope: `source: 'tcp'`,
-`confidence: 'authoritative'`, no `eventTime` (a class identifier has no event time). Failure mode:
-none — this is structural parsing, not a fact that can be absent once any message for the category
-has arrived; before that, `not-yet`.
+**Notation.**
+- **TCP.** `OnCourse.<attr>`, `Results.<attr>`, `Schedule.<attr>`, `RaceConfig.<attr>` and
+  `TimeOfDay` are the TCP push messages. `OnCourse` has attributes on its root and on its two
+  `Result` children, `[C]` and `[T]`.
+- **XML.** `XML.<Table>.<Column>` is the snapshot file.
+- **Targets.** `«phaseId,bib»` is the Attempt targeted.
+- **"Result push"** means a TCP `Results` message for one race. It is either:
+  - **event-driven** (`Current="Y"`), sent immediately whenever upstream recalculates that race's
+    ranking; or
+  - **rotation** (`Current="N"`), sent for one race every ~30 s, cycling through every race, so a
+    given race comes round only every few minutes (median 280–355 s, worst 920 s, measured).
 
-**`discipline`.** Source: the *set* of `roundKind` values (§2 below) observed under this
-`categoryId` — `'cross'` if any is one of `XT/X4/XS/XF/XER`, `'slalom'` otherwise. Conditionality:
-at least one Phase must have been observed. Envelope: `source: 'tcp'`, `confidence: 'inferred'`
-(derived from a set of observations, not asserted directly by any single field) — this is the one
-Category-level field that is `inferred` rather than `authoritative`, worth stating since nothing
-upstream ever says "this is a Cross category" in one place; it is read off the phase structure.
-Failure mode: `not-yet` until the first Phase is known.
+  Only event-driven pushes matter for latency. Both are ordinary observations for merge.
+
+### 0.1 Units and normalisation
+
+| Quantity | TCP | XML snapshot | Contract |
+|---|---|---|---|
+| run time, total | formatted seconds, 2 dp (`"82.36"`); running time is whole seconds, space-padded | integer **milliseconds** (`84190`) | seconds, decimal |
+| penalty | integer seconds | integer seconds | seconds |
+| second-run combined total | `Results.Total` on the second run's row | `TotalTotal`, ms | seconds |
+| time of day (start, finish, split) | `H:MM:SS.fff`, no date | `H:MM:SS.fff`, no date | `eventTime` via §0.2 |
+| gate penalties on a result row | fixed width, §4.6(b) | fixed width, §4.6(b) | `Gate[]` |
+| bib | padded to 4 chars in `Results`; unpadded in `OnCourse` | padded in some files | trimmed string |
+| "behind" gaps | pre-formatted strings | pre-formatted strings | not relayed; derived (`CONTRACTS.md` §5) |
+
+**Normalise once, at ingest.** Trim every bib. Divide XML milliseconds by 1000. Treat an empty
+attribute as absent, never as zero.
+
+### 0.2 `eventTime` construction
+
+Every upstream event time is a bare time of day on Canoe123's timing clock. The construction is:
+`eventTime = Phase.date + time of day + the venue's configured zone offset`.
+- The result is expressed on Canoe123's own clock. It is never shifted to the server clock:
+  Canoe123's clock is the official time, and the contract never compares `eventTime` with
+  `observedAt`.
+- A race crossing midnight is not handled, and is not a real case.
+- **Failure mode:** no configured zone means `eventTime` is omitted, never guessed.
+
+### 0.3 Ingest filters
+
+These are never domain entities:
+- **The staged-without-race sentinel.** On-course rows or result rows with `RaceId="<unassigned>"`
+  (with empty `Id` and `Name` on TCP) never become a Phase or an Attempt. The snapshot also has a
+  pseudo-schedule row of the same name.
+- **The pseudo-class `NA`**, "not entered or assigned".
+- **Row-number, print, finance and UI columns** (§9).
 
 ---
 
-## 2. Phase
+## 1. Class
 
-**`phaseId`.** = `RaceId` verbatim. No transformation. Always `authoritative`, `source: 'tcp'`.
+- **`classId`, `code`.**
+  - Source: `XML.Participants.ClassId` / `XML.Schedule.ClassId`, or `Results.ClassId` on TCP, used
+    verbatim.
+  - **Never the `RaceId` prefix.** For a hyphenated class the two differ (`K1M-ST` against
+    `K1M_ST`).
+  - Envelope: `source` is the channel; `confidence: 'authoritative'`; no `eventTime`.
+  - Failure mode: `not-yet` until first seen.
+- **`name`.**
+  - Source: `XML.Classes.Class`, with `Results.MainTitle` as a TCP fallback. Upstream falls back to the
+    class id itself when no title is set.
+  - This is organiser-authored text, carried verbatim (`CONTRACTS.md` §1.3). `LongTitle` is not
+    modelled (§9).
+- **`discipline`.**
+  - Source: `'cross'` if any Phase of the class has a Cross format (`X8/X4/XS/XF/XT/XT1/XT2/XER`),
+    otherwise `'slalom'`.
+  - Envelope: `confidence: 'inferred'`, because it is read off the phase structure.
+  - **Do not use `XML.Events.CanoeDiscipline`.** It reads `Slalom` for a recorded Kayak Cross event.
+- **`ageCategories`.**
+  - Source: `XML.Classes/Categories` rows for this class, each giving `CatId` and `Category` (the
+    name).
+  - A class with no rows gives an empty list, which is a valid `known` value.
+  - The age bounds (`FirstYear`/`LastYear`) are not modelled (§9).
 
-**`roundKind`.** Source: `Schedule.DisId` or the phase-marker substring of `RaceId`
-(`_BR1_`/`_BR2_`/`_QUA_`/`_SEM_`/`_FIN_`/`_XT_`/`_X4_`/`_XS_`/`_XF_`/`_XER_`, `DOMAIN-FACTS.md` §6) —
-prefer `Schedule.DisId` when a `Schedule` message has been seen (it is the field actually named for
-this purpose); fall back to the `RaceId` substring before the first `Schedule` push arrives, since
-`RaceId` is present on every message and `Schedule` pushes only every ~40 s (`DOMAIN-FACTS.md` §3). A
-token outside the ten known values is carried through unrecognised rather than rejected
-(`CONTRACTS.md` §2.4). Envelope: `source: 'tcp'`, `confidence: 'authoritative'` either way — both
-are Canoe123's own direct statement, never inferred by us. Failure mode: none once any message for
-the Phase has arrived.
+---
 
-**`date`.** Source: `Schedule.StartTime`'s date component if a `Schedule` push has been seen for this
-`RaceId`; otherwise the date of the *first observation of any kind* for this `RaceId` (its `Phase`'s
-own creation moment). Conditionality: assigned once, on first observation — `CONTRACTS.md` §2.4's
-immutability requirement means this derivation runs exactly once per Phase and is never re-evaluated,
-which must be enforced explicitly (a naive "recompute from the latest Schedule" implementation would
-violate it the first time a correction landed days later, § maintainer answer A7). Envelope:
-`source: 'tcp'`, `confidence: 'authoritative'` if from `Schedule`, `'inferred'` if from first-
-observation fallback (we are inferring the date from when *we* saw it, not from Canoe123 asserting
-one). Failure mode: none — a Phase cannot exist in domain state without having been observed once.
+## 2. Phase and Course
 
-**`status`.** Source: `RaceConfig.RaceStatus` (`c123-protocol.md`'s status push) or `Schedule`'s own
-status field, mapped through the closed table already given in `CONTRACTS.md` §3.1. Conditionality:
-none for the mapping itself, but see the finding below. Envelope: `source: 'tcp'`,
-`confidence: 'authoritative'` — Canoe123's own status is always asserted, never inferred, even though
-what it means is sometimes stale relative to reality.
+### 2.1 Phase identity and structure
 
-> **Finding, not a new fact but worth restating precisely here: `status` reliably reports Canoe123's
-> own field, and unreliably reports whether a correction happened underneath it.** `CONTRACTS.md`
-> §3.1 already states this (decompiled-source-verified: `RaceStatus` is operator-set only, never
-> touched by `PenaltyCorrection`) — repeated here only because a derivation document is where an
-> implementer would otherwise reasonably assume "the source field name says `RaceStatus`, so reading
-> it is the whole derivation," which is true of the *value* and false of what a reader might expect
-> it to *mean*.
+- **`phaseId`** is `RaceId`, verbatim.
+- **`format`.**
+  - Source: `XML.Schedule.DisId`. On TCP, fall back to the `RaceId` token between the class and the
+    day number, because **TCP `Schedule` has no `DisId` attribute**.
+  - An attribute sub-race carries a suffix (`WX1J_XT_26_JUN`). The token is still the part before the
+    day number.
+- **`kind`, `scoringKind`, `pair`, `heats`.**
+  - These come from `CONTRACTS.md` §2.4's token table, a lookup with no uncertainty, so
+    `confidence: 'authoritative'`.
+  - `pair.siblingPhaseId` is the Phase with the same `classId` and the first-run token. When several
+    exist, take the one with the same schedule date. This mirrors upstream's own pairing behaviour.
+- **`date`.**
+  - Source: the date part of `XML.Schedule.StartTime`, a full date-time with offset. Envelope:
+    `source: 'xml'`, `confidence: 'authoritative'`.
+  - Fallback before the snapshot is read: the date of the first observation of any kind for this
+    `RaceId`, with `confidence: 'inferred'`.
+  - **TCP `Schedule` has a `StartTime` element, but upstream always emits it empty.** It is never a
+    source.
+  - Assigned once, never re-derived (INV-5).
+- **`scheduledStart`** is the same `XML.Schedule.StartTime`, whole.
+- **`programmeOrder`** is `XML.Schedule.RaceOrder`, or `Schedule.Race@Order` on TCP.
+- **`title`** is `XML.Schedule.CustomTitle`, the organiser's own race title. Where it is empty the
+  field is `not-yet`. Upstream's generated, localised titles (`Race`, `SubTitle`, `ShortTitle`) are
+  never carried (§9).
+- **`courseId`** is `XML.Schedule.CourseNr`. It is XML only: no TCP message carries a course number.
+- **An attribute sub-race** (Cross juniors: `XML.Schedule.AttributeId`, with `XML.Attributes` giving
+  its description) is relayed as the Phase's own class, which upstream derives (`MX1J`). The link to
+  its base class is not stated upstream (§10).
 
-**`multiRun`, `scoringKind`.** Structural, from `roundKind`: `multiRun = roundKind ∈ {BR1, BR2}`;
-`scoringKind = 'ordinal'` if `roundKind ∈ {X4, XS, XF}` (Cross's ordinal-scored phases; `XT`, a time
-trial, is `'duration'` despite being a Cross round — checked directly, `DOMAIN-FACTS.md` §8's own
-table lists `Time` as an ordinal only for "X4/XS/XF", not `XT`), else `'duration'`. No upstream
-message states either field directly; both are computed once, deterministically, from `roundKind`
-already resolved above. `confidence: 'authoritative'` regardless — this is exact, total logic, not a
-guess, so the `inferred` label (reserved for evidence-not-assertion, `CONTRACTS.md` §1.2) does not
-apply to a lookup table with no uncertainty in it.
+### 2.2 `status`
+
+- Source: `Schedule.Race@RaceStatus` on TCP, the only TCP carrier (`RaceConfig` has no status), or
+  `XML.Schedule.RaceStatus`.
+- It is mapped through `CONTRACTS.md` §3.1's table.
+- Envelope: `confidence: 'authoritative'`.
+- Upstream sets race status only by direct operator action. It never tells us whether results
+  underneath changed.
+
+### 2.3 Course (#165)
+
+- **`courseId`, `layout`.**
+  - Source: `XML.CourseData.CourseNr` and `CourseConfig`: one character per course element.
+- **Parse the layout.**
+  - `N` is a downstream gate and `R` an upstream gate. Gates are numbered 1.. in order.
+  - `S` ends a sector: record the number of the gate before it.
+  - `I` is a split point: record the gate before it.
+  - `D` and `E` are carried in `layout` only; their effect on numbering is open (§10).
+- **Refresh from TCP.**
+  - `RaceConfig.GateConfig` is the currently selected course's layout. TCP strips the `S` markers.
+  - `RaceConfig` gives no course number. Use it only to refresh the course of the currently running
+    Phase.
+  - `RaceConfig.GateCaptions` gives `captions`. Captions are TCP only.
+  - `RaceConfig.NrSplits` says whether splits are armed. Zero means no split times will come.
+- **Ignore upstream's transmitted gate count** (`RaceConfig.NrGates`). The stream substitutes 30 when
+  no course configuration is attached, and 25 for a slalom course with an empty layout. Neither is
+  marked as a fallback.
+- **Detect a fabricated course.** Upstream fabricated the course when any of these holds:
+  - the gate string is empty while the count is non-zero;
+  - the captions are empty while the gate string is non-empty;
+  - the string's gate count differs from the transmitted count.
+- **Failure mode:** an empty layout, or a fabricated one, gives `unavailable{reason:'not-configured'}`
+  for `gates`. The same applies to every Attempt's `gates` on that course.
 
 ---
 
 ## 3. Entry
 
-**`entryId`.** On-site: Canoe123's `Id` field, used directly, verbatim, as the opaque contract
-identifier (`CONTRACTS.md` §1.1's on-site exception) — its exact composition
-(`{ICFId}["."{ICFId2}]"."{ClassId}["."{CatId}]`, with known exceptions) does not matter to this
-derivation, because nothing downstream ever decomposes it (`CONTRACTS.md` §2.5, `DECISIONS/ADR-001`'s
-Revision). Stable across BR1/BR2 — confirmed against a matched pair in the protocol docs; stable
-across QUA/SEM/FIN — inferred from field composition and the analogous Cross elimination chain, not
-directly confirmed, carried forward from round one as a stated residual risk (`CONTRACTS.md` §2.5).
-
-**`icfId`, `icfId2`.** Source: Canoe123's own `ICFId`/`ICFId2` elements for `value` — never the
-embedded numbers inside `Id`, which can disagree with them after a crew substitution the `Id` was
-never updated to reflect (`CONTRACTS.md` §2.5). **`scheme` is not derivable from Canoe123's data at
-all** — the wire format never states which registry a given `ICFId` number belongs to, and an
-organiser legitimately fills the same element with a national federation's own registry numbers, not
-only genuine ICF codes (`CONTRACTS.md` §2.5/§6, **[N]**). `scheme` is therefore asserted by whichever
-party operates the on-site bridge for this event, from that event's own configuration, not derived
-by this domain layer from any upstream field — the one value in this document that a bridge author
-must supply rather than the domain layer compute. Envelope: `source: 'tcp'`/`'xml'`, `confidence:
-'authoritative'` for `value`. **Failure mode: `unavailable{reason: 'not-applicable'}`, not `not-yet`
-and not an error**, for the genuine no-external-identity case (a forerunner) — confirmed as a real, if
-infrequent, upstream case (14 of 1,483 real entries), not a hypothetical one.
-
-**`bib`, `name`.** Source: `OnCourse.Bib`/`Results.Bib` and the embedded athlete name field on either
-message. Envelope: `source: 'tcp'`, `confidence: 'authoritative'`. Failure mode: `not-yet` before any
-message names this competitor.
+- **`entryId`** is `XML.Participants.Id`, or `Participant@Id` on TCP, used verbatim and **never
+  parsed** (#171). Where `XML.Events.IDHandling` is `USER`, the operator typed the id by hand. That is
+  where the non-conforming ids come from, and one more reason not to parse it.
+- **`displayName`** is the pre-assembled `Participant@Name` on TCP, in the form `FAMILY Given`, or
+  `FAMILY Given/FAMILY2 Given2` for a crew. For a team it is the team's `FamilyName`.
+- **`members`.**
+  - A single boat or crew comes from `XML.Participants`: `GivenName`/`FamilyName`/`Birthdate`/
+    `ICFId`, then `GivenName2`/`FamilyName2`/`Birthdate2`/`ICFId2` when present.
+  - A team (`IsTeam`) comes from `Member1..3`. These are participant `Id`s in the XML. Resolve each
+    against the participants index **by whole-string match**, never by parsing.
+  - On TCP, `Results.Member1..3` are already resolved to display names, and are emitted only when set.
+    Use them only as a pre-snapshot fallback for display. They never give identity.
+  - A team's own `ICFId` is synthetic and not carried.
+- **`externalId`.**
+  - `value` is `ICFId`, or `ICFId2` for the second member, from the snapshot only: **TCP carries no
+    registry number.**
+  - `scheme` is supplied by bridge configuration, never derived (`CONTRACTS.md` §6, [N]).
+  - When the element is absent, `externalId` is `null`, which maps to `unavailable{not-applicable}`.
+- **`birthDate`.**
+  - Source: `Birthdate`, as entered. Many organisers enter only the year, as `YYYY-01-01`.
+  - The on-site serialisation derives `birthYear` from it, falling back to `XML.Participants.Year`.
+- **`club`.**
+  - Source: `XML.Participants.Club`, or `Results.Participant@Club` on TCP.
+  - **Never from `OnCourse.Participant@Club`.** Upstream's on-course stream blanks club and nation
+    according to `XML.Events.ClubUsage`, and the results stream does not.
+- **`nation`** is `XML.Participants.NOC` or `Results.Participant@Nat`, with the same rule as `club`.
+- **`ageCategoryId`** is `XML.Participants.CatId`. It is empty where the class has no categories,
+  which gives `unavailable{not-applicable}`. The age category is never computed from the birth year.
+- **`eventBib`.**
+  - Source: `XML.Participants.EventBib`, trimmed, where `XML.Events.BibHandling` is `EventWide`.
+  - With `Startlist` bib handling it is `unavailable{not-applicable}`: bibs are issued per race.
+- **Do not read `_Bib` as a bib.** It is an organiser-imported value that looks like one (§9).
 
 ---
 
 ## 4. Attempt
 
-The substantial section — every named risk area concentrates here.
+**Identity.** `bib` is `Results.Participant@Bib`, `OnCourse.Participant@Bib` or `XML.Results.Bib`,
+trimmed. `attemptId` is `${phaseId}:${bib}`. The Attempt exists from the first row that names it,
+which may be a start-list row a day ahead.
 
-### 4.1 `status` — slalom finish detection
+### 4.1 `status` and result marks
 
-**Source expression.** Track `dtFinish` (`OnCourse.dtFinish`) as internal per-`«phaseId,bib»` state
-— **not itself a contract field** (`CONTRACTS.md` §1.2 lists it only as an `eventTime` source, never
-as its own `Attempt` field) — because the transition, not the value, is the signal: on the first
-`OnCourse` message where `dtFinish` is non-empty and the domain layer's own retained record of the
-previous value for this `«phaseId,bib»` was empty, `status → 'finished'`, `eventTime = dtFinish`. This
-requires the domain layer to retain the last-seen `dtFinish` per Attempt as implementation state for
-as long as the Attempt is being tracked — stated explicitly because nothing in `CONTRACTS.md`'s
-public shape carries `dtFinish`, and an implementer reading only the contract could reasonably not
-realise this bookkeeping is required at all.
+**The slalom finish.**
+- Track `OnCourse.Result[C]@dtFinish` per `«phaseId,bib»` as internal state.
+- On the first on-course message where it becomes non-empty, `status → 'finished'`, with `eventTime`
+  from §0.2 and `confidence: 'authoritative'`.
+- **No fallbacks.**
+  - The whole-seconds-to-decimal change in `Time` is not a finish signal. With splits armed, upstream
+    shows the 2-decimal split time for a hold period mid-run.
+  - The downstream highlight signal is our own derivative, not an upstream message.
 
-Two lower-confidence fallbacks, used only while `dtFinish` has not yet been observed non-empty:
-`OnCourse.Time` changing from a whole-second to a decimal format (`confidence: inferred`); the
-downstream `HighlightBib` signal (`confidence: inferred`, and CLI-only, so absent unless that channel
-is wired up). Neither ever overrides a `dtFinish`-sourced transition once one exists.
+**`at-start` and `on-course`.**
+- `at-start`: `OnCourse.Result[C]@chStart = 1` with `dtStart` empty. The competitor is armed for the
+  start impulse, which is 8% of on-course traffic.
+- `on-course`: `dtStart` non-empty and `dtFinish` empty.
+- `chFinish` ("armed for the finish impulse") adds nothing to this and is not modelled.
 
-**Conditionality.** None beyond an `OnCourse` message for this `«phaseId,bib»` existing at all.
+**The on-course list.**
+- Every `OnCourse` message carries one participant, its `@Position` (`courseOrder`), and `@Total`,
+  the number on course.
+- A bare `<OnCourse Total="0" Position="0"/>` with no children is upstream's explicit "course empty".
+- An Attempt leaves the list when upstream stops listing it, or on "course empty". This never changes
+  its status (`CONTRACTS.md` §7.1).
 
-**Envelope.** `source: 'tcp'`. `confidence: 'authoritative'` for the `dtFinish` signal (Canoe123's own
-direct assertion of the moment), `'inferred'` for either fallback. `eventTime` present and equal to
-the parsed `dtFinish` timestamp when that signal fired it; absent for the two fallbacks, which have no
-better event time than their own `observedAt`. `provisional`: `false` — the fact *that* the competitor
-finished is not provisional even while their *outcome* still is (§4.3) — these are different fields
-with different confidence trajectories, and conflating them was a risk worth naming explicitly even
-though it did not turn out to be a bug: `status` and `outcome` must be allowed to settle at different
-times, and nothing in the contract forces them together.
+**Result marks, closed-set mapping.**
+- Sources:
+  - `Results.Result@IRM` on TCP, where upstream sends the `*` mark as empty;
+  - `Results.Result@PP = "*"` on TCP;
+  - `XML.Results.Status`.
+- The mapping:
+  - `DNS`, `DNF`, `CAP`, `RAL`, `DSQ`, `DSQ-R` and `DQB` map to `dns`, `dnf`, `cap`, `ral`, `dsq`,
+    `dsq-r` and `dqb`.
+  - `NON-RK` maps to `non-ranked`, a finished run excluded from ranking.
+  - `*` means `underReview: true`, with the run otherwise `finished`.
+  - Empty with a time means `finished`.
+  - Any other value maps to `other`.
+- **No-results arrive only here.**
+  - They come at result-push latency, event-driven, because a removal with a mark recalculates the
+    race.
+  - The earlier "from `RemoveFromCourse.Reason`" was wrong. That is *our own* terminal command, not a
+    message upstream sends.
+- **On a second-run row, a mark describes run 2 only.** `placement` and `pairTotal` still come from
+  the row. The athlete keeps the combined rank from run 1.
 
-**Failure mode.** `not-yet` before the first transition; `dns`/`dnf`/`dsq`/`cap` sourced from
-`RemoveFromCourse.Reason` instead, same envelope treatment, no finish-detection derivation involved.
+**Envelope.**
+- `source` is the channel, with `confidence: 'authoritative'`.
+- `provisional` is `false` for `status`. *That* the run finished is final even while its outcome is
+  not.
 
-### 4.2 `status` — Kayak Cross
+### 4.2 Kayak Cross status and order
 
-No transformation to derive from OnCourse at all — confirmed empirically against a real recorded
-Cross heat: `chStart`, `chFinish`, `dtStart`, `dtFinish`, `Completed` never transition per-competitor
-for Cross. **Source expression:** `Results.Rank`/`Results.Time` becoming non-empty for this
-`«phaseId,bib»`. This is not a signal the domain layer interprets — it is a direct operator assertion
-(§4.5 below), and `status → 'finished'` the instant it is observed, pushed with no debounce
-(`ARCHITECTURE.md` §6.D). Envelope: `source: 'operator-assertion'`, `confidence: 'authoritative'`, no
-`eventTime` (Cross has none to give), `provisional: false` — an operator's own call is not awaiting
-further confirmation the way a mechanical inference is. Failure mode: `not-yet` for the entire heat
-until the operator enters it; a heat can legitimately show several Attempts `not-yet` and one
-`finished` simultaneously (`CONTRACTS.md` §2.6 already establishes this is not a bug).
+- No per-competitor signal exists on the on-course stream: `chStart`, `chFinish`, `dtStart`,
+  `dtFinish` and `Completed` never transition per competitor in a heat.
+- `status → 'finished'` when this bib's result row gains a placement. That placement is the operator's
+  assertion, entered after conferring with the finish judge.
+- `source` is the channel it arrived on, with `confidence: 'authoritative'`, no `eventTime` and
+  `provisional: false`. It is pushed with no debounce.
+- Until then the Attempt stays `on-course`, even after the heat has left the on-course list together.
 
-### 4.3 `outcome` — slalom, single run, on-course phase
+### 4.3 `outcome` while on course, and between finish and the first result push
 
-**This is where a genuine defect was found — not designed around, fixed.**
+**`running`.**
+- `elapsedSeconds` is `OnCourse.Result[T]@Time`, whole seconds while running. `penaltySeconds` is
+  `@Pen`.
+- The value is upstream's own display. It includes a configurable offset, and during a split hold it
+  shows the split time. It is relayed as displayed: `confidence: 'authoritative'`,
+  `provisional: true`.
 
-The derivation as first stated in `ARCHITECTURE.md` §6.A — compute `totalSeconds` mechanically from
-`OnCourse.Time` plus the gate penalties visible in `OnCourse.Gates`, evaluated at the exact message
-where `dtFinish` transitions — **is unsafe as a one-shot computation.** Checked against real recorded
-finishes, not assumed: in two full-day recordings, roughly 9–10% of finishes still had blank gate
-slots — trailing *and interior* ones, not only trailing — at the exact `dtFinish`-transition message,
-resolving on later `OnCourse` messages up to several seconds afterward. In two traced cases the
-`Pen`/`Total` Canoe123 itself later reported changed materially after `dtFinish` had already fired —
-one by 2 penalty points, one by 50. The four-second OnCourse/Results overlap `DOMAIN-FACTS.md` §5
-documents exists, mechanically, because gate judging can still be catching up during exactly that
-window — the finding gives the four-second number a cause, not only a duration.
+**`duration`, the inference.**
+- At the finish transition:
+  - `runSeconds = OnCourse.Result[T]@Time` (now 2 dp);
+  - `penaltySeconds = Σ` of the judged gates in `OnCourse.Result[C]@Gates`, per §4.6(a);
+  - `totalSeconds` is their sum.
+- **Recompute on every later on-course message** for this `«phaseId,bib»`. In recordings, gate judging
+  was still incomplete at the finish for 2–21% of runs, depending on the event, and the total moved by
+  up to 50 s afterwards.
+- **Stop recomputing** at the first of:
+  - (a) a results-table observation for this run generation, which supersedes the inference
+    (INV-2, rule 1). In recordings this arrived a median of 0.14–0.41 s after the finish impulse;
+  - (b) `OnCourse.Result[C]@Completed = "Y"`;
+  - (c) the Attempt leaving the on-course list.
+- `Completed` is upstream's own "run closed" mark. It is sent only when upstream auto-completes the
+  run, which needs penalties complete, a finish and the configured delay, or when a terminal asserts
+  it. A run the operator removes by hand never sends it. So it is a trigger, not *the* trigger.
+- **Envelope:** `source: 'tcp'`, `confidence: 'inferred'`, `provisional: true`.
 
-**Corrected source expression.** `outcome` is not computed once at the `dtFinish` transition; it is
-computed at the transition **and recomputed on every subsequent `OnCourse` message for the same
-`«phaseId,bib»`** — `runSeconds = OnCourse.Time`, `penaltySeconds = Σ(parseGates(OnCourse.Gates))`
-(§4.6's algorithm), `totalSeconds = runSeconds + penaltySeconds` — until either the Attempt's own
-gate count is fully populated (no blank slots remain) or a `Results` row for this `RaceId` arrives
-and supersedes it via §4.4's mechanism. **This requires the domain layer to keep tracking a
-`«phaseId,bib»` for `OnCourse` updates after `status` has already become `'finished'`** — a tracking
-lifetime distinct from, and longer than, whether that Attempt still appears in `GET /api/oncourse`
-(`CONTRACTS.md` §7.1 filters that list by `status == 'on-course'`, correctly excluding a finished
-Attempt immediately; the *internal* tracking window that feeds `outcome`'s recomputation is a
-separate, longer-lived concern the contract's public shape does not need to expose, but an
-implementation must not conflate the two, since conflating them is exactly how this defect would
-otherwise ship silently).
+**Failure mode:** `not-yet` before the finish. Never `unavailable`.
 
-**Conditionality.** Requires `OnCourse` messages to keep arriving for this `«phaseId,bib»` during the
-overlap window — true by construction, since Canoe123 keeps it in `OnCourse` for exactly this reason.
+### 4.4 `outcome` from a result row
 
-**Envelope.** `source: 'tcp'`, `confidence: 'inferred'` throughout this phase (we are computing, not
-reading an asserted total), `provisional: true` — genuinely provisional in the literal sense now,
-not only formally: the value can and does change while provisional, which is the corrected behaviour
-this section exists to specify. Once `Results` (§4.4) or CIS confirms, the newer, authoritative
-observation supersedes per `CONTRACTS.md` §4's ordinary same-field precedence rules — no special case
-needed there; the fix is entirely in not treating the `dtFinish` instant as a completion signal for
-gate judging, which it is not.
+**TCP, single run or the first run of a pair.** `runSeconds = Results.Result@Time`,
+`penaltySeconds = @Pen`, `totalSeconds = @Total`.
 
-**Failure mode.** `not-yet` before `dtFinish`; never `unavailable` — some estimate is always available
-once finished, per the maintainer's own stance against withholding a value that can be shown, aging,
-rather than shown as absent (§ maintainer answer A1).
+**TCP, the second run of a pair.**
+- `runSeconds = @Time` is run 2's own time.
+- `penaltySeconds` is `Σ` over run 2's own `@Gates`, per §4.6(b). `@Pen` and `@Total` on this row
+  describe the **counting** run, whichever it is.
+- `totalSeconds` is their sum.
+- `pairTotal = @Total`.
 
-### 4.4 `outcome` — slalom, `Results`-row-sourced (single run, or the better run of a pair)
+**XML, any row.**
+- `runSeconds = Time/1000`, `penaltySeconds = Pen`, `totalSeconds = Total/1000`.
+- Each row is its own run: the second run's row carries run 2's own figures.
+- `pairTotal = TotalTotal/1000`, on second-run rows.
+- `countingRun = BetterRunNr` (1 or 2; 0 means no pair yet, giving `not-yet`), on second-run rows of
+  a `'best'` pair. It is XML only: TCP does not state it.
 
-**Source expression.** `Results.Time`, `Results.Pen`, `Results.Total` read directly — no
-recomputation, since these are Canoe123's own asserted figures, not evidence to reconstruct from.
-`runSeconds = Results.Time` (or, for the pair case below, whichever run this row's `Time` actually
-describes), `penaltySeconds = Results.Pen`, `totalSeconds = Results.Total`. A same-source,
-later-`observedAt` observation naturally supersedes §4.3's inferred value with no CIS required —
-this is the mechanism `ARCHITECTURE.md` §6.A's "without CIS configured, `tcp` corrects itself"
-already described; this document states precisely which fields feed it.
+**Envelope.**
+- `source` is the channel, with `confidence: 'authoritative'`.
+- `eventTime` comes from `dtFinish` where present.
+- **`provisional`** is `true` while the Phase's course has at least one gate blank in this row's gate
+  string and the run is not closed. This is what marks a push that upstream sent before judging
+  finished: with "ranking with incomplete penalties" on, the first push precedes the last gate.
+- **Run closed** means `Completed = "Y"` was seen, or the Attempt left the on-course list, or it
+  carries a no-result mark.
+- Where the course is not configured, `provisional` stays `true` until the run is closed.
 
-**Conditionality.** A `Results` row for this `RaceId` must have arrived — up to the ~30 s rotation
-period after finishing (`DOMAIN-FACTS.md` §3).
+**Conditionality.** An event-driven push follows every finish, every penalty change and every
+correction, including to a closed race (observed upstream behaviour). Measured over 1,533 finishes,
+every one received a push, a median of 0.14–0.41 s after the finish impulse. The worst case was
+27 s, where the finish itself arrived late.
 
-**Envelope.** `source: 'tcp'`, `confidence: 'authoritative'` — this is the one slalom `outcome`
-derivation that reads an asserted figure rather than reconstructing one. `provisional`: `false` once
-CIS is not configured for this deployment (nothing more authoritative will ever report — `CONTRACTS.md`
-§1.2's `provisional` definition applies exactly as written); `true` if CIS is configured and has not
-yet reported, per the `§4` ranking table.
+### 4.5 A superseded run's detail
 
-**Failure mode.** Falls back to §4.3's inferred value while no `Results` row has arrived yet; never
-`unavailable` for a single-run or better-run outcome.
+Once run 2 has been run, TCP's second-run row describes run 2's own time and gates, plus the counting
+run's `Pen`, `Total` and `Rank`. TCP's first-run row for this athlete is not re-sent unless run 1
+itself changes. Run 1's own detail is therefore available:
+- **(a) From the XML snapshot, unconditionally.**
+  - The first run's own `XML.Results` row is frozen from its finish onward: across 610 snapshots of
+    one day it had exactly two byte states.
+  - The second run's row also carries `PrevTime`, `PrevPen`, `PrevTotal`, `PrevStatus`, `PrevRnk` and
+    `PrevRnkOrder`.
+  - A cold read of one day's final snapshot recovered 397 first runs and 384 second runs complete.
+  - Envelope: `source: 'xml'`, `confidence: 'authoritative'`.
+- **(b) From this server's own retained observation**, if it was running during run 1 (INV-1).
 
-### 4.5 `outcome` — the superseded run of a two-run pair
+**Failure mode.** `unavailable{source-unreachable | not-configured}` only once run 2 has been observed
+and neither path can supply run 1. Before that, the state is `not-yet`. `PrevRnk` in Cross means the
+rank in the previous round, not a previous run, and is not modelled (§9).
 
-The case `DOMAIN-FACTS.md` §4 names — but, checked against a real two-day event, states too broadly.
-Once BR2 completes, `Results.Time`/`Results.Gates` on the **TCP wire** always describe run 2, and
-`Results.Pen`/`Results.Total`/`Results.Rank` describe whichever run is better — never both, on that
-one message. This is true of the TCP stream specifically. It is not true of the XML snapshot, which
-keeps an explicit, complete record. Three independent recovery paths, precisely, XML first because it
-requires the least and is available to every deployment:
+### 4.6 Gate parsing
 
-**(a) The XML snapshot's own frozen record — checked against a real two-day event, not assumed.**
-Because BR1 and BR2 are separate `RaceId`s, the snapshot carries BR1's own `<Results>` row
-independently, and it is stable: across 610 snapshots of one full day, that row had exactly two
-byte-states — empty before the race, final and unchanging from the instant of finish onward, `Gates`
-and `GateTimes` included. BR2's own row separately carries `Prev*` fields (`PrevTime`, `PrevPen`,
-`PrevTotal`, `PrevRnk`, and others) summarising the other run, and `BetterRunNr`, naming the winner
-outright. A cold-started analysis of one day's final snapshot — one file, one read — recovered
-397 complete BR1 runs and 384 complete BR2 runs, gate penalties and (all but one of 738) gate passage
-times included, with CIS unreachable the entire time. **Conditionality:** the XML source is available
-at all (`CONTRACTS.md` §2.8's `SourceStatus`, same as any source) — no live observation, no caching,
-no licence. Envelope: `source: 'xml'`, `confidence: 'authoritative'` — the snapshot's `Prev*`/
-`BetterRunNr` fields are Canoe123 stating a fact directly, the same standing a TCP `Results` field
-has, not a lower-confidence read because the channel is XML rather than TCP; `eventTime` present
-where the row's own `dtFinish`-equivalent is populated; `provisional`: `false` once no higher-ranked
-source (`cis`, per `CONTRACTS.md` §4's revised table) is configured for this deployment, `true`
-otherwise until it reports. Failure mode: `unavailable{reason: 'source-unreachable'}` if the XML path
-is configured but not currently readable, `'not-configured'` if no path is known at all — the
-narrower case this row now reduces to.
+**(a) `OnCourse.Result[C]@Gates`.**
+- The string is comma-separated, dense, one token per gate: `"0,0,2,,,"`.
+- Split on `,`. Token `i` is gate `i+1`. `""` means `null`.
+- The width follows upstream's gate count even when that count is fabricated (§2.3). Keep only the
+  first `gateCount` tokens of the known course.
+- The attribute is omitted entirely when no course configuration is attached.
 
-**(b) The superseded run's own live-observed data, cached — retained as a second, redundant path,
-not the only one it used to be.** BR1 had its *own* `Results` row on the wire too, sourced via §4.4
-exactly as any single-run Attempt is, *while BR1 was itself the active phase*; monotonic knowledge
-(`CONTRACTS.md` §4 INV-1) means it is retained, gates included, for as long as this server instance
-has been running since BR1 finished. **Conditionality: this server was observing live during BR1** —
-still true, but no longer load-bearing on its own, since (a) recovers the same fact without it.
-Envelope: unchanged from whatever §4.3/§4.4 already assigned it at the time.
+**(b) `Results.Result@Gates` and `XML.Results.Gates`.**
+- The string is fixed-width: **3 characters per cell, 30 cells, whatever the course.**
+  - 90 characters in 99.8% of TCP rows at one event, and 578 of 580 snapshot rows on a 23-gate course.
+  - Shorter, trimmed strings occur (3, 18, 27, 69 characters).
+- Chunk from the left by 3. A missing cell is blank. Trim each chunk; blank means `null`, otherwise
+  parse as an integer. Keep the first `gateCount` cells.
+- **Never split on whitespace.** That collapses blanks and shifts every later gate: `EVIDENCE.md`
+  Exhibit 2.
+- The previous rule, `width = length / gateCount`, was wrong on every row of a 23-gate course. On a
+  9-gate Cross course it divided evenly as width 10, which is silently wrong.
 
-**(c) CIS, queried against the superseded run's own `RaceId` specifically — checked, not assumed,
-and now the third path rather than the only reliable one.** `CIS.GetResult(<BR1's RaceId>, bib)`
-remains fully and correctly queryable **indefinitely** after BR2 completes — confirmed against a real
-recording where the identical query, repeated hours after BR2 had already finished and been queried
-hundreds of times itself, returned byte-identical `StartDayTime`/`FinishDayTime`/`GateTimes`/`Total1`
-to its very first response. There is no "current race only" restriction. The response gives
-`runSeconds`/`penaltySeconds` directly from its own `Time1`(or `Time2`, matching whichever run's
-`RaceId` was queried)/`Pen1` fields, and gate detail from **`Gates`** specifically — a sparse
-`gateNumber=penalty` list (`"3=2;16=2"`), distinct from `GateTimes` (passage timestamps, not
-judgments) — parsed per §4.6(c) below. Conditionality: CIS configured and reachable, and "Init Event
-to CIS" performed that morning. Envelope: `source: 'cis'`, `confidence: 'authoritative'`, `eventTime`
-present (`FinishDayTime`), `provisional: false`. Failure mode: `unavailable{reason: 'not-configured'}`
-or `'source-unreachable'`.
+**(c) Team rows.**
+- `Gates` holds the per-gate **sum** over the members (52, 100, 150…).
+- `XML.Results.Gates1..3` hold each member's cells, in the same fixed-width format, and fill
+  `memberPenalties`.
 
-**The only case still genuinely `unavailable`: none of the three paths ever supplied the fact** —
-XML unreadable, no live observation cached, and CIS unreachable or unconfigured, all at once. **The
-precise trigger for this determination** (made explicit under conformance-vector review, before this
-event's evidence existed, and unaffected by it): `unavailable`, not `not-yet`, only once the domain
-layer can conclude the fact *should* exist and cannot be supplied — concretely, once BR2's own
-outcome has itself been observed (BR2 cannot exist without BR1 having already run) and none of the
-three paths can supply it. Before BR2 has been observed at all, the correct state is still `not-yet`
-— the domain layer cannot yet distinguish "BR1 hasn't happened" from "BR1 happened but is
-unrecoverable," and INV-1 requires it not to guess.
+**(d) Kayak Cross.**
+- Per-gate marks in Cross are obstacle judgements, not penalty seconds. `gates` is
+  `unavailable{not-applicable}` for Cross Attempts.
+- `faults` comes from `XML.Results.NrFLT` (the count), `FLT` (`FLT(2,4,5)`, the gate captions) and
+  `LastCleanGate`.
+- Whether TCP carries the same in Cross is open (§10).
 
-**Paths (a), (b), and (c) are independent, not sequential** — if more than one is available,
-`CONTRACTS.md` §4's revised ranking table governs which is presented (`xml` over `cis` for this
-specific field category, `tcp` not a candidate at all); a path not currently top-ranked still has its
-own observation retained, available to surface again per INV-2b if a higher-ranked one disconnects.
+All encodings produce `Gate[]` with exactly the course's gate count. The encoding is recorded only in
+`source`.
 
-### 4.6 Gate parsing — three encodings, one contract shape
+### 4.7 `placement`, `pairTotal`, `countingRun`, `qualified`, heats
 
-`CONTRACTS.md` §2.6 already commits to `gates` being position-correct by construction; this is the
-algorithm that makes that true, replacing `EVIDENCE.md` Exhibit 2's two independently-wrong parsers
-with one, specified once:
+**`placement.rank` and `placement.order`.**
 
-**(a) `OnCourse.Gates`** — comma-separated, dense, one token per gate in order:
-`"0,0,0,2,0,0,2,0,50,,,,,,,,,,,,,,,"`. Split on `,`; token at index `i` (0-based) is gate `i+1`;
-`""` → `null`, otherwise parse as integer. No special casing — the dense, ordered structure means
-position is never ambiguous.
+| Row | TCP | XML |
+|---|---|---|
+| single run, or first run of a pair | `Results.Result@Rank`, `@RankOrder` | `Rnk`, `RnkOrder` |
+| second run of a pair (combined) | `Results.Result@Rank`, `@RankOrder` | `TotalRnk`, `TotalRnkOrder` |
+| Cross heat | `@Rank`, `@RankOrder` (order within the heat) | `Rnk`, `RnkOrder` |
 
-**(b) `Results.Gates`** — fixed-width, dense, space-padded: `DOMAIN-FACTS.md` gives "typically 25
-gates × 3 chars" as an approximation, not a constant to hard-code. **The robust derivation:** the
-domain layer already knows this course's gate count from `RaceConfig`/`Schedule` by the time a
-`Results` row needs parsing; compute `width = len(Results.Gates) / gateCount` (must divide evenly —
-if it does not, that is a parse anomaly worth surfacing as a diagnostic, not silently guessing) and
-chunk the string into exactly `gateCount` fixed-width slices, **never split on whitespace** — chunk
-`i` (0-based) is gate `i+1`; each chunk trimmed and parsed, blank → `null`. This is the literal fix
-for Exhibit 2's bug: splitting on whitespace collapses consecutive blanks and shifts every position
-after them; fixed-width chunking cannot, by construction, regardless of how many leading or interior
-gates are unjudged.
+- On the second-run row, XML `Rnk` is the run-2-only rank. It differed from `TotalRnk` on 93% of rows,
+  and is not modelled (§9).
+- A single-run tie shares `Rank`, with the sequence in the order field. A combined tie is broken
+  upstream by the run that did not count.
+- **An empty rank means `rank: null`.** Where an order is present, it is carried.
+- **Never read `OnCourse.Result[T]@Rank` as placement.** At the start of a second run it holds the
+  first run's rank. It is blank for most first-run finishes.
+- **Upstream pushes the second-run race whenever the first run changes.** So a second-run Attempt has
+  a combined placement before it is run.
+- **Envelope.** `confidence: 'authoritative'`. `provisional` follows §4.4.
 
-**(c) `CIS.GetResult(...).Gates`** — sparse, `gateNumber=penalty` pairs, semicolon-separated:
-`"3=2;16=2"`. Split on `;`, each token splits on `=` into `(gateNumber, penalty)`; every gate number
-in `[1, gateCount]` **not** mentioned defaults to `0` (clean) — correct specifically because CIS is
-only ever consulted for a run already known complete (§4.5), so "not mentioned" cannot mean
-"not yet judged" the way a blank does in (a)/(b); that reading is only valid post-completion and this
-derivation is only ever invoked post-completion. A gate number outside `[1, gateCount]` is a parse
-anomaly, surfaced the same way as (b)'s width mismatch.
+**Other fields from the result row.**
+- **`ordinal.order`, Kayak Cross.** It is `placement.order`, never derived from `Time`. TCP's `Time`
+  in heat rounds is `"1.00"`, `"2.00"`…, and the XML's is in milliseconds. In both, athletes with
+  faults are placed after all clean finishers, whatever their finish order: rank differed from finish
+  order in 28 of 64 heat rows at one event.
+- **`heat`** is `Results.Result@HeatNr` or `XML.Results.HeatNr`. Zero means not applicable.
+- **`startLane`.** In Cross heats, upstream's `StartTime` field carries the start lane (1–4), not a
+  time.
+- **`scheduledStart`.** In slalom, `StartTime` (`H:MM:SS`) is the scheduled start, built per §0.2.
+- **`startOrder`** is `@StartOrder`.
+- **`qualified`** is `Results.Result@Q` or `XML.Results.Qualified`, equal to `"Q"`. Where the Phase's
+  format has no progression, it is `unavailable{not-applicable}`.
+- **`underReview`** is §4.1's `*` mark.
 
-All three produce the same contract shape, `Gate[] = {number, penalty}[]`, `penalty: 0 | 2 | 50 |
-null` — the encoding a client sees is always (c)'s dense equivalent regardless of which of the three
-encodings produced it; which one is recorded only in the field's own `source`.
+### 4.8 On-course extras
 
-### 4.7 `outcome` — Kayak Cross
-
-**Source expression.** `outcome.value = { kind: 'ordinal', order: <derived from Results.Rank> }` the
-instant `Results.Rank`/`Results.Time` populate for this bib (§4.2). `Results.Time` itself is not the
-order — `DOMAIN-FACTS.md` §8 states it directly: `Time` in `X4`/`XS`/`XF` carries finish order encoded
-as `1000`/`2000`/`3000`/`4000`, not a duration — `order = Results.Time / 1000`. **Conditionality:**
-none beyond the operator having entered it; this is an assertion, not a computation with a failure
-mode of its own. **Envelope:** `source: 'operator-assertion'`, `confidence: 'authoritative'`, no
-`eventTime`, `provisional: false` — same reasoning as §4.2, restated because `outcome` and `status`
-are different fields that happen to be asserted by the identical signal here, which is worth being
-explicit is a coincidence of Cross specifically, not a general rule linking the two fields.
-
-### 4.8 `upstreamRank`
-
-**Source expression.** `Results.Rank` (`source: 'tcp'`) or `CIS.GetResult(...).Rank` if present in
-that response (`source: 'cis'`) — `CONTRACTS.md` §4's ranking table already governs precedence
-between the two when both report; this document adds only the field mapping, since the precedence
-mechanism itself needed no new logic beyond what §4 already specifies generally. **Conditionality:**
-a `Results` row (or CIS response) carrying a non-empty `Rank`. **Envelope:** `confidence:
-'authoritative'` always — a rank is asserted, never inferred, by either source. **Failure mode:**
-`not-yet` before any source reports a rank for this Attempt — legitimate and common before a category
-has enough finishers to rank meaningfully.
+- **`courseOrder`** is `OnCourse@Position`: 1 is closest to the finish. It is a property of the
+  message, which carries one participant. Slalom showed up to 12 simultaneous positions.
+- **`timeToBeat`** comes from `OnCourse.Result[T]@TTBDiff`.
+  - An unsigned value (`88.38`) is `mode: 'target'`.
+  - A signed value (`+1.23`, `-0.40`) is `mode: 'delta'`.
+  - An empty value is `not-yet`.
+  - `holder` is `@TTBName`.
+  - It is never a rank.
+- **`splits`.**
+  - Source: `OnCourse.Result[C]@dtSplit1/2`, or `XML.Results.dtSplit1..3`, minus `dtStart`.
+  - Only when splits are armed (`RaceConfig.NrSplits > 0`); `unavailable{not-applicable}` otherwise.
+  - No recorded event armed splits, so this derivation is source-verified only.
 
 ### 4.9 `entry` (the mutable pointer)
 
-**Source expression.** Initial binding: `Bib` on the first `OnCourse`/`Results` message for this
-`«phaseId,bib»`, resolved to an `entryId` via §3's derivation. **Correction:** the maintainer's
-answer (§ maintainer answer A7) establishes this can be reasserted after the fact — the derivation for
-a correction is not upstream-automatic (no Canoe123 field flags "this bib was reassigned"); it is an
-operator or organiser action entered directly (`CONTRACTS.md` §8.5's direct-correction path), always
-`source: 'operator-write'`, never inferred from wire data, because nothing in Canoe123's wire format
-asserts this fact at all — it is a human noticing a discrepancy against a paper record, which is
-exactly why `CONTRACTS.md` §2.6 modelled this pointer as `Observed` rather than a fixed key in the
-first place.
+- **Initial binding:** the row's `Id`, verbatim.
+- **A correction** (the wrong person raced under a bib) is an operator write (`CONTRACTS.md` §8.5). No
+  upstream field flags it.
+
+### 4.10 Classification rows (Cross `XER`)
+
+- The classification Phase's `XML.Results` rows, or TCP result rows for that race, feed its
+  `classification` Standing directly. They create **no Attempts**.
+- `rank` and `order` come from `Rnk`/`RnkOrder`. `decidedIn` comes from `RecordType` (`F`, `SF`,
+  `1/2`, `1/4`, `T`).
+- Upstream generates these rows from the rounds. They are relayed, never recomputed.
+
+### 4.11 `run` (run generation)
+
+**Upstream evidence of a re-run** (`DECISIONS/ADR-013`).
+- Upstream sets `OnCourse.Participant@Warning` to a localised "overwriting results" string when a bib
+  is put on course in a race where it already has a result. The text is never carried.
+- **The generation increments on:**
+  - (a) an on-course observation for this `«phaseId,bib»` with a non-empty `dtStart` different from the
+    current generation's recorded start; or
+  - (b) a result row for this Attempt observed with `Time`, `Total` and the mark all empty after
+    having been known.
+- On increment, the run-scoped fields become `not-yet`, and the change is pushed.
+- A later result row whose `dtFinish` precedes the new generation's start describes the replaced run.
+  It is retained as history and never presented.
 
 ---
 
 ## 5. `SourceStatus`
 
-**Source expression.** Not a value read from any single upstream field — a state machine over
-connection events on each transport: `tcp`/`xml` are `'connected'` while the respective socket/file
-watch is open and has delivered a message within a stated liveness window,
-`'reconnecting'` while a reconnect attempt is in flight, `'unreachable'` after a stated number of
-failed attempts. `cis` additionally has `'not-configured'` when no CIS endpoint is set for this
-deployment at all, distinct from `'unreachable'` (configured, but not currently answering) —
-`CONTRACTS.md` §2.8 already names both states; this is the derivation that produces them.
-**Conditionality:** none — always computable, since it describes our own connections, not upstream
-content. **Envelope:** not `Observed`-wrapped at all (`CONTRACTS.md` §2.8 states this explicitly) —
-it is diagnostic connectivity state, not a domain fact with provenance of its own.
+- **`tcp.state`, `xml.state`.**
+  - A connection state machine: `connected` while the socket or file watch is open and live;
+    `reconnecting` while a reconnect is in flight; `unreachable` after a stated number of failures.
+  - `xml` is `not-configured` when no path is set.
+- **`tcp.upstreamInstance`** is `Canoe123@System` on every message: `Main`, `Backup` or `Offline`.
+- **`tcp.timingClockOffsetSeconds`** is `TimeOfDay` (Canoe123's timing clock, once a second) minus the
+  server clock at receipt. It is diagnostic only.
+- **`xml.lastRewriteDetectedAt`** is the moment a change of the file was last detected. This is what
+  INV-2's rule 2 means by "a rewrite detected after the disconnect".
 
 ---
 
-## 6. `WriteRequest` — the echo-matching derivation
+## 6. `WriteRequest` echo matching
 
-**Source expression.** `submittedAt`/`requestedValue` set at submission (`CONTRACTS.md` §7.3).
-`status → 'confirmed'` when a subsequent `OnCourse`/`Results` observation of the *same target field*
-(the same `«phaseId,bib»`, the same gate or status) arrives with a value equal to `requestedValue`;
-`→ 'mismatched'` when one arrives unequal. **This is a field-level comparison, not a whole-message
-one** — worth stating precisely, since a `Results` row touching this bib for an unrelated reason
-(a rotation refresh with no actual change) must not be mistaken for an echo of a *different* field's
-write. **Conditionality:** the write must actually reach Canoe123's terminal channel — no derivation
-runs before that; `pending` persists until the specific field it targeted next reports, however long
-that takes (`DECISIONS/ADR-010`, no timeout). **Envelope:** the confirmed/mismatched value itself
-follows the ordinary field derivation (§4.3/§4.4/§4.6) once observed — `WriteRequest` only tracks
-*whether* a subsequent observation matched, not a second copy of the value's own provenance.
+- **`confirmed`:** a later results-table observation of the same target field, for the same run
+  generation, equals `requestedValue`.
+- **`mismatched`:** it arrives unequal.
+- **`superseded`:** the generation increments first (§4.11).
+- The comparison is field-level: a row refreshed for an unrelated reason is not an echo of a different
+  field.
+- The echo arrives as an event-driven result push, because a correction recalculates the race.
 
 ---
 
-## 7. What could not be derived at all
+## 7. What could not be derived
 
-Consistent with `CONTRACTS.md` §6, restated here only where the *mechanism*, not merely the
-possibility, needed settling:
-
-- **Event spanning multiple days** — confirmed again here: no derivation exists because no upstream
-  field encodes it; §2's `date` derivation deliberately does not attempt to infer a multi-day
-  grouping, only a single Phase's own date.
-- **Run-1 detail, never observed live, CIS absent** — the one case in §4.5 with no recovery path at
-  all. Everything else this document set out to derive, it derived.
+- **The identity of a multi-day event.** One file per event, or one per day: both must work
+  (`CONTRACTS.md` §2.2). The grouping of days is visible from Phase dates. Identity is asserted by the
+  bridge.
+- **Which registry an external id belongs to** ([N], configuration).
+- **The base class of an attribute sub-class** (§10).
 
 ---
 
-## 8. Findings — where writing this down forced a change
+## 8. Findings — what the consolidated revision changed here
 
-1. **§4.3's mechanical on-course total computation was unsafe as a one-shot derivation.** Checked
-   against real recordings, not assumed correct: gate judging can still be in flight — for ~9–10% of
-   real finishes across two full-day recordings, on interior gates as well as trailing ones — at the
-   exact instant `dtFinish` transitions, with the eventual `Pen`/`Total` changing by as much as 50
-   points afterward. Fixed by making the computation ongoing (recomputed on every subsequent
-   `OnCourse` message) rather than a single evaluation at the transition, and by requiring the domain
-   layer to keep tracking a finished Attempt for `OnCourse` updates independently of whether it still
-   appears in the public "on course" resource. `ARCHITECTURE.md` §6.A's wording ("computes
-   `totalSeconds`... the moment `dtFinish` transitions") is corrected to match, below.
-2. **CIS's queryability against a superseded run's own RaceId, and its explicit per-gate penalty
-   field, were both assumptions rather than confirmed facts before this pass.** Checked, not assumed:
-   both hold, cleanly and without qualification — `CONTRACTS.md` §6's `[D]`/`[A]` marks for this row
-   stand as written, now with a demonstrated mechanism behind the claim rather than an inference from
-   documentation alone.
-3. **`Results.Gates`'s fixed width was documented only as "typically 3 chars," never confirmed as a
-   constant.** The derivation in §4.6(b) is written to derive the width from the known gate count
-   rather than hard-coding a number that the dossier itself only offers as an approximation —
-   avoiding a latent bug rather than one already found.
-4. **§4.5's `unavailable` failure mode had no stated trigger, found while writing a conformance
-   vector for it, not while writing this document the first time.** `not-yet` (never observed) and
-   `unavailable` (observed to be absent) look identical from outside until the exact condition that
-   separates them is named: BR1's detail is `unavailable` only once BR2's own arrival lets the domain
-   layer conclude it *should* exist, never before. Stated where §4.5 now describes the one case still
-   genuinely unavailable, after paths (a)–(c). `docs/arch/vectors/tier1-conformance.json`'s
-   `two-run-br1-unavailable-no-cache-no-xml-no-cis` (renamed from `-no-cache-no-cis`, per finding 5
-   below) is the vector that found this — its original name and setup predated §4.5's relettering,
-   but the condition it tests is unchanged: all paths, not `'not-observed-live-and-cis-unavailable'`
-   specifically, must be exhausted first.
-5. **The largest correction in this document: §4.5's premise, that recovering a superseded run
-   requires either live observation or CIS, was wrong, not merely conditional.** Checked against a
-   real two-day event where CIS was unreachable throughout and a cold-started analysis still
-   recovered complete two-run detail for every finisher from the XML snapshot alone. This was not a
-   gap in what was written — DOMAIN-FACTS.md §4 stated, as a general fact about Canoe123, something
-   true only of the TCP wire stream — and it was inherited here without being checked against the one
-   other interface (the XML file) already known, elsewhere in this same document, to be a legitimate
-   source. §4.5, `CONTRACTS.md` §4/§6, `ARCHITECTURE.md` Scenario C, `DECISIONS/ADR-004`, and
-   `DOMAIN-FACTS.md` itself all carried some form of the same unchecked assumption; all five are
-   corrected together.
+1. **Nonexistent or never-filled TCP fields were read.** Three were corrected: `Schedule.DisId`, which
+   does not exist; `RaceConfig.RaceStatus`, which does not exist; and `Schedule.StartTime`, which is
+   always empty.
+2. **`RemoveFromCourse.Reason` was never an upstream message.** It is our own command. The highlight
+   signal is our own derivative. Both are removed as sources (§4.1).
+3. **The result-row gate width was derived wrongly.** The width is 3 and there are always 30 cells
+   (§4.6(b)). The previous "finding 3", which claimed to avoid a latent bug, had introduced one.
+4. **XML units were never stated.** Milliseconds for times, seconds for penalties (§0.1).
+5. **The Cross order from `Time/1000` was wrong twice over:** the TCP format, and faults (§4.7).
+6. **The Class came from the `RaceId` prefix.** It now comes from `ClassId` (§1).
+7. **The registry number was sourced from TCP, which carries none** (§3).
+8. **Bib padding and the `<unassigned>` sentinel** now have ingest rules (§0.1, §0.3).
+9. **Completed and the stop-recompute rule.** Upstream's own run-closed mark is used, alongside two
+   other triggers. The blank-slot heuristic is dropped as a stop signal (§4.3). It stays as the
+   definition of *provisional* judging, where it is exact.
+10. **The Results cadence is two mechanisms**, event-driven and rotation. The ~30 s rotation carries
+    none of the latency-relevant values (§0).
+11. **CIS paths removed** (`DECISIONS/ADR-011`). Their facts are all available from TCP or the XML.
 
-No value marked `[D]` or `[A]` in `CONTRACTS.md` §6 turned out to be undeliverable; the findings above
-are corrections to *how* and *when*, not reversals of *whether* — finding 5 is the one exception
-worth naming plainly: it corrects a *source*, not merely a mechanism, and it is the reason the
-`unavailable` case in §4.5 is now far narrower than the design assumed for most of this engagement.
+---
+
+## 9. Not modelled, and why (appendix)
+
+Every upstream field the reverse pass found and the contract does not carry. "Internal" means print,
+finance, UI or start-list-generation scratch. "Never filled" means the field is in upstream's schema,
+but no code path or recording ever filled it.
+
+**TCP**
+
+| Field | Why not modelled |
+|---|---|
+| `OnCourse.Participant@Race`, `Results@SubTitle`, `Schedule.Race@Race`/`@SubTitle`/`@ShortTitle` | Upstream-generated localised labels (`CONTRACTS.md` §1.3). Clients label from `format` |
+| `OnCourse.Participant@Warning` | Localised text. Its fact, a re-run, is modelled as `run` (§4.11) |
+| `OnCourse.Result[C]@chFinish`, `@chSplit1/2` | Arming flags. `chStart` is used for `at-start`; the others add nothing a consumer needs |
+| `OnCourse.Result[T]@Total`, `@Rank` | The running total is `running`'s two parts. The rank is unreliable as placement (§4.7) |
+| `Results.Row@Number` | Upstream list position. `order` supersedes it |
+| `Results.Result@Behind` | A formatted gap. Derived instead (`CONTRACTS.md` §5) |
+| `Results@Current` | Used at ingest as a freshness signal only |
+| `TimingInput` (all) | Raw hardware impulses, with no bib |
+| `TVS@Odd_Bib`, `@Even_Bib` and their race ids | Upstream's TV featured-competitor choice. Whether the venue board should follow it is an open business question |
+
+**XML snapshot**
+
+| Field | Why not modelled |
+|---|---|
+| `Participants.Ranking`, `RankingPoints`, `Results.RacePoints`, `Schedule.PointTableNr`, `WorldRanking*`, `IsICFTopEvent` | Federation seeding and points. The design relays no federation numbers today. Revisit on demand |
+| `Participants.Year`, `Classes/Categories.FirstYear`/`LastYear` | Inputs to upstream's age-category rule. The resulting `CatId` is relayed. `Year` is only the on-site birth-year fallback |
+| `Participants.Gender` | Never filled |
+| `Participants._Bib` | **Caution: it is not a bib.** An organiser-imported value (performance class) under a misleading name |
+| `Participants.Draw`, `_Participations`, `_EntryFee`, `ArchiveData` | Internal |
+| `Classes.LongTitle`, `EntryFee`, `BibDeposit`, `EventId`, `ICFEventCode` | A second title, finance, never filled |
+| `CompOfficials` (all) | Officials and free-text misuse. No consumer asked. Revisit on demand |
+| `Schedule.Time`, `FirstBib`, `StartInterval`, `JuryNr`, `MaxStarters`, `Progression`, `EndTime`, `ForeRunners`, `ForeStart`, `QualificationInfo`, `RSCCode`, video fields | Start-list generation, internal, or never filled. `MaxStarters` is a Cross quota; progression is relayed through `qualified` |
+| `Results.TeamId`, `Forerunner`, `ForerunnerNOC`, `ExtraStartInt`, `IsRanked`, `Selected`, `SelRnk*`, `meta_tag`, `ArchiveData` | Never filled. **Caution: `IsRanked` looks meaningful and is never set** |
+| `Results.Rnk` on a second-run row | The run-2-only rank, XML only, ~35 s late. Not needed for any standing. Revisit if a "run-2 rank" column is wanted |
+| `Results.TotalBehind`, `catTotalBehind`, `TotalTotalBehind`, `catTotalTotalBehind` | Formatted gaps. Derived instead |
+| `Results.CatRnk`, `CatRnkOrder`, `TotalCatRnk*`, `PrevCatRnk*` | Used only as the check against assembled category ranks (`CONTRACTS.md` §5 step 4) |
+| `Results.TieBreaker` | Upstream's internal tie key. Its effect reaches us already applied, in the order fields |
+| `Results.GateTimes` | **Not gate passages.** Each stamp is the official time at which a judge first entered a penalty for the gate, minus 2 s. Gaps are back-filled in 2 s steps, and the order along the course is only approximately monotonic. If ever needed: `Gate.judgedAt`, `confidence: 'inferred'`, never an `eventTime` |
+| `Results.PrevRnk` (Cross meaning), `RoundNr`, `HasWildcard`, `Tag` | Cross ladder bookkeeping. Progression is relayed through `qualified` and the classification |
+| `Results.CheckList*`, `_*Order`, `Print*`, `Sector*`, `PrevGates`, `PrevSplit1`, `ForceTVSChannel`, `TVSStream*` | Internal: print copies, paper check-list workflow, TV routing |
+| `Events.Description`, `Country`, `NOC`, `TimeMode`, `TimingProvider`, `StartListsLocked`, report and logo fields, `ReportLanguage*`, `RankingOrderMode`, `AssignBibsReverse`, ODF codes, `CatHandling` | Free text, print layout, or never filled. Logos could brand a live page later. **Caution: `CanoeDiscipline` reads `Slalom` for a Cross event** |
+| `GateStatistics` (all) | Derivable from `gates`. Always zero for two-run formats in recordings |
+| `TeamResults`, `TeamResultsMembers`, `TeamResult`, `RaceParticipations`, `RaceClasses`, `ICFEventAssignment`, `MedalStandings`, `MedalsByEvent`, `GateStats`, `Clubs` | Never present in any sample. `RaceClasses`, if ever used, would break "one race = one class" and would need a new ADR |
+
+**CIS.** Not consumed (`DECISIONS/ADR-011`). Its unique items were:
+- live judge-entry gate stamps;
+- retained split differences;
+- the initialisation session id;
+- the scoring-terminal reset flag (§10).
+
+---
+
+## 10. Open technical questions
+
+These are E4: recorded here, not used to make rules.
+
+1. Does the operator's "reset scoring terminals" action reach the terminal channel penalty-check
+   already uses? CIS was the only documented carrier.
+2. How do the layout letters `D` and `E` affect gate numbering? #165 describes them as variant markers
+   that count as gates without advancing the number.
+3. Are `RXER`, `SLER` and `WWER` classifications like `XER`? Until checked, they are unknown formats.
+4. Upstream has two further pairings: a super-final following a second run, and a final following a
+   semi-final under a legacy-finals setting. What combination applies to each?
+5. What is the base class of an attribute sub-class (`MX1J` from `MX1`)? It is not stated in any
+   upstream field seen so far.
+6. Per-gate marks in Kayak Cross. The XML reverse pass found fault codes. An earlier scout found
+   touches added into `Pen`. Which holds on TCP?
+7. Does Canoe123 clear a result row at the moment a finished bib is staged for a re-run, or only at the
+   new finish? §4.11 works either way.
+8. After a TCP disconnect, the first snapshot rewrite detected afterwards takes over (INV-2, rule 2).
+   If that rewrite happened in the few seconds *before* the disconnect, its content can predate TCP's
+   last push. The window is bounded by the file-watch interval. Accepted as residual.
+9. The cause of the 11–27 s late-finish outliers. The finish message itself was late; a manually
+   entered finish is suspected.

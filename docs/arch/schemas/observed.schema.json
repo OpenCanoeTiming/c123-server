@@ -84,10 +84,9 @@
       "enum": [
         "tcp",
         "xml",
-        "operator-write",
-        "operator-assertion"
+        "operator-write"
       ],
-      "description": "CIS is not consumed (DECISIONS/ADR-011). operator-write and operator-assertion sit outside INV-2's rules 1-3 (rule 4, CONTRACTS.md SS4)."
+      "description": "CIS is not consumed (DECISIONS/ADR-011). operator-write sits outside INV-2's rules 1-3 (rule 4, CONTRACTS.md SS4). Kayak Cross heat order is tagged by the channel it arrived on."
     },
     "unavailableReason": {
       "enum": [

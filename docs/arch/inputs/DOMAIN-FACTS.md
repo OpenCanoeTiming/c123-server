@@ -31,10 +31,17 @@ it at the same fidelity, and are not all available at every venue.
 
 ## 2. Fidelity differs per interface — and the richest one is optional
 
+> **Correction, consolidated revision (2026-09-24).** The table below overstates CIS. A field-by-field
+> reverse pass found that CIS re-renders Canoe123's own results table and on-course record, with nothing
+> unique. It does **not** pre-compute rank for running competitors: rank is blank while running, as on
+> TCP. It is not faster than TCP's event-driven result push. It also accepts unauthenticated overwrites
+> from the LAN. Athlete directory and event metadata are both in the XML snapshot. **CIS is no longer
+> consumed** (`DECISIONS/ADR-011`). The table is kept as the dossier originally stated it.
+
 | Fact | TCP :27333 | CIS `/live` | Consequence |
 |------|-----------|-------------|-------------|
 | On-course competitors | push ~2/s | poll | CIS adds pre-computed Rank, TTBDiff, split diffs |
-| Results | push, **rotating ~30 s** | on demand per RaceId | TCP gives a category's results only once per rotation |
+| Results | push, **rotating ~30 s** — *corrected: plus an immediate event-driven push on every ranking recalculation, see §3* | on demand per RaceId | TCP gives a category's results only once per rotation — *corrected: the event-driven push arrives a median 0.14–0.41 s after the finish* |
 | **Both runs of a two-run race** | **best run only** | **Time1+Pen1+Total1 and Time2+Pen2+Total2** | CIS solves the BR2 loss described in §4 — **but §4 itself is corrected below: so does the XML snapshot, without CIS** |
 | **Gate passage times** | absent | `GateTimes` per gate | **Correction, made during the design engagement:** not CIS-only. A real two-day event's XML snapshot carried its own `Gates`/`GateTimes` on a completed run's frozen `<Results>` row — checked directly, not inferred, against 738 finished Attempts across one weekend, with CIS unreachable throughout |
 | Athlete directory | names embedded in messages | `GetAthletes` standalone | CIS-only |
@@ -71,12 +78,13 @@ the failure mode to design out.
 | OnCourse | ~2/s |
 | RaceConfig | ~20 s |
 | Schedule | ~40 s |
-| Results | rotating, ~30 s per cycle |
+| Results | **corrected:** two mechanisms. An event-driven push (`Current="Y"`) is sent immediately on every ranking recalculation: the finish, every penalty change, the last gate judged, corrections including to closed races, and the closure of a run. A rotation sends one race every ~30 s through all races, so a given race comes round only every few minutes (median 280–355 s, worst 920 s, measured) |
 
 Nothing coordinates these. Two messages describing the same competitor can arrive in either
 order and can disagree, because they were produced at different moments. **Results rotation is
 the sharpest case: a category's results snapshot may be up to a full rotation old, while OnCourse
-data about the same competitors is 500 ms old.**
+data about the same competitors is 500 ms old.** *(Corrected: this holds for the rotation only. Every
+change to a race's results is also pushed immediately; see the table.)*
 
 ## 4. Two-run races (BR1/BR2) lose data by design — on the TCP stream specifically
 
@@ -136,7 +144,9 @@ ts=66920  oncourse: competitor disappears  (moved to Results)
 
 Three usable signals, of unequal reliability: the `dtFinish` transition (high), the downstream
 `HighlightBib` change (high, but CLI-only and derived), and the `Time` format changing from whole
-seconds to decimals (medium). C123 is the origin; anything else is a derivative arriving 28–43 ms
+seconds to decimals (medium). *(Corrected: only `dtFinish` is usable. `HighlightBib` is our own
+derivative, not an upstream signal. With splits armed, upstream shows a 2-decimal split time for a
+hold period mid-run, so the format change fires falsely.)* C123 is the origin; anything else is a derivative arriving 28–43 ms
 later.
 
 Competitor lifecycle in OnCourse: *at start* (`chStart=0`, `dtStart=""`) → *on course*
@@ -149,7 +159,8 @@ with potentially different values.
 Per-gate penalties, `0` clean / `2` touch / `50` missed / empty not yet passed:
 
 - OnCourse: comma-separated, `"0,0,0,2,0,0,2,0,50,,,,,,,,,,,,,,,"`
-- Results: fixed-width space-padded, `"  0  0  2  0  0  0  50  0 ..."` (typically 25 gates × 3 chars)
+- Results: fixed-width space-padded, `"  0  0  2  0  0  0  50  0 ..."`. *(Corrected: always 3 characters
+  per cell and 30 cells, whatever the course, on TCP and in the XML. It is not "typically 25 gates".)*
 
 Competitor identity appears as `Bib` (display number, unique within a race), `Id` (internal,
 e.g. `30034.K1M_ST`) and `StartOrder`. Race identity appears as `RaceId` (`K1M_ST_BR2_6`) and
@@ -165,7 +176,8 @@ are common in practice — so any consumer that has only ever seen those four ma
 wrong about the rest.
 
 Per-run status codes are a separate, smaller vocabulary: empty (completed), `DNS`, `DNF`, `DSQ`,
-`CAP` (capsized, slalom-specific).
+`CAP` (capsized, slalom-specific). *(Corrected: the full upstream vocabulary also has `RAL`, `DSQ-R`,
+`DQB`, `NON-RK`, and `*` for "under review". See `DERIVATIONS.md` §4.1.)*
 
 ## 8. Kayak Cross breaks assumptions that slalom code holds implicitly
 
@@ -176,8 +188,8 @@ scoreboard and live-mini.
 |--------|--------|-------|
 | Gates | ~24, CourseNr=1 | ~6, CourseNr=2 or 4 |
 | `dtStart` / `dtFinish` | present | **absent** |
-| `Time` in X4/XS/XF | a time | **finish order** (1000, 2000, 3000, …) |
-| Phase progression | BR1→BR2, or QUA→SEM→FIN | XT→X4→XS→XF→XER |
+| `Time` in X4/XS/XF | a time | **finish order** (1000, 2000, 3000, … in the XML; `1.00`, `2.00` on TCP). *Corrected: finish order is not the placement. Athletes with faults are placed after clean finishers, and order restarts in every heat.* |
+| Phase progression | BR1→BR2, or QUA→SEM→FIN — *corrected: upstream has no `QUA`/`SEM`/`FIN`; it uses `HT1/HT2`, `QF`, `SF`/`SFB`, `FI`/`FIB`, among others* | XT→X4→XS→XF→XER — *`XER` is the final classification, not a round* |
 | Competitors at once | 1 | 4 (head-to-head) |
 | Extra fields | — | `PrevRnk`, `RoundNr`, `Qualified`, `RecordType` |
 
