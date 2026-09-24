@@ -101,3 +101,25 @@ reason (cross-event reporting). Nothing about `entryId`'s own opacity changes fo
 **Cost:** none — `ICFId` was already going to be carried once the live contract needed cross-event
 identity for its own sake (§8.3); this revision only names it as the same field a registry would
 later use, rather than leaving that connection to be rediscovered.
+
+## Revision 2 — `ICFId` is a reference into a registry, not a value; the binding is `(scheme, value)`
+
+Confirmed directly from the maintainer's own operating practice, found immediately after the
+revision above was written: `ICFId` is not one namespace. An organiser fills it with whichever
+registry identifies their own event's entrants — a Czech national race with the Czech federation's
+own RGC numbers, a foreign entrant at that same race with a genuine ICF code, or nothing at all. This
+is not a data-quality problem; it is federation-specific practice of exactly the kind
+`CONSTRAINTS.md` §1.8 already names for ranking schemes and category coding, now shown to apply to
+identity as well.
+
+**Consequence for this ADR's own argument:** "the field a registry would bind to" was correct at the
+level of *which element*, incomplete at the level of *which value*. A future registry does not bind
+to a bare `ICFId` number — it binds to a `(scheme, value)` pair, since the same number under two
+schemes is two different people, and the invariance property this ADR argues for only holds if the
+opaque, provenance-neutral treatment extends to the scheme as well as the value. `CONTRACTS.md` §2.5
+carries the fix (`ExternalId = {scheme, value}`, required together, a bare value rejected outright).
+
+**Still a strengthening, not a retreat:** the argument was never "a bare number is enough," only that
+*some* stable field exists for a future registry to attach to without a second contract migration.
+Naming its actual shape — qualified, not bare — is the same kind of precision this revision's
+predecessor already added, one layer further in.

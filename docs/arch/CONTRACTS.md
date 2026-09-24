@@ -349,13 +349,19 @@ across the pair, never a single Phase in isolation.
 A competitor within a Category — one athlete/boat, persistent across every Phase of that Category.
 
 ```ts
+type ExternalId = { scheme: string; value: string }
+// scheme is an open string, not a closed enum (CONSTRAINTS.md §1.8) — 'icf' is the one documented
+// convention (the genuine ICF global registry); a national federation's own registry (a Czech 'cz-rgc',
+// for instance) is equally valid and just as legitimate a value — see the note below on why a bare
+// value is never enough.
+
 type Entry = {
-  entryId: string           // opaque — see §1.1. On-site, derived from Canoe123 Id, verbatim, never parsed
+  entryId: string             // opaque — see §1.1. On-site, derived from Canoe123 Id, verbatim, never parsed
   categoryId: string
-  bib: Observed<string>     // [D] — display number; correctable, see §2.6's binding note
-  name: Observed<string>    // [D] — athlete/boat display name, raw, not translated
-  icfId: Observed<string>   // [D]/[N] — external identity; required on the live ingest contract, §8.3
-  icfId2: Observed<string>  // [D]/[N] — a crew's second member; a minimal, additive stand-in, not the full crew-shape answer — see below
+  bib: Observed<string>       // [D] — display number; correctable, see §2.6's binding note
+  name: Observed<string>      // [D] — athlete/boat display name, raw, not translated
+  icfId: Observed<ExternalId> // [D]/[N] — external identity; required on the live ingest contract, §8.3
+  icfId2: Observed<ExternalId> // [D]/[N] — a crew's second member; a minimal, additive stand-in, not the full crew-shape answer — see below
 }
 ```
 
@@ -400,7 +406,32 @@ ingest contract first: such an entry is **accepted**, not rejected, and is repre
 event-scoped identity only (`entryId`, exactly as any other `Entry`) — refusing to carry a forerunner
 at all would make a real, already-existing category of participant unrepresentable on the live tier
 for no gain, and a permanently-absent external identity is an honest fact this contract already has a
-state for, not a reason to reject the push. `icfId2` is a minimal, additive field for a two-person
+state for, not a reason to reject the push. **This remains true unchanged by the correction below —
+an entry with no registry identity at all is exactly as fully renderable as one with one, in whatever
+order the event seeds it; `icfId` being unavailable was never coupled to anything else about an
+`Entry`, and the fix below does not touch that.**
+
+**`ICFId` is not one namespace, found under review, not designed in from the start.** `value` alone
+is not a fact — it is a reference *into a registry*, and which registry is a matter of the
+organiser's own practice, not of the field. The maintainer's own operating description: a Czech
+national race fills `ICFId` with the Czech federation's own RGC numbers for domestic entrants, while
+a foreign entrant at that same event may carry a genuine ICF code, or nothing at all — the same field,
+two different registries, inside one event. This is not misuse of the field; it is how these events
+actually run, the identity equivalent of the federation-specific naming and coding `CONSTRAINTS.md`
+§1.8 already names for ranking schemes and age-class conventions — the principle turns out to apply
+to identity, not only to rules. **The consequence that matters:** the live tier is one shared cloud
+instance serving organisers who never coordinate (`CONSTRAINTS.md` §1.7). Organiser A's Czech RGC
+`12345` and organiser B's genuine ICF `12345` are different people; a contract keying on a bare
+`icfId` string merges them, silently, in exactly the tier whose purpose is to outlive one federation.
+**Fix:** `icfId`/`icfId2` carry their scheme, not just their value (`ExternalId`, above) — two values
+are the same external identity only when both `scheme` and `value` match. A bare string is not a
+valid `icfId` at all; a push submitting one gets `400 validation-failed` (§8.3), not a silent
+coercion — the namespace cannot be got wrong by omission, only by a bridge author actively declaring
+the wrong one, which is a configuration error to catch at that bridge, not something this contract
+can derive from Canoe123's own data (the wire format never disambiguates a genuine ICF code from a
+national registry number filled into the same element — recorded as **[N]**, `§6`).
+
+`icfId2` is a minimal, additive field for a two-person
 crew's second member — **it is not the full answer to whether `Entry` should represent one person or
 1–N**, which is a separate, structural question, deliberately deferred to its own piece of work.
 
@@ -912,6 +943,7 @@ rather than left as a claim.
 | Athlete directory / event metadata | [D] CIS `GetAthletes`/`GetEvent` | [A] names embedded piecemeal in other messages |
 | Tie-break beyond arithmetic equality | [D] only as an upstream `Rank` relay (§5.3) — never independently computed | same |
 | Registry-verified identity (nationality, spelling) | **[N]** in both cases — out of scope; Canoe123 is the only identity source that exists | same |
+| Which registry an `icfId` value references | **[N]** in both cases — Canoe123's wire data never disambiguates a genuine ICF code from a national federation's own registry number filled into the same element; asserted by whoever operates the on-site bridge, from configuration, never derived (§2.5). What it would take upstream: an explicit field naming the registry per participant, or a fixed convention Canoe123 itself enforced rather than leaving to each organiser's practice. What it would buy: correct scheme-tagging without trusting bridge configuration, and a way to catch a misconfigured bridge instead of trusting it silently | same |
 
 **The statefulness requirement the two rows above previously carried — that the server must have
 observed run 1 live to recover it — does not survive in any narrowed form; it dissolves, checked
@@ -1077,7 +1109,7 @@ names the field). Auth/rate-limit errors per §8.1.
 |---|---|---|
 | `PUT /ingest/v2/categories/{categoryId}` | `{ "code": string, "discipline": "slalom"\|"cross" }` | — |
 | `PUT /ingest/v2/phases/{phaseId}` | `{ "categoryId": string, "date": "YYYY-MM-DD", "status": PhaseStatus, "multiRun": boolean, "scoringKind": "duration"\|"ordinal" }` | **No `roundKind`** — see below |
-| `PUT /ingest/v2/entries/{entryId}` | `{ "categoryId": string, "bib": string, "name": string, "icfId": string \| null, "icfId2"?: string }` | **`icfId` required in the body — `null` when genuinely absent, never omitted** |
+| `PUT /ingest/v2/entries/{entryId}` | `{ "categoryId": string, "bib": string, "name": string, "icfId": {"scheme": string, "value": string} \| null, "icfId2"?: {"scheme": string, "value": string} }` | **`icfId` required in the body, `null` when genuinely absent, never omitted; a bare string instead of the object is `400 validation-failed`** |
 | `PUT /ingest/v2/attempts/{phaseId}/{bib}` | any non-empty subset of `{ entry, status, outcome, gates, upstreamRank }`, each `Observed`-wrapped per §1.2 | **Partial by design** |
 
 **No `roundKind` on `Phase`.** The live contract carries only the structural flags a renderer needs
@@ -1101,11 +1133,16 @@ and occasionally isn't. `icfId` is the opposite: its absence is rare (14 in 1,48
 when it happens, is exactly the fact a bridge author must not be allowed to elide by silence — an
 omitted key here could mean "I don't have this yet" or "there genuinely is none," and only the second
 is true for a forerunner. Requiring the key, with `null` as its explicit value for that case, forces
-the distinction the omission convention would otherwise blur. Such an entry is **accepted, not
+the distinction the omission convention would otherwise blur. **A submitted `null` becomes
+`icfId: { state: 'unavailable', reason: 'not-applicable' }` in the store** — stated here explicitly
+rather than left for an implementer to infer, since inference at exactly this kind of boundary is
+what produced `EVIDENCE.md` Exhibit 5. Such an entry is **accepted, not
 rejected** — refusing to carry a forerunner at all would make a real, already-existing category of
 participant unrepresentable on the live tier, for no gain (§2.5). `icfId2`, by contrast, stays
 genuinely optional: for the overwhelming majority of entries (single-person boats), it is not a
-notable absence worth marking, only the ordinary case.
+notable absence worth marking, only the ordinary case. **`icfId`'s scheme requirement (§2.5) applies
+identically to both:** a bare string, or an object missing `scheme`, is `400 validation-failed`
+regardless of which field carries it.
 
 **A `Phase` may reference a `categoryId` that hasn't been pushed yet, and vice versa is not required
 either.** The store creates a minimal stub (just the id) on first reference and fills it in whenever

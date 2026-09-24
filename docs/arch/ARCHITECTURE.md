@@ -97,7 +97,12 @@ design never computes any of them: `Standing.rank` is mechanical arithmetic over
 values plus a narrow, stated exception for relaying an upstream tie-break assertion (`CONTRACTS.md`
 §5) — never an invented competition rule. `Phase.status`'s `official` value is Canoe123's own
 judgement, relayed, not decided by us. There is nothing here to make pluggable for a second
-federation, because nothing here encodes a federation's rules in the first place.
+federation, because nothing here encodes a federation's rules in the first place. **The same
+principle turned out to apply to identity, not only to rules:** an organiser fills Canoe123's `ICFId`
+element with whichever registry identifies their own entrants — a national federation's own numbers
+for domestic athletes, genuine ICF codes for others — and the contract treats the registry itself as
+federation-specific data, carried as an explicit `scheme` alongside the value rather than assumed to
+always mean one particular registry (`CONTRACTS.md` §2.5, `DECISIONS/ADR-006` Revision 2).
 
 ---
 

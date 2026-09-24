@@ -108,11 +108,17 @@ Revision). Stable across BR1/BR2 — confirmed against a matched pair in the pro
 across QUA/SEM/FIN — inferred from field composition and the analogous Cross elimination chain, not
 directly confirmed, carried forward from round one as a stated residual risk (`CONTRACTS.md` §2.5).
 
-**`icfId`, `icfId2`.** Source: Canoe123's own `ICFId`/`ICFId2` elements, read directly — never the
+**`icfId`, `icfId2`.** Source: Canoe123's own `ICFId`/`ICFId2` elements for `value` — never the
 embedded numbers inside `Id`, which can disagree with them after a crew substitution the `Id` was
-never updated to reflect (`CONTRACTS.md` §2.5). Envelope: `source: 'tcp'`/`'xml'`, `confidence:
-'authoritative'`. **Failure mode: `unavailable{reason: 'not-applicable'}`, not `not-yet` and not an
-error**, for the genuine no-external-identity case (a forerunner) — confirmed as a real, if
+never updated to reflect (`CONTRACTS.md` §2.5). **`scheme` is not derivable from Canoe123's data at
+all** — the wire format never states which registry a given `ICFId` number belongs to, and an
+organiser legitimately fills the same element with a national federation's own registry numbers, not
+only genuine ICF codes (`CONTRACTS.md` §2.5/§6, **[N]**). `scheme` is therefore asserted by whichever
+party operates the on-site bridge for this event, from that event's own configuration, not derived
+by this domain layer from any upstream field — the one value in this document that a bridge author
+must supply rather than the domain layer compute. Envelope: `source: 'tcp'`/`'xml'`, `confidence:
+'authoritative'` for `value`. **Failure mode: `unavailable{reason: 'not-applicable'}`, not `not-yet`
+and not an error**, for the genuine no-external-identity case (a forerunner) — confirmed as a real, if
 infrequent, upstream case (14 of 1,483 real entries), not a hypothetical one.
 
 **`bib`, `name`.** Source: `OnCourse.Bib`/`Results.Bib` and the embedded athlete name field on either
