@@ -219,22 +219,37 @@ A judge corrects a gate penalty on the tablet.
 
 ### C — The unlicensed venue
 
-CIS is not configured; a two-run race is running; run 2 beats run 1. In the ordinary case — this
-server session has been running continuously since run 1 — **nothing is actually missing**: the
-full run-1 `Attempt`, gates included, was captured in domain state while it was live, and monotonic
-knowledge (§4 INV-1) means it does not vanish because run 2's wire message doesn't repeat it. `Standing`
-computes identically to the CIS-available case, because the comparison is mechanical arithmetic
-either way.
+CIS is not configured; a two-run race is running; run 2 beats run 1. **Nothing is missing, in the
+ordinary case or the restart case — corrected here after a real two-day event showed the original
+version of this scenario was wrong about which one needed CIS.**
 
-**What CIS actually buys here is robustness to a restart**, not day-to-day correctness: if this
-server instance is started fresh between run 1 and run 2 — genuinely never having observed run 1 —
-and CIS is unavailable, run 1's total and gates are truly `unavailable{reason}` (`CONTRACTS.md` §6).
-**How anyone finds out:** the operator sees `SourceStatus.cis = 'not-configured'` in the admin UI at
-any time, informational, not an alert; a client encountering the specific `unavailable` value renders
-its ordinary "not known" treatment — the same one it would use for any not-yet-known fact — because
-nothing about this case is structurally different from any other absent value. There is no
-spectator-facing "results may be incomplete" banner, deliberately: the maintainer was explicit that
-staleness should be borne quietly, never nagged about.
+If this server session has been running continuously since run 1, the full run-1 `Attempt`, gates
+included, was captured in domain state while it was live, and monotonic knowledge (§4 INV-1) means it
+does not vanish because run 2's wire message doesn't repeat it. If instead this server instance was
+started fresh between run 1 and run 2 — genuinely never having observed run 1 live — the XML snapshot
+recovers it anyway: Canoe123's own export keeps run 1's `<Results>` row, frozen from the moment it
+finished, independently of anything our server did or didn't see, and run 2's own row separately
+states which run won and summarises the other (`CONTRACTS.md` §4/§6, `DERIVATIONS.md` §4.5). `Standing`
+computes identically in every case, because the comparison is mechanical arithmetic regardless of
+which source supplied the inputs.
+
+**What this scenario's earlier version got wrong:** it credited CIS with "robustness to a restart" —
+the one thing left needing a licence, in a design otherwise built not to depend on one. Checked
+against a real weekend where CIS was unreachable throughout (61,000 polls, every response empty) and
+a cold-started analysis still recovered complete two-run detail for every finisher from the XML
+snapshot alone, that credit belongs to the snapshot, not to CIS. What CIS actually buys, once XML
+already supplies completeness, is on-demand immediacy — an answer *now* rather than waited on for the
+snapshot's own ~35 s rewrite cycle — which matters for latency-sensitive cases, not for whether this
+scenario's numbers are ever wrong (`DECISIONS/ADR-004`'s Revision).
+
+**How anyone finds out there's a gap at all, in the one case that remains genuinely unrecoverable —
+neither this server nor any prior instance ever observed run 1 live, *and* the XML path is itself
+unavailable (misconfigured, or the file unreadable):** the operator sees `SourceStatus` reflect it in
+the admin UI at any time, informational, not an alert; a client encountering the resulting
+`unavailable` value renders its ordinary "not known" treatment — the same one it would use for any
+not-yet-known fact — because nothing about this narrower case is structurally different from any
+other absent value. There is no spectator-facing "results may be incomplete" banner, deliberately:
+the maintainer was explicit that staleness should be borne quietly, never nagged about.
 
 ### D — The heat
 

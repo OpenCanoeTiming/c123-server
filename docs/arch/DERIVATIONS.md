@@ -228,50 +228,68 @@ yet reported, per the `§4` ranking table.
 
 ### 4.5 `outcome` — the superseded run of a two-run pair
 
-The case `DOMAIN-FACTS.md` §4 names directly: once BR2 completes, `Results.Time`/`Results.Gates`
-always describe run 2, and `Results.Pen`/`Results.Total`/`Results.Rank` describe whichever run is
-better — **never both, on this one row.** Two independent recovery paths, precisely:
+The case `DOMAIN-FACTS.md` §4 names — but, checked against a real two-day event, states too broadly.
+Once BR2 completes, `Results.Time`/`Results.Gates` on the **TCP wire** always describe run 2, and
+`Results.Pen`/`Results.Total`/`Results.Rank` describe whichever run is better — never both, on that
+one message. This is true of the TCP stream specifically. It is not true of the XML snapshot, which
+keeps an explicit, complete record. Three independent recovery paths, precisely, XML first because it
+requires the least and is available to every deployment:
 
-**(a) The superseded run's own live-observed data, cached.** Because BR1 and BR2 are separate
-`RaceId`s, BR1 had its *own* `Results` row, sourced via §4.4 exactly as any single-run Attempt is,
-*while BR1 was itself the active phase*. Nothing about BR2 starting erases that observation —
-monotonic knowledge (`CONTRACTS.md` §4 INV-1) means it is retained, gates included, for as long as
-this server instance has been running since BR1 finished. **Conditionality: this server was observing
-live during BR1.** Envelope: unchanged from whatever §4.3/§4.4 already assigned it at the time —
-`source`/`confidence`/`provisional` do not change just because a sibling Phase later completed.
-**Failure mode: `unavailable{reason: 'not-observed-live-and-cis-unavailable'}`** if this server was
-not running during BR1 *and* CIS is not configured for this deployment — the one case truly requiring
-external help. **The precise trigger for this determination, made explicit here because writing a
-conformance vector for it exposed that it had not been stated:** this is `unavailable`, not `not-yet`,
-only once the domain layer can conclude the fact *should* exist and cannot be supplied — concretely,
-once BR2's own outcome has itself been observed (BR2 cannot exist without BR1 having already run) and
-neither a cached BR1 record nor a reachable CIS can supply it. Before BR2 has been observed at all,
-the correct state is still `not-yet` — the domain layer cannot yet distinguish "BR1 hasn't happened"
-from "BR1 happened but wasn't cached," and INV-1 requires it not to guess. `not-yet` and this
-`unavailable` case would otherwise look like the same absence from a distance; they are not, and the
-distinguishing condition is BR2's own arrival.
+**(a) The XML snapshot's own frozen record — checked against a real two-day event, not assumed.**
+Because BR1 and BR2 are separate `RaceId`s, the snapshot carries BR1's own `<Results>` row
+independently, and it is stable: across 610 snapshots of one full day, that row had exactly two
+byte-states — empty before the race, final and unchanging from the instant of finish onward, `Gates`
+and `GateTimes` included. BR2's own row separately carries `Prev*` fields (`PrevTime`, `PrevPen`,
+`PrevTotal`, `PrevRnk`, and others) summarising the other run, and `BetterRunNr`, naming the winner
+outright. A cold-started analysis of one day's final snapshot — one file, one read — recovered
+397 complete BR1 runs and 384 complete BR2 runs, gate penalties and (all but one of 738) gate passage
+times included, with CIS unreachable the entire time. **Conditionality:** the XML source is available
+at all (`CONTRACTS.md` §2.8's `SourceStatus`, same as any source) — no live observation, no caching,
+no licence. Envelope: `source: 'xml'`, `confidence: 'authoritative'` — the snapshot's `Prev*`/
+`BetterRunNr` fields are Canoe123 stating a fact directly, the same standing a TCP `Results` field
+has, not a lower-confidence read because the channel is XML rather than TCP; `eventTime` present
+where the row's own `dtFinish`-equivalent is populated; `provisional`: `false` once no higher-ranked
+source (`cis`, per `CONTRACTS.md` §4's revised table) is configured for this deployment, `true`
+otherwise until it reports. Failure mode: `unavailable{reason: 'source-unreachable'}` if the XML path
+is configured but not currently readable, `'not-configured'` if no path is known at all — the
+narrower case this row now reduces to.
 
-**(b) CIS, queried against the superseded run's own `RaceId` specifically — checked, not assumed.**
-`CIS.GetResult(<BR1's RaceId>, bib)` remains fully and correctly queryable **indefinitely** after BR2
-completes — confirmed against a real two-run recording where the identical query, repeated hours
-after BR2 had already finished and been queried hundreds of times itself, returned byte-identical
-`StartDayTime`/`FinishDayTime`/`GateTimes`/`Total1` to its very first response. There is no
-"current race only" restriction to design around; this had been an open assumption and is now
-settled. The response gives `runSeconds`/`penaltySeconds` directly from its own `Time1`(or `Time2`,
-matching whichever run's `RaceId` was queried)/`Pen1` fields, and gate detail from **`Gates`**
-specifically — a sparse `gateNumber=penalty` list (`"3=2;16=2"`), confirmed as its own field, distinct
-from `GateTimes` (passage timestamps, not judgments) — parsed per §4.6(c) below. Conditionality: CIS
-configured and reachable, and "Init Event to CIS" performed that morning (`DOMAIN-FACTS.md` §2).
-Envelope: `source: 'cis'`, `confidence: 'authoritative'`, `eventTime` present (`FinishDayTime`,
-confirmed a real field carrying the run's own finish moment), `provisional: false` — this is the
-top-ranked source for this field category with nothing above it to await. Failure mode:
-`unavailable{reason: 'not-configured'}` or `'source-unreachable'` per `CONTRACTS.md` §2.8's
-`SourceStatus`.
+**(b) The superseded run's own live-observed data, cached — retained as a second, redundant path,
+not the only one it used to be.** BR1 had its *own* `Results` row on the wire too, sourced via §4.4
+exactly as any single-run Attempt is, *while BR1 was itself the active phase*; monotonic knowledge
+(`CONTRACTS.md` §4 INV-1) means it is retained, gates included, for as long as this server instance
+has been running since BR1 finished. **Conditionality: this server was observing live during BR1** —
+still true, but no longer load-bearing on its own, since (a) recovers the same fact without it.
+Envelope: unchanged from whatever §4.3/§4.4 already assigned it at the time.
 
-**Path (a) and (b) are independent, not sequential** — if both are available, `CONTRACTS.md` §4's
-ranking table already governs which is presented (`cis` outranks `tcp`'s cached value once CIS has
-actually reported this fact — path (a)'s cached value remains retained, per-source, and available to
-surface again if CIS ever disconnects, per INV-2b).
+**(c) CIS, queried against the superseded run's own `RaceId` specifically — checked, not assumed,
+and now the third path rather than the only reliable one.** `CIS.GetResult(<BR1's RaceId>, bib)`
+remains fully and correctly queryable **indefinitely** after BR2 completes — confirmed against a real
+recording where the identical query, repeated hours after BR2 had already finished and been queried
+hundreds of times itself, returned byte-identical `StartDayTime`/`FinishDayTime`/`GateTimes`/`Total1`
+to its very first response. There is no "current race only" restriction. The response gives
+`runSeconds`/`penaltySeconds` directly from its own `Time1`(or `Time2`, matching whichever run's
+`RaceId` was queried)/`Pen1` fields, and gate detail from **`Gates`** specifically — a sparse
+`gateNumber=penalty` list (`"3=2;16=2"`), distinct from `GateTimes` (passage timestamps, not
+judgments) — parsed per §4.6(c) below. Conditionality: CIS configured and reachable, and "Init Event
+to CIS" performed that morning. Envelope: `source: 'cis'`, `confidence: 'authoritative'`, `eventTime`
+present (`FinishDayTime`), `provisional: false`. Failure mode: `unavailable{reason: 'not-configured'}`
+or `'source-unreachable'`.
+
+**The only case still genuinely `unavailable`: none of the three paths ever supplied the fact** —
+XML unreadable, no live observation cached, and CIS unreachable or unconfigured, all at once. **The
+precise trigger for this determination** (made explicit under conformance-vector review, before this
+event's evidence existed, and unaffected by it): `unavailable`, not `not-yet`, only once the domain
+layer can conclude the fact *should* exist and cannot be supplied — concretely, once BR2's own
+outcome has itself been observed (BR2 cannot exist without BR1 having already run) and none of the
+three paths can supply it. Before BR2 has been observed at all, the correct state is still `not-yet`
+— the domain layer cannot yet distinguish "BR1 hasn't happened" from "BR1 happened but is
+unrecoverable," and INV-1 requires it not to guess.
+
+**Paths (a), (b), and (c) are independent, not sequential** — if more than one is available,
+`CONTRACTS.md` §4's revised ranking table governs which is presented (`xml` over `cis` for this
+specific field category, `tcp` not a candidate at all); a path not currently top-ranked still has its
+own observation retained, available to surface again per INV-2b if a higher-ranked one disconnects.
 
 ### 4.6 Gate parsing — three encodings, one contract shape
 
@@ -408,12 +426,28 @@ possibility, needed settling:
    constant.** The derivation in §4.6(b) is written to derive the width from the known gate count
    rather than hard-coding a number that the dossier itself only offers as an approximation —
    avoiding a latent bug rather than one already found.
-4. **§4.5(a)'s `unavailable` failure mode had no stated trigger, found while writing a conformance
+4. **§4.5's `unavailable` failure mode had no stated trigger, found while writing a conformance
    vector for it, not while writing this document the first time.** `not-yet` (never observed) and
    `unavailable` (observed to be absent) look identical from outside until the exact condition that
    separates them is named: BR1's detail is `unavailable` only once BR2's own arrival lets the domain
-   layer conclude it *should* exist, never before. Added to §4.5(a) above. `docs/arch/vectors/
-   tier1-conformance.json`'s `two-run-br1-unavailable-no-cache-no-cis` is the vector that found this.
+   layer conclude it *should* exist, never before. Stated where §4.5 now describes the one case still
+   genuinely unavailable, after paths (a)–(c). `docs/arch/vectors/tier1-conformance.json`'s
+   `two-run-br1-unavailable-no-cache-no-xml-no-cis` (renamed from `-no-cache-no-cis`, per finding 5
+   below) is the vector that found this — its original name and setup predated §4.5's relettering,
+   but the condition it tests is unchanged: all paths, not `'not-observed-live-and-cis-unavailable'`
+   specifically, must be exhausted first.
+5. **The largest correction in this document: §4.5's premise, that recovering a superseded run
+   requires either live observation or CIS, was wrong, not merely conditional.** Checked against a
+   real two-day event where CIS was unreachable throughout and a cold-started analysis still
+   recovered complete two-run detail for every finisher from the XML snapshot alone. This was not a
+   gap in what was written — DOMAIN-FACTS.md §4 stated, as a general fact about Canoe123, something
+   true only of the TCP wire stream — and it was inherited here without being checked against the one
+   other interface (the XML file) already known, elsewhere in this same document, to be a legitimate
+   source. §4.5, `CONTRACTS.md` §4/§6, `ARCHITECTURE.md` Scenario C, `DECISIONS/ADR-004`, and
+   `DOMAIN-FACTS.md` itself all carried some form of the same unchecked assumption; all five are
+   corrected together.
 
 No value marked `[D]` or `[A]` in `CONTRACTS.md` §6 turned out to be undeliverable; the findings above
-are corrections to *how* and *when*, not reversals of *whether*.
+are corrections to *how* and *when*, not reversals of *whether* — finding 5 is the one exception
+worth naming plainly: it corrects a *source*, not merely a mechanism, and it is the reason the
+`unavailable` case in §4.5 is now far narrower than the design assumed for most of this engagement.

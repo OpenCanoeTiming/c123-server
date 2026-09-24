@@ -35,8 +35,8 @@ it at the same fidelity, and are not all available at every venue.
 |------|-----------|-------------|-------------|
 | On-course competitors | push ~2/s | poll | CIS adds pre-computed Rank, TTBDiff, split diffs |
 | Results | push, **rotating ~30 s** | on demand per RaceId | TCP gives a category's results only once per rotation |
-| **Both runs of a two-run race** | **best run only** | **Time1+Pen1+Total1 and Time2+Pen2+Total2** | CIS solves the BR2 loss described in §4 |
-| **Gate passage times** | absent | `GateTimes` per gate | CIS-only capability |
+| **Both runs of a two-run race** | **best run only** | **Time1+Pen1+Total1 and Time2+Pen2+Total2** | CIS solves the BR2 loss described in §4 — **but §4 itself is corrected below: so does the XML snapshot, without CIS** |
+| **Gate passage times** | absent | `GateTimes` per gate | **Correction, made during the design engagement:** not CIS-only. A real two-day event's XML snapshot carried its own `Gates`/`GateTimes` on a completed run's frozen `<Results>` row — checked directly, not inferred, against 738 finished Attempts across one weekend, with CIS unreachable throughout |
 | Athlete directory | names embedded in messages | `GetAthletes` standalone | CIS-only |
 | Event metadata (venue, discipline, logos) | absent | `GetEvent` | CIS-only |
 | Schedule | push ~40 s | on demand, adds GateConfig `S` markers | different shape |
@@ -44,10 +44,15 @@ it at the same fidelity, and are not all available at every venue.
 | Time of day | push 1/s | `GetStatus.OfficialTime` | both |
 | Write penalties | Scoring via TCP/UDP | `SetScores` via HTTP | both |
 
-**We hold the CIS licence.** It is therefore a source this project may genuinely depend on — which
-matters, because it is the only interface carrying both runs of a two-run race and gate-by-gate
-passage times. Much of the reconstruction machinery in the current code exists only because CIS
-was never used.
+**We hold the CIS licence.** It is therefore a source this project may genuinely depend on.
+**Correction, made during the design engagement:** it is not "the only interface" carrying both runs
+and gate-by-gate detail — checked against a real two-day event where CIS was unreachable for its
+entire duration (61,000 polls, every response empty) and the XML snapshot alone reconstructed
+complete two-run detail, gates included, for every one of 781 finished Attempts. CIS's genuine,
+narrower value is on-demand immediacy: an answer *now* rather than waited on for the snapshot's own
+rewrite cycle, measured at a ~35 s median. Much of the reconstruction machinery in the current code
+exists only because *neither* interface was used — not because CIS specifically was the one thing
+missing.
 
 Two residual conditions remain, and they are operational rather than commercial: CIS needs
 Administrator privileges or a registered URL ACL on the timing machine, and an operator must have
@@ -73,9 +78,21 @@ order and can disagree, because they were produced at different moments. **Resul
 the sharpest case: a category's results snapshot may be up to a full rotation old, while OnCourse
 data about the same competitors is 500 ms old.**
 
-## 4. Two-run races (BR1/BR2) lose data by design
+## 4. Two-run races (BR1/BR2) lose data by design — on the TCP stream specifically
 
-In a second run, C123 sends:
+**Correction, made during the design engagement, and load-bearing enough to state before anything
+else in this section: everything below is true of the TCP message stream. It is not true of the XML
+snapshot file**, which keeps each run's own `<Results>` row independently and frozen from the moment
+it finishes, and states outright, on the later run's own row, which run won (`BetterRunNr`) and what
+the other one scored (`PrevTime`, `PrevPen`, `PrevTotal`, `PrevRnk`, and others). Checked against a
+real two-day event where CIS was unreachable throughout: a cold-started read of the final snapshot
+recovered 397 complete BR1 runs and 384 complete BR2 runs, gate penalties and (all but one of 738)
+gate passage times included. This section was written, and stood unchallenged for most of the design
+engagement, as if it described Canoe123 generally rather than the TCP stream in particular — the
+distinction matters enough to a reader that it is stated here rather than only in the design
+documents downstream of this one.
+
+In a second run, C123's TCP stream sends:
 
 ```xml
 <Result Type="T"
@@ -88,15 +105,20 @@ In a second run, C123 sends:
 
 `Time` and `Gates` describe run 2. `Pen`, `Total` and `Rank` describe whichever run is better.
 
-| Scenario | Run 2 recoverable | Run 1 recoverable |
+| Scenario | Run 2 recoverable from this TCP message | Run 1 recoverable from this TCP message |
 |----------|-------------------|-------------------|
 | Run 1 is better | yes (Time + Gates) | yes, by derivation: `Total − Pen` |
-| Run 2 is better | yes (= Total) | **no — irretrievably absent** |
+| Run 2 is better | yes (= Total) | **no, from this message — but see the correction above: the XML snapshot has it regardless** |
 
-The only complete remedies are caching BR1 results when they were live, or reading CIS
-`GetResult`, which carries both runs explicitly. Caching means the correctness of a displayed
-value depends on whether a process was running and listening earlier — i.e. on history, not on
-current input. This is a statefulness requirement, not a convenience.
+**Corrected remedies, in order of what each actually requires:** reading the XML snapshot — no
+licence, no live observation, no history, just a file read, since Canoe123 keeps run 1's own record
+independently of whichever run's TCP message is currently rotating past; caching BR1's TCP results
+when they were live, now a redundant second copy of the same fact rather than the only way to get it;
+or reading CIS `GetResult`, which carries both runs explicitly and can be asked on demand rather than
+waited for. The earlier version of this section named only the last two, and called caching a
+statefulness requirement "not a convenience" — true of caching in isolation, but no longer a
+requirement at all once the XML snapshot is understood to carry the same fact without needing to have
+been listening for it.
 
 ## 5. There is no finish event
 

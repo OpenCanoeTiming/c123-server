@@ -661,15 +661,48 @@ contract constrains.
   the field; the value the contract presents is the latest observation from the **highest-ranked
   source, among those `SourceStatus` (§2.8) currently reports available, that has reported this
   specific field.** Ranking is **per field-category**, never one global order over `SourceTag` —
-  no single order is correct for every field (§6: `tcp` beats `cis` on timeliness for on-course
-  facts; `cis` beats `tcp` on completeness for a finished Attempt once one exists):
+  no single order is correct for every field, and, as of this revision, not even for every case
+  within one field (§6: `tcp` beats `cis` on timeliness for on-course facts; for a finished Attempt's
+  own run `tcp` still leads; only for a *superseded sibling run's* detail — which `tcp` never carries
+  at all, at any configuration — does `xml` lead):
 
   | Field category | Ranking, highest first |
   |---|---|
   | On-course position / running time (`Attempt.status = 'on-course'`) | `tcp` > `cis` |
-  | Finished slalom `Attempt.outcome` / `Attempt.gates` | `cis` > `tcp` > `xml` (CIS configured) — `tcp` > `xml` (not configured) |
-  | `Attempt.upstreamRank` | `cis` > `tcp` — same discipline as the row above; §5 consumes this field's presented value, never a raw pass-through of whichever of Canoe123's or CIS's own `Rank` last arrived |
+  | Finished slalom `Attempt.outcome`/`Attempt.gates` — the Attempt's **own**, never-superseded run | `tcp` > `cis` > `xml` (CIS configured) — `tcp` > `xml` (not configured) |
+  | Finished slalom `Attempt.outcome`/`Attempt.gates` — a **superseded sibling run's** own detail (`DOMAIN-FACTS.md` §4) | `xml` > `cis` — `tcp` is not a candidate here at all: it never carries this fact once superseded, licensed or not |
+  | `Attempt.upstreamRank` | `cis` > `tcp` > `xml` — same discipline as the row above; §5 consumes this field's presented value, never a raw pass-through of whichever of Canoe123's, CIS's, or the XML snapshot's own `Rank` last arrived |
   | `Phase.status` | `tcp` > `xml` |
+
+  **The superseded-run row is new, found under review, not designed in from the start.** The earlier
+  single row put `xml` beneath both automated sources for a finished Attempt, universally — reasonable
+  when `xml` was believed to be a slow backstop, wrong once checked: a real two-day event, analysed
+  after the fact, had CIS unreachable for its entire duration — 61,000 polls, every response empty,
+  the operator never having performed "Init Event to CIS" — and a server starting cold, having
+  observed nothing live, reconstructed complete two-run detail for every finisher of the weekend from
+  the XML snapshot alone: 397 completed BR1 runs and 384 completed BR2 runs, gate penalties and (all
+  but one row of 738) gate passage times included. The snapshot's own `BetterRunNr` field states
+  outright which run won; `Prev*` fields (`PrevTime`, `PrevPen`, `PrevTotal`, `PrevRnk`, and others)
+  give the superseded run's full summary directly, on the very row that would otherwise, per
+  `DOMAIN-FACTS.md` §4, be the one place that information is lost. That section's claim is true of
+  the TCP wire stream specifically, and only of it.
+
+  **Why `xml` outranks `cis` for this one case, given both are complete once available:** not because
+  `xml`'s content is somehow more correct — where both report the same settled fact, there is no
+  reason to expect disagreement — but because `xml` is the source every deployment has. `cis` needs a
+  licence, the right OS privileges, and an operator having performed "Init Event to CIS" that morning,
+  any of which can fail (`DOMAIN-FACTS.md` §2); `xml` needs only a configured path, "guaranteed
+  present" per that same section. Preferring the source available to every organiser (`CONSTRAINTS.md`
+  §2.6) over one several will not have, when both give the same answer, is the more defensible default.
+
+  **Why the snapshot's own ~35 s rewrite cadence — measured, not the recording tool's polling
+  interval, which would have overstated it — does not threaten the case this row exists for.** A
+  35-second lag sounds like it should matter for exactly this scenario. It does not, because the lag
+  is relative to *now*, not to *when the value is next needed*. The moment anyone asks "what was run
+  1's total" is after run 2 has finished — and run 1's own row, frozen the instant run 1 itself
+  finished, has by then typically been stable for as long as run 2 took to run: minutes, not seconds.
+  The freshness bound is real and stated here rather than hidden, but the specific case this row
+  answers is nearly always one where it has already been satisfied by the time anyone asks.
 
   A source that is not currently top-ranked-and-available still has its own observation retained —
   so it can surface later, see INV-2b — but does not change what's presented while a higher-ranked
@@ -807,6 +840,16 @@ and an upstream-asserted one disagree, and what happens on a tie upstream doesn'
    `bib`) for deterministic list position only. This is not a federation-specific choice: a
    non-existent time cannot be ranked, in any ruleset.
 
+**Considered directly and rejected: letting the XML snapshot's `BetterRunNr` field decide which run
+counts, in place of step 1's mechanical comparison.** The snapshot states outright which run of a
+pair is better — a real, useful fact (`§4`'s ranking table, `DERIVATIONS.md` §4.5) — but using it to
+*decide* rather than to *corroborate* would trade an independently-checkable computation for trust in
+a single field, exactly the two-sources-of-truth problem step 1 exists to avoid. Mechanical
+comparison of resolved outcomes stays the rule; `BetterRunNr` is a cross-check available to the same
+diagnostic surface as `upstreamRank`'s disagreements (step 4), never a replacement for computing the
+answer ourselves. Recorded here so the question is not re-opened by a future reader finding the field
+and wondering why it isn't used.
+
 ---
 
 ## 6. Derivability ledger
@@ -823,18 +866,34 @@ rather than left as a claim.
 | On-course position/time | [D] TCP, ~500ms | same — CIS is poll-based and never faster than TCP here |
 | Slalom finish | [D] `dtFinish` transition, TCP, authoritative | same |
 | Run-2 outcome when run 1 was better | [D] mechanical, `Total − Pen`, from the wire | same |
-| Run-2 outcome when run 2 was better, run-1 total | [D] CIS `GetResult`, both runs explicit | **[A]** only if this server observed run 1 live and cached it — a statefulness dependency, not a property of the current input alone |
-| Run-1 gate-by-gate detail, once superseded | [D] CIS `GateTimes`/`GetResult` | **[A]** — same conditionality as the row above, not worse: monotonic knowledge (§4 INV-1) means the *whole* run-1 `Attempt`, gates included, was captured in domain state while it was live and does not vanish because run 2's wire message doesn't repeat it. Only genuinely **[N]** in the narrower case of this row's own condition failing *and* CIS absent — a mid-event server restart between run 1 and run 2, with no licence to fall back on |
+| Run-2 outcome when run 2 was better, run-1 total | [D] — CIS `GetResult` (both runs explicit), **or** the XML snapshot's own frozen run-1 `<Results>` row, **or** run-2's own `Prev*`/`BetterRunNr` fields; any one suffices | [D] — the XML snapshot alone is enough, unconditionally: confirmed against a full two-day event where CIS never answered a single poll and every finisher's run-1 total was still recovered |
+| Run-1 gate-by-gate detail, once superseded | [D] — CIS `GateTimes`/`GetResult`, **or** the XML snapshot's own frozen `Gates`/`GateTimes` on run 1's own row (near-universal: one row of 738 in the same event carried `Gates` without `GateTimes`) | [D] — same, XML alone, unconditionally |
 | Cross heat order | [D] operator assertion via Results stream — same either way; CIS does not change this | same |
 | Event spanning multiple days | **[N]** in both cases — never in Canoe123's data; always asserted by the bridge/operator (§2.2) | same |
 | Athlete directory / event metadata | [D] CIS `GetAthletes`/`GetEvent` | [A] names embedded piecemeal in other messages |
 | Tie-break beyond arithmetic equality | [D] only as an upstream `Rank` relay (§5.3) — never independently computed | same |
 | Registry-verified identity (nationality, spelling) | **[N]** in both cases — out of scope; Canoe123 is the only identity source that exists | same |
 
-**What CIS is deliberately not used for:** speed. It is poll-based (`DOMAIN-FACTS.md` §2); TCP
-remains the on-course source of truth regardless of CIS availability. CIS's value is completeness
-(both runs, gate detail), not latency — conflating the two would reintroduce the guessing this
-design exists to remove.
+**The statefulness requirement the two rows above previously carried — that the server must have
+observed run 1 live to recover it — does not survive in any narrowed form; it dissolves, checked
+against the exact case that would have exposed it if it were still real.** A server that had
+observed nothing live all weekend, with CIS unreachable throughout, reconstructed both runs and gate
+detail for every finisher from the XML snapshot alone. The old requirement existed to cover a fact
+that could vanish because nothing kept a copy of the one message that carried it. There is no such
+moment: the XML snapshot is that copy, kept continuously, by Canoe123 itself, independent of whether
+our own server was running to see the original event. The one thing that still bounds this is the
+snapshot's own rewrite cadence (~35 s median, measured) — real, and stated in `CONTRACTS.md` §4's
+revised ranking table, but nearly irrelevant to this specific case: the value is needed only after
+run 2 finishes, by which point run 1's own row has typically been stable for minutes.
+
+**What CIS retains, now that XML supplies completeness too: on-demand immediacy, not completeness.**
+TCP remains the on-course source of truth regardless of CIS availability — that was never in
+question. What CIS is good for is being askable *right now* rather than waited on for Canoe123's own
+~35 s rewrite or a TCP `Results` rotation of similar order — real, narrower value, called on directly
+by §4 INV-2b's re-query trigger and by any case needing an answer faster than either passive source
+delivers. It is not, as an earlier draft of this contract and of `DECISIONS/ADR-004` claimed, the
+only source of two-run completeness — checked against a full weekend where it supplied none at all,
+and the record was complete regardless (`DECISIONS/ADR-004`'s Revision).
 
 **How a deployment finds out which column it is in:** `SourceStatus.cis` (§2.8), plus the
 `unavailable{reason}` and `provisional` fields on the specific values affected. Never a spectator-

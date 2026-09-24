@@ -7,7 +7,7 @@ Tier 2's admission gate 3 checks a captured fixture against. Data lives in
 `ADR-003`). This document is the format, the coverage map, and the two things the exercise found
 that no vector could paper over.
 
-35 vectors. Not a target hit — the number the coverage below actually needed. Row 2 of the ranking
+36 vectors. Not a target hit — the number the coverage below actually needed. Row 2 of the ranking
 table needed four on its own, to show authority, recency, the no-CIS fallback, and the third-ranked
 `xml` case separately; some invariants (INV-4, INV-5, INV-6) needed exactly one, because there was
 exactly one distinct behaviour to pin down.
@@ -52,7 +52,7 @@ because §5 is a pure function of resolved values, and giving it anything else w
 | INV-6 (monotonic sequence, not wall clock) | `inv6-clock-jump-does-not-reorder-merge` | 1 |
 | §4 ranking table, row by row, with/without CIS | `ranking-row-1` (×1), `ranking-row-2` (×4: cis-confirms, cis-not-overridden, no-CIS self-correction, xml-only fallback), `ranking-row-3` (×1), `ranking-row-4` (×2: tcp-beats-xml, xml-fallback) | 8 |
 | Operator-write / operator-assertion carve-out | `operator-write-provisional-presented-immediately`, `-confirmed-by-matching-echo`, `-mismatched-echo-wins`, `-provisional-false-not-superseded-by-incidental-report` | 4 |
-| Two-run recovery (§4.5(a)/(b) and the unrecoverable case) | `two-run-br1-untouched-by-br2`, `-recovered-via-cis-after-restart`, `-unavailable-no-cache-no-cis` | 3 |
+| Two-run recovery (§4.5's three independent paths and the unrecoverable case) | `two-run-br1-untouched-by-br2`, `-recovered-via-xml-no-live-no-cis`, `-recovered-via-cis-after-restart`, `-unavailable-no-cache-no-xml-no-cis` | 4 |
 | Kayak Cross operator-asserted outcome | `cross-outcome-not-yet-before-operator-entry`, `-operator-asserted`, `-corrected-after-next-heat-started` | 3 |
 | Ongoing recomputation (`DERIVATIONS.md` §4.3's fix) | `ongoing-recomputation-provisional-total-revised-by-late-gate` | 1 |
 | State-machine legal transitions | `phasestatus-official-to-revised-skips-unofficial`, `attemptstatus-finished-to-dsq-post-finish` | 2 |
@@ -118,10 +118,16 @@ and landing on the same conclusion: recorded as untested by this tier, not solve
    operates over resolved outcomes, not raw observations (§1). Naming this explicitly rather than
    forcing one uniform shape onto two different functions.
 3. **The `not-yet` → `unavailable` boundary in the two-run unrecoverable case had no stated trigger**
-   until `two-run-br1-unavailable-no-cache-no-cis` needed one to be a well-formed vector at all.
-   Resolved in `DERIVATIONS.md` §4.5 and §8 (finding 4): the determination requires BR2's own arrival
-   to be observed first: the domain layer cannot honestly assert "this should exist and cannot be
-   supplied" before it knows BR2 happened, so before that point the honest state is still `not-yet`,
-   even though intuitively "BR1 detail is gone" already sounds true from a purely definitional
-   reading of the two-run scenario. This is a genuine domain-timing fact, not a wording preference,
-   and every reader of `DERIVATIONS.md`'s prior text had to infer it rather than being told it.
+   until `two-run-br1-unavailable-no-cache-no-xml-no-cis` (renamed after a real event added a fourth
+   recovery path, see below) needed one to be a well-formed vector at all. Resolved in
+   `DERIVATIONS.md` §4.5 and §8 (finding 4): the determination requires BR2's own arrival to be
+   observed first: the domain layer cannot honestly assert "this should exist and cannot be supplied"
+   before it knows BR2 happened, so before that point the honest state is still `not-yet`, even though
+   intuitively "BR1 detail is gone" already sounds true from a purely definitional reading of the
+   two-run scenario. This is a genuine domain-timing fact, not a wording preference, and every reader
+   of `DERIVATIONS.md`'s prior text had to infer it rather than being told it.
+4. **Added after this document's first draft: `two-run-br1-recovered-via-xml-no-live-no-cis`.** A
+   real two-day event showed the XML snapshot alone recovers a superseded run's full detail with no
+   live observation and no CIS — `DERIVATIONS.md` §4.5's now-primary path, previously untested by this
+   suite because it was believed to need CIS or a cache to work at all. Its absence was itself a trace
+   of the assumption the event disproved; recorded here rather than silently patched in.

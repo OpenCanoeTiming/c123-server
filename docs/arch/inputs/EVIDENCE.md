@@ -205,6 +205,21 @@ dead is only its path into `EventState`. Nothing visibly broke, so nobody notice
 your sources stopped contributing. It passed its own validation and reported healthy while
 delivering nothing.
 
+**Added during the design engagement: this exhibit and Exhibit 3 very likely share one root cause,
+not two separate ones.** Exhibit 3's own code already touches XML — `xmlRow?.pen`, its second
+priority behind a 10-second OnCourse cache — so the claim is not that `LiveTransformer` has no XML
+access at all. It is narrower and, on inspection, more telling: what it has is one numeric field,
+read ad hoc, ranked below a cache and above an arithmetic guess. Checked during a separate
+investigation into a real two-day event's XML snapshot: that same file's `BetterRunNr` field states
+outright which run won, and its `Prev*` fields give the other run's full total, penalty, and rank
+directly — exactly the fact `LiveTransformer`'s cache-then-guess chain exists to reconstruct. Someone
+who needed the answer this exhibit's own quoted comment describes ("matches scoreboard fallback") had
+a superior version of it sitting in a file the process already had open, for a different purpose,
+twelve lines away, and had no way to know it — because nothing in the pipeline (Exhibit 4) ever
+treated that file as more than a change-detection source and a REST backend. Stated as high
+confidence, not certainty: this is an inference from what both exhibits describe, not a claim
+verified against the running code.
+
 ---
 
 ## Exhibit 5 — `null` is silently destroyed at the cloud boundary
