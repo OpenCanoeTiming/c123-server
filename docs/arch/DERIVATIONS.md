@@ -752,5 +752,4 @@ These are E4: recorded here, not used to make rules.
     "delete selected results" exists; its no-push behaviour is from the source only.
 12. Whether today's live-mini XML ingest overwrites results that were cleared on TCP (E4).
 13. A penalty correction that reorders nobody, made after racing has ended, may never trigger an XML
-    write on its own. Not observable in the recordings. It reaches TCP immediately regardless. The finish message itself was late; a manually
-   entered finish is suspected.
+    write on its own. Not observable in the recordings. It reaches TCP immediately regardless.
