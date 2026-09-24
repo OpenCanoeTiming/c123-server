@@ -60,3 +60,26 @@ Nothing structural. `Phase.roundKind` is deliberately open-ended (`CONTRACTS.md`
 hard enum, so a round type this design has never seen does not require a spine change, only a new
 value — the property Kayak Cross was used to test (`BRIEF.md` §5.5, walked through in
 `ARCHITECTURE.md` Scenario D).
+
+## Revision — `entryId`'s opaqueness stated as a rule, not left as a habit
+
+This ADR chose `Id` as `Entry`'s identity backbone on a scout's confirmation that it is stable across
+BR1 and BR2. That confirmation was correct; what was never stated was that the field must never be
+*parsed*. An exhaustive analysis of 1,483 real `<Participants>` records — every one carrying
+`ICFId`/`ClassId` to check an `Id` against — found the field's actual composition holds in 97.3% of
+cases and fails four separate ways in the rest: 14 records with no `ICFId` at all and an `Id` with no
+separator (a forerunner's `ClassId`+`EventBib`); 8 with a genuine category tail making a three-segment
+`Id` ambiguous three ways; 6 with a class token disagreeing with the record's own `ClassId`; and
+segment count itself is not a reliable discriminator, since a doubles `Id` is three-part and a team
+`Id` two-part for unrelated reasons. `ClassId`, `CatId`, `ICFId`, and `ICFId2` are correct in all
+1,483 records, as their own fields.
+
+**Fix:** `entryId` remains derived from `Id`, unchanged — the spine does not move. What changes is
+that this ADR now states outright what was previously only true by construction: nothing may ever be
+recovered by parsing `entryId` — class, category, or crew membership are read from their own upstream
+fields, never decomposed from the opaque key. `CONTRACTS.md` §2.5 carries this as a stated rule.
+
+**Cost:** none to the design as built — nothing in this engagement's contract ever proposed parsing
+`entryId`, so this closes a door nobody had opened, not a door in active use. Its value is
+precautionary: a future implementer reading only the type (`entryId: string`) would have no reason to
+know parsing it was ever unsafe, absent this being written down.

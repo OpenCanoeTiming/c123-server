@@ -72,3 +72,32 @@ constraint: on-site, Canoe123 is the sole upstream by fixed topology (`CONSTRAIN
 that is not expected to reverse, so on-site identity is free to be Canoe123-derived in both meaning
 and mechanism. The invariance is scoped to the live contract, where the maintainer's stated future
 actually bears.
+
+## Revision — `ICFId`, not `entryId`, is the field a registry would bind to
+
+This ADR's Decision treats `entryId` as opaque and provenance-neutral, with the implicit picture that
+a future registry would eventually issue *that* field. An exhaustive analysis of Canoe123's `Id`
+composition (`DECISIONS/ADR-001`'s Revision) shows this picture was never quite right: `entryId`,
+derived from `Id`, embeds the class token of the event it was minted in — the same athlete is a
+different `Id` at an event that structures categories differently. It identifies a competitor
+*within one event*, not a person. A future registry, whose entire purpose is identifying a person
+*across* events, could not sensibly bind to it.
+
+**`ICFId` is the field it would bind to** — the maintainer's own scoping, given directly: "as external
+identity, definitely `ICFId` — but that only matters for live and for sending results out." `ICFId` is
+frozen at registration (a crew substitution can leave it disagreeing with who actually raced —
+`CONTRACTS.md` §2.5's own note on this) and, per the same analysis, is absent for 14 of 1,483 real
+entries (forerunners, proxies) with no external identity to have. It is carried on `Entry` alongside
+`entryId`, required on the live ingest contract specifically (`CONTRACTS.md` §8.3), and never derived
+by parsing `entryId` — consistent with `ADR-001`'s revision, not in tension with it.
+
+**This strengthens the invariance argument rather than weakening it.** The original argument was that
+an opaque `entryId` lets a future registry attach without a second contract-shape migration. Naming
+`ICFId` specifically as the seam a registry would actually use makes that concrete rather than
+aspirational: the field to watch for a future binding is not a hypothetical "whichever id `Entry`
+happens to have," it is the one already carried for exactly this purpose, today, for a different
+reason (cross-event reporting). Nothing about `entryId`'s own opacity changes for this to hold.
+
+**Cost:** none — `ICFId` was already going to be carried once the live contract needed cross-event
+identity for its own sake (§8.3); this revision only names it as the same field a registry would
+later use, rather than leaving that connection to be rediscovered.

@@ -100,11 +100,20 @@ apply to a lookup table with no uncertainty in it.
 
 ## 3. Entry
 
-**`entryId`.** On-site: Canoe123's `Id` field (`ICFcode.ClassId`), used directly as the opaque
-contract identifier (`CONTRACTS.md` §1.1's on-site exception). Stable across BR1/BR2 — confirmed
-against a matched pair in the protocol docs; stable across QUA/SEM/FIN — inferred from field
-composition and the analogous Cross elimination chain, not directly confirmed, carried forward from
-round one as a stated residual risk (`CONTRACTS.md` §2.5).
+**`entryId`.** On-site: Canoe123's `Id` field, used directly, verbatim, as the opaque contract
+identifier (`CONTRACTS.md` §1.1's on-site exception) — its exact composition
+(`{ICFId}["."{ICFId2}]"."{ClassId}["."{CatId}]`, with known exceptions) does not matter to this
+derivation, because nothing downstream ever decomposes it (`CONTRACTS.md` §2.5, `DECISIONS/ADR-001`'s
+Revision). Stable across BR1/BR2 — confirmed against a matched pair in the protocol docs; stable
+across QUA/SEM/FIN — inferred from field composition and the analogous Cross elimination chain, not
+directly confirmed, carried forward from round one as a stated residual risk (`CONTRACTS.md` §2.5).
+
+**`icfId`, `icfId2`.** Source: Canoe123's own `ICFId`/`ICFId2` elements, read directly — never the
+embedded numbers inside `Id`, which can disagree with them after a crew substitution the `Id` was
+never updated to reflect (`CONTRACTS.md` §2.5). Envelope: `source: 'tcp'`/`'xml'`, `confidence:
+'authoritative'`. **Failure mode: `unavailable{reason: 'not-applicable'}`, not `not-yet` and not an
+error**, for the genuine no-external-identity case (a forerunner) — confirmed as a real, if
+infrequent, upstream case (14 of 1,483 real entries), not a hypothetical one.
 
 **`bib`, `name`.** Source: `OnCourse.Bib`/`Results.Bib` and the embedded athlete name field on either
 message. Envelope: `source: 'tcp'`, `confidence: 'authoritative'`. Failure mode: `not-yet` before any

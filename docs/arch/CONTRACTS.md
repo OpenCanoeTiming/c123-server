@@ -118,10 +118,12 @@ contract, and a schema that treats every `null` as "absent" would collapse the t
 { "state": "unavailable", "reason": "not-observed-live-and-cis-unavailable" }
 ```
 
-`reason` is a closed set, not free text — a test asserts against these three values, never a
+`reason` is a closed set, not free text — a test asserts against these four values, never a
 message string: `'not-configured'` (the source that would carry this isn't set up for this
 deployment — no CIS licence), `'source-unreachable'` (it's configured but not answering right now),
-`'not-observed-live-and-cis-unavailable'` (the specific run-1-superseded case, §6). A `value` that is
+`'not-observed-live-and-cis-unavailable'` (the specific run-1-superseded case, §6), and
+`'not-applicable'` — the fact does not exist for this entity at all, permanently and by nature, not
+because of a temporary source failure (a forerunner with no ICF registration, §2.5). A `value` that is
 itself a discriminated union (`Outcome`, §2.6) nests its own `kind` field inside `value` exactly as
 declared in TypeScript — no special-casing at the envelope level:
 
@@ -348,12 +350,28 @@ A competitor within a Category — one athlete/boat, persistent across every Pha
 
 ```ts
 type Entry = {
-  entryId: string    // opaque — see §1.1. On-site, derived from Canoe123 Id (ICFcode+ClassId)
+  entryId: string           // opaque — see §1.1. On-site, derived from Canoe123 Id, verbatim, never parsed
   categoryId: string
-  bib: Observed<string>    // [D] — display number; correctable, see §2.6's binding note
-  name: Observed<string>   // [D] — athlete/boat display name, raw, not translated
+  bib: Observed<string>     // [D] — display number; correctable, see §2.6's binding note
+  name: Observed<string>    // [D] — athlete/boat display name, raw, not translated
+  icfId: Observed<string>   // [D]/[N] — external identity; required on the live ingest contract, §8.3
+  icfId2: Observed<string>  // [D]/[N] — a crew's second member; a minimal, additive stand-in, not the full crew-shape answer — see below
 }
 ```
+
+**`entryId` is opaque, full stop — never parsed for class, category, or crew, and this is now a
+stated rule, not an implicit habit.** Checked exhaustively, not sampled: 1,483 real `<Participants>`
+records, every one carrying `ICFId`/`ClassId` to validate an `Id` against, found the field's actual
+composition — `{ICFId}["."{ICFId2}]"."{ClassId, transformed}["."{CatId}]` — holds in 97.3% of cases
+and fails in the rest four separate ways: 14 records have no `ICFId` at all and an `Id` with no
+separator (`FR51`, a forerunner: `ClassId=FR` + `EventBib=51`); 8 have a genuine `.{CatId}` tail,
+making a three-segment `Id` ambiguous three ways (hyphenated class, crew, or category); 6 carry a
+class token disagreeing with the record's own `ClassId`; segment count is not even a reliable
+discriminator, since a doubles `Id` is three-part and a team `Id` is two-part for unrelated reasons
+(patrols use one synthetic `ICFId` and carry their crew in `Member1/2/3` instead). `ClassId`, `CatId`,
+`ICFId`, and `ICFId2` exist as their own elements and are correct in all 1,483 records — `entryId`
+is derived from `Id` for on-site identity exactly as before, but nothing is ever recovered *from* it
+by parsing; every one of those facts is read from its own field.
 
 **Derivability note on `entryId` stability.** Confirmed directly: Canoe123's `Id` field is
 identical for the same competitor's BR1 and BR2 entries (a matched pair was checked). For
@@ -363,7 +381,28 @@ class, with no phase component) makes cross-phase stability the structural defau
 accident. Treated as **[D]** for BR1/BR2 and Cross elimination, **[A]** — inferred, not directly
 observed — for QUA/SEM/FIN. Flagged as a residual risk, not a blocker: even if wrong, the failure
 mode is a spurious new `Entry` rather than silent data corruption, and is visible (a competitor
-would appear to have zero prior-phase attempts).
+would appear to have zero prior-phase attempts). **`entryId`'s stability is scoped to one event,
+never across events** — the class token embedded in `Id` means the same athlete is a different `Id`
+at an event that structures categories differently (`11078.C1W` where classes are plain, `11078.C1W.ZS`
+where the same class is split by category). `entryId` identifies a competitor *within this event*,
+never a person — which is exactly why `icfId`, not `entryId`, is what the live contract carries for
+cross-event identity (`§8.3`, `DECISIONS/ADR-006`).
+
+**`icfId`/`icfId2`, precisely.** Source: Canoe123's own `ICFId`/`ICFId2` elements, read directly,
+never derived from `Id`. `ICFId` is frozen at registration and can disagree with who is actually
+racing — 12 records in the same corpus carry a crew substitution the `Id` was never updated to
+reflect, while the record's own `ICFId2` is current; **for external identity, the record's own
+field is authoritative, never the embedded number inside `Id`.** Envelope: `source: 'tcp'` or `'xml'`
+per the usual rules, `confidence: 'authoritative'`. **Failure mode: `unavailable{reason:
+'not-applicable'}`, not an error and not `not-yet`**, for the 14-in-1,483 case with no `ICFId` at all
+— forerunners, proxies, course-openers. Decided here rather than left to whoever implements the
+ingest contract first: such an entry is **accepted**, not rejected, and is representable with an
+event-scoped identity only (`entryId`, exactly as any other `Entry`) — refusing to carry a forerunner
+at all would make a real, already-existing category of participant unrepresentable on the live tier
+for no gain, and a permanently-absent external identity is an honest fact this contract already has a
+state for, not a reason to reject the push. `icfId2` is a minimal, additive field for a two-person
+crew's second member — **it is not the full answer to whether `Entry` should represent one person or
+1–N**, which is a separate, structural question, deliberately deferred to its own piece of work.
 
 ### 2.6 Attempt
 
@@ -1038,7 +1077,7 @@ names the field). Auth/rate-limit errors per §8.1.
 |---|---|---|
 | `PUT /ingest/v2/categories/{categoryId}` | `{ "code": string, "discipline": "slalom"\|"cross" }` | — |
 | `PUT /ingest/v2/phases/{phaseId}` | `{ "categoryId": string, "date": "YYYY-MM-DD", "status": PhaseStatus, "multiRun": boolean, "scoringKind": "duration"\|"ordinal" }` | **No `roundKind`** — see below |
-| `PUT /ingest/v2/entries/{entryId}` | `{ "categoryId": string, "bib": string, "name": string }` | — |
+| `PUT /ingest/v2/entries/{entryId}` | `{ "categoryId": string, "bib": string, "name": string, "icfId": string \| null, "icfId2"?: string }` | **`icfId` required in the body — `null` when genuinely absent, never omitted** |
 | `PUT /ingest/v2/attempts/{phaseId}/{bib}` | any non-empty subset of `{ entry, status, outcome, gates, upstreamRank }`, each `Observed`-wrapped per §1.2 | **Partial by design** |
 
 **No `roundKind` on `Phase`.** The live contract carries only the structural flags a renderer needs
@@ -1054,6 +1093,19 @@ author reading only this table could otherwise assume `PUT` means "replace." Sen
 alone updates only `gates`; `status`, `outcome`, `entry`, `upstreamRank` keep whatever the store
 already had for this Attempt. **Every completed Attempt's `gates` must eventually be pushed** — this
 is the direct fix for `EVIDENCE.md` Exhibit 9's dead ingest branch, not optional detail.
+
+**`icfId` is a required key with an allowed `null`, not an optional one — deliberately, and unlike
+every other optional field in this contract.** `CONTRACTS.md` §1.2's omission rule (absent means "not
+applicable," used throughout the `Observed` envelope) is right for a field that is usually present
+and occasionally isn't. `icfId` is the opposite: its absence is rare (14 in 1,483 real entries) and,
+when it happens, is exactly the fact a bridge author must not be allowed to elide by silence — an
+omitted key here could mean "I don't have this yet" or "there genuinely is none," and only the second
+is true for a forerunner. Requiring the key, with `null` as its explicit value for that case, forces
+the distinction the omission convention would otherwise blur. Such an entry is **accepted, not
+rejected** — refusing to carry a forerunner at all would make a real, already-existing category of
+participant unrepresentable on the live tier, for no gain (§2.5). `icfId2`, by contrast, stays
+genuinely optional: for the overwhelming majority of entries (single-person boats), it is not a
+notable absence worth marking, only the ordinary case.
 
 **A `Phase` may reference a `categoryId` that hasn't been pushed yet, and vice versa is not required
 either.** The store creates a minimal stub (just the id) on first reference and fills it in whenever

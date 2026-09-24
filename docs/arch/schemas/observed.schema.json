@@ -49,8 +49,8 @@
       "description": "operator-write and operator-assertion sit outside the §4 ranking table (INV-2's carve-out) — see CONTRACTS.md §4 for how they are presented."
     },
     "unavailableReason": {
-      "enum": ["not-configured", "source-unreachable", "not-observed-live-and-cis-unavailable"],
-      "description": "Closed vocabulary. Never free text — CONTRACTS.md §1.2/§1.4."
+      "enum": ["not-configured", "source-unreachable", "not-observed-live-and-cis-unavailable", "not-applicable"],
+      "description": "Closed vocabulary. Never free text — CONTRACTS.md §1.2/§1.4. 'not-applicable' is distinct in kind from the other three: the fact does not exist for this entity at all, permanently, not a temporary source failure (e.g. a forerunner's ICFId, CONTRACTS.md §2.5)."
     }
   }
 }
