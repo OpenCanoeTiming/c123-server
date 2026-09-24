@@ -11,20 +11,27 @@ that isn't has been cut.
 
 ```
 Organiser (cloud tenant only)
-  └─ Event (bridge- or, later, registry-assigned; stable across days)
-       └─ Category (Canoe123 Class; carries `discipline`)
-            └─ Phase (one Canoe123 RaceId; carries `date`, `roundKind`, `status`)
-                 └─ Attempt (keyed by phaseId + bib — not entryId, see below)
+  └─ Event (bridge- or, later, registry-assigned; stable across days and file layouts)
+       ├─ Course (layout string; referenced by Phases)
+       └─ Class (Canoe123 class, e.g. K1M; carries `discipline` and its age categories)
+            ├─ Entry (one athlete, crew or team; 1..N members; keyed by Canoe123's `Id`, opaque)
+            └─ Phase (one Canoe123 race: a run, a round or a classification; open `format`)
+                 └─ Attempt (keyed by phaseId + this race's bib; carries a run generation)
                       ├─ entry: Observed<{entryId}>   — a mutable pointer, not a fixed key
-                      ├─ status, outcome, gates        — all Observed<T>
-Entry (one competitor within a Category, keyed by Canoe123's `Id`)
-Standing (derived per Category, never stored as primary state)
+                      ├─ status, outcome, gates, placement, … — all Observed<T>
+Standing (assembled per scope and age category from relayed placement; never ranked by us)
 ```
+
+**Consolidated revision, 2026-09-24** (`DECISIONS/ADR-011` to `ADR-014`):
+- `Category` is renamed `Class`. "Category" now means an age category.
+- CIS is no longer consumed.
+- Standings relay Canoe123's own order.
+- A re-run is a new run generation inside the same Attempt.
 
 Two deliberate departures from what Canoe123's own vocabulary suggests:
 
 **"Race" does not survive as a single entity.** Today it conflates what this model splits into
-`Category` (K1M) and `Phase` (K1M's second run) — `EVIDENCE.md` Exhibit 8 is every client
+`Class` (K1M) and `Phase` (K1M's second run) — `EVIDENCE.md` Exhibit 8 is every client
 re-deriving that split from a `RaceId` string by regex. Splitting it once, centrally, is most of
 what makes `CONTRACTS.md` §7's zero-interpretation clients possible.
 
@@ -41,7 +48,7 @@ rebind; keying on `bib` makes it an ordinary field update.
 ## 2. Where interpretation lives, and the line that decides what doesn't
 
 **All of it lives in `c123-server`'s domain layer** — the only component that ever sees every
-upstream interface (TCP, UDP, XML, CIS). Every other deployable renders what the domain layer
+upstream interface it uses (the TCP push and the XML snapshot). Every other deployable renders what the domain layer
 asserts. This resolves `CONSTRAINTS.md` §2.1 in favour of the stated working hypothesis, for a
 reason stronger than convenience: `EVIDENCE.md`'s ten exhibits are ten instances of the same
 component (a client, or one of two egress paths) needing an answer and having nowhere to look it
@@ -93,9 +100,9 @@ to recompute when a fixture step lands.
 
 **Federation-specific matter is separable by construction, not by policy.** Ranking-point schemes,
 age-class coding, and "what counts official" differ by federation (`CONSTRAINTS.md` §1.8). This
-design never computes any of them: `Standing.rank` is mechanical arithmetic over `Attempt.outcome`
-values plus a narrow, stated exception for relaying an upstream tie-break assertion (`CONTRACTS.md`
-§5) — never an invented competition rule. `Phase.status`'s `official` value is Canoe123's own
+design never computes any of them. `Standing` relays Canoe123's own order and rank, and assembles
+age-category standings by filtering that order (`CONTRACTS.md` §5, `DECISIONS/ADR-012`). Tie-breaks,
+result-mark ranking and Kayak Cross fault ranking are all upstream's; no tier invents one. `Phase.status`'s `official` value is Canoe123's own
 judgement, relayed, not decided by us. There is nothing here to make pluggable for a second
 federation, because nothing here encodes a federation's rules in the first place. **The same
 principle turned out to apply to identity, not only to rules:** an organiser fills Canoe123's `ICFId`
@@ -110,10 +117,10 @@ always mean one particular registry (`CONTRACTS.md` §2.5, `DECISIONS/ADR-006` R
 
 | Component | Owns | Does not own |
 |---|---|---|
-| **c123-server** | The domain layer entirely: ingest across TCP/UDP/XML/CIS, the merge invariants (`CONTRACTS.md` §4), `Standing` computation, write routing and confirmation tracking, translation into both the on-site and live-ingest contracts. | Any rendering decision. |
+| **c123-server** | The domain layer entirely: ingest from the TCP push and the XML snapshot (UDP for discovery only; CIS not consumed, `DECISIONS/ADR-011`), the merge invariants (`CONTRACTS.md` §4), `Standing` assembly, write routing and confirmation tracking, translation into both the on-site and live-ingest contracts. | Any rendering decision. |
 | **c123-scoreboard** | Display-lifetime policy, layout, locale, visual emphasis — rendering the on-site contract (§7). | Finish detection, gate parsing, merge, precedence — all retired from its `providers/utils/` layer by having nothing left to decide there. |
-| **c123-penalty-check** | Write initiation (including against closed Phases, `CONTRACTS.md` §2.9), its own workflow-tracking state ("has a judge visually compared this gate against the paper protocol") — kept, but now keyed on the domain's own `(phaseId, bib)` rather than a fourth incompatible fingerprint (`EVIDENCE.md` Exhibit 7's third entrant). | Gate parsing — retires its second, incompatible parser entirely. |
-| **live-mini-server** | A tenant-scoped store of exactly what the ingest contract asserts (`CONTRACTS.md` §8), applying the *same* merge invariants as c123-server (§4 is not on-site-specific), durability across on-site disconnection, tenant isolation, the public calendar (§8.4), accepting direct organiser corrections independent of the bridge being online (§8.5). | Ranking, lifecycle status, or any other recomputation — retires `EventLifecycleService`'s independent judgement and the two-parser XML re-ingestion of `EVIDENCE.md` Exhibit 9. |
+| **c123-penalty-check** | Write initiation (including against closed Phases, `CONTRACTS.md` §2.9), its own workflow-tracking state ("has a judge visually compared this gate against the paper protocol") — kept, but now keyed on the domain's own `(phaseId, bib)` plus run generation rather than a fourth incompatible fingerprint (`EVIDENCE.md` Exhibit 7's third entrant). | Gate parsing — retires its second, incompatible parser entirely. |
+| **live-mini-server** | A tenant-scoped store of exactly what the ingest contract asserts (`CONTRACTS.md` §8), applying the *same* merge invariants and the *same* standing assembly as c123-server (§4 and §5 are not on-site-specific), durability across on-site disconnection, tenant isolation, the public calendar (§8.4), accepting direct organiser corrections independent of the bridge being online (§8.5). | Ranking, lifecycle status, or any other recomputation — retires `EventLifecycleService`'s independent judgement and the two-parser XML re-ingestion of `EVIDENCE.md` Exhibit 9. |
 | **live-mini-client** | Spectator-facing layout and locale, its own (likely lighter) display-lifetime policy. | Everything a client never owned. |
 
 ---
@@ -121,11 +128,11 @@ always mean one particular registry (`CONTRACTS.md` §2.5, `DECISIONS/ADR-006` R
 ## 4. Data flow
 
 ```
-Canoe123 — TCP push, UDP push, XML file, CIS poll
+Canoe123 — TCP push, XML snapshot file   (UDP: discovery only; CIS: not consumed)
         │  observedAt captured here, at the ingest boundary — never at outbound serialisation
         ▼
 c123-server domain layer
-   merge invariants (§4) → Observed<> state → Standing computation
+   merge invariants (§4) → Observed<> state → Standing assembly (§5)
         │                                            │
         │ on-site contract, §7                        │ live-ingest contract, §8
         │ (Canoe123-native tokens)                    │ (vendor-neutral, Attempt-level push)
@@ -156,157 +163,143 @@ place doing the arithmetic, because there is no second domain layer to do it in.
 | A shared types/schema package underlying every DTO and the ingest schema | Exhibit 4 (a dead ingest path reporting healthy), Exhibit 5 (`null` silently collapsed at the boundary), Exhibit 9 (fields sent, ignored, recomputed) |
 | One finish-detection strategy per discipline, exported *and* actually used | Exhibit 6 — the tested definition was dead code; a second, inline one ran instead |
 | `Phase`/`Attempt` identity assigned once, centrally, and reused everywhere including workflow-tracking state | Exhibit 7 — three incompatible fingerprints for "is this the same event," one of them a 50%-fuzzy match |
-| `Category`/`Phase`/round identity derived once, structurally, never re-parsed from a string per client | Exhibit 8 — identity derived by regex, with presentation language leaking into the derivation |
+| `Class`/`Phase`/format identity derived once, structurally, never re-parsed from a string per client | Exhibit 8 — identity derived by regex, with presentation language leaking into the derivation |
 | Closed, language-free status and outcome vocabularies asserted by the domain layer | Exhibit 10 — five domain rulings, one of them duplicated, inside a file whose job was display reshaping |
 
 ---
 
 ## 6. Scenarios
 
-### A — The late rotation
+Rewritten in the consolidated revision. The timings are measured, from recordings of four events and
+1,533 finishes (`DECISIONS/ADR-011`).
 
-Run 2 beats run 1. The domain layer does not wait for Canoe123's `Total`/`Pen` fields to say so —
-it computes `totalSeconds` itself from OnCourse's own `Time` and per-gate penalties, because that
-arithmetic is ours to do and needs no upstream confirmation. **Not as a single computation at the
-instant `dtFinish` transitions** — `DERIVATIONS.md` §4.3 corrects that: real recordings show gate
-judging can still be catching up for several seconds after `dtFinish` fires, sometimes changing the
-total materially. The computation is ongoing, recomputed on each subsequent OnCourse message for the
-same Attempt, until the gate count is complete or `Results`/CIS supersedes it.
+### A — The finish, in a best-of-two race
 
-- **t+1s:** `Attempt.outcome` set — `confidence: inferred`, `provisional: true` (TCP Results'
-  independently-sourced `Total`/`Pen`, or CIS, haven't corroborated yet, and the mechanical total may
-  still be revised by a trailing gate judgement, per `DERIVATIONS.md` §4.3). `Standing` recomputes
-  immediately: this Entry's best total now beats their run 1 (retained in domain state by monotonic
-  knowledge — see Scenario C for what backs it), so rank changes. `attempt.updated` and
-  `standing.updated` push on-site and, in the same step, translate into the live-ingest push — not a
-  second computation.
-- **t+10s:** if CIS is configured, its poll has likely already corroborated: `confidence` flips to
-  `authoritative`, `provisional` to `false`, value unchanged in the ordinary case.
-- **t+30s:** TCP `Results` rotates round regardless of CIS. While CIS is configured and has already
-  reported, `cis` outranks `tcp` for this field-category (`CONTRACTS.md` §4 INV-2), so this message
-  updates `tcp`'s own retained slot only — the presented value is unchanged whether the rotation
-  agrees or not, and never oscillates on the rotation period. If it disagrees, that disagreement is
-  surfaced as a diagnostic and triggers a fresh, targeted CIS read for this bib rather than being
-  adopted from TCP directly or silently discarded (§4 INV-2b). Without CIS configured, `tcp` is the
-  top-ranked available source throughout, so the rotation's own value *is* what's presented — still
-  never a regression, since it is that same source correcting itself, not a lower-ranked source
-  overriding a better one.
-- **The scoreboard at t+1s already shows the correct leader**, not Canoe123's own stale value; the
-  30-second rotation window this scenario is built to expose never produces a visible wrong answer,
-  only a `provisional` flag a client may or may not choose to render.
-- **The spectator sees the same thing**, on the same trigger (the Attempt changing), typically a
-  second or two later than on-site for the network hop — not a different value produced by a
-  different reconciliation path. If the cloud link is down, the spectator sees the last value,
-  ageing, until reconnection replays the backlog — safely, because every push is an idempotent
-  upsert (§4 INV-5).
+Run 2 of bib 9 beats their run 1. The event runs Canoe123 with "ranking with incomplete penalties"
+switched on.
+
+- **t+0.0 s: the finish.** The on-course stream's finish time appears. `status → finished`,
+  authoritative. The domain layer computes an inferred `duration` from the on-course time and the gates
+  judged so far: `provisional: true`, `confidence: inferred`. It pushes that on both tiers. It does
+  **not** compute a rank.
+- **t+0.3 s: the result push.** Canoe123 recalculates the race and pushes it immediately
+  (`Current="Y"`, median 0.14–0.41 s). This is a results-table observation, so it supersedes the
+  inference (`CONTRACTS.md` §4 INV-2, rule 1). The Attempt now carries:
+  - its own run-2 figures;
+  - `pairTotal`, the combined better-run total;
+  - `placement`, the combined rank, already tie-broken upstream.
+
+  If a gate is still blank, all of it stays `provisional: true`. `Standing` re-assembles: the class
+  standing, and the athlete's age-category standing assembled from it at the same moment.
+- **t+2 s: the last gate is judged.** Upstream recalculates and pushes again. The values settle to
+  `provisional: false`, and the rank may move: at one event, 18% of first ranks in run 1 did. If the
+  event runs with that setting **off**, the first push waits for the last gate and arrives already
+  `provisional: false`. Both cases are marked honestly.
+- **t+~35 s: the snapshot rewrite.** The XML snapshot is rewritten with the same row. TCP has stayed
+  connected, so its observation stays presented (INV-2, rule 2). The snapshot's own age-category rank
+  arrives here, and is used only to check the assembled one.
+- **The rotation** comes round to this race only minutes later. It changes nothing.
+- **What people see.** The scoreboard shows result and rank within about half a second of the finish,
+  with a provisional mark while judging is still in flight. The spectator sees the same values a
+  network hop later. Run 1's Attempt is never touched by any of this.
 
 ### B — The write echo
 
 A judge corrects a gate penalty on the tablet.
 
-- The domain layer creates a `WriteRequest { status: 'pending' }` and, in the same step, optimistically
-  updates `Attempt.gates` — `source: 'operator-write'`, `confidence: authoritative` (a human just
-  asserted it), `provisional: true`. Every on-site client, not only penalty-check, sees the corrected
-  value within the same push cycle as any other Attempt update — there is no separate "my own write"
-  channel.
-- The write is issued upstream via Canoe123's `PenaltyCorrection` command, which — unlike `Scoring` —
-  carries an explicit `RaceId` and is documented for post-completion use, which is what makes writing
-  against a closed Phase (the maintainer's requirement, `CONTRACTS.md` §2.9) possible without CIS.
-- **When the echo arrives:** if it matches, `WriteRequest.status → 'confirmed'`, and the same
-  `Attempt.gates` field gets a newer `known` observation, now `source: 'tcp'`, `provisional: false`.
-  If it differs, `WriteRequest.status → 'mismatched'` **and** `Attempt.gates` updates to what the
-  echo actually says — the domain layer never keeps asserting what was requested once the record of
-  truth says otherwise, but the mismatch itself is never swallowed; both facts are visible.
-- **If the echo never arrives:** per the maintainer, this is not engineered as a timeout. `pending`
-  persists indefinitely; every client can compute "pending for how long" from `submittedAt` and
-  render that as it sees fit, but the contract asserts no threshold at which pending becomes failure.
-  Resolution is operator-facing, outside this contract's scope by design.
+- **The request.** The domain layer creates a `WriteRequest { status: 'pending' }` targeting the
+  current run generation. In the same step it optimistically updates `Attempt.gates`:
+  `source: 'operator-write'`, `provisional: true`. Every on-site client sees the correction in the same
+  push cycle.
+- **The command.** The write is issued through Canoe123's correction command, which carries an explicit
+  race id, so a closed Phase is writable.
+- **The echo.** Upstream recalculates and pushes the race immediately, and that push is the echo.
+  - If it matches, the status is `confirmed`.
+  - If it differs, the status is `mismatched`, and `gates` shows what upstream actually holds.
+  - If a re-run starts first, the status is `superseded`.
+- **No echo** is not engineered as a timeout (`DECISIONS/ADR-010`).
 
-### C — The unlicensed venue
+### C — The venue without CIS, and the cold restart
 
-CIS is not configured; a two-run race is running; run 2 beats run 1. **Nothing is missing, in the
-ordinary case or the restart case — corrected here after a real two-day event showed the original
-version of this scenario was wrong about which one needed CIS.**
+This is now simply how every venue runs: CIS is not consumed (`DECISIONS/ADR-011`).
 
-If this server session has been running continuously since run 1, the full run-1 `Attempt`, gates
-included, was captured in domain state while it was live, and monotonic knowledge (§4 INV-1) means it
-does not vanish because run 2's wire message doesn't repeat it. If instead this server instance was
-started fresh between run 1 and run 2 — genuinely never having observed run 1 live — the XML snapshot
-recovers it anyway: Canoe123's own export keeps run 1's `<Results>` row, frozen from the moment it
-finished, independently of anything our server did or didn't see, and run 2's own row separately
-states which run won and summarises the other (`CONTRACTS.md` §4/§6, `DERIVATIONS.md` §4.5). `Standing`
-computes identically in every case, because the comparison is mechanical arithmetic regardless of
-which source supplied the inputs.
+- **A server started cold at any point of the day** reads the XML snapshot once. From it, it recovers
+  every race's rows:
+  - run 1's frozen row, and run 2's summary of run 1;
+  - placements, age categories, members and course layouts.
 
-**What this scenario's earlier version got wrong:** it credited CIS with "robustness to a restart" —
-the one thing left needing a licence, in a design otherwise built not to depend on one. Checked
-against a real weekend where CIS was unreachable throughout (61,000 polls, every response empty) and
-a cold-started analysis still recovered complete two-run detail for every finisher from the XML
-snapshot alone, that credit belongs to the snapshot, not to CIS. What CIS actually buys, once XML
-already supplies completeness, is on-demand immediacy — an answer *now* rather than waited on for the
-snapshot's own ~35 s rewrite cycle — which matters for latency-sensitive cases, not for whether this
-scenario's numbers are ever wrong (`DECISIONS/ADR-004`'s Revision).
-
-**How anyone finds out there's a gap at all, in the one case that remains genuinely unrecoverable —
-neither this server nor any prior instance ever observed run 1 live, *and* the XML path is itself
-unavailable (misconfigured, or the file unreadable):** the operator sees `SourceStatus` reflect it in
-the admin UI at any time, informational, not an alert; a client encountering the resulting
-`unavailable` value renders its ordinary "not known" treatment — the same one it would use for any
-not-yet-known fact — because nothing about this narrower case is structurally different from any
-other absent value. There is no spectator-facing "results may be incomplete" banner, deliberately:
-the maintainer was explicit that staleness should be borne quietly, never nagged about.
+  On a real event, a cold start in the afternoon recovered 397 first runs and 384 second runs complete.
+- **TCP then carries every change from that moment on**, immediately.
+- **If the XML path is not configured or not readable**, `SourceStatus` shows it in the admin UI.
+  Values only the snapshot carries are `unavailable{reason}`: age categories, members, and run 1 after
+  a restart that happened mid-race. There is never a spectator-facing banner.
 
 ### D — The heat
 
-Four Kayak Cross competitors on course at once, one Phase, no `dtStart`/`dtFinish`.
+Four Kayak Cross competitors on course at once, one heat of one Phase.
 
-- `GET /api/oncourse` returns all four `Attempt`s under the same `phaseId` — plural by construction
-  (`CONTRACTS.md` §7), never a singleton "current competitor." This is what admits Cross without a
-  structural change: the model never assumed one active Attempt per Phase in the first place.
-- **Nothing detects an individual finish**, because nothing upstream signals one — checked directly
-  against a recorded heat: `chStart`, `chFinish`, `Completed` never transition per-competitor for
-  Cross, and OnCourse clears for the whole heat together, well after the fact. The authoritative
-  signal is the `Results` stream's `Rank`/`Time` field for a bib becoming non-empty — and per the
-  maintainer, **this is not a detection at all**: it is the operator's own assertion, entered after
-  conferring with the finish judge, at human pace, possibly one bib at a time rather than all four
-  together.
-- Each bib's `outcome: { kind: 'ordinal', order }` arrives as its own ordinary Attempt update —
-  `source: 'operator-assertion'`, `confidence: authoritative` — the instant it's ingested, no
-  batching. `Standing` for the heat is legitimately partial while some bibs are still `not-yet`; this
-  is monotonic knowledge doing exactly its job, not a bug to paper over.
-- **What bends:** the finish-detection *mechanism* — a different source, a different latency
-  profile, human-paced rather than sub-second. **What does not bend:** the entity model. `Phase`,
-  `Attempt`, `Category.discipline`, `Outcome`'s `ordinal` variant were all already generic enough;
-  Cross exercises values these structures already admitted, not new ones.
-- **The "before the next heat starts" deadline is split cleanly by the fact/presentation line
-  (§2):** the server's obligation is to push the operator's assertion the instant it is ingested,
-  with no artificial delay — that is a fact-timeliness guarantee, unconditional. How long the
-  scoreboard keeps the just-finished heat's result on screen once the next heat's on-course view is
-  already live is display-lifetime policy, owned by the scoreboard, the same category of decision as
-  today's grace-period constants.
+- **`GET /api/oncourse`** returns all four, ordered by `courseOrder`, upstream's on-course position.
+  This is the ordering that `ADR-009`'s plurality lacked (`DECISIONS/ADR-009` addendum).
+- **Nothing detects an individual finish.** The heat leaves the on-course list together, and the four
+  Attempts stay `on-course`.
+- **The operator enters the heat order** after conferring with the finish judge. It arrives in the
+  immediate result push, as each bib's `placement`, and upstream's placement is the order:
+  - athletes with faults are placed after clean finishers, whatever their finish order;
+  - in the final, the B-final ranks from 5.
 
-### E — The multi-day event
+  `outcome` is `ordinal`, with the order within the heat. `faults` carries fault count, faulted gates
+  and last clean gate.
+- **Standing.** The heat Standing and the Phase Standing, which orders by heat then order, both
+  re-assemble. Later, the `XER` classification Phase feeds the event's final classification. It has no
+  Attempts.
+- **The deadline** ("before the next heat starts") splits cleanly:
+  - pushing the order the instant it is ingested is the server's job;
+  - how long the finished heat stays prominent is the scoreboard's display policy (§2).
 
-Saturday: the operator starts c123-server for the first time this weekend. `AppSettings` (the
-existing persisted-settings mechanism, `c123-server/CLAUDE.md`) gets a new `eventId`, "Jarní pohár
-2026." Each Phase that runs gets `date: 2026-09-19`, fixed at first observation (`CONTRACTS.md`
-§2.4). Attempt-level pushes go to live-mini under this `eventId` throughout the day.
+### E — The multi-day event, in either file layout
 
-Saturday evening, the laptop is closed. Sunday morning, the operator reopens it, pointed — as is
-normal Canoe123 operating practice — at a fresh export for Sunday's races. **`AppSettings` still
-holds Saturday's `eventId`; nothing about this requires operator action.** The technical layer that
-notices "this looks like a different underlying Canoe123 session" (the successor to today's three
-fingerprints, `EVIDENCE.md` Exhibit 7 — kept, but narrowed to exactly this operational question, and
-separated from event identity, which it was never actually deciding) fires purely as an operational
-signal; it does not reset `eventId`. Sunday's Phases get `date: 2026-09-20` under the same event.
+Saturday: the operator starts c123-server. `AppSettings` mints an `eventId` for the weekend. Each Phase
+gets its own `date` at first observation. Pushes go to live-mini under that `eventId`.
 
-**The spectator sees one calendar entry**, opened to show Saturday's now-final results and Sunday's
-live results grouped by date — never two separate events on the shared cloud service, which is
-today's actual complaint (`BRIEF.md` §5.7). **The operator does nothing** for this, the ordinary
-case. Starting a genuinely different competition on the same laptop later is the one case that needs
-a deliberate action — an explicit "start new event" in the admin UI — kept rare and explicit rather
-than inferred from data, because inferring it from data is exactly the fragile 50%-overlap heuristic
-`EVIDENCE.md` Exhibit 7 already shows failing.
+- **One file for the whole weekend** (seen in every multi-day recording). Saturday's snapshot already
+  holds Sunday's races and start lists. Sunday's Phases simply have Sunday's date. The operator does
+  nothing.
+- **One file per race day** (the maintainer's own preference). On Sunday the operator points Canoe123
+  at a new file. The upstream event id in the snapshot changes, and the operational continuity check
+  notices. That check is the successor to `EVIDENCE.md` Exhibit 7's fingerprints. It uses that id as
+  an input, never as identity, and it **does not reset `eventId`**. Sunday's Phases get Sunday's date
+  under the same event. The operator does nothing.
+- **Either way, the spectator sees one calendar entry**, with results grouped by Phase date.
+- **Starting a genuinely different competition** on the same laptop needs one deliberate action in the
+  admin UI. That is never inferred from data.
+- **Nothing assumes either layout.** Day grouping comes only from Phase dates, never from the event's
+  own date range, which is operator-entered and was a day off at one recorded event.
+
+### F — The re-run
+
+An athlete is obstructed, and the jury grants a re-run.
+
+- **The trigger.** The operator puts the bib back on course in a race where it already has a result.
+  Upstream shows its "overwriting results" warning, and a new start follows.
+- **The domain layer starts run generation 2** (`DECISIONS/ADR-013`). In one push, `run` becomes 2, and
+  `outcome`, `gates`, `placement`, `pairTotal`, `underReview` and `faults` become `not-yet`. `status`
+  becomes `on-course`.
+- **What people see.** The scoreboard and live results show the athlete as if that run had not
+  happened yet (maintainer answer Q2). The old result is not shown. The athlete drops out of the
+  placed part of the standing until the re-run's own result push places them again.
+- **Writes and checks.** A pending penalty write against run 1 resolves to `superseded`. Judges' checks
+  of run 1's gates do not carry over.
+
+### G — A result under review
+
+The operator marks a result as under review, shown as an asterisk on upstream's own output.
+
+- **The push.** Upstream pushes the race, and `underReview` becomes `true` on the Attempt and on every
+  Standing entry for it. Scoreboard and live results show the mark (maintainer answer Q7).
+- **Independence from `provisional`.** `underReview` means an official is holding the result.
+  `provisional` means judging may still move it. They are independent, and a client shows each as it
+  chooses.
+- **Clearing.** When the operator clears the mark, the next push sets `underReview: false`.
 
 ---
 
@@ -336,3 +329,9 @@ the public live tier, but cannot reuse `c123-scoreboard` or `c123-penalty-check`
 a contract intentionally shaped around what Canoe123 emits. That is judged the right trade for a
 topology fixed to one on-site vendor (`CONSTRAINTS.md` §1.1) — but it is a trade, stated, not an
 oversight.
+
+**Also out of scope, stated rather than left silent:**
+- **Automatic failover to a backup Canoe123 instance.** Switching is the timekeeper's manual work: the
+  server is re-pointed by hand (maintainer answer Q8). `SourceStatus.tcp.upstreamInstance` shows which
+  instance is live, and nothing acts on it.
+- **CIS.** It is not consumed at all (`DECISIONS/ADR-011`).
