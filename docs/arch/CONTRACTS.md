@@ -907,7 +907,10 @@ implementation must satisfy, not an algorithm.
        held never displaces an assertion (INV-5).
 - **INV-2b (disagreement is surfaced, never silently adopted).** A retained, non-presented observation
   can disagree with the presented one after both have settled. Such a disagreement is surfaced as an
-  admin diagnostic, like `SourceStatus`. It never changes the presented value by itself. There is no
+  admin diagnostic,
+  `{ kind: 'source-disagreement'; attemptId: string; field: string; sources: SourceTag[] }`, served by
+  `GET /api/diagnostics` (§7.1), the same audience as `SourceStatus`. It never changes the presented
+  value by itself. There is no
   re-query: no on-demand source remains (`DECISIONS/ADR-011`), and neither remaining source can hold
   a correction back.
 - **INV-2c (an older event does not displace a newer one).** Where the presented value and a candidate
@@ -959,8 +962,10 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
      and upstream pushes it as soon as the *first* run changes. `result` is the second run's own
      outcome, and `pairTotalSeconds` is `pairTotal`.
    - A `classification` takes its rows from the classification Phase's rows (`DERIVATIONS.md` §4.10).
-3. **Unplaced entries** are listed after all placed ones, with `rank: null`, `order: null`, ordered by
-   `status` then `bib`, for a deterministic list position only.
+3. **Unplaced entries** are listed after all placed ones, with `rank: null`, `order: null`. They are
+   ordered by `status`, in the declaration order of `AttemptStatus` (§2.6), then by `bib`, compared
+   numerically where both bibs are integers and as strings otherwise. This order is deterministic and
+   carries no ranking meaning.
    - There is **no server-computed display rank**. Upstream places a finisher a median 0.14–0.41 s
      after the finish impulse (`DECISIONS/ADR-011`). A computed rank shown for half a second, then
      replaced wherever it differs, would be flicker.
@@ -1046,6 +1051,7 @@ Every response except `/api/sources` carries `asOfSeq: number` (§1.6) at the to
 | `GET /api/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`: every scope of §5, for the whole class and per age category | `404 class-not-found` |
 | `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[] }`: every Attempt currently on upstream's on-course list with status `at-start` or `on-course`, across every running Phase. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid | — |
 | `GET /api/sources` | `SourceStatus`, unwrapped | — |
+| `GET /api/diagnostics` | `{ asOfSeq, diagnostics: Diagnostic[] }`: current INV-2b source disagreements. Admin audience only | — |
 
 Membership of the on-course list is tracked from the on-course stream.
 - An Attempt leaves the list when:

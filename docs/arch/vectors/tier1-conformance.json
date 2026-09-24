@@ -1,574 +1,2555 @@
 {
-  "$schemaNote": "Format defined in CONFORMANCE-VECTORS.md. Each vector's `given` is an ordered list of synthetic observations fed to the merge function in `ingestSeq` order; `expect` (or `expectSequence`, for vectors that assert an intermediate state) is the presented envelope a correct implementation must produce. Data only — no runtime logic, per ADR-002/ADR-003 and TEST-ARCHITECTURE.md SS3.1.",
+  "$schemaNote": "Format defined in CONFORMANCE-VECTORS.md. Merge vectors: each `given` is an ordered list of synthetic observations (source, kind, run generation, judging/closure flags as DERIVATIONS.md would resolve them) and connection events, fed to the merge function in `ingestSeq` order; `expect` (or `expectSequence` + `then`) is the presented state a correct implementation must produce. Standing vectors: `given.entries` are resolved Attempt facts; `expect` is the assembled Standing (CONTRACTS.md SS5). Data only, no runtime logic (ADR-002/ADR-003, TEST-ARCHITECTURE.md SS3.1).",
   "vectors": [
-
-    { "id": "inv1-untouched-field-not-regressed",
+    {
+      "id": "inv1-untouched-field-not-regressed",
       "invariant": "INV-1",
       "description": "A field with no new observation in a later message is untouched, not regressed to not-yet.",
-      "context": { "cisConfigured": true },
       "given": [
-        { "ingestSeq": 1, "field": "status", "source": "tcp", "observedAt": "2026-09-15T10:14:02.083Z",
-          "eventTime": "2026-09-15T10:14:02.079Z", "value": "finished", "confidence": "authoritative" },
-        { "ingestSeq": 2, "field": "upstreamRank", "source": "tcp", "observedAt": "2026-09-15T10:14:05.000Z",
-          "value": 3, "confidence": "authoritative" }
+        {
+          "ingestSeq": 1,
+          "field": "status",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:02.083Z",
+          "value": "finished",
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:14:02.079Z"
+        },
+        {
+          "ingestSeq": 2,
+          "field": "placement",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:02.400Z",
+          "value": {
+            "rank": 3,
+            "order": 3
+          },
+          "confidence": "authoritative"
+        }
       ],
       "expect": {
-        "status": { "state": "known", "value": "finished", "source": "tcp", "confidence": "authoritative",
-                     "eventTime": "2026-09-15T10:14:02.079Z", "provisional": false },
-        "note": "status is unaffected by the unrelated upstreamRank observation at ingestSeq 2." }
+        "status": {
+          "state": "known",
+          "value": "finished",
+          "source": "tcp",
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:14:02.079Z",
+          "provisional": false
+        },
+        "note": "status is unaffected by the unrelated placement observation at ingestSeq 2."
+      }
     },
-
-    { "id": "inv1-unavailable-never-defaulted",
+    {
+      "id": "inv1-never-observed-stays-not-yet",
       "invariant": "INV-1",
-      "description": "A field never observed stays not-yet; it is never defaulted to unavailable merely because other fields on the same Attempt have values.",
-      "context": { "cisConfigured": true },
+      "description": "A field never observed stays not-yet; it is never defaulted to unavailable because other fields have values.",
       "given": [
-        { "ingestSeq": 1, "field": "status", "source": "tcp", "observedAt": "2026-09-15T10:00:00.000Z",
-          "value": "on-course", "confidence": "authoritative" }
+        {
+          "ingestSeq": 1,
+          "field": "status",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:00:00.000Z",
+          "value": "on-course",
+          "confidence": "authoritative"
+        }
       ],
       "expect": {
-        "upstreamRank": { "state": "not-yet" },
-        "note": "upstreamRank has never been observed for this Attempt and must read not-yet, not unavailable." }
+        "placement": {
+          "state": "not-yet"
+        }
+      }
     },
-
-    { "id": "ranking-row1-oncourse-tcp-beats-later-cis",
-      "invariant": "ranking-row-1",
-      "description": "Row 1 of SS4's table (tcp > cis for on-course facts): a later, disagreeing cis observation does not displace an already-presented tcp one.",
-      "context": { "cisConfigured": true },
+    {
+      "id": "inv2-rule1-result-row-supersedes-inference",
+      "invariant": "INV-2 rule 1",
+      "description": "A result push supersedes the on-course inference of the same run generation, whatever the ingest order within the run.",
       "given": [
-        { "ingestSeq": 1, "field": "onCoursePosition", "source": "tcp", "observedAt": "2026-09-15T10:00:00.500Z",
-          "value": { "runSeconds": 42.10 }, "confidence": "authoritative" },
-        { "ingestSeq": 2, "field": "onCoursePosition", "source": "cis", "observedAt": "2026-09-15T10:00:02.000Z",
-          "value": { "runSeconds": 41.80 }, "confidence": "authoritative" }
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:14:02.083Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 0,
+            "totalSeconds": 82.36
+          },
+          "confidence": "inferred",
+          "judgingComplete": true
+        },
+        {
+          "ingestSeq": 2,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:02.400Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 0,
+            "totalSeconds": 82.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        }
       ],
       "expect": {
-        "onCoursePosition": { "state": "known", "value": { "runSeconds": 42.10 }, "source": "tcp",
-                               "confidence": "authoritative", "provisional": false },
-        "note": "tcp outranks cis for this category; a later, higher-timestamped cis reading does not win." }
+        "outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 0,
+            "totalSeconds": 82.36
+          },
+          "source": "tcp",
+          "confidence": "authoritative",
+          "provisional": false
+        }
+      }
     },
-
-    { "id": "ranking-row2-cis-configured-tcp-then-cis-confirms",
-      "invariant": "ranking-row-2",
-      "description": "Finished slalom outcome, CIS configured: tcp's inferred value is presented until cis reports, then cis becomes presented and provisional clears.",
-      "context": { "cisConfigured": true },
+    {
+      "id": "inv2-rule1-inference-never-supersedes-result-row",
+      "invariant": "INV-2 rule 1",
+      "description": "An on-course inference arriving after a result row for the same run does not displace it.",
       "given": [
-        { "ingestSeq": 1, "field": "outcome", "source": "tcp", "observedAt": "2026-09-15T10:14:02.083Z",
-          "value": { "kind": "duration", "runSeconds": 82.36, "penaltySeconds": 0, "totalSeconds": 82.36 },
-          "confidence": "inferred" }
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:02.400Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 2,
+            "totalSeconds": 84.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        },
+        {
+          "ingestSeq": 2,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:14:02.900Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 0,
+            "totalSeconds": 82.36
+          },
+          "confidence": "inferred",
+          "judgingComplete": false
+        }
+      ],
+      "expect": {
+        "outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 2,
+            "totalSeconds": 84.36
+          },
+          "source": "tcp",
+          "confidence": "authoritative",
+          "provisional": false
+        },
+        "note": "the late on-course message still carried a blank gate; the result row already had it judged."
+      }
+    },
+    {
+      "id": "inv2-rule2-connected-tcp-beats-later-xml",
+      "invariant": "INV-2 rule 2",
+      "description": "While TCP stays connected, a later-ingested XML row does not displace the tcp observation of the same field.",
+      "context": {
+        "tcpConnectedThroughout": true
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:02.400Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 2,
+            "totalSeconds": 84.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        },
+        {
+          "ingestSeq": 2,
+          "field": "outcome",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:30.000Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 0,
+            "totalSeconds": 82.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        }
+      ],
+      "expect": {
+        "outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 2,
+            "totalSeconds": 84.36
+          },
+          "source": "tcp",
+          "provisional": false
+        },
+        "diagnostics": [
+          {
+            "kind": "source-disagreement",
+            "field": "outcome",
+            "sources": [
+              "tcp",
+              "xml"
+            ]
+          }
+        ],
+        "note": "the snapshot was written before the penalty was added; a connected TCP is never behind it. The disagreement is surfaced (INV-2b), never adopted."
+      }
+    },
+    {
+      "id": "inv2-rule2-xml-takes-over-after-disconnect",
+      "invariant": "INV-2 rule 2",
+      "description": "After TCP disconnects, a snapshot rewrite detected afterwards takes over.",
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:02.400Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 2,
+            "totalSeconds": 84.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        },
+        {
+          "ingestSeq": 2,
+          "event": "tcp-disconnected",
+          "observedAt": "2026-09-15T10:15:00.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:15:20.000Z"
+        },
+        {
+          "ingestSeq": 4,
+          "field": "outcome",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:15:20.000Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 52,
+            "totalSeconds": 134.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        }
+      ],
+      "expect": {
+        "outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 52,
+            "totalSeconds": 134.36
+          },
+          "source": "xml",
+          "provisional": false
+        },
+        "note": "a correction (+50 at a gate) made during the outage reaches us only through the snapshot."
+      }
+    },
+    {
+      "id": "inv2-rule2-reconnect-does-not-restore-stale-tcp",
+      "invariant": "INV-2 rule 2",
+      "description": "After reconnection, a tcp observation from before the outage does not outrank a snapshot read during the outage (the R52 defect of the previous rule).",
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:02.400Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 2,
+            "totalSeconds": 84.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        },
+        {
+          "ingestSeq": 2,
+          "event": "tcp-disconnected",
+          "observedAt": "2026-09-15T10:15:00.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:15:20.000Z"
+        },
+        {
+          "ingestSeq": 4,
+          "field": "outcome",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:15:20.000Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 52,
+            "totalSeconds": 134.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        },
+        {
+          "ingestSeq": 5,
+          "event": "tcp-connected",
+          "observedAt": "2026-09-15T10:16:00.000Z"
+        }
+      ],
+      "expect": {
+        "outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 52,
+            "totalSeconds": 134.36
+          },
+          "source": "xml"
+        },
+        "note": "the pre-outage tcp value (ingestSeq 1) lost its continuity; until TCP pushes this race again, the later xml value stays presented."
+      }
+    },
+    {
+      "id": "inv2-rule2-fresh-tcp-after-reconnect-wins",
+      "invariant": "INV-2 rule 2",
+      "description": "A tcp observation ingested after reconnection outranks the snapshot again.",
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:15:20.000Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 52,
+            "totalSeconds": 134.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        },
+        {
+          "ingestSeq": 2,
+          "event": "tcp-connected",
+          "observedAt": "2026-09-15T10:16:00.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:16:05.000Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 54,
+            "totalSeconds": 136.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        }
+      ],
+      "expect": {
+        "outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 54,
+            "totalSeconds": 136.36
+          },
+          "source": "tcp"
+        }
+      }
+    },
+    {
+      "id": "inv2-rule2-xml-alone-at-cold-start",
+      "invariant": "INV-2 rule 2",
+      "description": "With nothing observed on TCP, the snapshot supplies the value, authoritative and final once judging is complete.",
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T12:00:00.000Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 85.1,
+            "penaltySeconds": 2,
+            "totalSeconds": 87.1
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true,
+          "runClosed": true
+        }
+      ],
+      "expect": {
+        "outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 85.1,
+            "penaltySeconds": 2,
+            "totalSeconds": 87.1
+          },
+          "source": "xml",
+          "confidence": "authoritative",
+          "provisional": false
+        }
+      }
+    },
+    {
+      "id": "inv2-rule3-single-source-field",
+      "invariant": "INV-2 rule 3",
+      "description": "A field only the snapshot carries is presented from it, whatever TCP does.",
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "ageCategoryId",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T09:00:00.000Z",
+          "value": "DM",
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 2,
+          "field": "status",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:00:00.000Z",
+          "value": "on-course",
+          "confidence": "authoritative"
+        }
+      ],
+      "scope": "entry",
+      "expect": {
+        "ageCategoryId": {
+          "state": "known",
+          "value": "DM",
+          "source": "xml"
+        }
+      }
+    },
+    {
+      "id": "provisional-incomplete-judging-then-settles",
+      "invariant": "provisional",
+      "description": "A result pushed before the last gate is judged is provisional, and settles when the judged push arrives: ranking with incomplete penalties on.",
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:02.400Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 0,
+            "totalSeconds": 82.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": false
+        },
+        {
+          "ingestSeq": 2,
+          "field": "placement",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:02.400Z",
+          "value": {
+            "rank": 3,
+            "order": 3
+          },
+          "confidence": "authoritative",
+          "judgingComplete": false
+        }
       ],
       "expectSequence": [
-        { "afterGivenIndex": 0,
-          "expect": { "outcome": { "state": "known",
-                                    "value": { "kind": "duration", "runSeconds": 82.36, "penaltySeconds": 0, "totalSeconds": 82.36 },
-                                    "source": "tcp", "confidence": "inferred", "provisional": true } } }
+        {
+          "afterGivenIndex": 1,
+          "expect": {
+            "outcome": {
+              "provisional": true
+            },
+            "placement": {
+              "provisional": true
+            }
+          }
+        }
       ],
       "then": [
-        { "ingestSeq": 2, "field": "outcome", "source": "cis", "observedAt": "2026-09-15T10:14:11.400Z",
-          "eventTime": "2026-09-15T10:14:02.070Z",
-          "value": { "kind": "duration", "runSeconds": 82.36, "penaltySeconds": 0, "totalSeconds": 82.36 },
-          "confidence": "authoritative" }
+        {
+          "ingestSeq": 3,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:04.500Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 2,
+            "totalSeconds": 84.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        },
+        {
+          "ingestSeq": 4,
+          "field": "placement",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:04.500Z",
+          "value": {
+            "rank": 4,
+            "order": 4
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        }
       ],
       "expect": {
-        "outcome": { "state": "known",
-                     "value": { "kind": "duration", "runSeconds": 82.36, "penaltySeconds": 0, "totalSeconds": 82.36 },
-                     "source": "cis", "confidence": "authoritative", "eventTime": "2026-09-15T10:14:02.070Z",
-                     "provisional": false } }
+        "outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 2,
+            "totalSeconds": 84.36
+          },
+          "provisional": false
+        },
+        "placement": {
+          "state": "known",
+          "value": {
+            "rank": 4,
+            "order": 4
+          },
+          "provisional": false
+        }
+      }
     },
-
-    { "id": "ranking-row2-cis-configured-tcp-does-not-override-cis",
-      "invariant": "ranking-row-2",
-      "description": "Once cis has reported and remains available, a later tcp Results rotation touching the same field does not displace it, agreement or not — the fix for the flicker found in the adversarial pass.",
-      "context": { "cisConfigured": true },
+    {
+      "id": "provisional-first-push-already-complete",
+      "invariant": "provisional",
+      "description": "With ranking on incomplete penalties off, the first push follows the last gate and is final at once.",
       "given": [
-        { "ingestSeq": 1, "field": "outcome", "source": "cis", "observedAt": "2026-09-15T10:14:11.400Z",
-          "eventTime": "2026-09-15T10:14:02.070Z",
-          "value": { "kind": "duration", "runSeconds": 82.36, "penaltySeconds": 0, "totalSeconds": 82.36 },
-          "confidence": "authoritative" },
-        { "ingestSeq": 2, "field": "outcome", "source": "tcp", "observedAt": "2026-09-15T10:14:32.000Z",
-          "eventTime": "2026-09-15T10:14:02.079Z",
-          "value": { "kind": "duration", "runSeconds": 82.36, "penaltySeconds": 0, "totalSeconds": 82.36 },
-          "confidence": "authoritative" }
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:04.500Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 2,
+            "totalSeconds": 84.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        }
       ],
       "expect": {
-        "outcome": { "state": "known", "source": "cis", "confidence": "authoritative",
-                     "eventTime": "2026-09-15T10:14:02.070Z", "provisional": false },
-        "note": "presented value/provenance is unchanged by ingestSeq 2 — cis remains top-ranked and available." }
+        "outcome": {
+          "state": "known",
+          "provisional": false
+        }
+      }
     },
-
-    { "id": "ranking-row2-no-cis-tcp-self-corrects",
-      "invariant": "ranking-row-2",
-      "description": "Finished slalom outcome, CIS not configured: tcp's own later Results-row observation supersedes its earlier OnCourse-derived one, and provisional clears immediately since nothing more authoritative is coming.",
-      "context": { "cisConfigured": false },
+    {
+      "id": "provisional-run-closed-without-course",
+      "invariant": "provisional",
+      "description": "Without a configured course, judging completeness cannot be read: the value stays provisional until the run is closed.",
+      "context": {
+        "course": "not-configured"
+      },
       "given": [
-        { "ingestSeq": 1, "field": "outcome", "source": "tcp", "observedAt": "2026-09-15T10:14:02.083Z",
-          "value": { "kind": "duration", "runSeconds": 82.36, "penaltySeconds": 0, "totalSeconds": 82.36 },
-          "confidence": "inferred" },
-        { "ingestSeq": 2, "field": "outcome", "source": "tcp", "observedAt": "2026-09-15T10:14:28.000Z",
-          "value": { "kind": "duration", "runSeconds": 82.36, "penaltySeconds": 0, "totalSeconds": 82.36 },
-          "confidence": "authoritative" }
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:02.400Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 0,
+            "totalSeconds": 82.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": null
+        },
+        {
+          "ingestSeq": 2,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:09.000Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 0,
+            "totalSeconds": 82.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": null,
+          "runClosed": true
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 0,
+          "expect": {
+            "outcome": {
+              "provisional": true
+            }
+          }
+        }
       ],
       "expect": {
-        "outcome": { "state": "known", "source": "tcp", "confidence": "authoritative", "provisional": false },
-        "note": "provisional:false because no CIS is configured for this deployment, per SS1.2's provisional definition — not because the value is any less mechanically derived." }
+        "outcome": {
+          "state": "known",
+          "provisional": false
+        }
+      }
     },
-
-    { "id": "ranking-row2-xml-only-fallback-after-restart",
-      "invariant": "ranking-row-2",
-      "description": "Row 2's third-ranked source: after a restart, before TCP's rotation has caught up to this RaceId again, a fresh XML read supplies the outcome, presented as the best available.",
-      "context": { "cisConfigured": false },
+    {
+      "id": "ongoing-recomputation-provisional-total-revised-by-late-gate",
+      "invariant": "ongoing-recomputation",
+      "description": "Before the result push, the inferred total keeps updating as trailing gate judgements arrive.",
       "given": [
-        { "ingestSeq": 1, "field": "outcome", "source": "xml", "observedAt": "2026-09-15T11:00:00.000Z",
-          "value": { "kind": "duration", "runSeconds": 82.36, "penaltySeconds": 0, "totalSeconds": 82.36 },
-          "confidence": "authoritative" }
+        {
+          "ingestSeq": 1,
+          "field": "status",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:32:22.370Z",
+          "value": "finished",
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:32:22.370Z"
+        },
+        {
+          "ingestSeq": 2,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:32:22.370Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 83.55,
+            "penaltySeconds": 2,
+            "totalSeconds": 85.55
+          },
+          "confidence": "inferred",
+          "judgingComplete": false
+        }
       ],
-      "expect": { "outcome": { "state": "known", "source": "xml", "confidence": "authoritative", "provisional": true },
-                  "note": "provisional:true — tcp outranks xml for this category and is expected to report again once its rotation reaches this RaceId; xml is presented only because nothing higher-ranked has reported yet." }
-    },
-
-    { "id": "ranking-row3-upstreamrank-cis-beats-tcp",
-      "invariant": "ranking-row-3",
-      "description": "Row 3 (cis > tcp for upstreamRank): a later cis Rank supersedes an earlier tcp one.",
-      "context": { "cisConfigured": true },
-      "given": [
-        { "ingestSeq": 1, "field": "upstreamRank", "source": "tcp", "observedAt": "2026-09-15T10:14:05.000Z",
-          "value": 3, "confidence": "authoritative" },
-        { "ingestSeq": 2, "field": "upstreamRank", "source": "cis", "observedAt": "2026-09-15T10:14:12.000Z",
-          "value": 2, "confidence": "authoritative" }
+      "expectSequence": [
+        {
+          "afterGivenIndex": 1,
+          "expect": {
+            "outcome": {
+              "state": "known",
+              "value": {
+                "totalSeconds": 85.55
+              },
+              "provisional": true
+            }
+          }
+        }
       ],
-      "expect": { "upstreamRank": { "state": "known", "value": 2, "source": "cis", "confidence": "authoritative", "provisional": false } }
-    },
-
-    { "id": "ranking-row4-phasestatus-tcp-beats-xml",
-      "invariant": "ranking-row-4",
-      "description": "Row 4 (tcp > xml for Phase.status): xml disagreeing does not override tcp once tcp has reported.",
-      "context": { "cisConfigured": true },
-      "given": [
-        { "ingestSeq": 1, "field": "status", "source": "tcp", "observedAt": "2026-09-15T09:30:00.000Z",
-          "value": "running", "confidence": "authoritative" },
-        { "ingestSeq": 2, "field": "status", "source": "xml", "observedAt": "2026-09-15T09:30:05.000Z",
-          "value": "scheduled", "confidence": "authoritative" }
-      ],
-      "expect": { "status": { "state": "known", "value": "running", "source": "tcp", "confidence": "authoritative", "provisional": false } }
-    },
-
-    { "id": "ranking-row4-phasestatus-xml-fallback",
-      "invariant": "ranking-row-4",
-      "description": "Before tcp has reported this Phase's status at all, xml — the only source that has reported — is presented.",
-      "context": { "cisConfigured": true },
-      "given": [
-        { "ingestSeq": 1, "field": "status", "source": "xml", "observedAt": "2026-09-15T09:29:00.000Z",
-          "value": "scheduled", "confidence": "authoritative" }
-      ],
-      "expect": { "status": { "state": "known", "value": "scheduled", "source": "xml", "confidence": "authoritative", "provisional": true },
-                  "note": "provisional:true — tcp, the higher-ranked source for this field, has not yet reported and is configured/expected." }
-    },
-
-    { "id": "inv2c-stale-cis-eventtime-refused",
-      "invariant": "INV-2c",
-      "description": "A higher-ranked observation whose eventTime is strictly earlier than the presented value's does not supersede it, regardless of rank.",
-      "context": { "cisConfigured": true },
-      "given": [
-        { "ingestSeq": 1, "field": "outcome", "source": "tcp", "observedAt": "2026-09-15T10:14:02.083Z",
-          "eventTime": "2026-09-15T10:14:02.079Z",
-          "value": { "kind": "duration", "runSeconds": 82.36, "penaltySeconds": 0, "totalSeconds": 82.36 },
-          "confidence": "authoritative" },
-        { "ingestSeq": 2, "field": "outcome", "source": "cis", "observedAt": "2026-09-15T10:14:11.400Z",
-          "eventTime": "2026-09-15T09:58:00.000Z",
-          "value": { "kind": "duration", "runSeconds": 81.90, "penaltySeconds": 0, "totalSeconds": 81.90 },
-          "confidence": "authoritative" }
+      "then": [
+        {
+          "ingestSeq": 3,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:32:22.600Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 83.55,
+            "penaltySeconds": 4,
+            "totalSeconds": 87.55
+          },
+          "confidence": "inferred",
+          "judgingComplete": false
+        }
       ],
       "expect": {
-        "outcome": { "state": "known",
-                     "value": { "kind": "duration", "runSeconds": 82.36, "penaltySeconds": 0, "totalSeconds": 82.36 },
-                     "source": "tcp", "eventTime": "2026-09-15T10:14:02.079Z", "provisional": false },
-        "note": "cis outranks tcp for this category, but its eventTime is nine minutes older than what is already known — INV-2c refuses it." }
+        "outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 83.55,
+            "penaltySeconds": 4,
+            "totalSeconds": 87.55
+          },
+          "source": "tcp",
+          "confidence": "inferred",
+          "provisional": true
+        }
+      }
     },
-
-    { "id": "inv2c-does-not-apply-without-eventtime",
-      "invariant": "INV-2c",
-      "description": "Where the candidate carries no eventTime at all (upstreamRank never does), INV-2c has nothing to compare and ordinary INV-2 ranking governs alone.",
-      "context": { "cisConfigured": true },
-      "given": [
-        { "ingestSeq": 1, "field": "upstreamRank", "source": "tcp", "observedAt": "2026-09-15T10:14:05.000Z",
-          "value": 3, "confidence": "authoritative" },
-        { "ingestSeq": 2, "field": "upstreamRank", "source": "cis", "observedAt": "2026-09-15T10:14:04.000Z",
-          "value": 2, "confidence": "authoritative" }
-      ],
-      "expect": { "upstreamRank": { "state": "known", "value": 2, "source": "cis", "confidence": "authoritative", "provisional": false },
-                  "note": "cis wins on rank alone, even though its observedAt is earlier than tcp's — neither field carries eventTime, so INV-2c is not in play and only INV-2's table decides." }
-    },
-
-    { "id": "inv2b-lower-ranked-disagreement-does-not-silently-adopt",
+    {
+      "id": "inv2b-disagreement-surfaced-not-adopted",
       "invariant": "INV-2b",
-      "description": "The observable-value half of INV-2b: a lower-ranked source's disagreement never becomes presented directly. (The re-query-trigger half is not expressible as a value vector — see CONFORMANCE-VECTORS.md's 'could not write' section.)",
-      "context": { "cisConfigured": true },
+      "description": "A settled disagreement between retained sources is surfaced as a diagnostic and never changes the presented value.",
+      "context": {
+        "tcpConnectedThroughout": true
+      },
       "given": [
-        { "ingestSeq": 1, "field": "outcome", "source": "cis", "observedAt": "2026-09-15T10:14:11.400Z",
-          "eventTime": "2026-09-15T10:14:02.070Z",
-          "value": { "kind": "duration", "runSeconds": 82.36, "penaltySeconds": 0, "totalSeconds": 82.36 },
-          "confidence": "authoritative" },
-        { "ingestSeq": 2, "field": "outcome", "source": "tcp", "observedAt": "2026-09-15T14:02:11.000Z",
+        {
+          "ingestSeq": 1,
+          "field": "gates",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:20:00.000Z",
+          "value": [
+            {
+              "number": 4,
+              "penalty": 2
+            }
+          ],
+          "confidence": "authoritative",
+          "judgingComplete": true
+        },
+        {
+          "ingestSeq": 2,
+          "field": "gates",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:20:30.000Z",
+          "value": [
+            {
+              "number": 4,
+              "penalty": 0
+            }
+          ],
+          "confidence": "authoritative",
+          "judgingComplete": true
+        }
+      ],
+      "expect": {
+        "gates": {
+          "state": "known",
+          "value": [
+            {
+              "number": 4,
+              "penalty": 2
+            }
+          ],
+          "source": "tcp"
+        },
+        "diagnostics": [
+          {
+            "kind": "source-disagreement",
+            "field": "gates",
+            "sources": [
+              "tcp",
+              "xml"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "inv2c-older-event-refused",
+      "invariant": "INV-2c",
+      "description": "A candidate describing an earlier event (earlier eventTime) never supersedes a value about a later one.",
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:40:00.000Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 84.0,
+            "penaltySeconds": 0,
+            "totalSeconds": 84.0
+          },
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:39:58.000Z",
+          "judgingComplete": true
+        },
+        {
+          "ingestSeq": 2,
+          "event": "tcp-disconnected",
+          "observedAt": "2026-09-15T10:41:00.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "field": "outcome",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:41:10.000Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 86.5,
+            "penaltySeconds": 2,
+            "totalSeconds": 88.5
+          },
+          "confidence": "authoritative",
           "eventTime": "2026-09-15T10:14:02.079Z",
-          "value": { "kind": "duration", "runSeconds": 82.36, "penaltySeconds": 2, "totalSeconds": 84.36 },
-          "confidence": "authoritative" }
+          "judgingComplete": true
+        }
       ],
       "expect": {
-        "outcome": { "state": "known", "value": { "totalSeconds": 82.36 }, "source": "cis", "provisional": false },
-        "note": "tcp's disagreeing, later, PenaltyCorrection-driven reading is never adopted directly from this vector alone — only a fresh response from cis itself (a distinct, later ingestSeq observation with source:'cis') would change what is presented." }
+        "outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 84.0,
+            "penaltySeconds": 0,
+            "totalSeconds": 84.0
+          },
+          "source": "tcp",
+          "eventTime": "2026-09-15T10:39:58.000Z"
+        },
+        "note": "rule 2 alone would let the post-disconnect xml row win; its eventTime is 25 minutes earlier, so INV-2c refuses it."
+      }
     },
-
-    { "id": "trichotomy-known-zero-not-confused-with-absence",
-      "invariant": "trichotomy",
-      "description": "A real, asserted zero is structurally distinct from not-yet and unavailable — the direct fix for Exhibit 5.",
-      "context": { "cisConfigured": true },
+    {
+      "id": "inv2c-does-not-apply-without-eventtime",
+      "invariant": "INV-2c",
+      "description": "Where the candidate carries no eventTime, INV-2c does not apply and rule 2 governs alone.",
       "given": [
-        { "ingestSeq": 1, "field": "outcome", "source": "tcp", "observedAt": "2026-09-15T10:20:00.000Z",
-          "value": { "kind": "duration", "runSeconds": 79.10, "penaltySeconds": 0, "totalSeconds": 79.10 },
-          "confidence": "authoritative" }
+        {
+          "ingestSeq": 1,
+          "field": "placement",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:40:00.000Z",
+          "value": {
+            "rank": 2,
+            "order": 2
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        },
+        {
+          "ingestSeq": 2,
+          "event": "tcp-disconnected",
+          "observedAt": "2026-09-15T10:41:00.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "field": "placement",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:41:10.000Z",
+          "value": {
+            "rank": 3,
+            "order": 3
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        }
       ],
       "expect": {
-        "outcome": { "state": "known",
-                     "value": { "kind": "duration", "runSeconds": 79.10, "penaltySeconds": 0, "totalSeconds": 79.10 },
-                     "source": "tcp", "confidence": "authoritative" },
-        "note": "penaltySeconds: 0 is a `known` value, not `not-yet` or `unavailable` — a clean run, not an unjudged one." }
+        "placement": {
+          "state": "known",
+          "value": {
+            "rank": 3,
+            "order": 3
+          },
+          "source": "xml"
+        }
+      }
     },
-
-    { "id": "trichotomy-unavailable-persists-explicitly",
+    {
+      "id": "trichotomy-known-zero-not-confused-with-absence",
       "invariant": "trichotomy",
-      "description": "unavailable{reason} is asserted, not defaulted, and persists as an explicit state distinct from not-yet.",
-      "context": { "cisConfigured": false },
+      "description": "A real, asserted zero is structurally distinct from not-yet and unavailable: the direct fix for Exhibit 5.",
       "given": [
-        { "ingestSeq": 1, "field": "run1Gates", "state": "unavailable", "reason": "not-observed-live-and-cis-unavailable",
-          "observedAt": "2026-09-15T09:00:00.000Z" }
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:20:00.000Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 79.1,
+            "penaltySeconds": 0,
+            "totalSeconds": 79.1
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        }
       ],
-      "expect": { "run1Gates": { "state": "unavailable", "reason": "not-observed-live-and-cis-unavailable" },
-                  "note": "distinct from a field simply never having been observed (not-yet, see inv1-unavailable-never-defaulted) — this one is an explicit domain-layer determination." }
+      "expect": {
+        "outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 79.1,
+            "penaltySeconds": 0,
+            "totalSeconds": 79.1
+          },
+          "source": "tcp",
+          "confidence": "authoritative"
+        }
+      }
     },
-
-    { "id": "inv4-entry-correction-is-a-field-update",
+    {
+      "id": "trichotomy-unavailable-persists-explicitly",
+      "invariant": "INV-3",
+      "description": "unavailable{reason} is an explicit determination and persists as a state distinct from not-yet.",
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "gates",
+          "state": "unavailable",
+          "reason": "not-configured",
+          "observedAt": "2026-09-15T09:00:00.000Z"
+        }
+      ],
+      "expect": {
+        "gates": {
+          "state": "unavailable",
+          "reason": "not-configured"
+        },
+        "note": "no course layout is configured for this Phase (CONTRACTS.md SS2.12)."
+      }
+    },
+    {
+      "id": "inv3-not-applicable-external-id",
+      "invariant": "INV-3",
+      "description": "A person with no registry identity at all carries not-applicable, and the entry stays fully renderable.",
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "members[0].externalId",
+          "state": "unavailable",
+          "reason": "not-applicable",
+          "observedAt": "2026-09-15T09:00:00.000Z"
+        },
+        {
+          "ingestSeq": 2,
+          "field": "displayName",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T09:00:00.000Z",
+          "value": "FR51",
+          "confidence": "authoritative"
+        }
+      ],
+      "scope": "entry",
+      "expect": {
+        "members[0].externalId": {
+          "state": "unavailable",
+          "reason": "not-applicable"
+        },
+        "displayName": {
+          "state": "known",
+          "value": "FR51"
+        }
+      }
+    },
+    {
+      "id": "inv4-entry-correction-is-a-field-update",
       "invariant": "INV-4",
       "description": "A correction to who raced under a bib is a normal known-to-known transition, not a structural rebind.",
-      "context": { "cisConfigured": true },
       "given": [
-        { "ingestSeq": 1, "field": "entry", "source": "tcp", "observedAt": "2026-09-15T08:00:00.000Z",
-          "value": { "entryId": "30034.K1M_ST" }, "confidence": "authoritative" },
-        { "ingestSeq": 2, "field": "entry", "source": "operator-write", "observedAt": "2026-09-20T11:00:00.000Z",
-          "value": { "entryId": "30099.K1M_ST" }, "confidence": "authoritative" }
+        {
+          "ingestSeq": 1,
+          "field": "entry",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T08:00:00.000Z",
+          "value": {
+            "entryId": "30034.K1M"
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 2,
+          "field": "entry",
+          "source": "operator-write",
+          "kind": "operator",
+          "observedAt": "2026-09-15T08:00:00.000Z",
+          "value": {
+            "entryId": "30099.K1M"
+          },
+          "confidence": "authoritative",
+          "provisionalOverride": false
+        }
       ],
-      "expect": { "entry": { "state": "known", "value": { "entryId": "30099.K1M_ST" }, "source": "operator-write",
-                              "confidence": "authoritative", "provisional": false },
-                  "note": "attemptId is unchanged by this — it is keyed on (phaseId, bib), never on entry." }
+      "expect": {
+        "entry": {
+          "state": "known",
+          "value": {
+            "entryId": "30099.K1M"
+          },
+          "source": "operator-write",
+          "provisional": false
+        },
+        "note": "attemptId is unchanged: it is keyed on (phaseId, bib)."
+      }
     },
-
-    { "id": "inv5-identical-redelivery-is-a-noop",
+    {
+      "id": "inv5-identical-redelivery-is-a-noop",
       "invariant": "INV-5",
-      "description": "Re-delivering an identical observation does not alter presented state.",
-      "context": { "cisConfigured": true },
+      "description": "Re-delivering an identical observation does not alter presented state or notify.",
       "given": [
-        { "ingestSeq": 1, "field": "outcome", "source": "tcp", "observedAt": "2026-09-15T10:14:02.083Z",
-          "value": { "kind": "duration", "runSeconds": 82.36, "penaltySeconds": 0, "totalSeconds": 82.36 },
-          "confidence": "authoritative" },
-        { "ingestSeq": 2, "field": "outcome", "source": "tcp", "observedAt": "2026-09-15T10:14:02.083Z",
-          "value": { "kind": "duration", "runSeconds": 82.36, "penaltySeconds": 0, "totalSeconds": 82.36 },
-          "confidence": "authoritative" }
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:02.400Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 0,
+            "totalSeconds": 82.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        },
+        {
+          "ingestSeq": 2,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:32.400Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 0,
+            "totalSeconds": 82.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        }
       ],
-      "expect": { "outcome": { "state": "known", "observedAt": "2026-09-15T10:14:02.083Z", "source": "tcp" },
-                  "note": "ingestSeq 2 is byte-identical to ingestSeq 1 (same value, same observedAt, same source) and must not be treated as a new client-visible change." }
+      "expect": {
+        "outcome": {
+          "state": "known",
+          "observedAt": "2026-09-15T10:14:02.400Z",
+          "source": "tcp"
+        },
+        "notifications": 1,
+        "note": "the rotation re-sends the same row 30 s later; one client-visible change only."
+      }
     },
-
-    { "id": "inv6-clock-jump-does-not-reorder-merge",
+    {
+      "id": "inv6-clock-jump-does-not-reorder-merge",
       "invariant": "INV-6",
-      "description": "A wall-clock jump backward between two observations does not let the earlier-clocked, later-arrived one win — ordering is by ingestSeq, never by observedAt.",
-      "context": { "cisConfigured": true },
+      "description": "A wall-clock jump backward does not let the earlier-clocked, later-arrived observation lose: ordering is by ingestSeq.",
       "given": [
-        { "ingestSeq": 1, "field": "status", "source": "tcp", "observedAt": "2026-09-15T10:30:00.000Z",
-          "value": "running", "confidence": "authoritative" },
-        { "ingestSeq": 2, "field": "status", "source": "tcp", "observedAt": "2026-09-15T10:15:00.000Z",
-          "value": "paused", "confidence": "authoritative" }
+        {
+          "ingestSeq": 1,
+          "field": "status",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:30:00.000Z",
+          "value": "running",
+          "confidence": "authoritative",
+          "scope": "phase"
+        },
+        {
+          "ingestSeq": 2,
+          "field": "status",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:15:00.000Z",
+          "value": "paused",
+          "confidence": "authoritative",
+          "scope": "phase"
+        }
       ],
-      "expect": { "status": { "state": "known", "value": "paused", "source": "tcp", "confidence": "authoritative" },
-                  "note": "ingestSeq 2's observedAt (10:15) is EARLIER than ingestSeq 1's (10:30) — an NTP correction between them — but ingestSeq 2 is still the later observation and still wins; a naive observedAt comparison would have kept 'running'." }
+      "scope": "phase",
+      "expect": {
+        "status": {
+          "state": "known",
+          "value": "paused",
+          "source": "tcp"
+        }
+      }
     },
-
-    { "id": "operator-write-provisional-presented-immediately",
+    {
+      "id": "operator-write-provisional-presented-immediately",
       "invariant": "operator-write",
-      "description": "An optimistic write is presented the instant it is submitted, regardless of ranking, superseding whatever a lower- or higher-ranked automated source last showed.",
-      "context": { "cisConfigured": true },
+      "description": "An optimistic write is presented the instant it is submitted.",
       "given": [
-        { "ingestSeq": 1, "field": "gates", "source": "tcp", "observedAt": "2026-09-15T14:02:00.000Z",
-          "value": [ { "number": 4, "penalty": 0 } ], "confidence": "authoritative" },
-        { "ingestSeq": 2, "field": "gates", "source": "operator-write", "observedAt": "2026-09-15T14:02:11.000Z",
-          "value": [ { "number": 4, "penalty": 2 } ], "confidence": "authoritative" }
+        {
+          "ingestSeq": 1,
+          "field": "gates",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T14:02:00.000Z",
+          "value": [
+            {
+              "number": 4,
+              "penalty": 0
+            }
+          ],
+          "confidence": "authoritative",
+          "judgingComplete": true
+        },
+        {
+          "ingestSeq": 2,
+          "field": "gates",
+          "source": "operator-write",
+          "kind": "operator",
+          "observedAt": "2026-09-15T14:02:11.000Z",
+          "value": [
+            {
+              "number": 4,
+              "penalty": 2
+            }
+          ],
+          "confidence": "authoritative"
+        }
       ],
-      "expect": { "gates": { "state": "known", "value": [ { "number": 4, "penalty": 2 } ],
-                              "source": "operator-write", "provisional": true } }
+      "expect": {
+        "gates": {
+          "state": "known",
+          "value": [
+            {
+              "number": 4,
+              "penalty": 2
+            }
+          ],
+          "source": "operator-write",
+          "provisional": true
+        }
+      }
     },
-
-    { "id": "operator-write-confirmed-by-matching-echo",
+    {
+      "id": "operator-write-confirmed-by-matching-echo",
       "invariant": "operator-write",
-      "description": "A subsequent tcp observation matching the requested value confirms the write; presentation is unchanged in value, only in provenance.",
-      "context": { "cisConfigured": true },
+      "description": "The echo matching the requested value confirms the write.",
       "given": [
-        { "ingestSeq": 1, "field": "gates", "source": "operator-write", "observedAt": "2026-09-15T14:02:11.000Z",
-          "value": [ { "number": 4, "penalty": 2 } ], "confidence": "authoritative" },
-        { "ingestSeq": 2, "field": "gates", "source": "tcp", "observedAt": "2026-09-15T14:02:14.500Z",
-          "value": [ { "number": 4, "penalty": 2 } ], "confidence": "authoritative" }
+        {
+          "ingestSeq": 1,
+          "field": "gates",
+          "source": "operator-write",
+          "kind": "operator",
+          "observedAt": "2026-09-15T14:02:11.000Z",
+          "value": [
+            {
+              "number": 4,
+              "penalty": 2
+            }
+          ],
+          "confidence": "authoritative",
+          "run": 1
+        },
+        {
+          "ingestSeq": 2,
+          "field": "gates",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T14:02:11.400Z",
+          "value": [
+            {
+              "number": 4,
+              "penalty": 2
+            }
+          ],
+          "confidence": "authoritative",
+          "judgingComplete": true,
+          "run": 1
+        }
       ],
-      "expect": { "gates": { "state": "known", "value": [ { "number": 4, "penalty": 2 } ],
-                              "source": "tcp", "provisional": false },
-                  "writeRequest": { "status": "confirmed" } }
+      "expect": {
+        "gates": {
+          "state": "known",
+          "value": [
+            {
+              "number": 4,
+              "penalty": 2
+            }
+          ],
+          "source": "tcp",
+          "provisional": false
+        },
+        "writeRequest": {
+          "status": "confirmed"
+        }
+      }
     },
-
-    { "id": "operator-write-mismatched-echo-wins",
+    {
+      "id": "operator-write-mismatched-echo-wins",
       "invariant": "operator-write",
-      "description": "A subsequent tcp observation that DISAGREES with the requested value becomes presented — the domain layer never keeps asserting what was requested once the record of truth says otherwise.",
-      "context": { "cisConfigured": true },
+      "description": "An echo that disagrees becomes presented, and the write records the mismatch.",
       "given": [
-        { "ingestSeq": 1, "field": "gates", "source": "operator-write", "observedAt": "2026-09-15T14:02:11.000Z",
-          "value": [ { "number": 4, "penalty": 2 } ], "confidence": "authoritative" },
-        { "ingestSeq": 2, "field": "gates", "source": "tcp", "observedAt": "2026-09-15T14:02:14.500Z",
-          "value": [ { "number": 4, "penalty": 50 } ], "confidence": "authoritative" }
+        {
+          "ingestSeq": 1,
+          "field": "gates",
+          "source": "operator-write",
+          "kind": "operator",
+          "observedAt": "2026-09-15T14:02:11.000Z",
+          "value": [
+            {
+              "number": 4,
+              "penalty": 2
+            }
+          ],
+          "confidence": "authoritative",
+          "run": 1
+        },
+        {
+          "ingestSeq": 2,
+          "field": "gates",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T14:02:11.400Z",
+          "value": [
+            {
+              "number": 4,
+              "penalty": 50
+            }
+          ],
+          "confidence": "authoritative",
+          "judgingComplete": true,
+          "run": 1
+        }
       ],
-      "expect": { "gates": { "state": "known", "value": [ { "number": 4, "penalty": 50 } ],
-                              "source": "tcp", "provisional": false },
-                  "writeRequest": { "status": "mismatched", "confirmedValue": [ { "number": 4, "penalty": 50 } ] },
-                  "note": "both facts are visible: the field shows the true echoed value, and the WriteRequest separately records the mismatch." }
+      "expect": {
+        "gates": {
+          "state": "known",
+          "value": [
+            {
+              "number": 4,
+              "penalty": 50
+            }
+          ],
+          "source": "tcp",
+          "provisional": false
+        },
+        "writeRequest": {
+          "status": "mismatched",
+          "confirmedValue": [
+            {
+              "number": 4,
+              "penalty": 50
+            }
+          ]
+        }
+      }
     },
-
-    { "id": "operator-write-provisional-false-not-superseded-by-incidental-report",
+    {
+      "id": "operator-write-superseded-by-rerun",
       "invariant": "operator-write",
-      "description": "A no-echo-expected assertion (provisional:false) is not superseded by a routine, incidental automated report the way a provisional:true write is by its very next observation.",
-      "context": { "cisConfigured": true },
+      "description": "A pending write whose run generation is replaced by a re-run resolves to superseded.",
       "given": [
-        { "ingestSeq": 1, "field": "entry", "source": "operator-write", "observedAt": "2026-09-22T09:00:00.000Z",
-          "value": { "entryId": "30099.K1M_ST" }, "confidence": "authoritative", "provisionalOverride": false },
-        { "ingestSeq": 2, "field": "entry", "source": "tcp", "observedAt": "2026-09-22T09:05:00.000Z",
-          "value": { "entryId": "30034.K1M_ST" }, "confidence": "authoritative" }
+        {
+          "ingestSeq": 1,
+          "field": "gates",
+          "source": "operator-write",
+          "kind": "operator",
+          "observedAt": "2026-09-15T14:02:11.000Z",
+          "value": [
+            {
+              "number": 4,
+              "penalty": 2
+            }
+          ],
+          "confidence": "authoritative",
+          "run": 1
+        },
+        {
+          "ingestSeq": 2,
+          "field": "run",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T14:02:12.000Z",
+          "value": 2,
+          "confidence": "authoritative"
+        }
       ],
-      "expect": { "entry": { "state": "known", "value": { "entryId": "30099.K1M_ST" }, "source": "operator-write" },
-                  "note": "the direct correction (no echo ever expected, since the on-site session that produced ingestSeq 2 predates it and there is nothing further to await) is not displaced by an automated tcp observation ranked below it — only a later human assertion or a specifically-triggered top-source re-read would supersede it." }
+      "expect": {
+        "writeRequest": {
+          "status": "superseded"
+        },
+        "gates": {
+          "state": "not-yet"
+        },
+        "run": {
+          "state": "known",
+          "value": 2
+        }
+      }
     },
-
-    { "id": "two-run-br1-untouched-by-br2",
+    {
+      "id": "operator-assertion-not-displaced-by-redelivery",
+      "invariant": "operator-write",
+      "description": "A no-echo correction (provisional:false) is not displaced by a re-delivery of the value the source already held.",
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "entry",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T08:00:00.000Z",
+          "value": {
+            "entryId": "30034.K1M"
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 2,
+          "field": "entry",
+          "source": "operator-write",
+          "kind": "operator",
+          "observedAt": "2026-09-15T09:00:00.000Z",
+          "value": {
+            "entryId": "30099.K1M"
+          },
+          "confidence": "authoritative",
+          "provisionalOverride": false
+        },
+        {
+          "ingestSeq": 3,
+          "field": "entry",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T09:05:00.000Z",
+          "value": {
+            "entryId": "30034.K1M"
+          },
+          "confidence": "authoritative"
+        }
+      ],
+      "expect": {
+        "entry": {
+          "state": "known",
+          "value": {
+            "entryId": "30099.K1M"
+          },
+          "source": "operator-write"
+        }
+      }
+    },
+    {
+      "id": "operator-assertion-displaced-by-changed-upstream-value",
+      "invariant": "operator-write",
+      "description": "A no-echo correction is displaced by a result observation that changes its source's retained value: a genuine later upstream correction.",
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "entry",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T08:00:00.000Z",
+          "value": {
+            "entryId": "30034.K1M"
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 2,
+          "field": "entry",
+          "source": "operator-write",
+          "kind": "operator",
+          "observedAt": "2026-09-15T09:00:00.000Z",
+          "value": {
+            "entryId": "30099.K1M"
+          },
+          "confidence": "authoritative",
+          "provisionalOverride": false
+        },
+        {
+          "ingestSeq": 3,
+          "field": "entry",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T09:05:00.000Z",
+          "value": {
+            "entryId": "30111.K1M"
+          },
+          "confidence": "authoritative"
+        }
+      ],
+      "expect": {
+        "entry": {
+          "state": "known",
+          "value": {
+            "entryId": "30111.K1M"
+          },
+          "source": "tcp"
+        }
+      }
+    },
+    {
+      "id": "rerun-retracts-run-scoped-fields",
+      "invariant": "run-generation",
+      "description": "A new start for a bib whose run is recorded starts generation 2 and retracts the run-scoped fields explicitly.",
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:00:00.000Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 85.0,
+            "penaltySeconds": 0,
+            "totalSeconds": 85.0
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true,
+          "run": 1
+        },
+        {
+          "ingestSeq": 2,
+          "field": "placement",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:00:00.000Z",
+          "value": {
+            "rank": 1,
+            "order": 1
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true,
+          "run": 1
+        },
+        {
+          "ingestSeq": 3,
+          "field": "run",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:05:00.000Z",
+          "value": 2,
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 4,
+          "field": "status",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:05:00.000Z",
+          "value": "on-course",
+          "confidence": "authoritative",
+          "run": 2
+        }
+      ],
+      "expect": {
+        "run": {
+          "state": "known",
+          "value": 2
+        },
+        "status": {
+          "state": "known",
+          "value": "on-course"
+        },
+        "outcome": {
+          "state": "not-yet"
+        },
+        "placement": {
+          "state": "not-yet"
+        },
+        "notifications": "one push carrying run, status and the explicit not-yet values"
+      }
+    },
+    {
+      "id": "rerun-old-generation-row-not-presented",
+      "invariant": "run-generation",
+      "description": "After a re-run starts, a result row describing the replaced run (finish before the new start) is retained as history, never presented.",
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "run",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:05:00.000Z",
+          "value": 2,
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:04:58.000Z"
+        },
+        {
+          "ingestSeq": 2,
+          "field": "outcome",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:05:30.000Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 85.0,
+            "penaltySeconds": 0,
+            "totalSeconds": 85.0
+          },
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T09:59:59.000Z",
+          "judgingComplete": true
+        }
+      ],
+      "expect": {
+        "outcome": {
+          "state": "not-yet"
+        }
+      }
+    },
+    {
+      "id": "rerun-status-transition-legal-only-with-generation",
+      "invariant": "attempt-status-transition",
+      "description": "finished -> on-course is legal only together with a run increment; without one it is refused.",
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "status",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:00:00.000Z",
+          "value": "finished",
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:00:00.000Z",
+          "run": 1
+        },
+        {
+          "ingestSeq": 2,
+          "field": "status",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:01:00.000Z",
+          "value": "on-course",
+          "confidence": "authoritative",
+          "run": 1
+        }
+      ],
+      "expect": {
+        "status": {
+          "state": "known",
+          "value": "finished"
+        },
+        "note": "an on-course observation without evidence of a new start (no new dtStart, no cleared row) is not a re-run."
+      }
+    },
+    {
+      "id": "under-review-independent-of-provisional",
+      "invariant": "under-review",
+      "description": "underReview and provisional are independent fields.",
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:00:00.000Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 85.0,
+            "penaltySeconds": 2,
+            "totalSeconds": 87.0
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        },
+        {
+          "ingestSeq": 2,
+          "field": "underReview",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:01:00.000Z",
+          "value": true,
+          "confidence": "authoritative"
+        }
+      ],
+      "expect": {
+        "underReview": {
+          "state": "known",
+          "value": true
+        },
+        "outcome": {
+          "state": "known",
+          "provisional": false
+        }
+      }
+    },
+    {
+      "id": "second-run-dns-keeps-combined-placement",
+      "invariant": "marks",
+      "description": "In a second-run race a DNS mark describes run 2 only: status dns, placement still the combined one.",
+      "context": {
+        "phase": "K1M_BR2_19"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "status",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T11:00:00.000Z",
+          "value": "dns",
+          "confidence": "authoritative",
+          "run": 1
+        },
+        {
+          "ingestSeq": 2,
+          "field": "placement",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T11:00:00.000Z",
+          "value": {
+            "rank": 110,
+            "order": 110
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        },
+        {
+          "ingestSeq": 3,
+          "field": "pairTotal",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T11:00:00.000Z",
+          "value": 121.5,
+          "confidence": "authoritative",
+          "judgingComplete": true
+        }
+      ],
+      "expect": {
+        "status": {
+          "state": "known",
+          "value": "dns"
+        },
+        "placement": {
+          "state": "known",
+          "value": {
+            "rank": 110,
+            "order": 110
+          }
+        },
+        "pairTotal": {
+          "state": "known",
+          "value": 121.5
+        }
+      }
+    },
+    {
+      "id": "two-run-br1-untouched-by-br2",
       "invariant": "two-run",
-      "description": "BR1's own cached Attempt is untouched by anything in BR2's message stream — the worked example in CONTRACTS.md SS2.11, as a vector.",
-      "context": { "cisConfigured": false },
+      "description": "Run 1's Attempt is untouched by anything in run 2's messages.",
       "given": [
-        { "ingestSeq": 1, "attemptId": "K1M_ST_BR1_6:9", "field": "outcome", "source": "tcp",
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
           "observedAt": "2026-09-15T09:40:00.000Z",
-          "value": { "kind": "duration", "runSeconds": 85.10, "penaltySeconds": 2, "totalSeconds": 87.10 },
-          "confidence": "authoritative" },
-        { "ingestSeq": 2, "attemptId": "K1M_ST_BR2_6:9", "field": "outcome", "source": "tcp",
-          "observedAt": "2026-09-15T10:14:28.000Z",
-          "value": { "kind": "duration", "runSeconds": 82.36, "penaltySeconds": 0, "totalSeconds": 82.36 },
-          "confidence": "authoritative" }
+          "value": {
+            "kind": "duration",
+            "runSeconds": 85.1,
+            "penaltySeconds": 2,
+            "totalSeconds": 87.1
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true,
+          "attemptId": "K1M_BR1_6:9"
+        },
+        {
+          "ingestSeq": 2,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:02.400Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 0,
+            "totalSeconds": 82.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true,
+          "attemptId": "K1M_BR2_6:9"
+        }
       ],
       "expect": {
-        "K1M_ST_BR1_6:9.outcome": { "state": "known", "value": { "totalSeconds": 87.10 }, "source": "tcp" },
-        "K1M_ST_BR2_6:9.outcome": { "state": "known", "value": { "totalSeconds": 82.36 }, "source": "tcp" },
-        "note": "two distinct Attempts (distinct phaseId), not one field with two values — nothing in BR2's row mentions BR1's attemptId at all." }
+        "K1M_BR1_6:9.outcome": {
+          "state": "known",
+          "value": {
+            "totalSeconds": 87.1
+          }
+        },
+        "K1M_BR2_6:9.outcome": {
+          "state": "known",
+          "value": {
+            "totalSeconds": 82.36
+          }
+        }
+      }
     },
-
-    { "id": "two-run-br1-recovered-via-cis-after-restart",
+    {
+      "id": "two-run-br1-recovered-from-xml-cold",
       "invariant": "two-run",
-      "description": "BR1 never observed live (server restarted between runs); CIS configured — full recovery via GetResult against BR1's own RaceId.",
-      "context": { "cisConfigured": true },
+      "description": "A cold server with no live observation recovers run 1 from the snapshot, authoritative.",
       "given": [
-        { "ingestSeq": 1, "attemptId": "K1M_ST_BR1_6:9", "field": "outcome", "source": "cis",
-          "observedAt": "2026-09-15T10:20:00.000Z", "eventTime": "2026-09-15T09:40:00.000Z",
-          "value": { "kind": "duration", "runSeconds": 85.10, "penaltySeconds": 2, "totalSeconds": 87.10 },
-          "confidence": "authoritative" },
-        { "ingestSeq": 2, "attemptId": "K1M_ST_BR1_6:9", "field": "gates", "source": "cis",
-          "observedAt": "2026-09-15T10:20:00.000Z",
-          "value": [ { "number": 12, "penalty": 2 } ], "confidence": "authoritative" }
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T15:36:00.000Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 85.1,
+            "penaltySeconds": 2,
+            "totalSeconds": 87.1
+          },
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T09:40:00.000Z",
+          "judgingComplete": true,
+          "runClosed": true,
+          "attemptId": "K1M_BR1_6:9"
+        }
       ],
       "expect": {
-        "K1M_ST_BR1_6:9.outcome": { "state": "known", "value": { "totalSeconds": 87.10 }, "source": "cis", "provisional": false },
-        "K1M_ST_BR1_6:9.gates": { "state": "known", "source": "cis" } }
+        "K1M_BR1_6:9.outcome": {
+          "state": "known",
+          "value": {
+            "totalSeconds": 87.1
+          },
+          "source": "xml",
+          "confidence": "authoritative",
+          "provisional": false
+        }
+      }
     },
-
-    { "id": "two-run-br1-recovered-via-xml-no-live-no-cis",
+    {
+      "id": "two-run-br1-unavailable-no-live-no-xml",
       "invariant": "two-run",
-      "description": "BR1 never observed live, CIS not configured: full recovery from the XML snapshot's own frozen run-1 row and run-2's BetterRunNr/Prev* fields — the primary path, checked against a real two-day event where this was the only one available all weekend.",
-      "context": { "cisConfigured": false, "xmlAvailable": true },
+      "description": "Run 1 never observed and the snapshot unreadable: unavailable only once run 2 has been observed, not-yet before.",
+      "context": {
+        "xml": "unreachable"
+      },
       "given": [
-        { "ingestSeq": 1, "attemptId": "K1M_ST_BR1_6:9", "field": "outcome", "source": "xml",
-          "observedAt": "2026-09-15T10:20:00.000Z", "eventTime": "2026-09-15T09:40:00.000Z",
-          "value": { "kind": "duration", "runSeconds": 85.10, "penaltySeconds": 2, "totalSeconds": 87.10 },
-          "confidence": "authoritative" },
-        { "ingestSeq": 2, "attemptId": "K1M_ST_BR1_6:9", "field": "gates", "source": "xml",
-          "observedAt": "2026-09-15T10:20:00.000Z",
-          "value": [ { "number": 12, "penalty": 2 } ], "confidence": "authoritative" }
-      ],
-      "expect": {
-        "K1M_ST_BR1_6:9.outcome": { "state": "known", "value": { "totalSeconds": 87.10 }, "source": "xml", "provisional": false },
-        "K1M_ST_BR1_6:9.gates": { "state": "known", "source": "xml" },
-        "note": "confidence: authoritative, not inferred — the snapshot's own fields are Canoe123 stating a fact directly, the same standing a TCP field has." }
-    },
-
-    { "id": "two-run-br1-unavailable-no-cache-no-xml-no-cis",
-      "invariant": "two-run",
-      "description": "BR1 never observed live, XML unreadable, CIS not configured: the one genuinely unrecoverable case, now requiring all three paths to fail rather than just CIS — and only once BR2's own arrival lets the domain layer conclude BR1's detail SHOULD exist, per the trigger condition made explicit in DERIVATIONS.md SS4.5.",
-      "context": { "cisConfigured": false, "xmlAvailable": false },
-      "given": [
-        { "ingestSeq": 1, "attemptId": "K1M_ST_BR2_6:9", "field": "outcome", "source": "tcp",
-          "observedAt": "2026-09-15T10:14:28.000Z",
-          "value": { "kind": "duration", "runSeconds": 82.36, "penaltySeconds": 0, "totalSeconds": 82.36 },
-          "confidence": "authoritative" }
-      ],
-      "expect": {
-        "K1M_ST_BR1_6:9.outcome": { "state": "unavailable", "reason": "not-observed-live-and-cis-unavailable" },
-        "K1M_ST_BR1_6:9.gates": { "state": "unavailable", "reason": "not-observed-live-and-cis-unavailable" },
-        "note": "before ingestSeq 1 (BR2 arriving), K1M_ST_BR1_6:9.outcome must read not-yet, not unavailable — see inv1-unavailable-never-defaulted and DERIVATIONS.md SS4.5's trigger condition." }
-    },
-
-    { "id": "cross-outcome-not-yet-before-operator-entry",
-      "invariant": "cross-outcome",
-      "description": "Before the operator enters heat order, a Cross Attempt's outcome is not-yet — never inferred from Gates-fill progress.",
-      "context": { "cisConfigured": false },
-      "given": [
-        { "ingestSeq": 1, "attemptId": "WX1_XS_26:4", "field": "status", "source": "tcp",
-          "observedAt": "2026-09-15T11:00:00.000Z", "value": "on-course", "confidence": "authoritative" }
-      ],
-      "expect": { "WX1_XS_26:4.outcome": { "state": "not-yet" } }
-    },
-
-    { "id": "cross-outcome-operator-asserted",
-      "invariant": "cross-outcome",
-      "description": "The operator's heat-order entry is presented immediately, authoritative, with no eventTime.",
-      "context": { "cisConfigured": false },
-      "given": [
-        { "ingestSeq": 1, "attemptId": "WX1_XS_26:4", "field": "outcome", "source": "operator-assertion",
-          "observedAt": "2026-09-15T11:03:40.000Z", "value": { "kind": "ordinal", "order": 2 },
-          "confidence": "authoritative" }
-      ],
-      "expect": { "WX1_XS_26:4.outcome": { "state": "known", "value": { "kind": "ordinal", "order": 2 },
-                                            "source": "operator-assertion", "confidence": "authoritative",
-                                            "provisional": false },
-                  "note": "no eventTime — Cross has none to give." }
-    },
-
-    { "id": "cross-outcome-corrected-after-next-heat-started",
-      "invariant": "cross-outcome",
-      "description": "A later correction to heat order lands and is presented even after the next heat has started — the deadline in ARCHITECTURE.md SS6.D governs the original assertion's timeliness and display prominence, never whether a correction is accepted.",
-      "context": { "cisConfigured": false },
-      "given": [
-        { "ingestSeq": 1, "attemptId": "WX1_XS_26:4", "field": "outcome", "source": "operator-assertion",
-          "observedAt": "2026-09-15T11:03:40.000Z", "value": { "kind": "ordinal", "order": 2 },
-          "confidence": "authoritative" },
-        { "ingestSeq": 2, "attemptId": "WX1_XS_26:1", "field": "status", "source": "tcp",
-          "observedAt": "2026-09-15T11:05:00.000Z", "value": "on-course", "confidence": "authoritative",
-          "note-only": "the next heat's first competitor appearing — not itself part of the assertion under test" },
-        { "ingestSeq": 3, "attemptId": "WX1_XS_26:4", "field": "outcome", "source": "operator-assertion",
-          "observedAt": "2026-09-15T11:06:10.000Z", "value": { "kind": "ordinal", "order": 3 },
-          "confidence": "authoritative" }
-      ],
-      "expect": { "WX1_XS_26:4.outcome": { "state": "known", "value": { "kind": "ordinal", "order": 3 },
-                                            "source": "operator-assertion" } }
-    },
-
-    { "id": "ongoing-recomputation-provisional-total-revised-by-late-gate",
-      "invariant": "ongoing-recomputation",
-      "description": "DERIVATIONS.md SS4.3's fix: a finishing Attempt's mechanically-computed outcome keeps updating as trailing gate judgements arrive, rather than freezing at the dtFinish instant.",
-      "context": { "cisConfigured": false },
-      "given": [
-        { "ingestSeq": 1, "field": "status", "source": "tcp", "observedAt": "2026-09-15T10:32:22.370Z",
-          "eventTime": "2026-09-15T10:32:22.370Z", "value": "finished", "confidence": "authoritative" },
-        { "ingestSeq": 2, "field": "outcome", "source": "tcp", "observedAt": "2026-09-15T10:32:22.370Z",
-          "value": { "kind": "duration", "runSeconds": 83.55, "penaltySeconds": 2, "totalSeconds": 85.55 },
-          "confidence": "inferred" }
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:02.400Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 0,
+            "totalSeconds": 82.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true,
+          "attemptId": "K1M_BR2_6:9"
+        }
       ],
       "expectSequence": [
-        { "afterGivenIndex": 1,
-          "expect": { "outcome": { "state": "known", "value": { "totalSeconds": 85.55 }, "provisional": true } } }
-      ],
-      "then": [
-        { "ingestSeq": 3, "field": "outcome", "source": "tcp", "observedAt": "2026-09-15T10:32:24.170Z",
-          "value": { "kind": "duration", "runSeconds": 83.55, "penaltySeconds": 4, "totalSeconds": 87.55 },
-          "confidence": "inferred" }
+        {
+          "afterGivenIndex": -1,
+          "expect": {
+            "K1M_BR1_6:9.outcome": {
+              "state": "not-yet"
+            }
+          }
+        }
       ],
       "expect": {
-        "status": { "state": "known", "value": "finished" },
-        "outcome": { "state": "known", "value": { "totalSeconds": 87.55 }, "source": "tcp",
-                     "confidence": "inferred", "provisional": true },
-        "note": "the last gate judged at ingestSeq 3 (a further 2-point touch) revises the total from 85.55 to 87.55, seconds after status already read 'finished' at ingestSeq 1 — status and outcome are independent fields, per SS4.1's provisional note." }
+        "K1M_BR1_6:9.outcome": {
+          "state": "unavailable",
+          "reason": "source-unreachable"
+        }
+      }
     },
-
-    { "id": "phasestatus-official-to-revised-skips-unofficial",
+    {
+      "id": "cross-outcome-not-yet-before-operator-entry",
+      "invariant": "cross-outcome",
+      "description": "Before the operator enters the heat order, the outcome is not-yet and the status stays on-course, even after the heat left the on-course list.",
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "status",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T11:00:00.000Z",
+          "value": "on-course",
+          "confidence": "authoritative",
+          "attemptId": "WX1_XS_26:4"
+        },
+        {
+          "ingestSeq": 2,
+          "event": "oncourse-empty",
+          "observedAt": "2026-09-15T11:01:30.000Z"
+        }
+      ],
+      "expect": {
+        "WX1_XS_26:4.outcome": {
+          "state": "not-yet"
+        },
+        "WX1_XS_26:4.status": {
+          "state": "known",
+          "value": "on-course"
+        },
+        "oncourse": []
+      }
+    },
+    {
+      "id": "cross-outcome-from-placement-not-time",
+      "invariant": "cross-outcome",
+      "description": "The Cross ordinal is upstream's placement within the heat, never the finish order encoded in Time: a faulted athlete who finished first is placed after clean finishers.",
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "placement",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T11:03:40.000Z",
+          "value": {
+            "rank": 3,
+            "order": 3
+          },
+          "confidence": "authoritative",
+          "attemptId": "WX1_XS_26:4",
+          "rawTime": "1.00",
+          "heat": 1
+        }
+      ],
+      "expect": {
+        "WX1_XS_26:4.outcome": {
+          "state": "known",
+          "value": {
+            "kind": "ordinal",
+            "order": 3
+          },
+          "source": "tcp",
+          "confidence": "authoritative",
+          "provisional": false
+        },
+        "note": "finish position 1 (Time \"1.00\") but two faults; upstream places the athlete third."
+      }
+    },
+    {
+      "id": "cross-outcome-corrected-after-next-heat-started",
+      "invariant": "cross-outcome",
+      "description": "A later correction to heat order lands even after the next heat started; a stale snapshot row cannot undo it while TCP is connected.",
+      "context": {
+        "tcpConnectedThroughout": true
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "placement",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T11:03:40.000Z",
+          "value": {
+            "rank": 2,
+            "order": 2
+          },
+          "confidence": "authoritative",
+          "attemptId": "WX1_XS_26:4"
+        },
+        {
+          "ingestSeq": 2,
+          "field": "status",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T11:05:00.000Z",
+          "value": "on-course",
+          "confidence": "authoritative",
+          "attemptId": "WX1_XS_27:1"
+        },
+        {
+          "ingestSeq": 3,
+          "field": "placement",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T11:06:10.000Z",
+          "value": {
+            "rank": 3,
+            "order": 3
+          },
+          "confidence": "authoritative",
+          "attemptId": "WX1_XS_26:4"
+        },
+        {
+          "ingestSeq": 4,
+          "field": "placement",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T11:06:20.000Z",
+          "value": {
+            "rank": 2,
+            "order": 2
+          },
+          "confidence": "authoritative",
+          "attemptId": "WX1_XS_26:4"
+        }
+      ],
+      "expect": {
+        "WX1_XS_26:4.placement": {
+          "state": "known",
+          "value": {
+            "rank": 3,
+            "order": 3
+          },
+          "source": "tcp"
+        }
+      }
+    },
+    {
+      "id": "phasestatus-official-to-revised-skips-unofficial",
       "invariant": "phase-status-transition",
-      "description": "official -> revised is legal directly, without passing back through unofficial, per the maintainer's answer on corrections.",
-      "context": { "cisConfigured": true },
+      "description": "official -> revised is legal directly.",
       "given": [
-        { "ingestSeq": 1, "field": "status", "source": "tcp", "observedAt": "2026-09-15T13:00:00.000Z",
-          "value": "official", "confidence": "authoritative" },
-        { "ingestSeq": 2, "field": "status", "source": "tcp", "observedAt": "2026-09-20T09:00:00.000Z",
-          "value": "revised", "confidence": "authoritative" }
+        {
+          "ingestSeq": 1,
+          "field": "status",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T13:00:00.000Z",
+          "value": "official",
+          "confidence": "authoritative",
+          "scope": "phase"
+        },
+        {
+          "ingestSeq": 2,
+          "field": "status",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T13:30:00.000Z",
+          "value": "revised",
+          "confidence": "authoritative",
+          "scope": "phase"
+        }
       ],
-      "expect": { "status": { "state": "known", "value": "revised", "source": "tcp" } }
+      "scope": "phase",
+      "expect": {
+        "status": {
+          "state": "known",
+          "value": "revised"
+        }
+      }
     },
-
-    { "id": "attemptstatus-finished-to-dsq-post-finish",
+    {
+      "id": "attemptstatus-finished-to-dsq-post-finish",
       "invariant": "attempt-status-transition",
-      "description": "A post-finish disqualification is a legal transition, not a rejected regression.",
-      "context": { "cisConfigured": true },
+      "description": "A post-finish disqualification is legal, not a rejected regression.",
       "given": [
-        { "ingestSeq": 1, "field": "status", "source": "tcp", "observedAt": "2026-09-15T10:14:02.083Z",
-          "eventTime": "2026-09-15T10:14:02.079Z", "value": "finished", "confidence": "authoritative" },
-        { "ingestSeq": 2, "field": "status", "source": "tcp", "observedAt": "2026-09-15T10:20:00.000Z",
-          "value": "dsq", "confidence": "authoritative" }
+        {
+          "ingestSeq": 1,
+          "field": "status",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:14:02.083Z",
+          "value": "finished",
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:14:02.079Z"
+        },
+        {
+          "ingestSeq": 2,
+          "field": "status",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:20:00.000Z",
+          "value": "dsq",
+          "confidence": "authoritative"
+        }
       ],
-      "expect": { "status": { "state": "known", "value": "dsq", "source": "tcp" } }
+      "expect": {
+        "status": {
+          "state": "known",
+          "value": "dsq"
+        }
+      }
     },
-
-    { "id": "standing-tie-default-skip-rank",
-      "invariant": "standing-tiebreak",
-      "description": "Equal mechanical outcomes get equal rank by default — no invented tie-break.",
-      "context": { "cisConfigured": true },
-      "given": [
-        { "entryId": "A", "outcome": { "kind": "duration", "totalSeconds": 90.00 } },
-        { "entryId": "B", "outcome": { "kind": "duration", "totalSeconds": 90.00 } },
-        { "entryId": "C", "outcome": { "kind": "duration", "totalSeconds": 91.50 } }
-      ],
-      "expect": { "standing": [
-        { "entryId": "A", "rank": 1 }, { "entryId": "B", "rank": 1 }, { "entryId": "C", "rank": 3 } ],
-        "note": "skip ranking — the entry after a tied pair gets rank 3, not 2." }
+    {
+      "id": "standing-relays-upstream-order",
+      "invariant": "standing-assembly",
+      "description": "Entries sort by relayed order and show relayed rank; a single-run tie keeps its shared rank with upstream's sequence.",
+      "scope": {
+        "kind": "phase",
+        "phaseId": "C1M_BR1_19"
+      },
+      "given": {
+        "entries": [
+          {
+            "entryId": "A",
+            "bib": "40",
+            "status": "finished",
+            "placement": {
+              "rank": 3,
+              "order": 4
+            },
+            "provisional": false,
+            "underReview": false,
+            "result": {
+              "kind": "duration",
+              "totalSeconds": 100.7
+            }
+          },
+          {
+            "entryId": "B",
+            "bib": "45",
+            "status": "finished",
+            "placement": {
+              "rank": 3,
+              "order": 3
+            },
+            "provisional": false,
+            "underReview": false,
+            "result": {
+              "kind": "duration",
+              "totalSeconds": 100.7
+            }
+          },
+          {
+            "entryId": "C",
+            "bib": "12",
+            "status": "finished",
+            "placement": {
+              "rank": 1,
+              "order": 1
+            },
+            "provisional": false,
+            "underReview": false,
+            "result": {
+              "kind": "duration",
+              "totalSeconds": 95.0
+            }
+          },
+          {
+            "entryId": "D",
+            "bib": "7",
+            "status": "finished",
+            "placement": {
+              "rank": 2,
+              "order": 2
+            },
+            "provisional": false,
+            "underReview": false,
+            "result": {
+              "kind": "duration",
+              "totalSeconds": 98.2
+            }
+          }
+        ]
+      },
+      "expect": {
+        "standing": [
+          {
+            "entryId": "C",
+            "rank": 1,
+            "order": 1
+          },
+          {
+            "entryId": "D",
+            "rank": 2,
+            "order": 2
+          },
+          {
+            "entryId": "B",
+            "rank": 3,
+            "order": 3
+          },
+          {
+            "entryId": "A",
+            "rank": 3,
+            "order": 4
+          }
+        ],
+        "anomalies": []
+      }
     },
-
-    { "id": "standing-tie-resolved-by-upstreamrank",
-      "invariant": "standing-tiebreak",
-      "description": "An explicit upstreamRank differentiating a mechanically-tied pair resolves it with sequential, non-skip ranks.",
-      "context": { "cisConfigured": true },
-      "given": [
-        { "entryId": "A", "outcome": { "kind": "duration", "totalSeconds": 90.00 }, "upstreamRank": 2 },
-        { "entryId": "B", "outcome": { "kind": "duration", "totalSeconds": 90.00 }, "upstreamRank": 1 },
-        { "entryId": "C", "outcome": { "kind": "duration", "totalSeconds": 91.50 } }
-      ],
-      "expect": { "standing": [
-        { "entryId": "B", "rank": 1 }, { "entryId": "A", "rank": 2 }, { "entryId": "C", "rank": 3 } ] }
+    {
+      "id": "standing-combined-tie-broken-upstream-no-anomaly",
+      "invariant": "standing-assembly",
+      "description": "A combined tie broken upstream by the non-counting run is relayed as is and is not an anomaly.",
+      "scope": {
+        "kind": "pair",
+        "firstPhaseId": "K1M_BR1_19",
+        "secondPhaseId": "K1M_BR2_19"
+      },
+      "given": {
+        "entries": [
+          {
+            "entryId": "A",
+            "bib": "5",
+            "status": "finished",
+            "placement": {
+              "rank": 7,
+              "order": 7
+            },
+            "provisional": false,
+            "underReview": false,
+            "pairTotal": 80.23
+          },
+          {
+            "entryId": "B",
+            "bib": "9",
+            "status": "finished",
+            "placement": {
+              "rank": 6,
+              "order": 6
+            },
+            "provisional": false,
+            "underReview": false,
+            "pairTotal": 80.23
+          }
+        ]
+      },
+      "expect": {
+        "standing": [
+          {
+            "entryId": "B",
+            "rank": 6
+          },
+          {
+            "entryId": "A",
+            "rank": 7
+          }
+        ],
+        "anomalies": []
+      }
     },
-
-    { "id": "standing-no-result-gets-null-rank",
-      "invariant": "standing-tiebreak",
-      "description": "A no-result outcome never receives a fabricated numeric rank.",
-      "context": { "cisConfigured": true },
-      "given": [
-        { "entryId": "A", "outcome": { "kind": "duration", "totalSeconds": 90.00 } },
-        { "entryId": "B", "outcome": { "kind": "no-result", "status": "dsq" } }
-      ],
-      "expect": { "standing": [
-        { "entryId": "A", "rank": 1 }, { "entryId": "B", "rank": null, "status": "dsq" } ] }
+    {
+      "id": "standing-unplaced-listed-after-with-null-rank",
+      "invariant": "standing-assembly",
+      "description": "An entry without placement is listed after all placed ones with null rank and order; no server-computed rank.",
+      "scope": {
+        "kind": "phase",
+        "phaseId": "K1M_BR1_6"
+      },
+      "given": {
+        "entries": [
+          {
+            "entryId": "A",
+            "bib": "3",
+            "status": "finished",
+            "placement": null,
+            "provisional": true,
+            "underReview": false,
+            "result": {
+              "kind": "duration",
+              "totalSeconds": 80.0
+            }
+          },
+          {
+            "entryId": "B",
+            "bib": "9",
+            "status": "finished",
+            "placement": {
+              "rank": 1,
+              "order": 1
+            },
+            "provisional": false,
+            "underReview": false,
+            "result": {
+              "kind": "duration",
+              "totalSeconds": 82.0
+            }
+          },
+          {
+            "entryId": "C",
+            "bib": "1",
+            "status": "dns",
+            "placement": null,
+            "provisional": false,
+            "underReview": false
+          }
+        ]
+      },
+      "expect": {
+        "standing": [
+          {
+            "entryId": "B",
+            "rank": 1,
+            "order": 1
+          },
+          {
+            "entryId": "A",
+            "rank": null,
+            "order": null
+          },
+          {
+            "entryId": "C",
+            "rank": null,
+            "order": null
+          }
+        ],
+        "anomalies": [],
+        "note": "A finished faster than B but has no placement yet (first push not ingested); it is not ranked by us. Unplaced entries order by status then bib: finished before dns."
+      }
     },
-
-    { "id": "standing-anomaly-upstream-rank-disagrees-nontied",
-      "invariant": "standing-tiebreak",
-      "description": "An upstream Rank disagreeing with a non-tied mechanical ordering never wins silently — the mechanical order stands and the disagreement is recorded.",
-      "context": { "cisConfigured": true },
-      "given": [
-        { "entryId": "A", "outcome": { "kind": "duration", "totalSeconds": 88.00 }, "upstreamRank": 2 },
-        { "entryId": "B", "outcome": { "kind": "duration", "totalSeconds": 90.00 }, "upstreamRank": 1 }
-      ],
-      "expect": { "standing": [ { "entryId": "A", "rank": 1 }, { "entryId": "B", "rank": 2 } ],
-                  "anomalies": [ { "kind": "rank-disagreement", "entryId": "B", "ourRank": 2, "upstreamRank": 1 } ] }
+    {
+      "id": "standing-age-category-assembled",
+      "invariant": "standing-assembly",
+      "description": "Age-category standing: filter the class standing, rank = 1 + number of same-category entries with a strictly better class rank.",
+      "scope": {
+        "kind": "phase",
+        "phaseId": "K1M_BR1_6"
+      },
+      "given": {
+        "entries": [
+          {
+            "entryId": "A",
+            "bib": "1",
+            "status": "finished",
+            "placement": {
+              "rank": 1,
+              "order": 1
+            },
+            "provisional": false,
+            "underReview": false,
+            "result": {
+              "kind": "duration",
+              "totalSeconds": 80
+            },
+            "ageCategoryId": "DS"
+          },
+          {
+            "entryId": "B",
+            "bib": "2",
+            "status": "finished",
+            "placement": {
+              "rank": 2,
+              "order": 2
+            },
+            "provisional": false,
+            "underReview": false,
+            "result": {
+              "kind": "duration",
+              "totalSeconds": 81
+            },
+            "ageCategoryId": "DM"
+          },
+          {
+            "entryId": "C",
+            "bib": "3",
+            "status": "finished",
+            "placement": {
+              "rank": 3,
+              "order": 3
+            },
+            "provisional": false,
+            "underReview": false,
+            "result": {
+              "kind": "duration",
+              "totalSeconds": 82
+            },
+            "ageCategoryId": "DM"
+          },
+          {
+            "entryId": "D",
+            "bib": "4",
+            "status": "finished",
+            "placement": {
+              "rank": 3,
+              "order": 4
+            },
+            "provisional": false,
+            "underReview": false,
+            "result": {
+              "kind": "duration",
+              "totalSeconds": 82
+            },
+            "ageCategoryId": "DM"
+          },
+          {
+            "entryId": "E",
+            "bib": "5",
+            "status": "finished",
+            "placement": {
+              "rank": 5,
+              "order": 5
+            },
+            "provisional": false,
+            "underReview": false,
+            "result": {
+              "kind": "duration",
+              "totalSeconds": 83
+            },
+            "ageCategoryId": "DS"
+          }
+        ]
+      },
+      "ageCategoryId": "DM",
+      "expect": {
+        "ageCategoryId": "DM",
+        "standing": [
+          {
+            "entryId": "B",
+            "rank": 1,
+            "order": 1
+          },
+          {
+            "entryId": "C",
+            "rank": 2,
+            "order": 2
+          },
+          {
+            "entryId": "D",
+            "rank": 2,
+            "order": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "standing-category-rank-disagreement-recorded",
+      "invariant": "standing-assembly",
+      "description": "When the snapshot's own category rank arrives and differs from the assembled one, an anomaly is recorded and the assembled rank stays.",
+      "scope": {
+        "kind": "phase",
+        "phaseId": "K1M_BR1_6"
+      },
+      "given": {
+        "entries": [
+          {
+            "entryId": "B",
+            "bib": "2",
+            "status": "finished",
+            "placement": {
+              "rank": 2,
+              "order": 2
+            },
+            "provisional": false,
+            "underReview": false,
+            "result": {
+              "kind": "duration",
+              "totalSeconds": 81
+            },
+            "ageCategoryId": "DM"
+          }
+        ]
+      },
+      "ageCategoryId": "DM",
+      "upstreamCategoryRanks": {
+        "B": 2
+      },
+      "expect": {
+        "standing": [
+          {
+            "entryId": "B",
+            "rank": 1
+          }
+        ],
+        "anomalies": [
+          {
+            "kind": "category-rank-disagreement",
+            "entryId": "B",
+            "assembled": 1,
+            "upstream": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "standing-order-disagreement-anomaly",
+      "invariant": "standing-assembly",
+      "description": "Relayed order placing a strictly worse result ahead of a strictly better one is recorded; the relayed order still stands.",
+      "scope": {
+        "kind": "phase",
+        "phaseId": "K1M_BR1_6"
+      },
+      "given": {
+        "entries": [
+          {
+            "entryId": "A",
+            "bib": "1",
+            "status": "finished",
+            "placement": {
+              "rank": 1,
+              "order": 1
+            },
+            "provisional": false,
+            "underReview": false,
+            "result": {
+              "kind": "duration",
+              "totalSeconds": 90.0
+            }
+          },
+          {
+            "entryId": "B",
+            "bib": "2",
+            "status": "finished",
+            "placement": {
+              "rank": 2,
+              "order": 2
+            },
+            "provisional": false,
+            "underReview": false,
+            "result": {
+              "kind": "duration",
+              "totalSeconds": 88.0
+            }
+          }
+        ]
+      },
+      "expect": {
+        "standing": [
+          {
+            "entryId": "A",
+            "rank": 1
+          },
+          {
+            "entryId": "B",
+            "rank": 2
+          }
+        ],
+        "anomalies": [
+          {
+            "kind": "order-disagreement",
+            "entryId": "A",
+            "aheadOfEntryId": "B"
+          }
+        ]
+      }
+    },
+    {
+      "id": "standing-cross-never-checked",
+      "invariant": "standing-assembly",
+      "description": "Cross scopes are never checked mechanically: fault-based order is upstream's rule.",
+      "scope": {
+        "kind": "heat",
+        "phaseId": "WX1_XS_26",
+        "heat": 1
+      },
+      "given": {
+        "entries": [
+          {
+            "entryId": "A",
+            "bib": "4",
+            "status": "finished",
+            "placement": {
+              "rank": 3,
+              "order": 3
+            },
+            "provisional": false,
+            "underReview": false
+          },
+          {
+            "entryId": "B",
+            "bib": "7",
+            "status": "finished",
+            "placement": {
+              "rank": 1,
+              "order": 1
+            },
+            "provisional": false,
+            "underReview": false
+          }
+        ]
+      },
+      "expect": {
+        "standing": [
+          {
+            "entryId": "B",
+            "rank": 1
+          },
+          {
+            "entryId": "A",
+            "rank": 3
+          }
+        ],
+        "anomalies": []
+      }
+    },
+    {
+      "id": "standing-behind-and-flags",
+      "invariant": "standing-assembly",
+      "description": "behindSeconds is the ranked value minus the leader's; provisional and underReview are copied from the Attempt.",
+      "scope": {
+        "kind": "pair",
+        "firstPhaseId": "K1M_BR1_6",
+        "secondPhaseId": "K1M_BR2_6"
+      },
+      "given": {
+        "entries": [
+          {
+            "entryId": "A",
+            "bib": "9",
+            "status": "finished",
+            "placement": {
+              "rank": 1,
+              "order": 1
+            },
+            "provisional": false,
+            "underReview": false,
+            "pairTotal": 160.0
+          },
+          {
+            "entryId": "B",
+            "bib": "3",
+            "status": "finished",
+            "placement": {
+              "rank": 2,
+              "order": 2
+            },
+            "provisional": true,
+            "underReview": true,
+            "pairTotal": 161.5
+          }
+        ]
+      },
+      "expect": {
+        "standing": [
+          {
+            "entryId": "A",
+            "behindSeconds": 0.0,
+            "provisional": false,
+            "underReview": false
+          },
+          {
+            "entryId": "B",
+            "behindSeconds": 1.5,
+            "provisional": true,
+            "underReview": true
+          }
+        ]
+      }
     }
   ]
 }

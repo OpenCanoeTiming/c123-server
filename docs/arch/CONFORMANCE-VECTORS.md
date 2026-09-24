@@ -1,40 +1,77 @@
 # Tier-1 Conformance Vectors
 
-The vectors `TEST-ARCHITECTURE.md` §3.1 calls the minimum that proves the contract implementable
-before any server code exists — and, since the independent review's F1 fix, the outside authority
-Tier 2's admission gate 3 checks a captured fixture against. Data lives in
-`vectors/tier1-conformance.json`, hand-authored, no shared runtime code (`DECISIONS/ADR-002`/
-`ADR-003`). This document is the format, the coverage map, and the two things the exercise found
-that no vector could paper over.
+`TEST-ARCHITECTURE.md` §3.1 names these vectors as the minimum that proves the contract implementable
+before any server code exists. They are also the outside authority that Tier 2's admission gate 3
+checks a captured fixture against. The data lives in `vectors/tier1-conformance.json`. It is
+hand-authored, with no shared runtime code (`DECISIONS/ADR-002`/`ADR-003`).
 
-36 vectors. Not a target hit — the number the coverage below actually needed. Row 2 of the ranking
-table needed four on its own, to show authority, recency, the no-CIS fallback, and the third-ranked
-`xml` case separately; some invariants (INV-4, INV-5, INV-6) needed exactly one, because there was
-exactly one distinct behaviour to pin down.
+**Consolidated revision, 2026-09-24.** Rebuilt against the consolidated contract.
+- **Retired:** every vector that exercised CIS. CIS is not consumed (`DECISIONS/ADR-011`).
+- **Rewritten:** the ranking-table rows became vectors for INV-2's rules. The mechanical tie-break
+  vectors became standing-assembly vectors (`DECISIONS/ADR-012`).
+- **New coverage:**
+  - reconnection after a TCP outage (R52);
+  - provisional marking in both upstream modes;
+  - re-run generations;
+  - age-category assembly;
+  - second-run marks;
+  - under review;
+  - Cross placement.
+
+**50 vectors:** 42 merge vectors and 8 standing-assembly vectors. The number is what the coverage
+needed, not a target.
 
 ---
 
 ## 1. Format
 
-Every vector: `id`, `invariant` (a coverage tag — an `INV-N` number, a `ranking-row-N`, or a named
-area like `two-run`), `description`, `context.cisConfigured`, an ordered `given`, and `expect` — the
-presented envelope(s) a correct implementation must produce after applying `given` in order. Two
-extensions to the shape sketched in `TEST-ARCHITECTURE.md` §3.1, both forced by vectors that could
-not otherwise be written precisely (§4 below):
+### Merge vectors
 
-- **`expectSequence` + `then`**, for a vector that must assert an *intermediate* state, not only the
-  final one — `ongoing-recomputation-*` needs this to show the total actually changing mid-sequence,
-  which is the entire point of that vector.
-- **Multi-attempt keying** (`"K1M_ST_BR1_6:9.outcome"` as an expectation key, rather than one implicit
-  Attempt per vector) — the `two-run-*` vectors are inherently about two Attempts' independence, so a
-  single-Attempt shape could not express what they need to prove.
+Each vector has:
+- `id`;
+- `invariant`, a coverage tag;
+- `description`;
+- an optional `context`;
+- an ordered `given`;
+- `expect`.
 
-**A second, distinct `given`/`expect` shape exists for the four `standing-tiebreak` vectors**, and
-this is deliberate, not an inconsistency: those test `CONTRACTS.md` §5's ranking *algorithm* over
-already-resolved outcomes, not the merge/precedence function every other vector exercises. Their
-`given` is a list of `{entryId, outcome, upstreamRank?}` — resolved facts, not raw observations —
-because §5 is a pure function of resolved values, and giving it anything else would test something
-`CONTRACTS.md` doesn't claim it does.
+**`given` contains two kinds of element.**
+- **Observations.** Each has these fields:
+  - `ingestSeq`, `field`, `source` (`tcp`, `xml` or `operator-write`) and `kind` (`inference`,
+    `result-row` or `operator`);
+  - `observedAt`, `value` and `confidence`;
+  - optionally `eventTime` and `run`, the run generation;
+  - optionally `judgingComplete` (whether every course gate is judged in this observation; `null`
+    where no course is configured) and `runClosed`;
+  - optionally `attemptId`, when a vector involves more than one Attempt.
+
+  Observations are *resolved*: `DERIVATIONS.md` has already turned wire fields into these values.
+  These vectors test the merge, not the derivation.
+- **Connection events.** Each has `ingestSeq`, `event` and `observedAt`. The events are
+  `tcp-disconnected`, `tcp-connected`, `xml-rewrite-detected` and `oncourse-empty`. They exist
+  because INV-2's rule 2 depends on TCP continuity.
+
+**`expect` is the presented state after the last given.**
+- An envelope field left out of `expect` is not asserted.
+- Keys may be prefixed by an `attemptId` (`K1M_BR1_6:9.outcome`).
+- `diagnostics` asserts INV-2b's surfaced disagreements.
+- `writeRequest` asserts the write status.
+- `notifications` asserts the number of client-visible changes.
+
+**`expectSequence` + `then`** assert an intermediate state. `afterGivenIndex` is 0-based, and `-1`
+means before any given. The observations in `then` are applied after it.
+
+### Standing-assembly vectors
+
+`given.entries` holds resolved Attempt facts:
+- `entryId`, `bib`, `status`;
+- `placement` (`{rank, order}` or `null`);
+- `result`, `pairTotal`, `ageCategoryId`;
+- `provisional`, `underReview`.
+
+`scope` names the Standing scope. `ageCategoryId`, where present, asks for that category's standing.
+`upstreamCategoryRanks` supplies the snapshot's own category ranks for the check. `expect` is the
+assembled `standing`, in order, plus `anomalies` (`CONTRACTS.md` §5).
 
 ---
 
@@ -42,92 +79,53 @@ because §5 is a pure function of resolved values, and giving it anything else w
 
 | Area | Vectors | Count |
 |---|---|---|
-| INV-1 (monotonic knowledge) | `inv1-untouched-field-not-regressed`, `inv1-unavailable-never-defaulted` | 2 |
-| INV-2 (authority-gated replace) | all nine `ranking-row-*` vectors, §4's table exhaustively — see below | 9 |
-| INV-2b (re-query, never silent override) | `inv2b-lower-ranked-disagreement-does-not-silently-adopt` — the observable-value half only, §3 | 1 |
-| INV-2c (eventTime floor) | `inv2c-stale-cis-eventtime-refused`, `inv2c-does-not-apply-without-eventtime` | 2 |
-| INV-3 (`unavailable` asserted, never defaulted) | the two `trichotomy-*` vectors | 2 |
-| INV-4 (identity bindings are `Observed`) | `inv4-entry-correction-is-a-field-update` | 1 |
-| INV-5 (idempotent supersession) | `inv5-identical-redelivery-is-a-noop` | 1 |
-| INV-6 (monotonic sequence, not wall clock) | `inv6-clock-jump-does-not-reorder-merge` | 1 |
-| §4 ranking table, row by row, with/without CIS | `ranking-row-1` (×1), `ranking-row-2` (×4: cis-confirms, cis-not-overridden, no-CIS self-correction, xml-only fallback), `ranking-row-3` (×1), `ranking-row-4` (×2: tcp-beats-xml, xml-fallback) | 8 |
-| Operator-write / operator-assertion carve-out | `operator-write-provisional-presented-immediately`, `-confirmed-by-matching-echo`, `-mismatched-echo-wins`, `-provisional-false-not-superseded-by-incidental-report` | 4 |
-| Two-run recovery (§4.5's three independent paths and the unrecoverable case) | `two-run-br1-untouched-by-br2`, `-recovered-via-xml-no-live-no-cis`, `-recovered-via-cis-after-restart`, `-unavailable-no-cache-no-xml-no-cis` | 4 |
-| Kayak Cross operator-asserted outcome | `cross-outcome-not-yet-before-operator-entry`, `-operator-asserted`, `-corrected-after-next-heat-started` | 3 |
-| Ongoing recomputation (`DERIVATIONS.md` §4.3's fix) | `ongoing-recomputation-provisional-total-revised-by-late-gate` | 1 |
-| State-machine legal transitions | `phasestatus-official-to-revised-skips-unofficial`, `attemptstatus-finished-to-dsq-post-finish` | 2 |
-| Standing computation (§5, beyond the brief's minimum ask) | the four `standing-tiebreak-*` vectors | 4 |
-
-(Rows overlap by design — every `ranking-row-*` vector is also part of INV-2's coverage; the map
-above counts each vector once, under whichever heading a reader would look for it first.)
-
-**Beyond the minimum asked:** the four `standing-tiebreak` vectors. Not requested explicitly, but
-`ADR-008`'s tie-break rule is exactly as precise and exactly as previously-flagged (the orchestrator's
-open question after round one) as anything on the required list, and leaving it uncovered while
-writing vectors for everything around it would have been a visible, avoidable gap.
+| INV-1 (monotonic knowledge) | `inv1-untouched-field-not-regressed`, `inv1-never-observed-stays-not-yet` | 2 |
+| INV-2 rule 1 (result row over inference) | `inv2-rule1-result-row-supersedes-inference`, `inv2-rule1-inference-never-supersedes-result-row` | 2 |
+| INV-2 rule 2 (TCP continuity) | `inv2-rule2-connected-tcp-beats-later-xml`, `-xml-takes-over-after-disconnect`, `-reconnect-does-not-restore-stale-tcp`, `-fresh-tcp-after-reconnect-wins`, `-xml-alone-at-cold-start` | 5 |
+| INV-2 rule 3 (single-source fields) | `inv2-rule3-single-source-field` | 1 |
+| INV-2 rule 4 (operator writes) | the six `operator-write-*` and `operator-assertion-*` vectors, including `superseded` | 6 |
+| INV-2b (surfaced, never adopted) | `inv2b-disagreement-surfaced-not-adopted` | 1 |
+| INV-2c (older event refused) | `inv2c-older-event-refused`, `inv2c-does-not-apply-without-eventtime` | 2 |
+| INV-3 and the trichotomy | `trichotomy-known-zero-not-confused-with-absence`, `trichotomy-unavailable-persists-explicitly`, `inv3-not-applicable-external-id` | 3 |
+| INV-4, INV-5, INV-6 | one each | 3 |
+| `provisional` in both upstream modes | `provisional-incomplete-judging-then-settles`, `-first-push-already-complete`, `-run-closed-without-course` | 3 |
+| Ongoing recomputation before the result push | `ongoing-recomputation-provisional-total-revised-by-late-gate` | 1 |
+| Run generation (re-run) | `rerun-retracts-run-scoped-fields`, `rerun-old-generation-row-not-presented`, `rerun-status-transition-legal-only-with-generation` | 3 |
+| Marks and review | `under-review-independent-of-provisional`, `second-run-dns-keeps-combined-placement`, `attemptstatus-finished-to-dsq-post-finish` | 3 |
+| Two-run | `two-run-br1-untouched-by-br2`, `-recovered-from-xml-cold`, `-unavailable-no-live-no-xml` | 3 |
+| Kayak Cross | `cross-outcome-not-yet-before-operator-entry`, `-from-placement-not-time`, `-corrected-after-next-heat-started` | 3 |
+| Phase status transition | `phasestatus-official-to-revised-skips-unofficial` | 1 |
+| Standing assembly (§5) | relayed order and single-run tie; combined tie with no anomaly; unplaced entries; age-category assembly; category-rank disagreement; order disagreement; Cross never checked; behind and flags | 8 |
 
 ---
 
-## 3. What these vectors do not cover, stated plainly
+## 3. What these vectors do not cover
 
-- **The re-query *trigger* itself (INV-2b's other half).** See §4 — recorded as a finding, not
-  quietly dropped.
-- **The wire-level derivation from raw Canoe123 fields.** Every `given` observation is already
-  resolved (`source`, `confidence`, `value` as `DERIVATIONS.md` would produce them) — these vectors
-  test the *merge* function in isolation, per `TEST-ARCHITECTURE.md` §3.1's own scope. Whether
-  `DERIVATIONS.md`'s transformations are themselves correct against real wire data is Tier 2's job,
-  checked against real recordings, not this tier's.
-- **Timing/latency assertions** — e.g. that a Cross assertion is pushed "instantly," or that the
-  four-second overlap window behaves as `ongoing-recomputation-*` describes across *real* elapsed
-  time. These vectors assert *what the merge produces given an ingest order*; they say nothing about
-  wall-clock speed, which is `TEST-ARCHITECTURE.md`'s tier-3 clock-injection concern, not tier 1's.
-- **Multi-organiser/tenancy isolation** (`CONTRACTS.md` §8.1's compound-key requirement). That is a
-  storage-layer property, not a merge-function one — nothing about how two organisers' data must be
-  keyed is expressible as an input sequence to a single Attempt's merge function.
-- **The full `CONTRACTS.md` §7/§8 wire shapes** (status codes, error envelopes, the subscribe-before-
-  snapshot handshake). Out of scope for conformance vectors by `TEST-ARCHITECTURE.md`'s own tier
-  boundaries — those are integration-level, not unit-level, concerns.
+- **Derivation from raw wire fields.** Gate-string parsing, units, sentinels, the fabricated-course
+  signatures and generation triggers are all Tier 2's job, against real recordings.
+  `DERIVATIONS.md` §4 is the specification.
+- **Timing.** These vectors say nothing about speed. The measured push latency is evidence for the
+  design, not a tier-1 assertion.
+- **Multi-organiser isolation** (`CONTRACTS.md` §8.1). That is a storage property.
+- **The full wire shapes of §7 and §8.** Those are integration-level concerns.
 
 ---
 
-## 4. What could not be written, and why
+## 4. What could not be written
 
-**INV-2b's re-query trigger cannot be expressed as a pure `given` → `expect` vector on the presented
-value, and writing one anyway would have been the "vaguer vector to fill the slot" the brief warned
-against.** The *value* half of INV-2b — a disagreement never silently overrides — is just INV-2's
-ordinary behaviour restated, and `inv2b-lower-ranked-disagreement-does-not-silently-adopt` covers
-exactly that, honestly labelled as covering only that. The *distinctive* half of INV-2b — that the
-disagreement **triggers a targeted re-query** — is a side effect of the domain layer's own behaviour
-on receiving an input, not a function of input to presented-state output. Testing it would require
-deciding, here, that the merge function's own interface exposes triggered actions (an
-`{newState, effects[]}` return shape, or an equivalent) — an interface decision `CONTRACTS.md` never
-makes and this document should not make quietly on its behalf. This is exactly the same gap
-`TEST-ARCHITECTURE.md` §9 already named ("no realistic test path... two ways to close it, neither
-designed here") — reached independently, from the vector-writing side rather than the tooling side,
-and landing on the same conclusion: recorded as untested by this tier, not solved by it.
+Nothing. The previous edition could not express INV-2b's re-query trigger as a vector. The re-query
+no longer exists (`DECISIONS/ADR-011`): INV-2b now only surfaces a diagnostic, and that is a
+presented-state fact, covered by `inv2b-disagreement-surfaced-not-adopted`.
 
 ---
 
-## 5. Decisions this exercise forced, recorded rather than chosen quietly
+## 5. Decisions this rebuild forced
 
-1. **The base vector format (`given`/`expect` alone) is insufficient for a vector that must assert an
-   intermediate state, not only a final one.** `expectSequence`/`then` (§1) is the extension; adopted
-   here because `ongoing-recomputation-*` could not otherwise show the behaviour that motivated
-   writing it in the first place.
-2. **A second `given`/`expect` shape is required for `CONTRACTS.md` §5's ranking algorithm**, since it
-   operates over resolved outcomes, not raw observations (§1). Naming this explicitly rather than
-   forcing one uniform shape onto two different functions.
-3. **The `not-yet` → `unavailable` boundary in the two-run unrecoverable case had no stated trigger**
-   until `two-run-br1-unavailable-no-cache-no-xml-no-cis` (renamed after a real event added a fourth
-   recovery path, see below) needed one to be a well-formed vector at all. Resolved in
-   `DERIVATIONS.md` §4.5 and §8 (finding 4): the determination requires BR2's own arrival to be
-   observed first: the domain layer cannot honestly assert "this should exist and cannot be supplied"
-   before it knows BR2 happened, so before that point the honest state is still `not-yet`, even though
-   intuitively "BR1 detail is gone" already sounds true from a purely definitional reading of the
-   two-run scenario. This is a genuine domain-timing fact, not a wording preference, and every reader
-   of `DERIVATIONS.md`'s prior text had to infer it rather than being told it.
-4. **Added after this document's first draft: `two-run-br1-recovered-via-xml-no-live-no-cis`.** A
-   real two-day event showed the XML snapshot alone recovers a superseded run's full detail with no
-   live observation and no CIS — `DERIVATIONS.md` §4.5's now-primary path, previously untested by this
-   suite because it was believed to need CIS or a cache to work at all. Its absence was itself a trace
-   of the assumption the event disproved; recorded here rather than silently patched in.
+1. **Connection events in `given`.** INV-2's rule 2 depends on TCP continuity, so an input sequence
+   without connection events could not express it. Adopted as a second kind of `given` element.
+2. **`kind`, `run`, `judgingComplete` and `runClosed` on observations.** Precedence (rule 1),
+   generation attribution and `provisional` depend on them. They are resolved by `DERIVATIONS.md`,
+   exactly as `source` and `confidence` already were.
+3. **Unplaced entries needed a stated order** to be a well-formed vector. `CONTRACTS.md` §5 step 3
+   now states it: `AttemptStatus` declaration order, then bib.
+4. **INV-2b needed a stated diagnostic shape.** `CONTRACTS.md` §4 and §7.1 now state it.

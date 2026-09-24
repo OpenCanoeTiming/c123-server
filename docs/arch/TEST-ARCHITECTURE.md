@@ -84,7 +84,7 @@ exactly where the maintainer warned it would.
 ### 3.1 Tier 1 — Contract conformance
 
 **What it proves:** an implementation of the merge rule (`CONTRACTS.md` §4's eight invariants and the
-source-ranking table) is correct, in isolation, with no recording and no running server.
+precedence rules) is correct, in isolation, with no recording and no running server.
 
 **Who this applies to:** exactly the two components that implement the merge rule —
 `c123-server` and `live-mini-server` (`ARCHITECTURE.md` §3: live-mini applies "the *same* merge
@@ -99,19 +99,26 @@ from its `CONTRACTS.md` §4 clause — the INV-2c vector below is written straig
 own prose, not from any recording:
 
 ```json
-{ "id": "inv-2c-stale-cis-refused",
+{ "id": "inv2c-older-event-refused",
   "given": [
-    { "source": "tcp", "observedAt": "2026-09-15T10:14:02.083Z",
-      "eventTime": "2026-09-15T10:14:02.079Z", "value": { "totalSeconds": 82.36 } },
-    { "source": "cis", "observedAt": "2026-09-15T10:14:11.400Z",
-      "eventTime": "2026-09-15T09:58:00.000Z", "value": { "totalSeconds": 81.90 } }
+    { "ingestSeq": 1, "source": "tcp", "kind": "result-row", "observedAt": "2026-09-15T10:40:00.000Z",
+      "eventTime": "2026-09-15T10:39:58.000Z", "value": { "totalSeconds": 84.0 } },
+    { "ingestSeq": 2, "event": "tcp-disconnected", "observedAt": "2026-09-15T10:41:00.000Z" },
+    { "ingestSeq": 3, "source": "xml", "kind": "result-row", "observedAt": "2026-09-15T10:41:10.000Z",
+      "eventTime": "2026-09-15T10:14:02.079Z", "value": { "totalSeconds": 88.5 } }
   ],
-  "expect": { "value": { "totalSeconds": 82.36 }, "source": "tcp",
-              "note": "cis outranks tcp for this category, but its eventTime is older — INV-2c refuses it" } }
+  "expect": { "value": { "totalSeconds": 84.0 }, "source": "tcp",
+              "note": "rule 2 alone would let the post-disconnect xml row win; its eventTime is older, so INV-2c refuses it" } }
 ```
 
-Roughly 25–30 vectors cover this precisely: one or two per invariant, one per row of the §4 ranking
-table, the tie-break and no-result cases from §5. Each of `c123-server` and `live-mini-server` writes
+(Shape abbreviated here. The authoritative format is `CONFORMANCE-VECTORS.md` §1.) The vectors
+cover:
+- every invariant and every rule of INV-2;
+- `provisional` in both upstream modes;
+- run generations;
+- §5's standing assembly.
+
+The count is 50 as of the consolidated revision (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
 a thin adapter that feeds these vectors into its own merge function and asserts the result — proving
 both satisfy the same data-defined contract without either depending on the other's code.
 
@@ -307,7 +314,7 @@ and only tier 4 needed it. Recorded as a genuine tooling gap in §9, not glossed
 ## 4. The fixture format
 
 **One format, used four ways**, because it is the same thing every time — a sequence of the same
-`{seq, type, attemptId|phaseId|categoryId, fields|standing|write|sources}` deltas `CONTRACTS.md`
+`{seq, type, attemptId|phaseId|classId|entryId|courseId, fields|standing|course|write|sources}` deltas `CONTRACTS.md`
 §7.2/§8.4 already define, with a file-level header:
 
 ```json
@@ -495,9 +502,8 @@ layer-implementation.md`, and the five named tools) — not the other way round.
 
 **Survives, and becomes more central, not less:**
 - `player.js` — the full v3-format emulator with its Control API is exactly what tier 2's new
-  capture tool drives, and exactly what a realistic tier-4 smoke test needs. **Qualified for CIS
-  specifically** — see the two named bugs below; the TCP/UDP/XML emulation this design leans on
-  hardest is unaffected.
+  capture tool drives, and exactly what a realistic tier-4 smoke test needs. Its CIS emulation is
+  no longer needed at all (`DECISIONS/ADR-011`). Only the TCP and XML emulation matter.
 - `extract-excerpt.js` — already produces exactly the "ingest fixture" §3.2 needs, checksum included.
   Zero rework; it was simply never used yet (`qa/excerpts/` is empty).
 - `recordings-cli.js` — its push/fetch/catalog mechanism is reused as-is for fixture distribution
@@ -532,24 +538,10 @@ layer-implementation.md`, and the five named tools) — not the other way round.
   in it addresses WS output capture, fixture loading, or clock control. Plausibly extended rather than
   replaced, but the two capabilities this design actually needs from a shared utility layer —
   capturing a domain-state fixture, and loading one into a tier-3 harness — are not there today.
-- **`player.js`'s `CisEmulator` has two real bugs, found under review, blocking any CIS-dependent
-  fixture today.** `_extractSoapMethod` (`player.js:434-526`) reads only the SOAP method name, never
-  `RaceId`/`Bib` — it cannot distinguish a `GetResult` call for bib 9 from one for bib 12, so it cannot
-  emulate CIS at the granularity every CIS-dependent scenario needs. Separately, the path meant to
-  populate `GetResult` from replayed data checks `record.cisMethod`, while the recorder actually writes
-  `type: 'CIS-${method}'` — a field-name mismatch that means the store is never populated from real
-  data at all, independent of the first bug. Both are prerequisites for any fixture exercising CIS,
-  not only for the item below.
-- **INV-2b's live re-query-triggering behaviour has no realistic test path, and this design does not
-  yet give it one.** Tier 1's synthetic vectors can assert the merge-level *outcome* of a re-query
-  (given a triggering disagreement and a synthetic response, the presented value updates correctly) —
-  but tier 2 deliberately bypasses live transport (§3.2's direct-injection replay), so even a fixed
-  `CisEmulator` sits outside that loop, and nothing in this design exercises the actual triggering
-  mechanism against realistic timing. Two ways to close this, neither designed here: extend the
-  fixture format to represent an on-demand query keyed by a trigger condition rather than a flat
-  timeline, or accept this as untested by tiers 1–4 and cover it with a narrow, dedicated integration
-  check outside them. Left open, §10 — stated plainly rather than assumed solved, since INV-2b exists
-  specifically to stop a subtle failure mode, and an untested mechanism for stopping it is worth naming.
+- ~~**`player.js`'s `CisEmulator` has two real bugs**~~ and ~~**INV-2b's live re-query has no test
+  path**~~. Both are **moot since the consolidated revision.** CIS is not consumed
+  (`DECISIONS/ADR-011`), and INV-2b no longer re-queries: it only surfaces a diagnostic, which tier 1
+  covers. The two emulator bugs remain real in the tool, but they block nothing this design needs.
 - **Write-echo emulation** — `player.js` explicitly does not emulate the write-side channels
   (`tools/player.js:904`). Tier 1 covers the merge-rule half of write handling without it; a
   realistic tier-4 round trip does not exist until this is built, and is recorded here as a gap
@@ -562,7 +554,7 @@ layer-implementation.md`, and the five named tools) — not the other way round.
 
 ## 10. Left open
 
-- ~~**The exact vector count and coverage for tier 1.**~~ **Resolved.** 35 vectors were written; the estimate did undercount, as the review suspected. Coverage map and the gaps that remain are in `CONFORMANCE-VECTORS.md` §2–§3. Original text follows for the record.
+- ~~**The exact vector count and coverage for tier 1.**~~ **Resolved.** 35 vectors were written, then 50 after the consolidated revision; the estimate did undercount, as the review suspected. Coverage map and the gaps that remain are in `CONFORMANCE-VECTORS.md` §2–§3. Original text follows for the record.
 - **The exact vector count and coverage for tier 1.** §3.1 gives a target range (~25–30) and method,
   not the vectors themselves — writing them is implementation, test-first, the same relationship
   `CONTRACTS.md` has to the server code it precedes. Raised directly under review: the §4 ranking
@@ -583,10 +575,11 @@ layer-implementation.md`, and the five named tools) — not the other way round.
   driver" could turn out to cost about what "shared pattern, locally forked" already costs today.
   Not resolved here — it is a question about implementation effort this document cannot settle by
   further specification, only by someone building the first driver and comparing.
-- **INV-2b's fixture-format extension**, if the "represent an on-demand query" option in §9 is the one
-  chosen over "accept it as untested" — what a triggered (not flat-timeline) step looks like is a real
-  design question, not resolved here, and is exactly the kind of thing that should be designed once a
-  real need for it (not just INV-2b) makes the shape clearer.
+- ~~**INV-2b's fixture-format extension.**~~ Moot: INV-2b no longer triggers a query
+  (`DECISIONS/ADR-011`).
+- **TCP connection events in fixtures.** INV-2's rule 2 depends on TCP continuity, so an ingest fixture
+  must record connect and disconnect events alongside messages, as the tier-1 vectors already do
+  (`CONFORMANCE-VECTORS.md` §5). Whether `extract-excerpt.js` captures them today is unverified.
 - Which test runner/framework each repository uses for tier 3 is that repository's own choice; this
   document requires the clock-injection discipline (§5) and the fixture format (§4), not a specific
   library.
