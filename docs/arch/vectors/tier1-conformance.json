@@ -4134,9 +4134,9 @@
       }
     },
     {
-      "id": "check-verified-when-value-unchanged",
+      "id": "check-stale-definition",
       "invariant": "workflow-state",
-      "description": "A check made against the presented penalty reads verified while that penalty is unchanged.",
+      "description": "A check reads verified while the presented penalty equals the value seen at check time, and stale once a later correction changes it.",
       "given": {
         "checks": [
           {
@@ -4160,39 +4160,6 @@
           }
         }
       },
-      "expect": {
-        "gateStatus": {
-          "C1W_BR1_19:38:1:7": "verified"
-        }
-      }
-    },
-    {
-      "id": "check-stale-after-late-correction",
-      "invariant": "workflow-state",
-      "description": "A protest correction 30 minutes later changes the presented penalty: the check reads stale, and one check.updated is pushed.",
-      "given": {
-        "checks": [
-          {
-            "attemptId": "C1W_BR1_19:38",
-            "run": 1,
-            "gate": 7,
-            "checkedAt": "2026-09-15T08:39:10.000Z",
-            "valueAtCheck": 52
-          }
-        ],
-        "flags": [],
-        "presented": {
-          "C1W_BR1_19:38": {
-            "run": 1,
-            "gates": [
-              {
-                "number": 7,
-                "penalty": 52
-              }
-            ]
-          }
-        }
-      },
       "expectSequence": [
         {
           "afterGivenIndex": -1,
@@ -4211,27 +4178,23 @@
               "gates": [
                 {
                   "number": 7,
-                  "penalty": 2
+                  "penalty": 50
                 }
               ]
             }
           }
         }
       ],
-      "context": {
-        "note": "recorded: bib 38 gate penalty 52 to 2, 15.4 min after the result."
-      },
       "expect": {
         "gateStatus": {
           "C1W_BR1_19:38:1:7": "stale"
-        },
-        "notifications": 1
+        }
       }
     },
     {
       "id": "check-null-vs-zero-distinct",
       "invariant": "workflow-state",
-      "description": "A check made while the gate was unjudged (null) is stale once it is judged clean (0); a check made against 0 is stale once the gate is retracted to null.",
+      "description": "null and 0 are distinct: a check made while the gate was unjudged is stale once it is judged clean; a check made against 0 is stale once the gate is retracted to null; when gates is not known the presented value is null.",
       "given": {
         "checks": [
           {
@@ -4247,6 +4210,20 @@
             "gate": 5,
             "checkedAt": "2026-09-15T08:39:10.000Z",
             "valueAtCheck": 0
+          },
+          {
+            "attemptId": "C1W_BR1_19:38",
+            "run": 1,
+            "gate": 6,
+            "checkedAt": "2026-09-15T08:39:10.000Z",
+            "valueAtCheck": null
+          },
+          {
+            "attemptId": "C1W_BR1_19:38",
+            "run": 1,
+            "gate": 8,
+            "checkedAt": "2026-09-15T08:39:10.000Z",
+            "valueAtCheck": 2
           }
         ],
         "flags": [],
@@ -4261,54 +4238,28 @@
               {
                 "number": 5,
                 "penalty": null
+              },
+              {
+                "number": 6,
+                "penalty": null
+              },
+              {
+                "number": 8,
+                "penalty": null
               }
             ]
           }
         }
       },
+      "context": {
+        "note": "gates 6 and 8 model the state after a retraction (ADR-015): the check is never deleted, its status follows the presented value."
+      },
       "expect": {
         "gateStatus": {
           "C1W_BR1_19:38:1:4": "stale",
-          "C1W_BR1_19:38:1:5": "stale"
-        }
-      }
-    },
-    {
-      "id": "check-null-when-gates-not-known",
-      "invariant": "workflow-state",
-      "description": "When Attempt.gates is not known, the presented penalty is null: a check made against null is verified, one made against a value is stale.",
-      "given": {
-        "checks": [
-          {
-            "attemptId": "C1W_BR1_19:38",
-            "run": 1,
-            "gate": 4,
-            "checkedAt": "2026-09-15T08:39:10.000Z",
-            "valueAtCheck": null
-          },
-          {
-            "attemptId": "C1W_BR1_19:38",
-            "run": 1,
-            "gate": 5,
-            "checkedAt": "2026-09-15T08:39:10.000Z",
-            "valueAtCheck": 2
-          }
-        ],
-        "flags": [],
-        "presented": {
-          "C1W_BR1_19:38": {
-            "run": 1,
-            "gates": null
-          }
-        }
-      },
-      "context": {
-        "note": "this is the state after a retraction (ADR-015): the check is never deleted."
-      },
-      "expect": {
-        "gateStatus": {
-          "C1W_BR1_19:38:1:4": "verified",
-          "C1W_BR1_19:38:1:5": "stale"
+          "C1W_BR1_19:38:1:5": "stale",
+          "C1W_BR1_19:38:1:6": "verified",
+          "C1W_BR1_19:38:1:8": "stale"
         }
       }
     },
@@ -4457,235 +4408,6 @@
           "K1M_BR1_19:55:1:4": "stale",
           "K1M_BR1_19:56:1:4": "plain"
         }
-      }
-    },
-    {
-      "id": "check-survives-rebaseline",
-      "invariant": "workflow-state",
-      "description": "A re-baseline keeps checks and flags and recomputes status against the rebuilt values.",
-      "given": {
-        "checks": [
-          {
-            "attemptId": "C1W_BR1_19:38",
-            "run": 1,
-            "gate": 7,
-            "checkedAt": "2026-09-15T08:39:10.000Z",
-            "valueAtCheck": 2
-          }
-        ],
-        "flags": [
-          {
-            "flagId": "f-1",
-            "attemptId": "C1W_BR1_19:38",
-            "run": 1,
-            "gate": 9,
-            "createdAt": "2026-09-15T08:40:00.000Z",
-            "comment": "spadl?"
-          }
-        ],
-        "presented": {
-          "C1W_BR1_19:38": {
-            "run": 1,
-            "gates": [
-              {
-                "number": 7,
-                "penalty": 2
-              },
-              {
-                "number": 9,
-                "penalty": 0
-              }
-            ]
-          }
-        }
-      },
-      "expectSequence": [
-        {
-          "afterGivenIndex": -1,
-          "expect": {
-            "gateStatus": {
-              "C1W_BR1_19:38:1:7": "verified",
-              "C1W_BR1_19:38:1:9": "flagged"
-            }
-          }
-        }
-      ],
-      "then": [
-        {
-          "event": "rebaseline",
-          "scope": {
-            "kind": "phase",
-            "phaseId": "C1W_BR1_19"
-          }
-        },
-        {
-          "presented": {
-            "C1W_BR1_19:38": {
-              "run": 1,
-              "gates": [
-                {
-                  "number": 7,
-                  "penalty": 50
-                },
-                {
-                  "number": 9,
-                  "penalty": 0
-                }
-              ]
-            }
-          }
-        }
-      ],
-      "expect": {
-        "gateStatus": {
-          "C1W_BR1_19:38:1:7": "stale",
-          "C1W_BR1_19:38:1:9": "flagged"
-        },
-        "checks": [
-          {
-            "attemptId": "C1W_BR1_19:38",
-            "run": 1,
-            "gate": 7,
-            "valueAtCheck": 2
-          }
-        ],
-        "flags": [
-          {
-            "flagId": "f-1"
-          }
-        ]
-      }
-    },
-    {
-      "id": "flag-lifecycle",
-      "invariant": "workflow-state",
-      "description": "An open flag reads flagged ahead of any check status; once resolved, the check status shows again; resolving twice is a no-op.",
-      "given": {
-        "checks": [
-          {
-            "attemptId": "C1W_BR1_19:38",
-            "run": 1,
-            "gate": 7,
-            "checkedAt": "2026-09-15T08:39:10.000Z",
-            "valueAtCheck": 2
-          }
-        ],
-        "flags": [
-          {
-            "flagId": "f-2",
-            "attemptId": "C1W_BR1_19:38",
-            "run": 1,
-            "gate": 7,
-            "createdAt": "2026-09-15T08:40:00.000Z",
-            "comment": "dotyk?",
-            "suggestedValue": 50
-          }
-        ],
-        "presented": {
-          "C1W_BR1_19:38": {
-            "run": 1,
-            "gates": [
-              {
-                "number": 7,
-                "penalty": 2
-              }
-            ]
-          }
-        }
-      },
-      "expectSequence": [
-        {
-          "afterGivenIndex": -1,
-          "expect": {
-            "gateStatus": {
-              "C1W_BR1_19:38:1:7": "flagged"
-            }
-          }
-        }
-      ],
-      "then": [
-        {
-          "resolve": "f-2",
-          "resolvedAt": "2026-09-15T08:45:00.000Z"
-        },
-        {
-          "resolve": "f-2",
-          "resolvedAt": "2026-09-15T08:46:00.000Z"
-        }
-      ],
-      "expect": {
-        "gateStatus": {
-          "C1W_BR1_19:38:1:7": "verified"
-        },
-        "flags": [
-          {
-            "flagId": "f-2",
-            "resolution": {
-              "resolvedAt": "2026-09-15T08:45:00.000Z"
-            }
-          }
-        ],
-        "notifications": 1
-      }
-    },
-    {
-      "id": "check-recheck-replaces-snapshot",
-      "invariant": "workflow-state",
-      "description": "Re-checking a stale gate replaces the snapshot with the current presented value: verified again.",
-      "given": {
-        "checks": [
-          {
-            "attemptId": "C1W_BR1_19:38",
-            "run": 1,
-            "gate": 7,
-            "checkedAt": "2026-09-15T08:39:10.000Z",
-            "valueAtCheck": 2
-          }
-        ],
-        "flags": [],
-        "presented": {
-          "C1W_BR1_19:38": {
-            "run": 1,
-            "gates": [
-              {
-                "number": 7,
-                "penalty": 50
-              }
-            ]
-          }
-        }
-      },
-      "expectSequence": [
-        {
-          "afterGivenIndex": -1,
-          "expect": {
-            "gateStatus": {
-              "C1W_BR1_19:38:1:7": "stale"
-            }
-          }
-        }
-      ],
-      "then": [
-        {
-          "check": {
-            "attemptId": "C1W_BR1_19:38",
-            "gate": 7,
-            "checkedAt": "2026-09-15T09:10:00.000Z"
-          }
-        }
-      ],
-      "expect": {
-        "gateStatus": {
-          "C1W_BR1_19:38:1:7": "verified"
-        },
-        "checks": [
-          {
-            "attemptId": "C1W_BR1_19:38",
-            "run": 1,
-            "gate": 7,
-            "valueAtCheck": 50
-          }
-        ]
       }
     }
   ]

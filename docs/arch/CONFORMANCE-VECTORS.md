@@ -24,9 +24,11 @@ hand-authored, with no shared runtime code (`DECISIONS/ADR-002`/`ADR-003`).
 **Revision round 2** (`DECISIONS/ADR-015`) added 15 vectors for retraction, contradiction, marks over
 time, half-corrections, the re-baseline and the live tier's explicit reset.
 
-**Round 3** (`DECISIONS/ADR-016`, #168) added 10 workflow-state vectors for gate checks and flags.
+**Round 3** (`DECISIONS/ADR-016`, #168) added 5 workflow-state vectors for gate checks: only the
+contract-level rules. Durability and the flag lifecycle are ordinary store tests in `c123-server`
+(`TEST-ARCHITECTURE.md` §3.5), not vectors.
 
-**80 vectors:** 62 merge vectors, 8 standing-assembly vectors and 10 workflow-state vectors. The number is what the coverage
+**75 vectors:** 62 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
 needed, not a target.
 
 ---
@@ -93,11 +95,9 @@ assembled `standing`, in order, plus `anomalies` (`CONTRACTS.md` §5).
 ### Workflow-state vectors
 
 `given` holds `checks`, `flags` and `presented` (per Attempt: the current `run` and the presented
-`gates`, `null` where `Attempt.gates` is not `known`). `then` steps are: a new `presented` state; a
-`check` write; a `resolve` of a flag; or a `rebaseline` event. `expect` is `gateStatus`, a map of
-`attemptId:run:gate` to `flagged | verified | stale | plain`, plus optionally the resulting `checks`
-and `flags` (only the fields listed are asserted) and `notifications`, the number of `check.updated`
-or `flag.updated` pushes.
+`gates`, `null` where `Attempt.gates` is not `known`). A `then` step is a new `presented` state.
+`expect` is `gateStatus`, a map of `attemptId:run:gate` to `flagged | verified | stale | plain`, plus
+optionally the resulting `checks` (only the fields listed are asserted).
 
 ---
 
@@ -117,7 +117,7 @@ or `flag.updated` pushes.
 | Marks over time; half-corrections | `status-overrides-time`, `half-correction-snapshot-duplicate-finish` | 2 |
 | Re-baseline | `rebaseline-discards-stale-tcp-and-rebuilds-from-xml`, `rebaseline-keeps-writes-and-generation` | 2 |
 | Live tier explicit reset | `live-explicit-not-yet-resets-field` | 1 |
-| Workflow state (§2.10): staleness, `null` vs `0`, team sums, generations, moved results, re-baseline, flags, re-check | the ten `check-*` and `flag-*` vectors | 10 |
+| Workflow state (§2.10): what `stale` compares against (`null` vs `0`, team sums, `gates` not known), the re-run and re-bib interplay | `check-stale-definition`, `check-null-vs-zero-distinct`, `check-team-sum-compared`, `check-not-carried-to-new-generation`, `check-stays-with-bib-when-result-moves` | 5 |
 | INV-2 rule 3 (single-source fields) | `inv2-rule3-single-source-field` | 1 |
 | INV-2 rule 4 (operator writes) | the six `operator-write-*` and `operator-correction-*` vectors, including `superseded` | 6 |
 | INV-2b (surfaced, never adopted) | `inv2b-disagreement-surfaced-not-adopted` | 1 |
@@ -173,5 +173,5 @@ presented-state fact, covered by `inv2b-disagreement-surfaced-not-adopted`.
 6. **The XML write-time guard needed the poll interval in `context`** (`xmlPollIntervalSeconds`),
    because the guard is defined in terms of it.
 7. **Workflow state needed a third shape** (round 3). Its rules are functions over stored checks and
-   the presented state, not over observations, and `TEST-ARCHITECTURE.md` §3.5 says why they are
-   vectors at all: the durability half is a store-boundary suite, and only the rules are contract.
+   the presented state, not over observations. Only those rules are vectors; durability and the flag
+   lifecycle are store tests (`TEST-ARCHITECTURE.md` §3.5).

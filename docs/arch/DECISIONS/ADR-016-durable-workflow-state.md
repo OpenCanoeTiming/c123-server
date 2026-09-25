@@ -45,10 +45,11 @@ verification path: the state appears in no recording, so tiers 2 and 3 cannot co
    - `entry` being re-pointed (INV-4) does not move a check: it belongs to the Attempt, not the person.
 5. **Durability is a contract guarantee with a verification path.** Every change is written
    atomically (temporary file, then rename) before the write is acknowledged and before it is pushed;
-   the file is validated on load. `TEST-ARCHITECTURE.md` §3.5 defines a narrow durability suite,
-   owned by `c123-server`, that needs no recording and no emulator: restart round-trip, crash
-   mid-write, event switch without merging, re-run isolation, re-baseline preservation, staleness
-   after a late correction, and the flag lifecycle. The contract-level rules are tier-1 vectors.
+   the file is validated on load. It is verified by ordinary unit and integration tests of the store
+   in `c123-server`, outside the replay and fixture tiers (`TEST-ARCHITECTURE.md` §3.5): this is a
+   bounded storage feature, not race behaviour, and it gets no tier and no harness of its own. Only
+   the contract-level rules, what `stale` compares against and the re-run and re-bib interplay, are
+   tier-1 vectors.
 
 ## Options considered
 
@@ -65,7 +66,7 @@ switch inside one event (`ARCHITECTURE.md` Scenario E), which would split a day'
 ## What it costs
 
 A value snapshot per check, a status recomputation whenever a presented gate penalty changes, and
-one small test suite outside the four tiers.
+ordinary store tests in one repository.
 
 ## What it forecloses
 
