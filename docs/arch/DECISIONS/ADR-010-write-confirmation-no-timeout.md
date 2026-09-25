@@ -73,3 +73,11 @@ Attempt has left upstream's on-course list (`CONTRACTS.md` §7.3). Holding the w
 at closure was rejected as a quiet failure path. Today's code sends the correction command in that
 window regardless (`EVIDENCE.md` Exhibit 14).
 
+## Revision 3 — no status write (2026-09-25)
+
+No inbound command can set or clear a result mark on a closed run (observed upstream behaviour:
+the only status command targets an on-course slot by position and ignores the bib), and
+penalty-check writes only closed runs. The status write has therefore left the contract.
+`WriteRequest.target.field` is `'gate-penalty'` only, and marks are set and cleared by the operator
+in Canoe123 (`CONTRACTS.md` §2.9, §7.3).
+

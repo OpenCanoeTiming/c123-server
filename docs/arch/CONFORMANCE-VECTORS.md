@@ -82,11 +82,14 @@ Each vector has:
 
 **Which vectors the live tier runs** (`CONTRACTS.md` §8.3, "Merge on the live tier").
 live-mini-server runs every vector tagged `INV-1`, `INV-3`, `INV-4`, `INV-5`, `INV-6`,
-`operator-write`, `live-ingest`, `run-generation` and `standing-assembly`, and none tagged `INV-2 …`,
-`INV-2b`, `INV-2c`, `INV-2d`, `INV-7`, `oncourse`, `provisional`, `two-run`, `cross-outcome`,
-`left-without-finish`, `marks`, `half-correction`, `rebaseline` or `workflow-state`: those need the
-on-course stream, connection events, scope snapshots or the checks store, none of which the live
-wire carries. `ARCHITECTURE.md` §3's "the same merge invariants" means exactly this subset.
+`operator-write` and `live-ingest`, and the `standing-assembly` vectors **except** the three anomaly
+ones (`standing-category-rank-disagreement-recorded`, `standing-order-disagreement-anomaly`,
+`standing-cross-never-checked`), since the live tier assembles without steps 4 and 7 of
+`CONTRACTS.md` §5. It runs none tagged `INV-2 …`, `INV-2b`, `INV-2c`, `INV-2d`, `INV-7`,
+`run-generation`, `oncourse`, `provisional`, `two-run`, `cross-outcome`, `left-without-finish`,
+`marks`, `half-correction`, `rebaseline` or `workflow-state`: those need the on-course stream,
+connection events, scope snapshots, generation triggers or the checks store, none of which the live
+wire carries (a generation change reaches live as explicit `not-yet`). `ARCHITECTURE.md` §3's "the same merge invariants" means exactly this subset.
 
 **`expect` is the presented state after the last given.**
 - An envelope field left out of `expect` is not asserted.

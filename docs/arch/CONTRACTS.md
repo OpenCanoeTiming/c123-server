@@ -464,8 +464,10 @@ semi-final, then the heats, and used for points. Each row says which round decid
 place. A classification Phase holds no Attempts; it feeds a `classification` Standing (§2.7).
 **Staleness, stated:** upstream rebuilds a classification only when the operator presses "calculate
 event result", so a later correction in a contributing Phase does not reach it until then. The
-classification is relayed as upstream last built it, never recomputed by us; a client shows it with
-its own `observedAt`. `RXER` is a title for which upstream calculates nothing: a classification Phase
+classification is relayed as upstream last built it, never recomputed by us. **`Standing.asOf` is
+what tells a client how old it is** (§5): for a classification it is the ingest time of the last row
+observation, which moves only when the operator recalculates, so a client compares it with the
+`asOf` of the contributing Phases' standings to see that it lags them. `RXER` is a title for which upstream calculates nothing: a classification Phase
 that never holds rows.
 
 **`date` is assigned once and never changes**, even if a correction to the Phase's results is pushed a
@@ -494,6 +496,7 @@ type Entry = {
   nation: Observed<string>            // [D] xml — see "Nation" below
   ageCategoryId: Observed<string>     // [D] xml; not-applicable where the class has no age categories
   eventBib: Observed<string>          // [D] xml; not-applicable where bibs are issued per race
+  isTeam: Observed<boolean>           // [D] xml — a team or patrol boat (judged per member); a C2 double is not
 }
 ```
 
@@ -524,8 +527,8 @@ type Entry = {
 - **Birth date** (maintainer answer Q4). The on-site contract (§7) carries only the **birth year**:
   no venue consumer needs the day, and the year is what places an athlete in an age category. The
   live ingest contract (§8.3) carries the birth date as entered, often `YYYY-01-01` with only the year
-  meaningful. Whether the live store keeps it, and whether it is ever published, is live-client
-  configuration, not a contract rule.
+  meaningful. The live store keeps it; whether and how it is published is the per-event
+  `birthDatePublication` setting of §8.4, default year only.
 - **Nation.** Upstream's nation code, relayed as a string. At events where the competing units are
   regions, organisers legitimately fill it with regional codes. At national events, a foreign
   entrant's country may appear only inside the club name. A client must not assume `nation` is always
@@ -614,7 +617,13 @@ and the run is raced again. Meanwhile, it looks as if the athlete never did that
   (through its injected clock, `TEST-ARCHITECTURE.md` §5) to the last `elapsedSeconds`, provided it
   snaps to every new `running` value as it arrives and stops the instant `status` leaves
   `on-course`. Upstream re-sends at least once per second, so the local tick never runs more than
-  about a second ahead of a real value.
+  about a second ahead of a real value. **The tick also stops when the feed goes quiet:** a client
+  ticks for at most `runningStaleAfterSeconds` (a named constant, 3 s) past the last `running`
+  value's `observedAt`, then freezes the display at that value and shows it as stale, with its age.
+  This is the same rule on both tiers: a TCP outage on site, or a quiet bridge on live. The value is
+  never cleared by time (stale over flicker), and it never runs on as if the athlete were still
+  moving. On site, `SourceStatus.tcp` says why; on live, `oncourse.updated`'s `asOf` and the
+  calendar's status do.
 - **`duration`:** a slalom run's own time, penalties and total. On a second run of a pair, this is
   **run 2's own** figures:
   - the time is run 2's own;
@@ -1147,7 +1156,11 @@ implementation must satisfy, not an algorithm.
   `GET /api/diagnostics` (§7.1), the same audience as `SourceStatus`. Two further diagnostic kinds
   live there: `{ kind: 'contradicted-finish'; attemptId; finishTime }` (INV-2d) and
   `{ kind: 'duplicate-finish'; phaseId; finishTime; bibs: string[] }` (§2.6), and
-  `{ kind: 'stale-mark'; attemptId; run; mark }` (§2.6, a mark carried over a re-run). It never changes the presented
+  `{ kind: 'stale-mark'; attemptId; run; mark }` (§2.6, a mark carried over a re-run),
+  `{ kind: 'member-sum-mismatch'; attemptId; gate; crew: number; members: (number | null)[] }` (§2.6)
+  and `{ kind: 'unparseable-cell'; attemptId; source; slot; text: string }` (§1.3). All six are
+  admin-facing, served by `GET /api/diagnostics` and pushed as `diagnostics.updated` (§7.2), never on
+  the live tier, and never rendered by a scoreboard. It never changes the presented
   value by itself. There is no
   re-query: no on-demand source remains (`DECISIONS/ADR-011`), and neither remaining source can hold
   a correction back.
@@ -1254,6 +1267,9 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
 
    `standingKey = "<scope.kind>:<phaseId>[:<heat>]/<ageCategoryId | 'all'>"`, with `phaseId` being the
    second Phase for a pair.
+   **`asOf`** is the ingest time of the latest observation that contributed to any entry of the
+   standing: for a race or pair standing, the latest `placement`, `outcome` or `pairTotal`
+   observation of its Attempts; for a classification, the latest row observation (§2.4).
 2. **Whole-class entries.**
    - Each Attempt of the Phase with a `known` `placement` is an entry. It gets that `placement`'s
      `rank` and `order`.
@@ -1358,7 +1374,7 @@ Every response except `/api/sources` carries `asOfSeq: number` (§1.6) at the to
 | `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null }`: every Attempt currently on upstream's on-course list with status `at-start` or `on-course`, across every running Phase. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8). Kept current by `oncourse.updated` (§7.2) | — |
 | `GET /api/phases/{phaseId}/checks` | `{ asOfSeq, checks: GateCheck[], flags: GateFlag[] }`: every check and flag of the Phase, all run generations, `status` derived at serialisation (§2.10) | `404 phase-not-found` |
 | `GET /api/sources` | `SourceStatus`, unwrapped | — |
-| `GET /api/diagnostics` | `{ asOfSeq, diagnostics: Diagnostic[] }`: current source disagreements, contradicted finishes and duplicate finishes (§4). Admin audience only | — |
+| `GET /api/diagnostics` | `{ asOfSeq, diagnostics: Diagnostic[] }`: every current diagnostic of the six kinds in §4 (source disagreement, contradicted finish, duplicate finish, stale mark, member-sum mismatch, unparseable cell). Admin audience only | — |
 | `POST /api/rebaseline` | body `{ "scope": { "kind": "phase", "phaseId": string } \| { "kind": "event" } }`. `200 { asOfSeq, scope, snapshotWrittenAt, snapshotDetectedAt, attempts: number }`: the operator re-baseline (§4). Admin audience only; safe to repeat | `404 phase-not-found`; `409 source-unavailable` |
 
 **Which competitor to feature** is a presentation decision (`ARCHITECTURE.md` §2). The default the
@@ -1390,9 +1406,12 @@ Every message carries `seq` (§1.6).
 - **A retraction** (§4 INV-7) or a contradiction (INV-2d) is sent as `attempt.updated` with explicit
   `not-yet` values, never by omission.
 - **`oncourse.updated`** carries the whole on-course set: `{ attemptIds: string[], featuredByUpstream:
-  string | null }`, `attemptIds` in `courseOrder` (§7.1). It is sent whenever membership, order or the
+  string | null, asOf: Timestamp }`, `attemptIds` in `courseOrder` (§7.1), `asOf` the ingest time of
+  the latest on-course observation behind it. It is sent whenever membership, order or the
   featured competitor changes. The Attempts themselves arrive by `attempt.updated`; this message is
   what keeps the set current, including in Kayak Cross, where leaving the list changes no `status`.
+- **`diagnostics.updated`** carries the whole current `Diagnostic[]` whenever it changes. Admin
+  audience only; a scoreboard ignores it.
 - **`event.changed`** carries the whole `Event`. It is sent when the current event changes: on the
   explicit "start a new event" action (`ARCHITECTURE.md` Scenario E), or when a client connects while
   an event is configured. On a *different* `eventId` than the one the client holds, the client
@@ -1463,7 +1482,15 @@ has left the list (`oncourse.updated`, §7.2). Holding the write server-side and
 closure was rejected: it needs a queued state, and it goes wrong quietly when the run is retracted
 or re-run meanwhile. A refusal is loud, and the wait is seconds.
 
+**Retrying after `409 run-not-closed`.** A `409` creates no `WriteRequest` and binds no
+`Idempotency-Key`, so the retry may reuse the key or take a new one; either is one correction. The
+trigger is the first `oncourse.updated` (§7.2) whose `attemptIds` no longer contain the Attempt. A
+tablet may also simply disable the write while the Attempt is listed, which is the same rule applied
+before the request.
+
 **Team boats: the operator corrects them in Canoe123, never the tablet** (maintainer, binding).
+The tablet knows a team boat from `Entry.isTeam` (§2.5) and hides or disables the write up front;
+the `409` is the backstop, not the interface.
 Upstream's correction command replaces the crew sum and leaves the member cells stale, and the
 maintainer wants no crew-sum correction from the tablet. A penalty write for a team-boat Attempt is
 refused: `409 write-not-possible`, `reason: 'team-boat'`. The read side is unchanged: per-member
@@ -1558,7 +1585,7 @@ with `error.details` naming the field.
 | `PUT /ingest/v2/classes/{classId}` | `{ "code": string, "name": string, "discipline": "slalom"\|"cross", "ageCategories": [{ "ageCategoryId": string, "name": string }] }` |
 | `PUT /ingest/v2/courses/{courseId}` | `{ "gates": [{ "number": number, "kind": "downstream"\|"upstream" }], "sectorEndsAfterGate": number[], "splitsAfterGate": number[] }` |
 | `PUT /ingest/v2/phases/{phaseId}` | `{ "classId": string, "kind": "race"\|"classification", "scoringKind": "duration"\|"ordinal", "pair": { "role": "first"\|"second", "siblingPhaseId": string, "combination": "best"\|"sum" } \| null, "heats": boolean, "date": "YYYY-MM-DD", "courseId": string \| null, "scheduledStart": Timestamp \| null, "programmeOrder": number \| null, "title": string \| null, "status": PhaseStatus }` |
-| `PUT /ingest/v2/entries/{entryId}` | `{ "classId": string, "displayName": string, "club": string \| null, "nation": string \| null, "ageCategoryId": string \| null, "eventBib": string \| null, "members": [{ "givenName": string, "familyName": string, "birthDate"?: "YYYY-MM-DD", "externalId": { "scheme": string, "value": string } \| null }] }` |
+| `PUT /ingest/v2/entries/{entryId}` | `{ "classId": string, "displayName": string, "isTeam": boolean, "club": string \| null, "nation": string \| null, "ageCategoryId": string \| null, "eventBib": string \| null, "members": [{ "givenName": string, "familyName": string, "birthDate"?: "YYYY-MM-DD", "externalId": { "scheme": string, "value": string } \| null }] }` |
 | `PUT /ingest/v2/attempts/{phaseId}/{bib}` | any non-empty subset of the `Observed` fields of §2.6, each wrapped per §1.2. **An explicit `{ "state": "not-yet" }` resets that field** |
 | `PUT /ingest/v2/oncourse` | `{ "attemptIds": string[], "featuredByUpstream": string \| null }`: **the whole on-course set, in course order**, replaced on every push. An `attemptId` not yet pushed is stubbed (forward reference). Emits `oncourse.updated` |
 | `DELETE /ingest/v2/attempts/{phaseId}/{bib}` | no body. `204` whether or not the Attempt existed; the Attempt and its standing entries are removed |
@@ -1577,8 +1604,8 @@ with `error.details` naming the field.
   `400 validation-failed`. So is a bare string, or an object without `scheme`. In the store, a `null`
   becomes `unavailable{reason:'not-applicable'}`. Such an entry is accepted and fully renderable
   (§2.5).
-- **`birthDate` is optional, and carried as entered.** Whether the store keeps it, and whether it is
-  published, is live-client configuration (maintainer answer Q4). The contract only transports it.
+- **`birthDate` is optional, and carried as entered.** The store keeps it as pushed; publication is
+  governed by the per-event `birthDatePublication` setting (§8.4, maintainer answer Q4).
 - **Bare values are wrapped by the store.** Class, Phase, Entry and Course bodies carry bare values,
   because a vendor-neutral bridge has no per-field provenance to offer for them. The store presents
   each such `Observed` field as `{ state: 'known', value, observedAt: <ingest time of the push>,
@@ -1608,7 +1635,7 @@ with `error.details` naming the field.
   INV-2d or INV-7 to: those need the on-course stream, TCP connection events and scope snapshots,
   which never leave the venue. A retraction reaches live already resolved, as explicit `not-yet`.
   Among bridge observations of one field, the later-ingested one is presented (INV-6).
-  `CONFORMANCE-VECTORS.md` §2 marks which vectors apply to the live tier.
+  `CONFORMANCE-VECTORS.md` §1 lists which vectors apply to the live tier.
 - **What each push emits on the public stream** (§8.4): a partial Attempt `PUT` emits
   `attempt.updated`; `DELETE` emits `attempt.deleted`; the whole-Phase `PUT` emits `scope.replaced`
   with `{ kind: 'phase' }`; Class, Phase, Entry and Course `PUT`s emit their `*.updated`; the on-course

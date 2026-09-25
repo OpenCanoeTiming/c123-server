@@ -225,6 +225,8 @@ These are never domain entities:
 - **`nation`** is `XML.Participants.NOC` or `Results.Participant@Nat`, with the same rule as `club`.
 - **`ageCategoryId`** is `XML.Participants.CatId`. It is empty where the class has no categories,
   which gives `unavailable{not-applicable}`. The age category is never computed from the birth year.
+- **`isTeam`** is `XML.Participants.IsTeam`; it marks a team or patrol row, the only rows upstream
+  judges per member (§4.6(c)). A C2 double is `false`.
 - **`eventBib`.**
   - Source: `XML.Participants.EventBib`, trimmed, where `XML.Events.BibHandling` is `EventWide`.
   - With `Startlist` bib handling it is `unavailable{not-applicable}`: bibs are issued per race.

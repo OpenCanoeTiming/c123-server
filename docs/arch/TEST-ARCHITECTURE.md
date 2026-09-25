@@ -345,7 +345,10 @@ nothing; a public read of an unknown `eventId` is `404`, never another organiser
 ## 4. The fixture format
 
 **One format, used four ways**, because it is the same thing every time — a sequence of the same
-`{seq, type, attemptId|phaseId|classId|entryId|courseId, fields|standing|course|write|sources}` deltas `CONTRACTS.md`
+`{seq, type, …}` deltas `CONTRACTS.md` §7.2/§8.4 define — `attempt.updated`, `attempt.deleted`,
+`phase.updated`, `entry.updated`, `class.updated`, `course.updated`, `standing.updated`,
+`oncourse.updated`, `scope.replaced`, `event.changed`, `write.updated`, `sources.updated`,
+`diagnostics.updated`, `check.updated`, `flag.updated`, each with the payload keys those sections give — as `CONTRACTS.md`
 §7.2/§8.4 already define, with a file-level header:
 
 ```json
