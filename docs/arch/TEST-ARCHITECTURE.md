@@ -390,6 +390,17 @@ E2E suite — five failing tests, attributed to "mock-server/timing issues" — 
 happens without this discipline: timing asserted against real elapsed time is exactly what produces
 flaky, hard-to-diagnose failures, independent of whether the feature under test is even wrong.
 
+**When it is done (maintainer decision, c123-server#167): during each client's migration to this
+contract, not retrofitted to today's code.** The sites that most need it are the on-course reducer,
+the run-2 merger and the on-course penalty cache. Once the server interprets upstream, these are
+rewritten or deleted, so a retrofit would be thrown away. The rule is part of every client
+migration's definition of done:
+- every display-lifetime rule reads time through the `Clock`;
+- every such rule is also re-evaluated on a clock tick;
+- every such rule has a tier-3 test that advances a fake `Clock`.
+
+The fake `Clock` is not a global fake-timer patch.
+
 **On the server side, the same interface, the same discipline, a different reason: `§3.1`'s
 time-windowed reads (the live-ingest calendar's `status`) need "now" to be injectable for exactly the
 same reason a client's grace period does** — not because server-side code has a rendering loop, but
