@@ -446,6 +446,13 @@ mirrored in `PC/types/scoring.ts:18`) cannot express a team crew sum such as 4 o
 on-course command is sent without the member attribute upstream accepts (`:175-178`), so a team
 write lands on the crew cell and is overwritten by the next judge's member entry.
 
+A third, latent finding on the status path (E2, verified by the orchestrator, 2026-09-25):
+upstream's only status command targets an on-course slot by *position* and ignores the bib.
+`SRV/service/ScoringService.ts:194-195` and `PC/…/scoringApi.ts:87-90` default that position to 1,
+so any status write would hit whoever happens to be in slot 1, not the named bib. Latent only: no UI
+calls it, and `SRV/…/UnifiedServer.ts:2630` rejects DSQ. The design has no status write at all
+(`CONTRACTS.md` §7.3).
+
 **Why it matters:** a write path that reports success for a change upstream will undo is the
 write-side twin of Exhibit 5. The design keeps the correction command as the only write command,
 since penalty-check writes only finished runs (maintainer), refuses every write until the athlete

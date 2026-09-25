@@ -816,10 +816,10 @@ Items 1–7 and 13 were answered from the source on 2026-09-25 (#179; E1). Items
     "stale row survives" behaviour matches the on-course grid edit path. No recorded instance of
     "delete selected results" exists; its no-push behaviour is from the source only.
 12. Whether today's live-mini XML ingest overwrites results that were cleared on TCP (E4).
-14. Whether upstream's terminal channel can set a result mark (DNS, DNF, DSQ, CAP) on a run that has
-    already left the on-course list. The removal command acts on a listed athlete; penalty-check now
-    writes only closed runs. If there is no such path, the status write leaves the contract and the
-    operator sets marks in Canoe123 (E4, to be read from the source).
+14. ~~Whether upstream's terminal channel can set a result mark on a closed run.~~ **Answered from the
+    source (2026-09-25):** no. The only status command targets an on-course slot by position and
+    ignores the bib; on a closed or never-started run there is no slot, and no command clears a mark.
+    The status write has left the contract; marks are the operator's (`CONTRACTS.md` §7.3).
 13. ~~A no-reorder penalty correction after racing ends may never trigger an XML write.~~ **Answered:**
     confirmed from the source; the conditions are stated in §5 and `CONTRACTS.md` §2.8. TCP carries
     it regardless, and the maintainer confirms the file is always saved at the end, so the gap is a

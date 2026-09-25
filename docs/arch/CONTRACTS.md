@@ -814,7 +814,7 @@ The contract's answer to Scenario B and to maintainer answer A6: there is no tim
 ```ts
 type WriteRequest = {
   writeId: string
-  target: { phaseId: string; bib: string; run: number; field: 'gate-penalty' | 'status' }
+  target: { phaseId: string; bib: string; run: number; field: 'gate-penalty' }   // the only writable field, §7.3
   requestedValue: unknown
   submittedAt: Timestamp
   status: 'pending' | 'confirmed' | 'mismatched' | 'superseded'
@@ -1429,16 +1429,23 @@ Clients **must** follow §1.6's subscribe-before-snapshot sequence.
 
 ### 7.3 Writes (REST)
 
-Both writes require an `Idempotency-Key` (§1.5). Both may target a closed Phase (§2.9). Both target
-the Attempt's run generation that is current at submission. Both are accepted only once the Attempt
-has left upstream's on-course list (below). Whether upstream's terminal channel can set a mark on a
-closed run at all, as opposed to a penalty, is unverified (`DERIVATIONS.md` §10); the status write
-stays in the contract pending that answer.
+**There is one write: a gate penalty on a closed run.** It requires an `Idempotency-Key` (§1.5), may
+target a closed Phase (§2.9), targets the Attempt's run generation current at submission, and is
+accepted only once the Attempt has left upstream's on-course list (below).
+
+**There is no status write.** No inbound command can set or clear a result mark (DNS, DNF, DSQ, CAP)
+on a closed run (observed upstream behaviour, 2026-09-25): upstream's only status command targets an
+on-course *slot* by position, ignores the bib, and does different things depending on where the
+athlete is. On course and finished, it stores the mark and pushes; on course and unfinished, it
+stores it silently; closed or never started, there is no slot, and re-staging the athlete lands on
+the wrong race or wipes the run's times. Clearing a mark is possible only in the operator's grid.
+Since penalty-check writes only closed runs, marks are set and cleared by the operator in Canoe123,
+and the earlier status endpoint is withdrawn. Today's code carries a latent hazard on that path
+(`EVIDENCE.md` Exhibit 14).
 
 | Method & path | Body | First response | Retry (same key) | Error |
 |---|---|---|---|---|
 | `POST /api/attempts/{phaseId}/{bib}/penalty` | `{ "gate": number, "value": 0\|2\|50 }` | `202`, `Location: /api/writes/{writeId}`, body = `WriteRequest{status:'pending'}` | `200`, current `WriteRequest` | `404 attempt-not-found`; `400 validation-failed` (`value` not in `{0,2,50}`; `gate` outside the Phase's course gates; or the course not configured); `409 write-not-possible` with `reason: 'run-not-closed'` or `'team-boat'` (below) |
-| `POST /api/attempts/{phaseId}/{bib}/status` | `{ "status": "dns"\|"dnf"\|"dsq"\|"cap" }` | as above | as above | as above; any other status string is `400 validation-failed`; `409 write-not-possible` with `reason: 'run-not-closed'` while the Attempt is on the on-course list |
 | `GET /api/writes/{writeId}` | — | `200 WriteRequest` | — | `404 write-not-found` |
 
 **Penalty-check writes only finished runs** (maintainer, 2026-09-25, binding). It never writes for an
@@ -1477,8 +1484,7 @@ timekeeper's manual failover (maintainer answer Q8) every write would be silentl
 contract that silence would at least surface as a failed write through the echo rule (§2.9). Both are
 stated: the first so it is fixed, the second so it is understood.
 
-The four write statuses the contract accepts are the ones Canoe123's terminal removal command takes.
-Other marks, such as `dsq-r` and `ral`, are relayed but not writable here.
+Every result mark is relayed (§2.6) and none is writable here.
 
 **The confirmation lifecycle over the wire** (§2.9, `DECISIONS/ADR-010`). These are snapshots of the
 same `WriteRequest` over time:
