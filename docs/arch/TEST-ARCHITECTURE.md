@@ -535,6 +535,10 @@ component at fault.
   contract requirement.
 - **Cross-client visual/pixel-identical comparison.** §7's last point is the reason: two clients are
   not required to look alike, only to each satisfy their own stated policy.
+- **Visual regression within one client, as a tier.** Screenshot suites, such as today's Playwright
+  suites in `c123-scoreboard` and `c123-penalty-check`, stay with each client as its own discipline.
+  They sit outside the four tiers, which neither adopt nor retire them (maintainer decision,
+  c123-server#170). Tier 3 asserts behaviour on the DOM or view-model; appearance is the client's.
 - **`c123-xml-tools` and `timing-design-system`.** Out of scope here exactly as they were out of scope
   for the architecture itself (`CONSTRAINTS.md` §1.6) — context, not subjects.
 - **A migration plan for existing tests.** This document states the target shape; deciding which of
