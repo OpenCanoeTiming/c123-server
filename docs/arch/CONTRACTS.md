@@ -785,7 +785,9 @@ written on a timer whose interval is a venue setting (65 s by default; 35 s at t
 only when upstream has flagged a change: an operator edit, an import, or a slalom rank change. A
 penalty correction flags one only when a rank moves, when the race has a marked row (DNS, DNF, DSQ,
 CAP, RAL, DQB), or when it was typed in the results grid; a quiet post-race correction can therefore
-stay out of the file while TCP carries it. It is never written in upstream's offline mode. The Kayak
+stay out of the file while TCP carries it. That window is transient: at the end of racing the file
+is always saved, automatically or manually (maintainer, 2026-09-25), so the final snapshot carries
+every correction. It is never written in upstream's offline mode. The Kayak
 Cross heat ranking sets no such flag, so Cross heat results reached the file 1.5–10 min late in a
 recording. For Cross, TCP is the only fast source.
 Readers validate every read and retry: the write is a copy over the file, not an atomic rename.
@@ -1422,7 +1424,9 @@ the Attempt's run generation that is current at submission.
 **All writes go through the server.** Penalty-check keeps no direct terminal channel. The operator's
 "reset scoring terminals" action in Canoe123 resets only the hardware judge terminals on their own
 port and never touches the TCP command receiver these writes use (observed upstream behaviour; 22
-recorded episodes), so nothing here needs to react to it.
+recorded episodes), so nothing here needs to react to it. In operating practice (maintainer,
+2026-09-25) it is used mainly between categories, to clear the judges' tablets of the previous
+entries so they stay readable.
 
 **Every write is addressed to the connected instance.** Canoe123's command envelope names the
 instance it is for, and a Backup instance ignores a command addressed to Main (observed upstream

@@ -547,7 +547,9 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
 - **What upstream does** (observed upstream behaviour; no recorded instance): the re-run wizard wipes
   the stored row immediately on confirm, with no push; the next push shows the row gone (first run)
   or `Time=""` (second run), plus the new scheduled start. That is a retraction (§4.12) followed by a
-  new start. Staging a finished bib *without* the wizard never clears the row: the old result stays in
+  new start. **The wizard is the normal path** (maintainer, 2026-09-25): operators use it, and it
+  schedules the re-run at a specific time. Staging a finished bib *without* the wizard is the
+  exception, and it never clears the row: the old result stays in
   every push until the new finish overwrites it, and an old DNF is not cleared even then (§4.12,
   stale mark).
 - **The generation increments on exactly one trigger:** an on-course observation for this
@@ -641,8 +643,9 @@ mark on a row with no new finish, is presented.
   default, 35 s at the recorded NKZ) and only when upstream has flagged a change: an operator edit,
   an import, or a slalom rank change. A penalty correction flags one only when a rank moves, when the
   race has a marked row (DNS, DNF, DSQ, CAP, RAL, DQB), or when it was typed in the results grid;
-  otherwise it waits for the next flagged change, and after racing has ended it may never reach the
-  file while TCP carries it. The Kayak Cross heat ranking never flags one: Cross heat results reached the file
+  otherwise it waits for the next flagged change; after racing has ended it reaches the file at the
+  end-of-day save, which always happens, automatically or manually (maintainer, 2026-09-25), while
+  TCP carries it meanwhile. The Kayak Cross heat ranking never flags one: Cross heat results reached the file
   1.5–10 min late in a recording. Nothing is written in upstream's offline mode.
 
 ---
@@ -804,4 +807,5 @@ Items 1–7 and 13 were answered from the source on 2026-09-25 (#179; E1). Items
 12. Whether today's live-mini XML ingest overwrites results that were cleared on TCP (E4).
 13. ~~A no-reorder penalty correction after racing ends may never trigger an XML write.~~ **Answered:**
     confirmed from the source; the conditions are stated in §5 and `CONTRACTS.md` §2.8. TCP carries
-    it regardless.
+    it regardless, and the maintainer confirms the file is always saved at the end, so the gap is a
+    transient window, never lasting.
