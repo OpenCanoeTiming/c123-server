@@ -3319,6 +3319,119 @@
       }
     },
     {
+      "id": "rerun-stale-mark-not-presented",
+      "invariant": "run-generation",
+      "description": "A mark carried from before a re-run is not presented on a row whose finish is the new run's; a mark first seen in the new generation is.",
+      "context": {
+        "note": "upstream does not clear an old DNF when a re-run finishes over it (source; no recorded instance). A later, different mark (dsq) is presented."
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "status",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:00:00.000",
+          "value": "dnf",
+          "confidence": "authoritative",
+          "run": 1
+        },
+        {
+          "ingestSeq": 2,
+          "field": "run",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:05:00.000",
+          "value": 2,
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:04:58.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR1_19",
+            "mode": "results",
+            "rows": [
+              {
+                "status": "dnf",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 88.2,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 88.2
+                },
+                "placement": {
+                  "rank": 4,
+                  "order": 4
+                },
+                "finishTime": "2026-09-15T10:06:30.000Z",
+                "judgingComplete": true,
+                "bib": "9"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:06:40.000"
+        }
+      ],
+      "then": [
+        {
+          "ingestSeq": 4,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR1_19",
+            "mode": "results",
+            "rows": [
+              {
+                "status": "dsq",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 88.2,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 88.2
+                },
+                "finishTime": "2026-09-15T10:06:30.000Z",
+                "judgingComplete": true,
+                "bib": "9"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:20:00.000"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 2,
+          "expect": {
+            "K1M_BR1_19:9.status": {
+              "state": "known",
+              "value": "finished"
+            }
+          }
+        }
+      ],
+      "expect": {
+        "K1M_BR1_19:9.status": {
+          "state": "known",
+          "value": "finished"
+        },
+        "K1M_BR1_19:9.outcome": {
+          "state": "known",
+          "value": {
+            "totalSeconds": 88.2
+          }
+        },
+        "diagnostics": [
+          {
+            "kind": "stale-mark",
+            "attemptId": "K1M_BR1_19:9",
+            "run": 2,
+            "mark": "dnf"
+          }
+        ]
+      }
+    },
+    {
       "id": "under-review-independent-of-provisional",
       "invariant": "under-review",
       "description": "underReview and provisional are independent fields.",

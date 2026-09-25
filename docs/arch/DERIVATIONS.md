@@ -150,8 +150,11 @@ These are never domain entities:
   never carried (§9).
 - **`courseId`** is `XML.Schedule.CourseNr`. It is XML only: no TCP message carries a course number.
 - **An attribute sub-race** (Cross juniors: `XML.Schedule.AttributeId`, with `XML.Attributes` giving
-  its description) is relayed as the Phase's own class, which upstream derives (`MX1J`). The link to
-  its base class is not stated upstream (§10).
+  its description) is relayed as the Phase's own class, which upstream derives (`MX1J`). No base-class
+  link is stored anywhere upstream: in the recorded event `MX1J` and `WX1J` were separate classes
+  with the same people entered twice, and their time-trial "times" were rank × 1000 typed by the
+  operator. Such a class is an ordinary separate Class. Nothing is inferred about its relation to
+  another class.
 
 ### 2.2 `status`
 
@@ -170,7 +173,10 @@ These are never domain entities:
   - `N` is a downstream gate and `R` an upstream gate. Gates are numbered 1.. in order.
   - `S` ends a sector: record the number of the gate before it.
   - `I` is a split point: record the gate before it.
-  - `D` and `E` are carried in `layout` only; their effect on numbering is open (§10).
+  - `D` is the Kayak Cross start ramp (caption `ST`) and `E` the roll zone (`RZ`). Each is a judging
+    slot that does not advance the gate number. Build `Course.slots` from the layout: one slot per
+    `N`/`R`/`D`/`E`, in order, with `gateNumber` for `N`/`R` only and the caption from
+    `RaceConfig.GateCaptions` at the same index. `S` and `I` produce no slot.
 - **Refresh from TCP.**
   - `RaceConfig.GateConfig` is the currently selected course's layout. TCP strips the `S` markers.
   - `RaceConfig` gives no course number. Use it only to refresh the course of the currently running
@@ -408,9 +414,14 @@ rank in the previous round, not a previous run, and is not modelled (§9).
 
 ### 4.6 Gate parsing
 
+**Cells are per slot, not per gate** (`CONTRACTS.md` §2.12). Cell `i` (0-based) belongs to
+`Course.slots[i]`. A gate's penalty is the cell of the slot whose `gateNumber` it is; the cells of a
+start-ramp or roll-zone slot are judging marks for Kayak Cross faults (d), never gate penalties. On a
+slalom course every slot is a gate, so cell `i` is gate `i+1`.
+
 **(a) `OnCourse.Result[C]@Gates`.**
-- The string is comma-separated, dense, one token per gate: `"0,0,2,,,"`.
-- Split on `,`. Token `i` is gate `i+1`. `""` means `null`.
+- The string is comma-separated, dense, one token per slot: `"0,0,2,,,"`.
+- Split on `,`. Token `i` is slot `i`. `""` means `null`.
 - The width follows upstream's gate count even when that count is fabricated (§2.3). Keep only the
   first `gateCount` tokens of the known course.
 - The attribute is omitted entirely when no course configuration is attached.
@@ -420,7 +431,7 @@ rank in the previous round, not a previous run, and is not modelled (§9).
   - 90 characters in 99.8% of TCP rows at one event, and 578 of 580 snapshot rows on a 23-gate course.
   - Shorter, trimmed strings occur (3, 18, 27, 69 characters).
 - Chunk from the left by 3. A missing cell is blank. Trim each chunk; blank means `null`, otherwise
-  parse as an integer. Keep the first `gateCount` cells.
+  parse as an integer. Keep the first `slotCount` cells.
 - **Never split on whitespace.** That collapses blanks and shifts every later gate: `EVIDENCE.md`
   Exhibit 2.
 - The previous rule, `width = length / gateCount`, was wrong on every row of a 23-gate course. On a
@@ -431,12 +442,17 @@ rank in the previous round, not a previous run, and is not modelled (§9).
 - `XML.Results.Gates1..3` hold each member's cells, in the same fixed-width format, and fill
   `memberPenalties`.
 
-**(d) Kayak Cross.**
-- Per-gate marks in Cross are obstacle judgements, not penalty seconds. `gates` is
+**(d) Kayak Cross.** Settled against the source and the recorded Cross event (E1):
+- The cells are **fault marks**, not penalty seconds: only `""`, `0` and `2` occur. `gates` is
   `unavailable{not-applicable}` for Cross Attempts.
-- `faults` comes from `XML.Results.NrFLT` (the count), `FLT` (`FLT(2,4,5)`, the gate captions) and
-  `LastCleanGate`.
-- Whether TCP carries the same in Cross is open (§10).
+- **`faults` is derived from the cells plus the captions, on TCP and in the XML alike:** `count` is
+  the number of cells marked `2`; `gates` lists those slots' captions (`ST`, `1`…`6`, `RZ`, `7`);
+  `lastCleanGate` is the highest gate number whose slot cell is `0` before the first fault. This
+  reproduced `XML.Results.NrFLT`/`FLT`/`LastCleanGate` exactly: 136 of 136 rows.
+- **Ignore `Pen` in Cross.** In the time trial the marks are never added into `Pen` (`Pen 0` and
+  `Total = Time` in all 293 rows); in heats the on-course stream adds them while the result rows
+  are inconsistent (3 of 16 faulted bibs showed `Pen 0`). The time trial ranks by faults, then last
+  clean gate, then time; that ranking is relayed as `placement`, never recomputed.
 
 **(e) Merging on-course and result-row gate cells** (`CONTRACTS.md` §4, INV-2 rule 1).
 - Keep one value per gate, updated in receive order from both vectors.
@@ -511,10 +527,14 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
 - **A correction** (the wrong person raced under a bib) is an operator write (`CONTRACTS.md` §8.5). No
   upstream field flags it.
 
-### 4.10 Classification rows (Cross `XER`)
+### 4.10 Classification rows (`XER`, `SLER`, `WWER`)
 
 - The classification Phase's `XML.Results` rows, or TCP result rows for that race, feed its
   `classification` Standing directly. They create **no Attempts**.
+- Upstream assembles the rows from the final, then the semi-final, then the heats, **only when the
+  operator presses "calculate event result"**. A later correction in a contributing Phase does not
+  reach the classification until it is pressed again. The Standing is relayed as last built, with its
+  own `observedAt`; nothing is recomputed. `RXER` is a title only and never carries rows.
 - `rank` and `order` come from `Rnk`/`RnkOrder`. `decidedIn` comes from `RecordType` (`F`, `SF`,
   `1/2`, `1/4`, `T`).
 - Upstream generates these rows from the rounds. They are relayed, never recomputed.
@@ -524,6 +544,12 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
 **Upstream evidence of a re-run** (`DECISIONS/ADR-013`).
 - Upstream sets `OnCourse.Participant@Warning` to a localised "overwriting results" string when a bib
   is put on course in a race where it already has a result. The text is never carried.
+- **What upstream does** (observed upstream behaviour; no recorded instance): the re-run wizard wipes
+  the stored row immediately on confirm, with no push; the next push shows the row gone (first run)
+  or `Time=""` (second run), plus the new scheduled start. That is a retraction (§4.12) followed by a
+  new start. Staging a finished bib *without* the wizard never clears the row: the old result stays in
+  every push until the new finish overwrites it, and an old DNF is not cleared even then (§4.12,
+  stale mark).
 - **The generation increments on exactly one trigger:** an on-course observation for this
   `«phaseId,bib»` with a non-empty `dtStart` different from the current generation's recorded start.
   A result row observed cleared is a **retraction** (§4.12), not a generation change
@@ -590,6 +616,12 @@ neither of two bibs for 35 s. Each such state is upstream's own table at that in
 presented as such, with the diagnostics above. The next snapshot or push resolves it; the operator's
 re-baseline (`CONTRACTS.md` §4) is the remedy for one that never does.
 
+**A stale mark after a re-run** (`CONTRACTS.md` §2.6). Remember the mark, if any, the Attempt
+carried when the generation incremented. On a row of the new generation whose `dtFinish` is later
+than the generation's start, a mark equal to that remembered one is not presented and raises
+`stale-mark`; `outcome` is derived from the row's time and cells as usual. A different mark, or a
+mark on a row with no new finish, is presented.
+
 **Standing after a retraction or contradiction:** the entry is unplaced (`CONTRACTS.md` §5 step 3).
 
 ---
@@ -607,8 +639,10 @@ re-baseline (`CONTRACTS.md` §4) is the remedy for one that never does.
   INV-2's rule 2 means by "a rewrite detected after the disconnect", and what §4.12's write-time
   guard subtracts the poll interval from. The file is written on a timer (a venue setting, 65 s by
   default, 35 s at the recorded NKZ) and only when upstream has flagged a change: an operator edit,
-  an import, or a slalom rank change. A penalty correction that reorders nobody waits for the next
-  flagged change. The Kayak Cross heat ranking never flags one: Cross heat results reached the file
+  an import, or a slalom rank change. A penalty correction flags one only when a rank moves, when the
+  race has a marked row (DNS, DNF, DSQ, CAP, RAL, DQB), or when it was typed in the results grid;
+  otherwise it waits for the next flagged change, and after racing has ended it may never reach the
+  file while TCP carries it. The Kayak Cross heat ranking never flags one: Cross heat results reached the file
   1.5–10 min late in a recording. Nothing is written in upstream's offline mode.
 
 ---
@@ -669,6 +703,12 @@ changes: a late correction, a retraction, a contradiction, a re-baseline. The di
     1 is the better run.
 13. **Result marks are not always pushed**, and `left-without-finish` is the honest interim state
     (§4.1).
+15. **#179 answered from the source** (2026-09-25): start ramp and roll zone as judging slots (§2.3,
+    §4.6); Cross faults derived from the cells, `Pen` ignored (§4.6(d)); `SLER`/`WWER` as
+    classifications with stated staleness (§4.10); super-final and legacy final as summed pairs,
+    relayed (`CONTRACTS.md` §2.4); attribute sub-classes as ordinary classes (§2.1); the re-run
+    wizard's silent wipe and the stale mark (§4.11, §4.12); the reset-scoring-terminals action never
+    touching the write channel, and writes addressed to the connected instance (`CONTRACTS.md` §7.3).
 14. **Retraction is first-class** (§0.3, §4.12; `DECISIONS/ADR-015`). A TCP result push and an XML
     snapshot are complete statements of a race; their stated absence retracts. The on-course stream
     contradicts a finish taken away on the on-course grid, which upstream never clears. A mark
@@ -730,21 +770,24 @@ but no code path or recording ever filled it.
 
 ## 10. Open technical questions
 
-These are E4: recorded here, not used to make rules.
+Items 1–7 and 13 were answered from the source on 2026-09-25 (#179; E1). Items 8, 9, 11 and 12 remain.
 
-1. Does the operator's "reset scoring terminals" action reach the terminal channel penalty-check
-   already uses? CIS was the only documented carrier.
-2. How do the layout letters `D` and `E` affect gate numbering? #165 describes them as variant markers
-   that count as gates without advancing the number.
-3. Are `RXER`, `SLER` and `WWER` classifications like `XER`? Until checked, they are unknown formats.
-4. Upstream has two further pairings: a super-final following a second run, and a final following a
-   semi-final under a legacy-finals setting. What combination applies to each?
-5. What is the base class of an attribute sub-class (`MX1J` from `MX1`)? It is not stated in any
-   upstream field seen so far.
-6. Per-gate marks in Kayak Cross. The XML reverse pass found fault codes. An earlier scout found
-   touches added into `Pen`. Which holds on TCP?
-7. Does Canoe123 clear a result row at the moment a finished bib is staged for a re-run, or only at the
-   new finish? §4.11 works either way.
+1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
+   hardware judge terminals on their own port and raises a flag on the scoring service for about
+   11 s; the TCP command receiver is untouched and nothing is emitted on TCP (`CONTRACTS.md` §7.3).
+2. ~~The layout letters `D` and `E`.~~ **Answered:** the Cross start ramp and roll zone, judging
+   slots that do not advance the gate number (§2.3, §4.6).
+3. ~~Are `RXER`, `SLER` and `WWER` classifications?~~ **Answered:** `SLER` and `WWER` are event-result
+   classifications like `XER`; `RXER` is a title only (§4.10).
+4. ~~Combination for the super-final and the legacy final.~~ **Answered:** sum of two runs, tie
+   broken by the better run; relayed, never computed (`CONTRACTS.md` §2.4).
+5. ~~The base class of an attribute sub-class.~~ **Answered:** none is stored; an ordinary separate
+   class (§2.1). The maintainer's reading of what these classes were is pending; nothing speculative
+   is added.
+6. ~~Per-gate marks in Kayak Cross on TCP.~~ **Answered:** fault marks in the cells, never `Pen`
+   (§4.6(d)).
+7. ~~Does a re-run clear the row at staging or at the new finish?~~ **Answered:** the wizard wipes it
+   at once with no push; staging without the wizard never clears it (§4.11).
 8. After a TCP disconnect, the first snapshot rewrite detected afterwards takes over (INV-2, rule 2).
    If that rewrite happened in the few seconds *before* the disconnect, its content can predate TCP's
    last push. The window is bounded by the file-watch interval. Accepted as residual.
@@ -759,5 +802,6 @@ These are E4: recorded here, not used to make rules.
     "stale row survives" behaviour matches the on-course grid edit path. No recorded instance of
     "delete selected results" exists; its no-push behaviour is from the source only.
 12. Whether today's live-mini XML ingest overwrites results that were cleared on TCP (E4).
-13. A penalty correction that reorders nobody, made after racing has ended, may never trigger an XML
-    write on its own. Not observable in the recordings. It reaches TCP immediately regardless.
+13. ~~A no-reorder penalty correction after racing ends may never trigger an XML write.~~ **Answered:**
+    confirmed from the source; the conditions are stated in §5 and `CONTRACTS.md` §2.8. TCP carries
+    it regardless.

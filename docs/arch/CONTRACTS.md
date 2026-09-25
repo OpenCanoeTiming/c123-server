@@ -429,7 +429,10 @@ pairing and combination behaviour.
 | `SR1`/`SR2` and any other paired second run | race | first / second, `combination: 'sum'` | duration | no |
 | `QF`, `SF`, `SFB`, `FI`, `FIB`, `SP1`, `SP2`, `SPF`, `TSR`, `XT`, `XT1`, `XT2` and single-run tokens generally | race | `null` | duration | no |
 | `X8`, `X4`, `XS`, `XF` (Kayak Cross head-to-head) | race | `null` | ordinal | yes |
-| `XER` (Kayak Cross final classification) | classification | `null` | ordinal | no |
+| `XER`, `SLER`, `WWER` (event-result classifications: "ER" = event result) | classification | `null` | ordinal | no |
+| `RXER` (a title only; upstream calculates nothing for it) | classification, never holding rows | `null` | ordinal | no |
+| `SUF` (super-final after a second run) | race | second of a pair with the `BR2`, `combination: 'sum'` | duration | no |
+| `FI` after an `SF` under upstream's legacy-finals setting | race | second of a pair with the `SF`, `combination: 'sum'` — only when its rows carry a combined total, see below | duration | no |
 | any unknown token | race | `null` | duration | no |
 
 **Pairing.**
@@ -439,18 +442,28 @@ pairing and combination behaviour.
   for every other second run.
 - The tokens `QUA`/`SEM`/`FIN`, which appeared in an earlier draft of this contract and in the
   protocol documentation, **do not exist upstream**.
-- Two further pairings exist upstream: a super-final following a second run, and a final following a
-  semi-final under a legacy-finals setting. Neither is modelled yet. This is recorded as an open
-  technical question (`DERIVATIONS.md` §10).
+- **Two further pairings** (observed upstream behaviour; neither appears in the corpus): a
+  super-final after a second run, and a final after a semi-final. Both combine as the **sum** of the
+  two runs, with a tie broken by the better run. The super-final gets no automatic copy of run 2;
+  the operator types it. The final-after-semi pairing counts only under a legacy-finals setting that
+  is stored **per machine**, not in the event file, so two machines could rank the same final
+  differently. The contract therefore never computes either combination: `pairTotal` and
+  `placement` are relayed, and the `FI`/`SF` pairing is asserted only when the final's rows carry a
+  combined total, with `confidence: 'inferred'` on `pair`.
 
 **Labelling a format** is a client-side lookup keyed on the token (§1.3). For a token the client does
 not know, it shows the token itself, verbatim, together with what the structural fields say (run 1 or
 2 of a pair, heats, classification). It never invents a name, and never fails to render.
 
-**`XER` is a classification, not a round.** Its rows are upstream's final classification of the whole
-Cross event. Each row says which round decided that athlete's place. A classification Phase holds no
-Attempts; it feeds a `classification` Standing (§2.7). Other upstream tokens that look like event
-rankings (`RXER`, `SLER`, `WWER`) stay "unknown" until checked (E4, `DERIVATIONS.md` §10).
+**`XER`, `SLER` and `WWER` are classifications, not rounds** ("ER" = event result, confirmed by the
+maintainer). Their rows are upstream's synthetic event result, assembled from the final, then the
+semi-final, then the heats, and used for points. Each row says which round decided that athlete's
+place. A classification Phase holds no Attempts; it feeds a `classification` Standing (§2.7).
+**Staleness, stated:** upstream rebuilds a classification only when the operator presses "calculate
+event result", so a later correction in a contributing Phase does not reach it until then. The
+classification is relayed as upstream last built it, never recomputed by us; a client shows it with
+its own `observedAt`. `RXER` is a title for which upstream calculates nothing: a classification Phase
+that never holds rows.
 
 **`date` is assigned once and never changes**, even if a correction to the Phase's results is pushed a
 week later. That is what keeps multi-day grouping correct under late correction.
@@ -542,7 +555,7 @@ type Attempt = {
   outcome: Observed<Outcome>
   gates: Observed<Gate[]>              // not-applicable in Cross (see faults)
   splits: Observed<Split[]>            // [D] where splits are armed; not-applicable otherwise
-  faults: Observed<Faults>             // Cross only; not-applicable in slalom
+  faults: Observed<Faults>             // Cross only; derived from the judging cells, never from Pen — DERIVATIONS §4.6(d)
   courseOrder: Observed<number>        // on course only: 1 = closest to the finish — [D] tcp
   timeToBeat: Observed<TimeToBeat>     // on course only — [D] tcp
   placement: Observed<Placement>       // upstream's rank and order — §5
@@ -663,6 +676,11 @@ same finish time raise a `duplicate-finish` diagnostic. The operator resolves it
 - **In a second run of a pair, a mark describes run 2 only.** The athlete keeps a combined placement
   from run 1. For example, one athlete was marked `dns` for run 2 and ranked 110th. `placement` and
   `pairTotal` carry that, independently of `status`.
+- **A mark left over from before a re-run is stale.** Upstream does not clear an old mark when a
+  re-run finishes over it (observed upstream behaviour; no recorded instance). So on a row of the
+  current generation whose finish time is the new run's, a mark identical to the one the Attempt
+  carried before the generation started is not presented, and is surfaced as a `stale-mark`
+  diagnostic (§7.1). A mark first seen in the current generation is presented normally.
 - **`underReview`** is upstream's "under review" mark, shown as an asterisk on upstream's own output.
   It is first-class (maintainer answer Q7): clients show it on the scoreboard and in live results.
   It is independent of `provisional`:
@@ -764,9 +782,12 @@ admin UI can show which instance is live.
 
 **`xml.lastRewriteDetectedAt`** is the moment the last change of the file was detected. The file is
 written on a timer whose interval is a venue setting (65 s by default; 35 s at the recorded NKZ), and
-only when upstream has flagged a change: an operator edit, an import, or a slalom rank change. It is
-never written in upstream's offline mode. The Kayak Cross heat ranking sets no such flag, so Cross
-heat results reached the file 1.5–10 min late in a recording. For Cross, TCP is the only fast source.
+only when upstream has flagged a change: an operator edit, an import, or a slalom rank change. A
+penalty correction flags one only when a rank moves, when the race has a marked row (DNS, DNF, DSQ,
+CAP, RAL, DQB), or when it was typed in the results grid; a quiet post-race correction can therefore
+stay out of the file while TCP carries it. It is never written in upstream's offline mode. The Kayak
+Cross heat ranking sets no such flag, so Cross heat results reached the file 1.5–10 min late in a
+recording. For Cross, TCP is the only fast source.
 Readers validate every read and retry: the write is a copy over the file, not an atomic rename.
 
 **`timingClockOffsetSeconds`** is the offset of Canoe123's timing clock from the server clock,
@@ -921,6 +942,7 @@ type Course = {
   eventId: string
   layout: Observed<string>               // upstream's layout string, one char per element
   gates: Observed<{ number: number; kind: 'downstream' | 'upstream' }[]>
+  slots: Observed<{ slot: number; kind: 'gate' | 'start-ramp' | 'roll-zone'; gateNumber?: number; caption?: string }[]>
   sectorEndsAfterGate: Observed<number[]>
   splitsAfterGate: Observed<number[]>
   captions: Observed<string[]>           // [D] tcp only, current course only
@@ -943,8 +965,13 @@ Settled against observed upstream behaviour, after three wrong readings of a rec
 - **Only the snapshot carries course numbers.** TCP describes only the currently selected course,
   without its number. It is used only to refresh that course, and for the captions, which only TCP
   sends.
-- The meaning of the layout letters `D` and `E` for gate numbering is an open technical question
-  (`DERIVATIONS.md` §10). Until it is settled, they are carried in `layout` only.
+- **`D` is the Kayak Cross start ramp and `E` the roll zone** (observed upstream behaviour;
+  recorded layout `DNNRNNNER` with captions `ST,1,2,3,4,5,6,RZ,7`). Each is a **judging slot**: it
+  counts in upstream's transmitted gate count and in the width of every gate string, and it carries a
+  judging cell (the start-ramp slot carried a real time in 67 of 72 recorded runs), but neither
+  advances the gate number. `Course.slots` lists every slot in layout order with its kind and, for a
+  gate, its number; `Course.gates` lists gates only. Gate strings are parsed per slot
+  (`DERIVATIONS.md` §4.6).
 
 ---
 
@@ -1100,7 +1127,8 @@ implementation must satisfy, not an algorithm.
   `{ kind: 'source-disagreement'; attemptId: string; field: string; sources: SourceTag[] }`, served by
   `GET /api/diagnostics` (§7.1), the same audience as `SourceStatus`. Two further diagnostic kinds
   live there: `{ kind: 'contradicted-finish'; attemptId; finishTime }` (INV-2d) and
-  `{ kind: 'duplicate-finish'; phaseId; finishTime; bibs: string[] }` (§2.6). It never changes the presented
+  `{ kind: 'duplicate-finish'; phaseId; finishTime; bibs: string[] }` (§2.6), and
+  `{ kind: 'stale-mark'; attemptId; run; mark }` (§2.6, a mark carried over a re-run). It never changes the presented
   value by itself. There is no
   re-query: no on-demand source remains (`DECISIONS/ADR-011`), and neither remaining source can hold
   a correction back.
@@ -1390,6 +1418,19 @@ the Attempt's run generation that is current at submission.
 | `POST /api/attempts/{phaseId}/{bib}/penalty` | `{ "gate": number, "value": 0\|2\|50 }` | `202`, `Location: /api/writes/{writeId}`, body = `WriteRequest{status:'pending'}` | `200`, current `WriteRequest` | `404 attempt-not-found`; `400 validation-failed` (`value` not in `{0,2,50}`; `gate` outside the Phase's course gates; or the course is not configured) |
 | `POST /api/attempts/{phaseId}/{bib}/status` | `{ "status": "dns"\|"dnf"\|"dsq"\|"cap" }` | as above | as above | as above; any other status string is `400 validation-failed` |
 | `GET /api/writes/{writeId}` | — | `200 WriteRequest` | — | `404 write-not-found` |
+
+**All writes go through the server.** Penalty-check keeps no direct terminal channel. The operator's
+"reset scoring terminals" action in Canoe123 resets only the hardware judge terminals on their own
+port and never touches the TCP command receiver these writes use (observed upstream behaviour; 22
+recorded episodes), so nothing here needs to react to it.
+
+**Every write is addressed to the connected instance.** Canoe123's command envelope names the
+instance it is for, and a Backup instance ignores a command addressed to Main (observed upstream
+behaviour). The server therefore addresses each write to `SourceStatus.tcp.upstreamInstance` (§2.8),
+never to a constant. Today's code hard-codes Main (`EVIDENCE.md` Exhibit 13), so after the
+timekeeper's manual failover (maintainer answer Q8) every write would be silently ignored; under this
+contract that silence would at least surface as a failed write through the echo rule (§2.9). Both are
+stated: the first so it is fixed, the second so it is understood.
 
 The four write statuses the contract accepts are the ones Canoe123's terminal removal command takes.
 Other marks, such as `dsq-r` and `ral`, are relayed but not writable here.

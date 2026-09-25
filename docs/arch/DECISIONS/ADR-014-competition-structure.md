@@ -86,3 +86,19 @@ race", never to an error.
 
 Any client inferring pairing, scoring kind or heat structure from a token string. The domain layer
 states them.
+
+## Revision — #179 answers (2026-09-25)
+
+- **Formats (point 3).** `SLER` and `WWER` join `XER` as event-result classifications; `RXER` is a
+  title only. A super-final after a second run, and a final after a semi-final under upstream's
+  per-machine legacy-finals setting, both combine as the *sum* of two runs with the tie broken by the
+  better run. Neither is computed: the setting is not in the event file, so two machines could rank
+  the same final differently, and only relay is safe (`CONTRACTS.md` §2.4).
+- **Courses (point 6).** `D` is the Kayak Cross start ramp and `E` the roll zone: judging slots that
+  count in upstream's gate count and in every gate string's width but never advance the gate number.
+  `Course.slots` carries them; cells are parsed per slot (`CONTRACTS.md` §2.12, `DERIVATIONS.md`
+  §4.6).
+- **Kayak Cross faults** are derived from the cells and captions, on both interfaces; upstream's
+  `Pen` is ignored in Cross (`DERIVATIONS.md` §4.6(d)).
+- **Attribute sub-classes** are ordinary separate classes; no base-class link exists upstream.
+

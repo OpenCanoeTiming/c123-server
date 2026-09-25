@@ -416,7 +416,21 @@ live as a replace.
 
 ---
 
-## What these twelve have in common
+## Exhibit 13 — Every write is addressed to the Main instance, whichever one is connected
+
+Added 2026-09-25 (#179), E2 as read by the orchestrator: `SRV/scoring/ScoringService.ts:177-203`
+hard-codes `System="Main"` on every command envelope. Observed upstream behaviour: a Backup instance
+ignores a command addressed to Main. The timekeeper's failover to the backup is manual (maintainer
+answer Q8) and re-points the server by hand, so after it every penalty correction from the tablets
+would be silently ignored upstream, while the server kept reporting them as sent.
+
+**Why it matters:** it is Exhibit 5's shape again, a boundary assumption nobody wrote down. The
+design addresses each write to the connected `upstreamInstance` (`CONTRACTS.md` §7.3), and its echo
+rule (§2.9) turns any remaining silence into a visible failed write.
+
+---
+
+## What these thirteen have in common
 
 Not carelessness. Each is a locally reasonable decision made by someone who needed an answer and
 had nowhere to look it up. The system has no place where the answer lives, so every component
