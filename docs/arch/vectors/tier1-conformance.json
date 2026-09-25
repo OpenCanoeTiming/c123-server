@@ -3432,6 +3432,194 @@
       }
     },
     {
+      "id": "live-oncourse-set-replaced-whole",
+      "invariant": "live-ingest",
+      "description": "On the live tier the on-course set is replaced whole by each push, in the pushed order; an unknown attemptId is stubbed; each push emits one oncourse.updated; identical re-push is a no-op.",
+      "context": {
+        "tier": "live",
+        "note": "bib 58 was stubbed by the first push and stays as an Attempt after leaving the set."
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "push": "oncourse",
+          "observedAt": "2026-09-15T10:00:00.000Z",
+          "body": {
+            "attemptIds": [
+              "K1M_BR1_19:58",
+              "K1M_BR1_19:57"
+            ],
+            "featuredByUpstream": "K1M_BR1_19:58"
+          }
+        },
+        {
+          "ingestSeq": 2,
+          "push": "oncourse",
+          "observedAt": "2026-09-15T10:00:40.000Z",
+          "body": {
+            "attemptIds": [
+              "K1M_BR1_19:57"
+            ],
+            "featuredByUpstream": null
+          }
+        },
+        {
+          "ingestSeq": 3,
+          "push": "oncourse",
+          "observedAt": "2026-09-15T10:00:41.000Z",
+          "body": {
+            "attemptIds": [
+              "K1M_BR1_19:57"
+            ],
+            "featuredByUpstream": null
+          }
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 0,
+          "expect": {
+            "oncourse": [
+              "K1M_BR1_19:58",
+              "K1M_BR1_19:57"
+            ],
+            "featuredByUpstream": "K1M_BR1_19:58"
+          }
+        }
+      ],
+      "expect": {
+        "oncourse": [
+          "K1M_BR1_19:57"
+        ],
+        "featuredByUpstream": null,
+        "attempts": [
+          "K1M_BR1_19:57",
+          "K1M_BR1_19:58"
+        ],
+        "notifications": {
+          "oncourse.updated": 2
+        }
+      }
+    },
+    {
+      "id": "live-running-then-finished-latest-wins",
+      "invariant": "live-ingest",
+      "description": "On the live tier the latest bridge observation of outcome is presented: running values in order, then the finished duration; nothing is cleared when pushes stop.",
+      "context": {
+        "tier": "live",
+        "note": "the bridge pushes presented values in its own ingest order and coalesces to one per Attempt per second; the store presents the latest (INV-6)."
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:00:10.000",
+          "value": {
+            "kind": "running",
+            "elapsedSeconds": 10,
+            "penaltySeconds": 0
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 2,
+          "field": "gates",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:00:31.000",
+          "value": [
+            {
+              "number": 4,
+              "penalty": 2
+            }
+          ],
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 3,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:00:31.000",
+          "value": {
+            "kind": "running",
+            "elapsedSeconds": 31,
+            "penaltySeconds": 2
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 4,
+          "field": "status",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:01:22.400",
+          "value": "finished",
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:01:22.079Z"
+        },
+        {
+          "ingestSeq": 5,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:01:22.400",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 2,
+            "totalSeconds": 84.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 2,
+          "expect": {
+            "outcome": {
+              "state": "known",
+              "value": {
+                "kind": "running",
+                "elapsedSeconds": 31,
+                "penaltySeconds": 2
+              },
+              "provisional": true
+            }
+          }
+        }
+      ],
+      "expect": {
+        "outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 2,
+            "totalSeconds": 84.36
+          },
+          "source": "tcp",
+          "provisional": false
+        },
+        "status": {
+          "state": "known",
+          "value": "finished"
+        },
+        "gates": {
+          "state": "known",
+          "value": [
+            {
+              "number": 4,
+              "penalty": 2
+            }
+          ]
+        }
+      }
+    },
+    {
       "id": "under-review-independent-of-provisional",
       "invariant": "under-review",
       "description": "underReview and provisional are independent fields.",

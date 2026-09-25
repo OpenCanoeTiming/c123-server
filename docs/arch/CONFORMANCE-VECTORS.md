@@ -31,7 +31,9 @@ contract-level rules. Durability and the flag lifecycle are ordinary store tests
 **Round 4** added 3: the on-course set and its push, and two live-tier vectors (bare values wrapped,
 Attempt deletion).
 
-**79 vectors:** 66 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
+**Gap 21** added 2 live on-course vectors.
+
+**81 vectors:** 68 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
 needed, not a target.
 
 ---
@@ -72,8 +74,8 @@ Each vector has:
 - **On-course listing.** An observation with `field: 'onCourse'` and
   `value: { dtStart, dtFinish }` states what the on-course stream lists for the Attempt (INV-2d).
 - A `kind: 'fragment'` observation stands for any single-row, non-snapshot message.
-- **Live-tier elements.** `{ ingestSeq, push: 'entry' | 'class' | 'phase' | 'course', body }` is a bare
-  §8.3 push; the event `delete` with `attemptId` is a `DELETE`. `expect.notifications` may be a map of
+- **Live-tier elements.** `{ ingestSeq, push: 'entry' | 'class' | 'phase' | 'course' | 'oncourse', body }`
+  is a bare §8.3 push; the event `delete` with `attemptId` is a `DELETE`. `expect.notifications` may be a map of
   message type to count.
 
 **Which vectors the live tier runs** (`CONTRACTS.md` §8.3, "Merge on the live tier").
@@ -130,7 +132,7 @@ optionally the resulting `checks` (only the fields listed are asserted).
 | INV-2d (contradiction by the on-course stream) | `contradiction-oncourse-running-again` | 1 |
 | Marks over time; half-corrections | `status-overrides-time`, `half-correction-snapshot-duplicate-finish` | 2 |
 | Re-baseline | `rebaseline-discards-stale-tcp-and-rebuilds-from-xml`, `rebaseline-keeps-writes-and-generation` | 2 |
-| Live tier: explicit reset, bare values wrapped, deletion | `live-explicit-not-yet-resets-field`, `live-bare-value-wrapped-as-bridge`, `live-attempt-deleted` | 3 |
+| Live tier: explicit reset, bare values wrapped, deletion, on-course set and running state | `live-explicit-not-yet-resets-field`, `live-bare-value-wrapped-as-bridge`, `live-attempt-deleted`, `live-oncourse-set-replaced-whole`, `live-running-then-finished-latest-wins` | 5 |
 | The on-course set and `oncourse.updated` | `oncourse-set-order-and-push` | 1 |
 | Workflow state (§2.10): what `stale` compares against (`null` vs `0`, team sums, `gates` not known), the re-run and re-bib interplay | `check-stale-definition`, `check-null-vs-zero-distinct`, `check-team-sum-compared`, `check-not-carried-to-new-generation`, `check-stays-with-bib-when-result-moves` | 5 |
 | INV-2 rule 3 (single-source fields) | `inv2-rule3-single-source-field` | 1 |

@@ -1513,6 +1513,7 @@ with `error.details` naming the field.
 | `PUT /ingest/v2/phases/{phaseId}` | `{ "classId": string, "kind": "race"\|"classification", "scoringKind": "duration"\|"ordinal", "pair": { "role": "first"\|"second", "siblingPhaseId": string, "combination": "best"\|"sum" } \| null, "heats": boolean, "date": "YYYY-MM-DD", "courseId": string \| null, "scheduledStart": Timestamp \| null, "programmeOrder": number \| null, "title": string \| null, "status": PhaseStatus }` |
 | `PUT /ingest/v2/entries/{entryId}` | `{ "classId": string, "displayName": string, "club": string \| null, "nation": string \| null, "ageCategoryId": string \| null, "eventBib": string \| null, "members": [{ "givenName": string, "familyName": string, "birthDate"?: "YYYY-MM-DD", "externalId": { "scheme": string, "value": string } \| null }] }` |
 | `PUT /ingest/v2/attempts/{phaseId}/{bib}` | any non-empty subset of the `Observed` fields of §2.6, each wrapped per §1.2. **An explicit `{ "state": "not-yet" }` resets that field** |
+| `PUT /ingest/v2/oncourse` | `{ "attemptIds": string[], "featuredByUpstream": string \| null }`: **the whole on-course set, in course order**, replaced on every push. An `attemptId` not yet pushed is stubbed (forward reference). Emits `oncourse.updated` |
 | `DELETE /ingest/v2/attempts/{phaseId}/{bib}` | no body. `204` whether or not the Attempt existed; the Attempt and its standing entries are removed |
 | `PUT /ingest/v2/phases/{phaseId}/attempts` | `{ "attempts": [ { "bib": string, ...the Observed fields of §2.6 } ] }`: **replaces every Attempt of the Phase**; Attempts absent from the body are removed. This is what an on-site re-baseline (§4) emits |
 
@@ -1538,6 +1539,21 @@ with `error.details` naming the field.
   field (`club`, `nation`, `ageCategoryId`, `eventBib`, `courseId`, `scheduledStart`, `programmeOrder`,
   `title`, and each member's `externalId`) becomes `unavailable{reason:'not-applicable'}`. Attempt
   fields arrive already wrapped and keep the `source` the bridge states.
+- **On-course state is carried, because live shows who is on course and how their time and
+  penalties come in** (maintainer, gap 21: "an important feature"). It rides on two things already
+  here. **The set** is its own resource: `PUT /ingest/v2/oncourse`, whole, in course order, pushed
+  whenever membership, order or the featured competitor changes, which is rare (a start, a finish,
+  a heat leaving). Its order is the order; `courseOrder` on an Attempt is informational and may lag.
+  **The per-athlete state** rides on the partial Attempt `PUT`: `status` (`at-start`, `on-course`,
+  `left-without-finish`), `outcome` as `running`, `gates` as cells are judged, `timeToBeat`. The
+  bridge pushes only what the on-site domain layer presents, in its own ingest order, so an
+  on-course inference never follows a result row for the same generation on the wire. **Rate:** the
+  bridge coalesces on-course pushes to at most one per Attempt per second, and pushes at once on a
+  status change or a gate judgement; upstream sends about two on-course messages per competitor per
+  second, and a spectator gains nothing from the second. The live client ticks locally between
+  pushes (§2.6). **Stale over flicker:** when pushes stop, the store keeps the last set and the last
+  running values, ageing; the calendar's `status` (§8.4) and each envelope's `observedAt` say how
+  old they are, and nothing is cleared by the passage of time.
 - **Merge on the live tier** is §4 reduced to what the wire carries. The wire brings resolved
   observations from one automated source, the bridge, plus operator writes (§8.5). So the store
   applies INV-1 (omission), INV-3, INV-4, INV-5, INV-6 and INV-2 rule 4, and honours explicit
@@ -1548,8 +1564,8 @@ with `error.details` naming the field.
   `CONFORMANCE-VECTORS.md` §2 marks which vectors apply to the live tier.
 - **What each push emits on the public stream** (§8.4): a partial Attempt `PUT` emits
   `attempt.updated`; `DELETE` emits `attempt.deleted`; the whole-Phase `PUT` emits `scope.replaced`
-  with `{ kind: 'phase' }`; Class, Phase, Entry and Course `PUT`s emit their `*.updated`; every
-  affected Standing follows as `standing.updated`.
+  with `{ kind: 'phase' }`; Class, Phase, Entry and Course `PUT`s emit their `*.updated`; the on-course
+  `PUT` emits `oncourse.updated`; every affected Standing follows as `standing.updated`.
 - **Naming a round on the live tier.** With no format token, a client labels a Phase from its
   organiser-authored `title` when present, else from the structural fields: `pair.role` and
   `combination` ("run 1", "run 2", "best of two", "sum of two"), `heats`, `scoringKind`, and
@@ -1593,6 +1609,7 @@ out-of-band.
 | `GET /public/events/{eventId}/classes/{classId}/entries` | `{ asOfSeq, entries: Entry[] }`, birth data per the publication setting below | `404 event-not-found`, else `404 class-not-found` |
 | `GET /public/events/{eventId}/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`, each `Standing` **without `anomalies`** (§2.7) | as above |
 | `GET /public/events/{eventId}/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }` | `404 event-not-found`, else `404 phase-not-found` |
+| `GET /public/events/{eventId}/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null, asOf: Timestamp }`: the on-course set as last pushed, Attempts in course order, `asOf` the push's ingest time. Same shape as §7.1's. The featured competitor defaults to the first Attempt; `featuredByUpstream` is the optional alternative | `404 event-not-found` |
 
 **Birth-date publication is a live-mini-server setting, per event.** The store keeps whatever the
 bridge pushed, so the setting can change later without a re-push. The setting,
@@ -1604,10 +1621,10 @@ apply the same setting.
 **Push transport: Server-Sent Events.** `GET /public/events/{eventId}/stream`, with
 `Accept: text/event-stream`. It carries `attempt.updated`, `attempt.deleted` (`{ seq, attemptId }`,
 after a `DELETE`; the client removes the Attempt and its standing entries), `phase.updated`,
-`entry.updated`, `class.updated`, `course.updated`, `standing.updated` (without `anomalies`) and
-`scope.replaced`, in §7.2's shapes. A `scope.replaced` is applied as a replace, exactly as on-site.
-The stream never carries `write.updated`, `sources.updated`, `check.updated`, `flag.updated`,
-`oncourse.updated` or `event.changed`. §1.6's subscribe-before-snapshot and reconnection rules apply.
+`entry.updated`, `class.updated`, `course.updated`, `standing.updated` (without `anomalies`),
+`oncourse.updated` (the whole set, as §7.2) and `scope.replaced`, in §7.2's shapes. A
+`scope.replaced` is applied as a replace, exactly as on-site. The stream never carries
+`write.updated`, `sources.updated`, `check.updated`, `flag.updated` or `event.changed`. §1.6's subscribe-before-snapshot and reconnection rules apply.
 
 ### 8.5 Corrections after the on-site session has ended
 
