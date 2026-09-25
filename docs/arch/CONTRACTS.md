@@ -207,6 +207,7 @@ client may parse it. Codes used anywhere in §7 or §8, each with the HTTP statu
 | `phase-not-found` | 404 | §7, §8.4 |
 | `attempt-not-found` | 404 | §7 writes — `phaseId`/`bib` don't resolve to a known Attempt |
 | `write-not-found` | 404 | §7 |
+| `flag-not-found` | 404 | §7.4 |
 | `validation-failed` | 400 | both — malformed body; carries `error.details: [{field, issue}]` |
 | `vendor-payload-rejected` | 400 | §8.6 — a raw vendor export where a structured resource was required |
 | `unauthorized` | 401 | §8 — missing or unrecognised `X-API-Key` |
@@ -768,23 +769,75 @@ type WriteRequest = {
 explicit race id and works after completion. The contract only requires that closed-phase writes are
 accepted and tracked identically to current-phase ones.
 
-### 2.10 Verification state
+### 2.10 Durable workflow state: gate checks and flags
 
-Penalty-check's own workflow bookkeeping: whether a judge has compared a displayed penalty against
-the paper protocol. It is not a sport-domain fact. It is stored on the server so every tablet shares
-it.
+Penalty-check's own bookkeeping (`DECISIONS/ADR-016`): whether a judge has compared a displayed
+penalty against the paper protocol, and the review requests judges raise on a gate. Neither is a
+sport-domain fact; a wrong value here is a worse workflow, never a wrong result. Both are stored on
+the server so every tablet shares them, and neither ever crosses to the live tier.
 
 ```ts
-type VerificationState = {
+type GateCheck = {
+  attemptId: string; run: number; gate: number   // key
+  checkedAt: Timestamp
+  checkedBy?: string
+  valueAtCheck: number | null   // the presented Gate.penalty the moment the check was made; null = not judged then
+  status: 'verified' | 'stale'  // derived by the server at serialisation, never stored — see below
+}
+
+type GateFlag = {
+  flagId: string
   attemptId: string; run: number; gate: number
-  checked: boolean; checkedBy?: string; checkedAt?: Timestamp
+  createdAt: Timestamp; createdBy?: string
+  comment: string                // judge's free text: workflow, not domain state
+  suggestedValue?: number        // integer seconds
+  resolution?: { resolvedAt: Timestamp; resolvedBy?: string; note?: string }   // absent = open
 }
 ```
 
-- **It is keyed on the domain's own identity, plus the run generation.** A check of an earlier run's
-  penalty never carries over to a re-run (`DECISIONS/ADR-013`).
-- **It must be durable across restart.** Nothing upstream can reconstruct it. Everything else is
-  recoverable from the XML snapshot in one read.
+**Keyed on the domain's own identity plus the run generation.** `attemptId` is `(phaseId, bib)`;
+`run` is the Attempt's generation at the moment the check or flag was made.
+
+**Staleness is derived, by the server, every time it is served or pushed.** A check's `status` is
+`verified` when `valueAtCheck` equals the presented value of `Attempt.gates[gate].penalty` for that
+Attempt and generation, and `stale` otherwise, where:
+- `null` and `0` are distinct: a check made while the gate was unjudged is `stale` once it is judged
+  clean, and a check made against `0` is `stale` once the gate is retracted to `null`;
+- when `gates` is not `known`, the presented value is `null`;
+- a team's penalty is the sum over its members, compared as a sum.
+
+A gate's display state is then a lookup, the same on every tablet: `flagged` if an open flag exists,
+else the check's `status` if a check exists, else `plain`.
+
+**Interplay with the rest of the contract:**
+- **Run generation** (`DECISIONS/ADR-013`): a new generation starts with no checks and no open flags.
+  The old generation's remain readable under their own `run`. A judge's check of an earlier run is
+  never carried to a re-run.
+- **Retraction and contradiction** (`DECISIONS/ADR-015`): a check is never deleted by either. The
+  presented penalty becomes `null`, and the check's `status` follows: `stale` if it was made against
+  a value, still `verified` if it was made against `null`.
+- **A result moved to another bib** leaves the check with the bib it was made on. The paper protocol
+  is per bib as raced; the receiving bib has no check. Re-pointing `entry` (INV-4) does not move a
+  check either: it belongs to the Attempt, not the person.
+- **The re-baseline** (§4) keeps every check and flag and recomputes `status` against the rebuilt
+  values.
+- **A late correction** (a protest 30 minutes on) changes the presented penalty; every check on that
+  gate becomes `stale` and is pushed as such (§7.2). This is the case the snapshot exists for.
+
+**The store is keyed by `eventId`** (§2.2), the identity the bridge asserts. Starting a new event,
+an explicit admin action, opens a new, empty store; the previous event's file stays on disk and is
+never merged. A change of XML file, of race day, or of upstream's own event id inside one event
+changes nothing here. This retires the 0.5 schedule-overlap heuristic of `EVIDENCE.md` Exhibit 7:
+identity is asserted, so nothing is left to guess.
+
+**Durability is a contract guarantee.** Nothing upstream can reconstruct this state; everything else
+is recoverable from the XML snapshot in one read. So:
+- every change is written to durable storage atomically, as a temporary file then a rename, so a
+  crash at any point leaves the previous complete state;
+- a write is acknowledged (§7.4) and pushed (§7.2) only after it is durable;
+- the store is validated on load, and a file that fails validation is reported through
+  `SourceStatus`-style diagnostics, never silently replaced;
+- `TEST-ARCHITECTURE.md` §3.5 is the verification path (#168).
 
 ### 2.11 Worked example: the envelope through a finish
 
@@ -1070,8 +1123,8 @@ re-baseline, per Phase or per Event:
 1. discards every retained upstream observation (`tcp` and `xml`), every contradiction record and
    every diagnostic for the scope's result fields: `status` marks, `outcome`, `gates`, `splits`,
    `faults`, `placement`, `pairTotal`, `countingRun`, `underReview`, `qualified`. Identities,
-   `entry`, `bib`, `startOrder`, `heat`, `startLane`, `run`, `VerificationState` and every
-   `WriteRequest` survive; a pending write stays pending;
+   `entry`, `bib`, `startOrder`, `heat`, `startLane`, `run`, every gate check and flag (§2.10) and
+   every `WriteRequest` survive; a pending write stays pending, and a check's `status` is recomputed;
 2. reads the current XML snapshot, validated, and ingests it as a scope snapshot with a fresh ingest
    sequence. If no valid snapshot can be read, the action fails with `409 source-unavailable` and
    changes nothing;
@@ -1213,6 +1266,7 @@ Every response except `/api/sources` carries `asOfSeq: number` (§1.6) at the to
 | `GET /api/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }` | `404 phase-not-found` |
 | `GET /api/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`: every scope of §5, for the whole class and per age category | `404 class-not-found` |
 | `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null }`: every Attempt currently on upstream's on-course list with status `at-start` or `on-course`, across every running Phase. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8) | — |
+| `GET /api/phases/{phaseId}/checks` | `{ asOfSeq, checks: GateCheck[], flags: GateFlag[] }`: every check and flag of the Phase, all run generations, `status` derived at serialisation (§2.10) | `404 phase-not-found` |
 | `GET /api/sources` | `SourceStatus`, unwrapped | — |
 | `GET /api/diagnostics` | `{ asOfSeq, diagnostics: Diagnostic[] }`: current source disagreements, contradicted finishes and duplicate finishes (§4). Admin audience only | — |
 | `POST /api/rebaseline` | body `{ "scope": { "kind": "phase", "phaseId": string } \| { "kind": "event" } }`. `200 { asOfSeq, scope, snapshotWrittenAt, snapshotDetectedAt, attempts: number }`: the operator re-baseline (§4). Admin audience only; safe to repeat | `404 phase-not-found`; `409 source-unavailable` |
@@ -1239,6 +1293,10 @@ Every message carries `seq` (§1.6).
   fields. An omitted field is untouched, never reset. A run-generation change is sent as explicit
   `not-yet` values (INV-1).
 - `standing.updated`, `course.updated`, `write.updated` and `sources.updated` carry the whole resource.
+- **`check.updated`** carries `{ attemptId, run, gate, check: GateCheck | null }`, whole; `null` means
+  the check was removed. It is sent on every check write and **whenever a check's derived `status`
+  changes** because the presented gate penalty changed (§2.10). **`flag.updated`** carries the whole
+  `GateFlag`. Neither is ever sent on the live tier (§8.4).
 - **A retraction** (§4 INV-7) or a contradiction (INV-2d) is sent as `attempt.updated` with explicit
   `not-yet` values, never by omission.
 - **`scope.replaced`** carries every Attempt and every Standing of a scope after a re-baseline
@@ -1253,6 +1311,9 @@ Every message carries `seq` (§1.6).
               "placement": { "state": "not-yet" }, "status": { "state": "known", "value": "on-course", ... } } }
 { "seq": 1046, "type": "standing.updated", "standing": { "standingKey": "pair:K1M_BR2_6/all", ... } }
 { "seq": 1047, "type": "write.updated", "write": { ...WriteRequest... } }
+{ "seq": 1050, "type": "check.updated", "attemptId": "C1W_BR1_19:38", "run": 1, "gate": 7,
+  "check": { "attemptId": "C1W_BR1_19:38", "run": 1, "gate": 7, "checkedAt": "…T08:39:10.000Z",
+             "valueAtCheck": 50, "status": "stale" } }
 { "seq": 1048, "type": "attempt.updated", "attemptId": "K1W_BR1_19:53",
   "fields": { "status": { "state": "known", "value": "not-started", ... }, "outcome": { "state": "not-yet" },
               "placement": { "state": "not-yet" } } }
@@ -1288,6 +1349,22 @@ same `WriteRequest` over time:
 ```
 
 No field ever encodes a timeout or a deadline.
+
+### 7.4 Gate checks and flags (REST)
+
+The durable workflow state of §2.10. Every write below is acknowledged only after it is durable, and
+is followed by a `check.updated` or `flag.updated` push (§7.2). `run` is never in a path: a write
+targets the Attempt's current generation.
+
+| Method & path | Body | Response | Error |
+|---|---|---|---|
+| `PUT /api/attempts/{phaseId}/{bib}/checks/{gate}` | `{ "checkedBy"?: string }` | `200 GateCheck`: the check for the current generation, `valueAtCheck` set to the presented penalty at this moment, `status: 'verified'`. Repeating it replaces the snapshot, which is how a judge re-verifies after a correction | `404 attempt-not-found`; `400 validation-failed` (`gate` outside the Phase's course, or the course not configured) |
+| `DELETE /api/attempts/{phaseId}/{bib}/checks/{gate}` | — | `204`, whether or not a check existed | `404 attempt-not-found` |
+| `POST /api/attempts/{phaseId}/{bib}/flags` | `{ "gate": number, "comment": string, "suggestedValue"?: number, "createdBy"?: string }`, with `Idempotency-Key` (§1.5) | `201 GateFlag`, open | `404 attempt-not-found`; `400 validation-failed` |
+| `POST /api/flags/{flagId}/resolution` | `{ "note"?: string, "resolvedBy"?: string }` | `200 GateFlag`, resolved. Repeating it on a resolved flag returns `200` unchanged | `404 flag-not-found` |
+
+A flag never changes a penalty. A judge who agrees with a flag's suggested value corrects the
+penalty through §7.3, and the flag is resolved separately.
 
 ---
 
@@ -1396,7 +1473,7 @@ out-of-band.
 `Accept: text/event-stream`. It carries `attempt.updated`, `phase.updated`, `entry.updated`,
 `class.updated`, `course.updated`, `standing.updated` and `scope.replaced`, in §7.2's shapes. A
 `scope.replaced` is applied as a replace, exactly as on-site. The stream never carries
-`write.updated` or `sources.updated`. §1.6's subscribe-before-snapshot sequence applies.
+`write.updated`, `sources.updated`, `check.updated` or `flag.updated`. §1.6's subscribe-before-snapshot sequence applies.
 
 ### 8.5 Corrections after the on-site session has ended
 

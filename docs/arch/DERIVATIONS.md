@@ -623,6 +623,14 @@ re-baseline (`CONTRACTS.md` §4) is the remedy for one that never does.
   field.
 - The echo arrives as an event-driven result push, because a correction recalculates the race.
 
+**`GateCheck.status`** (`CONTRACTS.md` §2.10). Derived at serialisation, never stored:
+`presented = Attempt.gates` is `known` ? `gates.value[gate − 1].penalty` : `null`;
+`status = (valueAtCheck === presented) ? 'verified' : 'stale'`, with `null === null` true and
+`null === 0` false. A team's `penalty` is already the member sum (§4.6(c)), so no further arithmetic.
+Recomputed, and `check.updated` pushed, whenever the presented `gates` of that Attempt and generation
+changes: a late correction, a retraction, a contradiction, a re-baseline. The display state
+`flagged | verified | stale | plain` is a lookup over open flags and the check, in that order.
+
 ---
 
 ## 7. What could not be derived

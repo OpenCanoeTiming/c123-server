@@ -16,6 +16,7 @@
             "phase-not-found",
             "attempt-not-found",
             "write-not-found",
+            "flag-not-found",
             "validation-failed",
             "vendor-payload-rejected",
             "unauthorized",

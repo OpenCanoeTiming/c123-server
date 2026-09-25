@@ -311,6 +311,12 @@ fingerprint.
 **Why it matters:** three implementations, no owner, and — as the correction above shows — not even
 agreement about which question they answer.
 
+**Resolution in the consolidated revision (2026-09-24, `DECISIONS/ADR-016`).** The 50 % heuristic
+existed to decide which checks file to open. The design keys that store by the bridge-asserted
+`eventId` (`CONTRACTS.md` §2.2, §2.10): a new event is an explicit admin action, so nothing is left
+to guess, and a file or day switch inside an event no longer risks splitting a day's checks. The
+operational continuity question keeps its own, narrower mechanism (`ARCHITECTURE.md` Scenario E).
+
 ---
 
 ## Exhibit 8 — Identity derived by parsing strings
