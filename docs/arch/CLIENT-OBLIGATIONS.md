@@ -60,7 +60,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Tell whether a value is still accruing from `outcome.kind` being `running`, never by cross-referencing `status` (CONTRACTS §2.6).
 - [ ] Display `running.elapsedSeconds` and `penaltySeconds` as delivered: upstream's own display, including its split hold (CONTRACTS §2.6; DERIVATIONS §4.3).
 - [ ] Tick the running time locally, if at all, only through the injected `Clock`, snapping to every new `running` value and stopping the instant `status` leaves `on-course` (CONTRACTS §2.6; TEST-ARCHITECTURE §5).
-- [ ] Stop the tick `runningStaleAfterSeconds`, a named constant of 3 s, past the last `running` value's `observedAt`: freeze the display at that value and show it as stale, with its age; never clear it by time and never let it run on, on either tier (CONTRACTS §2.6).
+- [ ] Stop the tick `runningStaleAfterSeconds`, a named constant of 3 s, past the client's own receipt of the last `running` value, measured on its own injected clock; freeze the display at that value and show it as stale, with its age from receipt; never subtract `observedAt` from the client clock (CONTRACTS §2.6).
 - [ ] Render `left-without-finish` as an observed removal with no reason; show a mark only once `status` carries one; never infer DNF (CONTRACTS §2.6, §3.2, §7.1; ARCHITECTURE §6.G).
 - [ ] Render `outcome.kind: 'no-result'` as its mark, whatever time the row carried; never let a time suppress a mark (CONTRACTS §2.6).
 - [ ] Show `non-ranked` as raced and timed but unranked, and `ral` where its `placement` puts it (CONTRACTS §2.6).
@@ -209,6 +209,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Among bridge observations of one field, present the later-ingested one (CONTRACTS §4, §8.3).
 - [ ] Assemble standings as c123-server does, from the pushed `placement` and `ageCategoryId`, without the category-rank check and without the order-anomaly check; rank nothing (CONTRACTS §5, §8; ADR-012).
 - [ ] Set each Standing's `asOf` to the ingest time of the latest observation behind any of its entries (CONTRACTS §5).
+- [ ] Accept `PUT /ingest/v2/phases/{phaseId}/classification` for a Phase of `kind: 'classification'`, replace its rows whole, assemble the `classification` Standing from them as delivered and emit `standing.updated`; refuse Attempts on a classification Phase and classifications pushed as Attempts (CONTRACTS §2.4, §5, §8.3, §8.6).
 - [ ] Recompute nothing else: retire `EventLifecycleService`'s independent judgement, the independent ranking and the second XML parser (ARCHITECTURE §3; CONTRACTS §8).
 - [ ] Store a second run's `outcome`, which is run 2's own, and its `pairTotal` and `countingRun` as pushed; never recombine the runs (CONTRACTS §2.6, §8).
 - [ ] Keep its own `seq` counter: one per server, strictly increasing, persisted, never regressing across a restart (CONTRACTS §1.6).
@@ -265,7 +266,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Encode every envelope as the wire encoding requires, `eventTime` omitted rather than `null`, so that every envelope and error validates against the two schemas (CONTRACTS §1.2, §1.7).
 
 **Tests**
-- [ ] Run, through a thin adapter into its own merge function, the tier-1 vectors tagged `INV-1`, `INV-3`, `INV-4`, `INV-5`, `INV-6`, `operator-write` and `live-ingest`, and the `standing-assembly` vectors except the three anomaly ones (TEST-ARCHITECTURE §3.1; CONFORMANCE-VECTORS §1).
+- [ ] Run, through a thin adapter into its own merge function, the tier-1 vectors CONFORMANCE-VECTORS §1 lists for the live tier: `INV-1` except the two scope-snapshot ones, `INV-3`, `INV-4`, `INV-5`, `INV-6`, `live-ingest`, the two `operator-correction-*` vectors, and `standing-assembly` except the three anomaly vectors (CONFORMANCE-VECTORS §1, §2; TEST-ARCHITECTURE §3.1).
 - [ ] Add tier-1 time-window vectors for calendar `status`: just under, exactly at and just over 5 minutes (TEST-ARCHITECTURE §3.1).
 - [ ] Replay each admitted domain-state fixture as `PUT` calls, and check that values read back over the public reads match (TEST-ARCHITECTURE §3.2, §7).
 - [ ] Verify tenant isolation with the store's own integration tests: no leakage between two keys with equal local ids, no cross-event access, `403` for a revoked key, `404` for an unknown `eventId` (TEST-ARCHITECTURE §3.5; CONFORMANCE-VECTORS §3).
@@ -285,6 +286,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Feature by default the first Attempt of the on-course set; offer `featuredByUpstream` only as the optional alternative (CONTRACTS §8.4; ARCHITECTURE §2).
 - [ ] Take each on-course athlete's `status`, `running` outcome, judged `gates` and `timeToBeat` from `attempt.updated` (CONTRACTS §8.3).
 - [ ] On `attempt.deleted`, remove the Attempt and its standing entries (CONTRACTS §8.4).
+- [ ] Show a classification Standing (`XER`, `SLER`, `WWER`) as delivered, dated by its `asOf`, which lags the contributing Phases until the operator recalculates (CONTRACTS §2.4, §5, §8.3).
 - [ ] Label a Phase from its organiser-authored `title` when present, else from `pair.role`, `combination`, `heats`, `scoringKind` and `kind`; expect no `format` token (CONTRACTS §8.3; ADR-007; DERIVATIONS §9).
 - [ ] Show birth data only as served: `birthYear`, `birthDate` or neither, per the event's publication setting (CONTRACTS §8.4).
 - [ ] Expect no `anomalies`, diagnostics, `write.updated`, `sources.updated`, `check.updated`, `flag.updated` or `event.changed` on the live tier (CONTRACTS §2.7, §4, §8.4).
@@ -293,8 +295,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 
 ## Gaps and conflicts
 
-Still open at 0c199af; each needs a decision in the cited documents before the items it touches close.
-
-1. **Whose clock the stale tick uses.** The tick stops 3 s past the last `running` value's `observedAt`, a timestamp on the ingesting server's clock, which on the live tier is the venue laptop's. The client measures against its own clock, and nothing addresses the offset between the two, or says whether a client may measure from its own receipt of the value instead (CONTRACTS §1.2, §2.6, §8.3).
-2. **Live-tier vectors that still need venue inputs.** The live tier runs every `INV-1` and `operator-write` vector. Two `INV-1` vectors are built on scope snapshots (`retraction-not-from-fragment`, `retraction-not-in-other-race-snapshot`), and four `operator-write` vectors assert a `WriteRequest` status, which exists only on site (CONFORMANCE-VECTORS §1; CONTRACTS §2.9, §8.3).
-3. **Classification rows have no live ingest.** Standings on the live tier are assembled like the on-site ones, and a classification Standing takes its rows from the classification Phase. The live ingest has no shape that carries those rows, so live-mini-server cannot assemble one, and live-mini-client has none to show (CONTRACTS §2.4, §5, §8.3, §8.6).
+None open at the commit that closed round 6. The three found at 0c199af were resolved into
+obligations above: the stale tick is measured from the client's own receipt (rendering clients),
+the live-tier vector subset is listed by name (live-mini-server), and classification rows have an
+ingest shape (live-mini-server, live-mini-client).

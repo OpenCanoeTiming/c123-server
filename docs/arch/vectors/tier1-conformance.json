@@ -3689,6 +3689,119 @@
       }
     },
     {
+      "id": "live-classification-rows-replaced-whole",
+      "invariant": "live-ingest",
+      "description": "A classification push replaces the Phase's rows whole; the classification Standing is assembled from them as delivered and dated by the push's asOf.",
+      "context": {
+        "tier": "live",
+        "note": "entry C dropped out on recalculation; no Attempt exists for a classification Phase."
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "push": "classification",
+          "observedAt": "2026-09-15T12:00:00.000Z",
+          "phaseId": "MX1_XER_26",
+          "body": {
+            "rows": [
+              {
+                "entryId": "A",
+                "bib": "4",
+                "rank": 1,
+                "order": 1,
+                "decidedIn": "XF"
+              },
+              {
+                "entryId": "B",
+                "bib": "7",
+                "rank": 2,
+                "order": 2,
+                "decidedIn": "XF"
+              },
+              {
+                "entryId": "C",
+                "bib": "9",
+                "rank": 5,
+                "order": 5,
+                "decidedIn": "XS"
+              }
+            ],
+            "asOf": "2026-09-15T11:58:00.000Z"
+          }
+        },
+        {
+          "ingestSeq": 2,
+          "push": "classification",
+          "observedAt": "2026-09-15T12:30:00.000Z",
+          "phaseId": "MX1_XER_26",
+          "body": {
+            "rows": [
+              {
+                "entryId": "B",
+                "bib": "7",
+                "rank": 1,
+                "order": 1,
+                "decidedIn": "XF"
+              },
+              {
+                "entryId": "A",
+                "bib": "4",
+                "rank": 2,
+                "order": 2,
+                "decidedIn": "XF"
+              }
+            ],
+            "asOf": "2026-09-15T12:29:00.000Z"
+          }
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 0,
+          "expect": {
+            "standing": {
+              "classification:MX1_XER_26/all": [
+                {
+                  "entryId": "A",
+                  "rank": 1
+                },
+                {
+                  "entryId": "B",
+                  "rank": 2
+                },
+                {
+                  "entryId": "C",
+                  "rank": 5
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "expect": {
+        "standing": {
+          "classification:MX1_XER_26/all": [
+            {
+              "entryId": "B",
+              "rank": 1,
+              "order": 1,
+              "decidedIn": "XF"
+            },
+            {
+              "entryId": "A",
+              "rank": 2,
+              "order": 2,
+              "decidedIn": "XF"
+            }
+          ]
+        },
+        "attempts": [],
+        "notifications": {
+          "standing.updated": 2
+        }
+      }
+    },
+    {
       "id": "under-review-independent-of-provisional",
       "invariant": "under-review",
       "description": "underReview and provisional are independent fields.",

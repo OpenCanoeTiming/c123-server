@@ -33,9 +33,10 @@ Attempt deletion).
 
 **Gap 21** added 2 live on-course vectors.
 
-**Gap 22** added 1: a confirmed write later changed upstream stays confirmed.
+**Gap 22** added 1: a confirmed write later changed upstream stays confirmed. **Round 6** added 1: a
+classification pushed to the live tier.
 
-**82 vectors:** 69 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
+**83 vectors:** 70 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
 needed, not a target.
 
 ---
@@ -76,13 +77,17 @@ Each vector has:
 - **On-course listing.** An observation with `field: 'onCourse'` and
   `value: { dtStart, dtFinish }` states what the on-course stream lists for the Attempt (INV-2d).
 - A `kind: 'fragment'` observation stands for any single-row, non-snapshot message.
-- **Live-tier elements.** `{ ingestSeq, push: 'entry' | 'class' | 'phase' | 'course' | 'oncourse', body }`
-  is a bare §8.3 push; the event `delete` with `attemptId` is a `DELETE`. `expect.notifications` may be a map of
+- **Live-tier elements.** `{ ingestSeq, push: 'entry' | 'class' | 'phase' | 'course' | 'oncourse' |
+  'classification', body }` is a bare §8.3 push; the event `delete` with `attemptId` is a `DELETE`. `expect.notifications` may be a map of
   message type to count.
 
 **Which vectors the live tier runs** (`CONTRACTS.md` §8.3, "Merge on the live tier").
-live-mini-server runs every vector tagged `INV-1`, `INV-3`, `INV-4`, `INV-5`, `INV-6`,
-`operator-write` and `live-ingest`, and the `standing-assembly` vectors **except** the three anomaly
+live-mini-server runs: the `INV-1` vectors **except** the two built on scope snapshots
+(`retraction-not-from-fragment`, `retraction-not-in-other-race-snapshot`); every `INV-3`, `INV-4`,
+`INV-5`, `INV-6` and `live-ingest` vector; of the `operator-write` vectors only the two no-echo
+corrections (`operator-correction-not-displaced-by-redelivery`,
+`operator-correction-displaced-by-changed-upstream-value`), since a `WriteRequest` exists on site
+only; and the `standing-assembly` vectors **except** the three anomaly
 ones (`standing-category-rank-disagreement-recorded`, `standing-order-disagreement-anomaly`,
 `standing-cross-never-checked`), since the live tier assembles without steps 4 and 7 of
 `CONTRACTS.md` §5. It runs none tagged `INV-2 …`, `INV-2b`, `INV-2c`, `INV-2d`, `INV-7`,
@@ -137,7 +142,7 @@ optionally the resulting `checks` (only the fields listed are asserted).
 | INV-2d (contradiction by the on-course stream) | `contradiction-oncourse-running-again` | 1 |
 | Marks over time; half-corrections | `status-overrides-time`, `half-correction-snapshot-duplicate-finish` | 2 |
 | Re-baseline | `rebaseline-discards-stale-tcp-and-rebuilds-from-xml`, `rebaseline-keeps-writes-and-generation` | 2 |
-| Live tier: explicit reset, bare values wrapped, deletion, on-course set and running state | `live-explicit-not-yet-resets-field`, `live-bare-value-wrapped-as-bridge`, `live-attempt-deleted`, `live-oncourse-set-replaced-whole`, `live-running-then-finished-latest-wins` | 5 |
+| Live tier: explicit reset, bare values wrapped, deletion, on-course set and running state, classification rows | `live-explicit-not-yet-resets-field`, `live-bare-value-wrapped-as-bridge`, `live-attempt-deleted`, `live-oncourse-set-replaced-whole`, `live-running-then-finished-latest-wins`, `live-classification-rows-replaced-whole` | 6 |
 | The on-course set and `oncourse.updated` | `oncourse-set-order-and-push` | 1 |
 | Workflow state (§2.10): what `stale` compares against (`null` vs `0`, team sums, `gates` not known), the re-run and re-bib interplay | `check-stale-definition`, `check-null-vs-zero-distinct`, `check-team-sum-compared`, `check-not-carried-to-new-generation`, `check-stays-with-bib-when-result-moves` | 5 |
 | INV-2 rule 3 (single-source fields) | `inv2-rule3-single-source-field` | 1 |

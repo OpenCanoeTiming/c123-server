@@ -618,8 +618,13 @@ and the run is raced again. Meanwhile, it looks as if the athlete never did that
   snaps to every new `running` value as it arrives and stops the instant `status` leaves
   `on-course`. Upstream re-sends at least once per second, so the local tick never runs more than
   about a second ahead of a real value. **The tick also stops when the feed goes quiet:** a client
-  ticks for at most `runningStaleAfterSeconds` (a named constant, 3 s) past the last `running`
-  value's `observedAt`, then freezes the display at that value and shows it as stale, with its age.
+  ticks for at most `runningStaleAfterSeconds` (a named constant, 3 s) **past its own receipt of the
+  last `running` value, measured on its own injected clock**, then freezes the display at that value
+  and shows it as stale. It never subtracts `observedAt` from its own clock: `observedAt` is on the
+  ingesting server's clock (on live, the venue laptop's), and an offset between the two must not
+  freeze or unfreeze the tick. The question is whether the feed is quiet, and that is a fact about
+  arrivals at the client. Age is shown the same way, from receipt; `observedAt` is displayed as a
+  timestamp, not used in arithmetic against a different clock.
   This is the same rule on both tiers: a TCP outage on site, or a quiet bridge on live. The value is
   never cleared by time (stale over flicker), and it never runs on as if the athlete were still
   moving. On site, `SourceStatus.tcp` says why; on live, `oncourse.updated`'s `asOf` and the
@@ -1278,7 +1283,8 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    - For a `pair`, the Attempts are the second Phase's. Their placement is already the combined one,
      and upstream pushes it as soon as the *first* run changes. `result` is the second run's own
      outcome, and `pairTotalSeconds` is `pairTotal`.
-   - A `classification` takes its rows from the classification Phase's rows (`DERIVATIONS.md` §4.10).
+   - A `classification` takes its rows from the classification Phase's rows (`DERIVATIONS.md` §4.10);
+     on the live tier, from the classification push (§8.3), which carries them already placed.
 3. **Unplaced entries** are listed after all placed ones, with `rank: null`, `order: null`. They are
    ordered by `status`, in the declaration order of `AttemptStatus` (§2.6), then by `bib`, compared
    numerically where both bibs are integers and as strings otherwise. This order is deterministic and
@@ -1587,6 +1593,7 @@ with `error.details` naming the field.
 | `PUT /ingest/v2/phases/{phaseId}` | `{ "classId": string, "kind": "race"\|"classification", "scoringKind": "duration"\|"ordinal", "pair": { "role": "first"\|"second", "siblingPhaseId": string, "combination": "best"\|"sum" } \| null, "heats": boolean, "date": "YYYY-MM-DD", "courseId": string \| null, "scheduledStart": Timestamp \| null, "programmeOrder": number \| null, "title": string \| null, "status": PhaseStatus }` |
 | `PUT /ingest/v2/entries/{entryId}` | `{ "classId": string, "displayName": string, "isTeam": boolean, "club": string \| null, "nation": string \| null, "ageCategoryId": string \| null, "eventBib": string \| null, "members": [{ "givenName": string, "familyName": string, "birthDate"?: "YYYY-MM-DD", "externalId": { "scheme": string, "value": string } \| null }] }` |
 | `PUT /ingest/v2/attempts/{phaseId}/{bib}` | any non-empty subset of the `Observed` fields of §2.6, each wrapped per §1.2. **An explicit `{ "state": "not-yet" }` resets that field** |
+| `PUT /ingest/v2/phases/{phaseId}/classification` | `{ "rows": [ { "entryId": string, "bib": string, "rank": number \| null, "order": number, "decidedIn": string } ], "asOf": Timestamp }`: **the rows of a classification Phase (§2.4), whole, replaced on every push**, as upstream last built them. The store assembles the `classification` Standing from them and emits `standing.updated`. The Phase must have `kind: 'classification'`, else `400 validation-failed` |
 | `PUT /ingest/v2/oncourse` | `{ "attemptIds": string[], "featuredByUpstream": string \| null }`: **the whole on-course set, in course order**, replaced on every push. An `attemptId` not yet pushed is stubbed (forward reference). Emits `oncourse.updated` |
 | `DELETE /ingest/v2/attempts/{phaseId}/{bib}` | no body. `204` whether or not the Attempt existed; the Attempt and its standing entries are removed |
 | `PUT /ingest/v2/phases/{phaseId}/attempts` | `{ "attempts": [ { "bib": string, ...the Observed fields of §2.6 } ] }`: **replaces every Attempt of the Phase**; Attempts absent from the body are removed. This is what an on-site re-baseline (§4) emits |
@@ -1715,6 +1722,8 @@ This is also how a mis-bibbed run is corrected: `entry` is re-pointed (INV-4).
 ### 8.6 What this contract refuses
 
 - A raw vendor payload of any kind: `400 vendor-payload-rejected`.
+- A classification pushed as Attempts, or Attempts pushed to a classification Phase:
+  `400 validation-failed`. A classification carries placed rows and nothing else (§2.4, §8.3).
 - A body that matches none of §8.3's shapes, including one missing a required identity key:
   `400 validation-failed`.
 - Any non-idempotent operation. There is no "append a result", only "assert the current value",
