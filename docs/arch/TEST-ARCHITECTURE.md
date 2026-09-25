@@ -118,7 +118,7 @@ cover:
 - run generations;
 - §5's standing assembly.
 
-The count is 70 as of the consolidated revision (round 2) (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
+The count is 80 as of the consolidated revision (round 3) (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
 a thin adapter that feeds these vectors into its own merge function and asserts the result — proving
 both satisfy the same data-defined contract without either depending on the other's code.
 
@@ -308,6 +308,53 @@ a replay server for round-trip correctness" — cannot be fully realised by tier
 can still test the *merge* half precisely (a synthetic "submitted write, then a synthetic echo"
 vector, §3.1) without needing a real echo at all; only the realistic upstream round trip is blocked,
 and only tier 4 needed it. Recorded as a genuine tooling gap in §9, not glossed over.
+
+### 3.5 Durable workflow state — a narrow suite outside the four tiers (#168)
+
+**What it proves:** that `CONTRACTS.md` §2.10's durability guarantee holds. Gate checks and flags
+exist nowhere upstream, so they appear in no recording, no domain-state fixture can contain them,
+and tiers 2 and 3 structurally cannot cover them. Issue #168 was right that this was the only
+durability guarantee with no verification path. This section gives it one; "deliberately untested"
+is not an option for state that a restart would otherwise lose for good.
+
+**Two halves, two mechanisms.**
+
+- **The rules are tier-1 vectors.** Staleness (`valueAtCheck` against the presented penalty, `null`
+  against `0`, team sums), run-generation isolation, a check staying with its bib when a result
+  moves, retraction and re-baseline effects, and the flag lifecycle are all pure functions over
+  (checks, flags, presented state) → (status). They use a third `given`/`expect` shape,
+  `CONFORMANCE-VECTORS.md` §1, and need no recording.
+- **Durability is a store-boundary suite, owned by `c123-server` alone**, since it is the only
+  component that stores this state. It runs against the real filesystem in a temporary directory,
+  with no player, no recording and no fake clock, and it is what makes the guarantee falsifiable.
+  The minimum set, each a failing test until the store passes it:
+  1. **Restart round-trip.** Write checks and flags, stop the process, start it against the same
+     directory: `GET /api/phases/{phaseId}/checks` returns them byte-for-byte, `status` recomputed.
+  2. **Crash mid-write.** Inject a failure between the temporary file being written and the rename
+     (a truncated or absent temporary file, a rename that never happens): the store loads the
+     previous complete state, and reports nothing lost. A second injection, a corrupted final file,
+     must be reported as a diagnostic and never silently replaced by an empty store.
+  3. **Acknowledgement after durability.** A `PUT` check or `POST` flag whose durable write fails
+     returns an error and pushes nothing; a successful one is readable after an immediate restart.
+  4. **Event switch without merging.** Start a new event (the explicit admin action): the new store
+     is empty, the previous event's file is unchanged byte-for-byte, and switching back reopens it
+     intact. A change of XML path inside an event opens nothing new.
+  5. **Re-run isolation.** A check on run 1; a run-generation increment; the gate reads `plain` for
+     run 2, and run 1's check is still readable under `run: 1`.
+  6. **Re-baseline preservation.** Checks and flags survive `POST /api/rebaseline`, and each check's
+     `status` is recomputed against the rebuilt values.
+  7. **Stale after a late correction.** A check made against `2`; thirty minutes of fake-free real
+     time are not needed, only a later presented penalty of `50`: the check reads `stale`, and a
+     `check.updated` carrying `status: 'stale'` was pushed exactly once.
+  8. **Flag lifecycle.** Create, read as `flagged` ahead of any check status, resolve, read the
+     underlying check status again; a repeated resolution is a no-op `200`.
+
+  Items 1–4 are the durability half and belong only here. Items 5–8 duplicate tier-1 vectors on
+  purpose: the vector proves the rule, the suite proves the stored state still obeys it after a
+  restart.
+
+**Why it is not a fifth tier.** It tests one component's storage boundary, not a contract between
+components, and it must never grow into one: anything about *what* a check means belongs in tier 1.
 
 ---
 
@@ -565,7 +612,7 @@ layer-implementation.md`, and the five named tools) — not the other way round.
 
 ## 10. Left open
 
-- ~~**The exact vector count and coverage for tier 1.**~~ **Resolved.** 35 vectors were written, then 70 after the consolidated revision; the estimate did undercount, as the review suspected. Coverage map and the gaps that remain are in `CONFORMANCE-VECTORS.md` §2–§3. Original text follows for the record.
+- ~~**The exact vector count and coverage for tier 1.**~~ **Resolved.** 35 vectors were written, then 80 after the consolidated revision; the estimate did undercount, as the review suspected. Coverage map and the gaps that remain are in `CONFORMANCE-VECTORS.md` §2–§3. Original text follows for the record.
 - **The exact vector count and coverage for tier 1.** §3.1 gives a target range (~25–30) and method,
   not the vectors themselves — writing them is implementation, test-first, the same relationship
   `CONTRACTS.md` has to the server code it precedes. Raised directly under review: the §4 ranking

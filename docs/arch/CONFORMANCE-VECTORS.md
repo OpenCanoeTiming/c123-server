@@ -24,7 +24,9 @@ hand-authored, with no shared runtime code (`DECISIONS/ADR-002`/`ADR-003`).
 **Revision round 2** (`DECISIONS/ADR-015`) added 15 vectors for retraction, contradiction, marks over
 time, half-corrections, the re-baseline and the live tier's explicit reset.
 
-**70 vectors:** 62 merge vectors and 8 standing-assembly vectors. The number is what the coverage
+**Round 3** (`DECISIONS/ADR-016`, #168) added 10 workflow-state vectors for gate checks and flags.
+
+**80 vectors:** 62 merge vectors, 8 standing-assembly vectors and 10 workflow-state vectors. The number is what the coverage
 needed, not a target.
 
 ---
@@ -88,6 +90,15 @@ means before any given. The observations in `then` are applied after it.
 `upstreamCategoryRanks` supplies the snapshot's own category ranks for the check. `expect` is the
 assembled `standing`, in order, plus `anomalies` (`CONTRACTS.md` §5).
 
+### Workflow-state vectors
+
+`given` holds `checks`, `flags` and `presented` (per Attempt: the current `run` and the presented
+`gates`, `null` where `Attempt.gates` is not `known`). `then` steps are: a new `presented` state; a
+`check` write; a `resolve` of a flag; or a `rebaseline` event. `expect` is `gateStatus`, a map of
+`attemptId:run:gate` to `flagged | verified | stale | plain`, plus optionally the resulting `checks`
+and `flags` (only the fields listed are asserted) and `notifications`, the number of `check.updated`
+or `flag.updated` pushes.
+
 ---
 
 ## 2. Coverage map
@@ -106,6 +117,7 @@ assembled `standing`, in order, plus `anomalies` (`CONTRACTS.md` §5).
 | Marks over time; half-corrections | `status-overrides-time`, `half-correction-snapshot-duplicate-finish` | 2 |
 | Re-baseline | `rebaseline-discards-stale-tcp-and-rebuilds-from-xml`, `rebaseline-keeps-writes-and-generation` | 2 |
 | Live tier explicit reset | `live-explicit-not-yet-resets-field` | 1 |
+| Workflow state (§2.10): staleness, `null` vs `0`, team sums, generations, moved results, re-baseline, flags, re-check | the ten `check-*` and `flag-*` vectors | 10 |
 | INV-2 rule 3 (single-source fields) | `inv2-rule3-single-source-field` | 1 |
 | INV-2 rule 4 (operator writes) | the six `operator-write-*` and `operator-correction-*` vectors, including `superseded` | 6 |
 | INV-2b (surfaced, never adopted) | `inv2b-disagreement-surfaced-not-adopted` | 1 |
@@ -160,3 +172,6 @@ presented-state fact, covered by `inv2b-disagreement-surfaced-not-adopted`.
    expressible.
 6. **The XML write-time guard needed the poll interval in `context`** (`xmlPollIntervalSeconds`),
    because the guard is defined in terms of it.
+7. **Workflow state needed a third shape** (round 3). Its rules are functions over stored checks and
+   the presented state, not over observations, and `TEST-ARCHITECTURE.md` §3.5 says why they are
+   vectors at all: the durability half is a store-boundary suite, and only the rules are contract.
