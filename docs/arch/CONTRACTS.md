@@ -843,8 +843,8 @@ which this happens; the client shows how long the write has been pending, from `
 judge, an operator, or upstream's own closure of the run: that is an ordinary later observation of
 the field, visible on the field, and the `WriteRequest` stays `confirmed`. The one such reversal
 that is not a person's decision, upstream's save from the on-course state overwriting a correction
-made while the athlete was still on course, is prevented by the command rule in §7.3, not surfaced
-afterwards.
+made while the athlete was still on course, is prevented by §7.3 refusing every write until the run
+is closed, not surfaced afterwards.
 
 **Writes may target a closed Phase** (maintainer answer A2). Canoe123's correction command carries an
 explicit race id and works after completion. The contract only requires that closed-phase writes are
@@ -1430,36 +1430,37 @@ Clients **must** follow §1.6's subscribe-before-snapshot sequence.
 ### 7.3 Writes (REST)
 
 Both writes require an `Idempotency-Key` (§1.5). Both may target a closed Phase (§2.9). Both target
-the Attempt's run generation that is current at submission.
+the Attempt's run generation that is current at submission. Both are accepted only once the Attempt
+has left upstream's on-course list (below). Whether upstream's terminal channel can set a mark on a
+closed run at all, as opposed to a penalty, is unverified (`DERIVATIONS.md` §10); the status write
+stays in the contract pending that answer.
 
 | Method & path | Body | First response | Retry (same key) | Error |
 |---|---|---|---|---|
-| `POST /api/attempts/{phaseId}/{bib}/penalty` | `{ "gate": number, "value": 0\|2\|50, "member"?: 1\|2\|3 }` — `member` required for a team boat, forbidden otherwise | `202`, `Location: /api/writes/{writeId}`, body = `WriteRequest{status:'pending'}` | `200`, current `WriteRequest` | `404 attempt-not-found`; `400 validation-failed` (`value` not in `{0,2,50}`; `gate` outside the Phase's course gates; the course not configured; `member` missing for a team boat or present for a single boat); `409 write-not-possible` (below) |
-| `POST /api/attempts/{phaseId}/{bib}/status` | `{ "status": "dns"\|"dnf"\|"dsq"\|"cap" }` | as above | as above | as above; any other status string is `400 validation-failed` |
+| `POST /api/attempts/{phaseId}/{bib}/penalty` | `{ "gate": number, "value": 0\|2\|50 }` | `202`, `Location: /api/writes/{writeId}`, body = `WriteRequest{status:'pending'}` | `200`, current `WriteRequest` | `404 attempt-not-found`; `400 validation-failed` (`value` not in `{0,2,50}`; `gate` outside the Phase's course gates; or the course not configured); `409 write-not-possible` with `reason: 'run-not-closed'` or `'team-boat'` (below) |
+| `POST /api/attempts/{phaseId}/{bib}/status` | `{ "status": "dns"\|"dnf"\|"dsq"\|"cap" }` | as above | as above | as above; any other status string is `400 validation-failed`; `409 write-not-possible` with `reason: 'run-not-closed'` while the Attempt is on the on-course list |
 | `GET /api/writes/{writeId}` | — | `200 WriteRequest` | — | `404 write-not-found` |
 
-**Which upstream command a penalty write becomes, and when a write is refused** (observed
-upstream behaviour, from the source; `EVIDENCE.md` Exhibit 14 is today's code doing the opposite).
-Upstream has two commands, and the difference is not cosmetic:
-- **While the Attempt is on upstream's on-course list** (`at-start`, `on-course`, or `finished` and
-  still listed, which lasts about 20 s until closure), the write goes as the **on-course scoring
-  command**, which edits the on-course state. The correction command edits only the stored row, and
-  upstream rewrites that row from the on-course state at the next save and always at closure, so a
-  correction made in this window is confirmed by echo and then silently lost.
-- **Once the Attempt has left the list**, the write goes as the **correction command**, which carries
-  the race id and works on a closed Phase.
-- **Back-fill.** The on-course scoring command at gate N also marks every earlier blank gate of that
-  boat (or member) as `0`. The server therefore **refuses** an on-course write at gate N while any
-  earlier gate of the same boat or member is still `null`: `409 write-not-possible`,
-  `reason: 'earlier-gates-unjudged'`. The window is short (judging catches up within seconds for most
-  runs, `DERIVATIONS.md` §4.3), and the tablet retries; a fact must never be minted by our own write.
-- **Team boats.** On course, `member` selects the member's cell, and upstream re-sums the crew cell.
-  After closure there is no per-member path upstream: the correction command replaces the crew sum
-  only and leaves the member cells stale. The server therefore **refuses** a team-boat penalty write
-  after closure: `409 write-not-possible`, `reason: 'team-member-write-after-closure'`. The
-  correction is made by the operator in Canoe123. How teams' penalties are corrected in practice is
-  unknown (E4); if a crew-sum correction from the tablet turns out to be wanted, that is a one-line
-  change here, decided with the maintainer, not silently.
+**Penalty-check writes only finished runs** (maintainer, 2026-09-25, binding). It never writes for an
+athlete on course. So the only upstream write command in this contract is the **correction
+command**, which carries the race id and edits the stored row; upstream's on-course scoring
+command, and its back-fill of earlier blank gates, are outside the contract entirely.
+
+**The window after the finish, decided: refuse, never hold.** For about 20 s after a finish, until
+closure, the athlete is still on upstream's on-course list, and upstream rewrites the stored row from
+the on-course state at the next save and always at closure. A correction sent then is confirmed by
+echo and silently lost (`EVIDENCE.md` Exhibit 14 is today's code doing exactly that). The server
+therefore **refuses** a write while the Attempt is still on the on-course list:
+`409 write-not-possible`, `reason: 'run-not-closed'`. The tablet says so and retries once the Attempt
+has left the list (`oncourse.updated`, §7.2). Holding the write server-side and sending it at
+closure was rejected: it needs a queued state, and it goes wrong quietly when the run is retracted
+or re-run meanwhile. A refusal is loud, and the wait is seconds.
+
+**Team boats: the operator corrects them in Canoe123, never the tablet** (maintainer, binding).
+Upstream's correction command replaces the crew sum and leaves the member cells stale, and the
+maintainer wants no crew-sum correction from the tablet. A penalty write for a team-boat Attempt is
+refused: `409 write-not-possible`, `reason: 'team-boat'`. The read side is unchanged: per-member
+cells from the snapshot, and `member-sum-mismatch` when the crew cell is not their sum (§2.6).
 
 **All writes go through the server.** Penalty-check keeps no direct terminal channel. The operator's
 "reset scoring terminals" action in Canoe123 resets only the hardware judge terminals on their own

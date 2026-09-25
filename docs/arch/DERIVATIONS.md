@@ -666,11 +666,10 @@ mark on a row with no new finish, is presented.
   field.
 - The echo arrives as an event-driven result push, because a correction recalculates the race.
 
-**Command selection** (`CONTRACTS.md` §7.3). Let `listed` be whether the Attempt is currently on
-upstream's on-course list (§4.1). `listed` → the on-course scoring command, with `Member` for a team
-boat, refused (`earlier-gates-unjudged`) while any earlier cell of that boat or member is `null`;
-not `listed` → the correction command with the race id, refused (`team-member-write-after-closure`)
-for a team boat. The status write always goes as upstream's removal command.
+**When a write is accepted** (`CONTRACTS.md` §7.3). Let `listed` be whether the Attempt is currently
+on upstream's on-course list (§4.1). `listed` → refused, `run-not-closed`; a team-boat Attempt →
+refused, `team-boat`; otherwise the penalty goes as the correction command with the race id. Only
+that one command is used; upstream's on-course scoring command is not part of the contract.
 
 **`GateCheck.status`** (`CONTRACTS.md` §2.10). Derived at serialisation, never stored:
 `presented = Attempt.gates` is `known` ? `gates.value[gate − 1].penalty` : `null`;
@@ -817,6 +816,10 @@ Items 1–7 and 13 were answered from the source on 2026-09-25 (#179; E1). Items
     "stale row survives" behaviour matches the on-course grid edit path. No recorded instance of
     "delete selected results" exists; its no-push behaviour is from the source only.
 12. Whether today's live-mini XML ingest overwrites results that were cleared on TCP (E4).
+14. Whether upstream's terminal channel can set a result mark (DNS, DNF, DSQ, CAP) on a run that has
+    already left the on-course list. The removal command acts on a listed athlete; penalty-check now
+    writes only closed runs. If there is no such path, the status write leaves the contract and the
+    operator sets marks in Canoe123 (E4, to be read from the source).
 13. ~~A no-reorder penalty correction after racing ends may never trigger an XML write.~~ **Answered:**
     confirmed from the source; the conditions are stated in §5 and `CONTRACTS.md` §2.8. TCP carries
     it regardless, and the maintainer confirms the file is always saved at the end, so the gap is a

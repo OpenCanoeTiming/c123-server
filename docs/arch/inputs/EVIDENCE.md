@@ -447,8 +447,10 @@ on-course command is sent without the member attribute upstream accepts (`:175-1
 write lands on the crew cell and is overwritten by the next judge's member entry.
 
 **Why it matters:** a write path that reports success for a change upstream will undo is the
-write-side twin of Exhibit 5. The design's command rule (`CONTRACTS.md` §7.3) chooses the command by
-the Attempt's on-course state, refuses what upstream cannot safely apply, and says so.
+write-side twin of Exhibit 5. The design keeps the correction command as the only write command,
+since penalty-check writes only finished runs (maintainer), refuses every write until the athlete
+has left the on-course list, and never writes a team-boat penalty at all (`CONTRACTS.md` §7.3). The
+two smaller findings become moot for writes and stay recorded as facts about today's code.
 
 ---
 

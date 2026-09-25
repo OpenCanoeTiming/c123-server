@@ -67,7 +67,9 @@ A confirmed write can later be changed by a judge, an operator, or upstream's ow
 That is an ordinary later observation and is visible on the field; the `WriteRequest` stays
 `confirmed`, and no fourth "reverted" state is added. The one reversal that is not a person's
 decision, upstream's save from the on-course state overwriting a correction made while the athlete
-was still on course, is prevented by choosing the command from the Attempt's on-course state
-(`CONTRACTS.md` §7.3) rather than surfaced afterwards. Today's code sends the correction command
-always (`EVIDENCE.md` Exhibit 14).
+was still on course, is prevented rather than surfaced: penalty-check writes only finished runs
+(maintainer, binding), and the server refuses a write with `409 write-not-possible` until the
+Attempt has left upstream's on-course list (`CONTRACTS.md` §7.3). Holding the write and sending it
+at closure was rejected as a quiet failure path. Today's code sends the correction command in that
+window regardless (`EVIDENCE.md` Exhibit 14).
 
