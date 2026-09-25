@@ -386,3 +386,9 @@ oversight.
   server is re-pointed by hand (maintainer answer Q8). `SourceStatus.tcp.upstreamInstance` shows which
   instance is live, and nothing acts on it.
 - **CIS.** It is not consumed at all (`DECISIONS/ADR-011`).
+- **Client configuration and remote client control.** This covers ConfigPush, `clientId`, per-IP
+  client records and remote scoreboard control from the admin UI. They are an operational concern,
+  not domain truth. The maintainer decided they stay outside the redesign (c123-server#169). They
+  keep today's mechanism, and they are fixed independently, before or after the redesign, then pinned
+  by regression tests (c123-server#3, #145, c123-scoreboard#127). The contract neither carries nor
+  constrains them.
