@@ -181,8 +181,10 @@ with no special-casing at the envelope level.
 - **Bibs** are strings, trimmed of upstream's padding before they are used anywhere. Result-table bibs
   arrive padded to four characters (`DERIVATIONS.md` §0.1).
 - **Gate penalties** are an integer number of seconds, or `null` for not yet judged or passed. `null`
-  is never coerced to `0`. A single-crew boat's value is always `0`, `2` or `50`. A team's value is
-  the sum over its members (§2.6).
+  is never coerced to `0`. A single boat's value is `0`, `2` or `50`. A team's value is the sum over
+  its members (§2.6), so 4, 52, 100 and 150 occur. Upstream's gate cells are also free text in the
+  operator's grid: a recorded row carried a note in place of a value. A cell that is not an integer
+  parses as `null` and raises an `unparseable-cell` diagnostic (`DERIVATIONS.md` §4.6(b)).
 - **No field carries natural-language text describing domain state.** Status, format, round and
   discipline are closed or opaque identifiers. A human-readable label is a client-side lookup, in
   whatever language the client chooses. This generalises the fix for `EVIDENCE.md` Exhibit 8.
@@ -214,6 +216,7 @@ client may parse it. Codes used anywhere in §7 or §8, each with the HTTP statu
 | `attempt-not-found` | 404 | §7 writes — `phaseId`/`bib` don't resolve to a known Attempt |
 | `write-not-found` | 404 | §7 |
 | `flag-not-found` | 404 | §7.4 |
+| `write-not-possible` | 409 | §7.3 — the write is well-formed but upstream offers no safe path for it now; `error.details.reason` says why |
 | `validation-failed` | 400 | both — malformed body; carries `error.details: [{field, issue}]` |
 | `vendor-payload-rejected` | 400 | §8.6 — a raw vendor export where a structured resource was required |
 | `unauthorized` | 401 | §8 — missing or unrecognised `X-API-Key` |
@@ -694,7 +697,14 @@ string formats (`DERIVATIONS.md` §4.6). The domain layer owns gate numbering ce
 never sees a raw string. `gates` has exactly the Phase's course gate count. Where no course is
 configured, `gates` is `unavailable{not-configured}`: upstream then fabricates a 25- or 30-gate grid
 (§2.12), and relaying it would invent gates. `outcome.penaltySeconds` still carries upstream's own
-penalty sum. A team boat's `penalty` is the sum over its members, with `memberPenalties` alongside.
+penalty sum. **A team boat's `penalty` is the sum over its members, with `memberPenalties`
+alongside.** Judging is per member (observed upstream behaviour; the maintainer's "on paper A, B and
+C separately"): a judge enters one value per member per gate, upstream sums them, and the crew cell
+stays blank until all three are judged. TCP carries only the sums; the per-member cells reach the
+snapshot at the next save, so `memberPenalties` is absent until then and present afterwards. A
+crew cell that is not the sum of its members is upstream's own crew-level edit, presented as
+upstream states it and surfaced as a `member-sum-mismatch` diagnostic. No team race has been
+recorded; the rules rest on the source and a static sample (691 judged cells, 8 such edits).
 
 **On-course facts.**
 - **`courseOrder`** is upstream's on-course position: 1 is closest to the finish (#166).
@@ -828,6 +838,13 @@ from the `WriteRequest`. **A lost echo counts as a failed write** (maintainer an
 stays `pending` is never shown as settled, is never cleared by the client on its own, and is resolved
 with the user: re-submitted, or checked against Canoe123 by hand. The contract sets no duration after
 which this happens; the client shows how long the write has been pending, from `submittedAt`.
+
+**`confirmed` describes the echo, not permanence.** A confirmed write can be changed later by a
+judge, an operator, or upstream's own closure of the run: that is an ordinary later observation of
+the field, visible on the field, and the `WriteRequest` stays `confirmed`. The one such reversal
+that is not a person's decision, upstream's save from the on-course state overwriting a correction
+made while the athlete was still on course, is prevented by the command rule in §7.3, not surfaced
+afterwards.
 
 **Writes may target a closed Phase** (maintainer answer A2). Canoe123's correction command carries an
 explicit race id and works after completion. The contract only requires that closed-phase writes are
@@ -1417,9 +1434,32 @@ the Attempt's run generation that is current at submission.
 
 | Method & path | Body | First response | Retry (same key) | Error |
 |---|---|---|---|---|
-| `POST /api/attempts/{phaseId}/{bib}/penalty` | `{ "gate": number, "value": 0\|2\|50 }` | `202`, `Location: /api/writes/{writeId}`, body = `WriteRequest{status:'pending'}` | `200`, current `WriteRequest` | `404 attempt-not-found`; `400 validation-failed` (`value` not in `{0,2,50}`; `gate` outside the Phase's course gates; or the course is not configured) |
+| `POST /api/attempts/{phaseId}/{bib}/penalty` | `{ "gate": number, "value": 0\|2\|50, "member"?: 1\|2\|3 }` — `member` required for a team boat, forbidden otherwise | `202`, `Location: /api/writes/{writeId}`, body = `WriteRequest{status:'pending'}` | `200`, current `WriteRequest` | `404 attempt-not-found`; `400 validation-failed` (`value` not in `{0,2,50}`; `gate` outside the Phase's course gates; the course not configured; `member` missing for a team boat or present for a single boat); `409 write-not-possible` (below) |
 | `POST /api/attempts/{phaseId}/{bib}/status` | `{ "status": "dns"\|"dnf"\|"dsq"\|"cap" }` | as above | as above | as above; any other status string is `400 validation-failed` |
 | `GET /api/writes/{writeId}` | — | `200 WriteRequest` | — | `404 write-not-found` |
+
+**Which upstream command a penalty write becomes, and when a write is refused** (observed
+upstream behaviour, from the source; `EVIDENCE.md` Exhibit 14 is today's code doing the opposite).
+Upstream has two commands, and the difference is not cosmetic:
+- **While the Attempt is on upstream's on-course list** (`at-start`, `on-course`, or `finished` and
+  still listed, which lasts about 20 s until closure), the write goes as the **on-course scoring
+  command**, which edits the on-course state. The correction command edits only the stored row, and
+  upstream rewrites that row from the on-course state at the next save and always at closure, so a
+  correction made in this window is confirmed by echo and then silently lost.
+- **Once the Attempt has left the list**, the write goes as the **correction command**, which carries
+  the race id and works on a closed Phase.
+- **Back-fill.** The on-course scoring command at gate N also marks every earlier blank gate of that
+  boat (or member) as `0`. The server therefore **refuses** an on-course write at gate N while any
+  earlier gate of the same boat or member is still `null`: `409 write-not-possible`,
+  `reason: 'earlier-gates-unjudged'`. The window is short (judging catches up within seconds for most
+  runs, `DERIVATIONS.md` §4.3), and the tablet retries; a fact must never be minted by our own write.
+- **Team boats.** On course, `member` selects the member's cell, and upstream re-sums the crew cell.
+  After closure there is no per-member path upstream: the correction command replaces the crew sum
+  only and leaves the member cells stale. The server therefore **refuses** a team-boat penalty write
+  after closure: `409 write-not-possible`, `reason: 'team-member-write-after-closure'`. The
+  correction is made by the operator in Canoe123. How teams' penalties are corrected in practice is
+  unknown (E4); if a crew-sum correction from the tablet turns out to be wanted, that is a one-line
+  change here, decided with the maintainer, not silently.
 
 **All writes go through the server.** Penalty-check keeps no direct terminal channel. The operator's
 "reset scoring terminals" action in Canoe123 resets only the hardware judge terminals on their own

@@ -3620,6 +3620,75 @@
       }
     },
     {
+      "id": "operator-write-confirmed-then-changed-upstream",
+      "invariant": "operator-write",
+      "description": "A write confirmed by echo and later changed upstream: the field shows the new value and the WriteRequest stays confirmed; confirmed is about the echo, not permanence.",
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "gates",
+          "source": "operator-write",
+          "kind": "operator",
+          "observedAt": "2026-09-15T14:02:11.000",
+          "value": [
+            {
+              "number": 4,
+              "penalty": 2
+            }
+          ],
+          "confidence": "authoritative",
+          "run": 1
+        },
+        {
+          "ingestSeq": 2,
+          "field": "gates",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T14:02:11.400",
+          "value": [
+            {
+              "number": 4,
+              "penalty": 2
+            }
+          ],
+          "confidence": "authoritative",
+          "judgingComplete": true,
+          "run": 1
+        },
+        {
+          "ingestSeq": 3,
+          "field": "gates",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T14:30:00.000",
+          "value": [
+            {
+              "number": 4,
+              "penalty": 50
+            }
+          ],
+          "confidence": "authoritative",
+          "judgingComplete": true,
+          "run": 1
+        }
+      ],
+      "expect": {
+        "gates": {
+          "state": "known",
+          "value": [
+            {
+              "number": 4,
+              "penalty": 50
+            }
+          ],
+          "source": "tcp"
+        },
+        "writeRequest": {
+          "status": "confirmed"
+        }
+      }
+    },
+    {
       "id": "under-review-independent-of-provisional",
       "invariant": "under-review",
       "description": "underReview and provisional are independent fields.",

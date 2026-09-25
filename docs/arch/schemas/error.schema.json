@@ -17,6 +17,7 @@
             "attempt-not-found",
             "write-not-found",
             "flag-not-found",
+            "write-not-possible",
             "validation-failed",
             "vendor-payload-rejected",
             "unauthorized",

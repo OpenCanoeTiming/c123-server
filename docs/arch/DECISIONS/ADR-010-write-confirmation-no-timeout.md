@@ -60,3 +60,14 @@ A write can target a run that stops counting: a re-run starts a new generation (
 write is still `pending`. Such a write resolves to `superseded`, and is never matched against the
 re-run's penalties. This is still not a timeout. It is an observed upstream transition, and the
 person who submitted the write sees it resolve.
+
+## Revision 2 — `confirmed` is not permanence; the command rule prevents the one silent reversal (2026-09-25)
+
+A confirmed write can later be changed by a judge, an operator, or upstream's own closure of the run.
+That is an ordinary later observation and is visible on the field; the `WriteRequest` stays
+`confirmed`, and no fourth "reverted" state is added. The one reversal that is not a person's
+decision, upstream's save from the on-course state overwriting a correction made while the athlete
+was still on course, is prevented by choosing the command from the Attempt's on-course state
+(`CONTRACTS.md` §7.3) rather than surfaced afterwards. Today's code sends the correction command
+always (`EVIDENCE.md` Exhibit 14).
+

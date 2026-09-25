@@ -431,16 +431,22 @@ slalom course every slot is a gate, so cell `i` is gate `i+1`.
   - 90 characters in 99.8% of TCP rows at one event, and 578 of 580 snapshot rows on a 23-gate course.
   - Shorter, trimmed strings occur (3, 18, 27, 69 characters).
 - Chunk from the left by 3. A missing cell is blank. Trim each chunk; blank means `null`, otherwise
-  parse as an integer. Keep the first `slotCount` cells.
+  parse as an integer. **A cell that is not an integer parses as `null` and raises
+  `unparseable-cell`:** the field is free text in the operator's grid, and a recorded row carried a
+  note in it (`"pozor !!!!!"`, `Pen="1"`). Keep the first `slotCount` cells.
 - **Never split on whitespace.** That collapses blanks and shifts every later gate: `EVIDENCE.md`
   Exhibit 2.
 - The previous rule, `width = length / gateCount`, was wrong on every row of a 23-gate course. On a
   9-gate Cross course it divided evenly as width 10, which is silently wrong.
 
-**(c) Team rows.**
-- `Gates` holds the per-gate **sum** over the members (52, 100, 150…).
+**(c) Team rows** (`TR1/TR2`, `TSR`, `TS1/TS2/TSF`, `TFI`; source and static sample only, no recording).
+- `Gates` holds the per-gate **sum** over the members (4, 52, 100, 150…). Upstream computes it from
+  the member cells whenever one changes, and leaves it blank while any member is unjudged; a `C`
+  mark counts as 50.
 - `XML.Results.Gates1..3` hold each member's cells, in the same fixed-width format, and fill
-  `memberPenalties`.
+  `memberPenalties`. **TCP never carries them**, so `memberPenalties` appears at the next snapshot.
+- A crew cell that differs from the member sum (8 of 691 judged cells in the sample) is a
+  crew-level edit made upstream; present the crew cell, raise `member-sum-mismatch`.
 
 **(d) Kayak Cross.** Settled against the source and the recorded Cross event (E1):
 - The cells are **fault marks**, not penalty seconds: only `""`, `0` and `2` occur. `gates` is
@@ -659,6 +665,12 @@ mark on a row with no new finish, is presented.
 - The comparison is field-level: a row refreshed for an unrelated reason is not an echo of a different
   field.
 - The echo arrives as an event-driven result push, because a correction recalculates the race.
+
+**Command selection** (`CONTRACTS.md` §7.3). Let `listed` be whether the Attempt is currently on
+upstream's on-course list (§4.1). `listed` → the on-course scoring command, with `Member` for a team
+boat, refused (`earlier-gates-unjudged`) while any earlier cell of that boat or member is `null`;
+not `listed` → the correction command with the race id, refused (`team-member-write-after-closure`)
+for a team boat. The status write always goes as upstream's removal command.
 
 **`GateCheck.status`** (`CONTRACTS.md` §2.10). Derived at serialisation, never stored:
 `presented = Attempt.gates` is `known` ? `gates.value[gate − 1].penalty` : `null`;

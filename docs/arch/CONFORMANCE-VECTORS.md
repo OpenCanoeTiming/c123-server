@@ -33,7 +33,9 @@ Attempt deletion).
 
 **Gap 21** added 2 live on-course vectors.
 
-**81 vectors:** 68 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
+**Gap 22** added 1: a confirmed write later changed upstream stays confirmed.
+
+**82 vectors:** 69 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
 needed, not a target.
 
 ---
@@ -136,7 +138,7 @@ optionally the resulting `checks` (only the fields listed are asserted).
 | The on-course set and `oncourse.updated` | `oncourse-set-order-and-push` | 1 |
 | Workflow state (§2.10): what `stale` compares against (`null` vs `0`, team sums, `gates` not known), the re-run and re-bib interplay | `check-stale-definition`, `check-null-vs-zero-distinct`, `check-team-sum-compared`, `check-not-carried-to-new-generation`, `check-stays-with-bib-when-result-moves` | 5 |
 | INV-2 rule 3 (single-source fields) | `inv2-rule3-single-source-field` | 1 |
-| INV-2 rule 4 (operator writes) | the six `operator-write-*` and `operator-correction-*` vectors, including `superseded` | 6 |
+| INV-2 rule 4 (operator writes) | the six `operator-write-*` and `operator-correction-*` vectors, including `superseded`, plus `operator-write-confirmed-then-changed-upstream` | 7 |
 | INV-2b (surfaced, never adopted) | `inv2b-disagreement-surfaced-not-adopted` | 1 |
 | INV-2c (older event refused) | `inv2c-older-event-refused`, `inv2c-does-not-apply-without-eventtime` | 2 |
 | INV-3 and the trichotomy | `trichotomy-known-zero-not-confused-with-absence`, `trichotomy-unavailable-persists-explicitly`, `inv3-not-applicable-external-id` | 3 |

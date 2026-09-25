@@ -430,7 +430,29 @@ rule (§2.9) turns any remaining silence into a visible failed write.
 
 ---
 
-## What these thirteen have in common
+## Exhibit 14 — Every penalty write is a correction, even for an athlete still on course
+
+Added 2026-09-25 (gap 22), E2 verified by the orchestrator. `SRV/service/ScoringService.ts:23-24`
+sends the on-course scoring command when no race id is given and the correction command when one
+is. `PC/components/ResultsGrid/ResultsGrid.tsx:398, :405, :551` always pass the race id. So every
+write from the tablet is a correction, including for an athlete on course. Observed upstream
+behaviour: the correction command edits only the stored row, which upstream rewrites from the
+on-course state at the next save and always at run closure. A correction made in that window is
+therefore echoed, confirmed, and then silently lost. It cannot be seen in the recordings, because
+inbound commands are not recorded.
+
+Two smaller findings on the same file: `PenaltyValue = 0 | 2 | 50 | null` (`ScoringService.ts:9`,
+mirrored in `PC/types/scoring.ts:18`) cannot express a team crew sum such as 4 or 52; and the
+on-course command is sent without the member attribute upstream accepts (`:175-178`), so a team
+write lands on the crew cell and is overwritten by the next judge's member entry.
+
+**Why it matters:** a write path that reports success for a change upstream will undo is the
+write-side twin of Exhibit 5. The design's command rule (`CONTRACTS.md` §7.3) chooses the command by
+the Attempt's on-course state, refuses what upstream cannot safely apply, and says so.
+
+---
+
+## What these fourteen have in common
 
 Not carelessness. Each is a locally reasonable decision made by someone who needed an answer and
 had nowhere to look it up. The system has no place where the answer lives, so every component

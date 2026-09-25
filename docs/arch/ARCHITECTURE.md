@@ -234,8 +234,11 @@ A judge corrects a gate penalty on the tablet.
   `source: 'operator-write'`, `provisional: true`. Every on-site client sees the correction in the same
   push cycle. **The tablet itself shows nothing before that push**: it renders the server's optimistic
   value and the write's `pending` state, never a local guess (`CONTRACTS.md` §2.9).
-- **The command.** The write is issued through Canoe123's correction command, which carries an explicit
-  race id, so a closed Phase is writable.
+- **The command.** While the athlete is still on upstream's on-course list, the write goes as the
+  on-course scoring command; once they have left it, as the correction command, which carries an
+  explicit race id, so a closed Phase is writable (`CONTRACTS.md` §7.3). Sending the correction
+  command too early is confirmed by echo and then silently overwritten at closure, which is what
+  today's code does (`EVIDENCE.md` Exhibit 14).
 - **The echo.** Upstream recalculates and pushes the race immediately, and that push is the echo.
   - If it matches, the status is `confirmed`.
   - If it differs, the status is `mismatched`, and `gates` shows what upstream actually holds.
