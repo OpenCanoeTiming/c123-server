@@ -94,3 +94,12 @@ idempotent: an explicit `not-yet` inside a partial Attempt push resets that fiel
 an Attempt; a whole-Phase `PUT` replaces every Attempt of that Phase, which is what the on-site
 re-baseline (`ADR-015`) emits. The unit of push is unchanged; the vocabulary of what a push can say
 is completed.
+
+## Revision 4 — one sentence of the Decision is superseded (2026-09-25)
+
+The Decision above says a direct correction is superseded by "a specifically-triggered re-read of
+the top-ranked automated source (§4 INV-2b)". INV-2b no longer re-queries (`ADR-011`), and
+`CONTRACTS.md` §8.5 with INV-2 rule 4 now governs: a direct correction yields to a later assertion of
+the same kind, or to a results-table observation that *changes* the bridge's own retained value
+afterwards. The sentence is left in place as history; the contract is the rule.
+

@@ -77,7 +77,7 @@ type Observed<T> =
   | { state: 'not-yet' }
   | { state: 'unavailable'; reason: UnavailableReason }
 
-type SourceTag = 'tcp' | 'xml' | 'operator-write'
+type SourceTag = 'tcp' | 'xml' | 'operator-write' | 'bridge'   // bridge: live tier only, §8.3
 type UnavailableReason = 'not-configured' | 'source-unreachable' | 'not-applicable'
 type Timestamp = string   // ISO-8601 with an explicit offset or Z
 ```
@@ -152,6 +152,12 @@ contract (`Gate.penalty`, §2.6). This is the direct fix for `EVIDENCE.md` Exhib
 - `'not-applicable'`: the fact does not exist for this entity, permanently and by its nature. For
   example, a forerunner has no registry identity (§2.5), and a heat number does not apply to a race
   without heats.
+
+**How a client renders `unavailable`.** By default all three reasons render alike, as "not known",
+exactly as `not-yet` does; the reason is for the admin UI and diagnostics, and no client renders a
+spectator-facing banner from it (maintainer answer A1). The one distinction a client may draw:
+`not-applicable` may hide the field or column altogether (a heat column in a race without heats),
+because the fact will never exist.
 
 A `value` that is itself a discriminated union (`Outcome`, §2.6) nests its own `kind` inside `value`,
 with no special-casing at the envelope level.
@@ -237,25 +243,41 @@ own just-submitted correction is a second legitimate `WriteRequest`, not a retry
 
 ### 1.6 Snapshot and subscription ordering
 
-Every push-capable stream (§7's WebSocket, §8.4's public feed) assigns each outbound message a
-connection-scoped, strictly increasing integer, `seq` — drawn from the same internal ingest sequence
-INV-6 (§4) requires, but exposed here for a narrower purpose than INV-2's precedence: `seq` only lets
-a client tell whether it has already incorporated a given update, the way a log offset or a database
-WAL position would. It carries no ranking or authority information and a client must not treat it as
-one — precedence among sources is entirely the domain layer's decision (§4), settled before anything
-reaches the wire.
+**`seq` is one counter per server.** Every push-capable stream (§7's WebSocket, §8.4's public feed)
+stamps each outbound message with `seq`: the ingest sequence number (INV-6, §4) of the change that
+produced it. It is the same number on every connection and in every `asOfSeq` a REST response
+carries, because all of them read one counter. It is strictly increasing, and it **never regresses
+across a server restart**: the counter's high-water mark is persisted with the same discipline as
+§2.10. `seq` only lets a client tell whether it has already incorporated a given change, the way a
+log offset would. It carries no ranking or authority information; precedence among sources is
+settled in the domain layer (§4) before anything reaches the wire. live-mini-server keeps its own
+counter with the same rules.
 
-**The handshake this fixes** (found in adversarial review, not designed in from the start): a
-snapshot fetched over REST and a subscription opened afterward leaves a gap — any update landing
-between the two calls is in neither. So every hydration/snapshot response carries a top-level
+**Every message is idempotent to apply.** A message carries state, never an increment: a field's
+envelope, a whole resource, or a scope replace. Applying a message whose content is already
+reflected changes nothing. This is what makes the rules below safe.
+
+**The handshake** (found in adversarial review): a snapshot fetched over REST and a subscription
+opened afterward leaves a gap. So every hydration/snapshot response carries a top-level
 `asOfSeq: number`, and the required sequence is:
 
 1. Open the stream connection first.
 2. Buffer every message received, by `seq`, without applying it yet.
-3. Request the snapshot.
-4. On the snapshot response, discard every buffered message with `seq ≤ asOfSeq` — already reflected
-   — and apply the rest, in `seq` order.
-5. Apply every subsequent message as it arrives, ordinarily.
+3. Request every snapshot the client needs (§7.1, §8.4). Each response carries its own `asOfSeq`.
+4. Let `hydratedSeq` be the **smallest** `asOfSeq` among those responses. Discard every buffered
+   message with `seq ≤ hydratedSeq` and apply the rest, in `seq` order. A message already reflected in
+   a later-fetched response is applied again harmlessly (it is idempotent).
+5. Apply every subsequent message as it arrives, in `seq` order.
+
+**Reconnection.** A stream does not replay and has no resume-from-`seq`. After any reconnection, on
+either tier, the client repeats steps 1–5 in full for every resource it holds. Because `seq` never
+regresses, a client may use its last applied `seq` for one thing only: to discard, after re-hydration,
+any message it has already applied.
+
+**Creation over the push.** A `*.updated` message for an id the client does not hold creates the
+entity. The first message for a new id carries the whole resource, with every `Observed` field that
+is not yet known as `not-yet`; later messages for it are partial. A client therefore never needs to
+re-hydrate to learn of a new Attempt, Entry, Phase, Class or Course.
 
 Both on-site client applications and the public spectator client are required to implement this; §7
 and §8.4 each restate only the connection-specific detail, not this sequence.
@@ -421,6 +443,10 @@ pairing and combination behaviour.
   semi-final under a legacy-finals setting. Neither is modelled yet. This is recorded as an open
   technical question (`DERIVATIONS.md` §10).
 
+**Labelling a format** is a client-side lookup keyed on the token (§1.3). For a token the client does
+not know, it shows the token itself, verbatim, together with what the structural fields say (run 1 or
+2 of a pair, heats, classification). It never invents a name, and never fails to render.
+
 **`XER` is a classification, not a round.** Its rows are upstream's final classification of the whole
 Cross event. Each row says which round decided that athlete's place. A classification Phase holds no
 Attempts; it feeds a `classification` Standing (§2.7). Other upstream tokens that look like event
@@ -568,7 +594,11 @@ and the run is raced again. Meanwhile, it looks as if the athlete never did that
 - **`pending`:** nothing yet.
 - **`running`:** on course. It carries upstream's own ticking running time and penalties so far
   (#166). It is displayed as upstream displays it, including upstream's split-hold behaviour
-  (`DERIVATIONS.md` §4.3).
+  (`DERIVATIONS.md` §4.3). **A client may tick locally** between messages, adding elapsed local time
+  (through its injected clock, `TEST-ARCHITECTURE.md` §5) to the last `elapsedSeconds`, provided it
+  snaps to every new `running` value as it arrives and stops the instant `status` leaves
+  `on-course`. Upstream re-sends at least once per second, so the local tick never runs more than
+  about a second ahead of a real value.
 - **`duration`:** a slalom run's own time, penalties and total. On a second run of a pair, this is
   **run 2's own** figures:
   - the time is run 2's own;
@@ -711,6 +741,9 @@ type Anomaly =
   | { kind: 'category-rank-disagreement'; entryId: string; assembled: number; upstream: number }
 ```
 
+`anomalies` is an on-site diagnostic. It is served and pushed in §7 (the admin UI reads it; a
+scoreboard ignores it) and **never in §8.4**: the public `Standing` is serialised without the field.
+
 ### 2.8 Source status
 
 Diagnostic and admin-facing only. Per maintainer answer A1, a missing source must not nag.
@@ -764,6 +797,14 @@ type WriteRequest = {
     (`DECISIONS/ADR-013`).
 - No state is reached by the passage of time alone. A client may compute "pending for N s" from
   `submittedAt`.
+
+**A tablet renders only what the server pushes.** The optimistic value is the server's: the domain
+layer applies it in the same step as it creates the `WriteRequest` and pushes both (§7.2), so a
+client never shows a value of its own before that push. It shows the write as `pending`, distinctly,
+from the `WriteRequest`. **A lost echo counts as a failed write** (maintainer answer A6): a write that
+stays `pending` is never shown as settled, is never cleared by the client on its own, and is resolved
+with the user: re-submitted, or checked against Canoe123 by hand. The contract sets no duration after
+which this happens; the client shows how long the write has been pending, from `submittedAt`.
 
 **Writes may target a closed Phase** (maintainer answer A2). Canoe123's correction command carries an
 explicit race id and works after completion. The contract only requires that closed-phase writes are
@@ -1204,7 +1245,9 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    no-result mark. An anomaly is recorded when an entry is ordered ahead of another whose result is
    strictly smaller. Ties are never flagged, because upstream breaks them legitimately: a combined tie
    by the run that did not count, and a single-run tie by its own order field. Cross scopes are never
-   checked. Anomalies go to the admin audience only. They never reorder anything.
+   checked. Anomalies go to the admin audience only. They never reorder anything. **The live tier
+   assembles standings without step 7 and without step 4's check**: it has no results-table
+   observations to compare against, and it serves no anomalies (§2.7, §8.4).
 
 **Considered and rejected: deciding which run of a pair counts from upstream's `BetterRunNr`.** It is
 not needed. The pair's combined total and placement are relayed. `countingRun` carries
@@ -1265,7 +1308,7 @@ Every response except `/api/sources` carries `asOfSeq: number` (§1.6) at the to
 | `GET /api/classes/{classId}/entries` | `{ asOfSeq, entries: Entry[] }` | `404 class-not-found` |
 | `GET /api/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }` | `404 phase-not-found` |
 | `GET /api/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`: every scope of §5, for the whole class and per age category | `404 class-not-found` |
-| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null }`: every Attempt currently on upstream's on-course list with status `at-start` or `on-course`, across every running Phase. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8) | — |
+| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null }`: every Attempt currently on upstream's on-course list with status `at-start` or `on-course`, across every running Phase. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8). Kept current by `oncourse.updated` (§7.2) | — |
 | `GET /api/phases/{phaseId}/checks` | `{ asOfSeq, checks: GateCheck[], flags: GateFlag[] }`: every check and flag of the Phase, all run generations, `status` derived at serialisation (§2.10) | `404 phase-not-found` |
 | `GET /api/sources` | `SourceStatus`, unwrapped | — |
 | `GET /api/diagnostics` | `{ asOfSeq, diagnostics: Diagnostic[] }`: current source disagreements, contradicted finishes and duplicate finishes (§4). Admin audience only | — |
@@ -1299,9 +1342,20 @@ Every message carries `seq` (§1.6).
   `GateFlag`. Neither is ever sent on the live tier (§8.4).
 - **A retraction** (§4 INV-7) or a contradiction (INV-2d) is sent as `attempt.updated` with explicit
   `not-yet` values, never by omission.
-- **`scope.replaced`** carries every Attempt and every Standing of a scope after a re-baseline
-  (§4). A client applies it as a **replace**: Attempts of that scope absent from the message are
-  removed. It is never merged.
+- **`oncourse.updated`** carries the whole on-course set: `{ attemptIds: string[], featuredByUpstream:
+  string | null }`, `attemptIds` in `courseOrder` (§7.1). It is sent whenever membership, order or the
+  featured competitor changes. The Attempts themselves arrive by `attempt.updated`; this message is
+  what keeps the set current, including in Kayak Cross, where leaving the list changes no `status`.
+- **`event.changed`** carries the whole `Event`. It is sent when the current event changes: on the
+  explicit "start a new event" action (`ARCHITECTURE.md` Scenario E), or when a client connects while
+  an event is configured. On a *different* `eventId` than the one the client holds, the client
+  discards everything and re-hydrates (§1.6).
+- **`scope.replaced`** carries, after a re-baseline (§4), **every Attempt of the scope and every
+  Standing whose scope names one of its Phases** (phase, pair on either side, heat, classification;
+  whole class and every age category). For `{ kind: 'event' }` that is every Attempt and every Standing
+  of the event. It never carries Phases, Entries, Classes or Courses: a re-baseline discards result
+  fields only, and those entities are unchanged. A client applies it as a **replace**: Attempts and
+  Standings of that scope absent from the message are removed. It is never merged.
 
 ```json
 { "seq": 1044, "type": "attempt.updated", "attemptId": "K1M_BR2_6:9",
@@ -1319,6 +1373,9 @@ Every message carries `seq` (§1.6).
               "placement": { "state": "not-yet" } } }
 { "seq": 1049, "type": "scope.replaced", "scope": { "kind": "phase", "phaseId": "K1M_BR1_19" },
   "attempts": [ ...Attempt... ], "standings": [ ...Standing... ] }
+{ "seq": 1051, "type": "oncourse.updated", "attemptIds": ["K1M_BR1_19:57", "K1M_BR1_19:58"],
+  "featuredByUpstream": "K1M_BR1_19:57" }
+{ "seq": 1052, "type": "event.changed", "event": { ...Event... } }
 ```
 
 Clients **must** follow §1.6's subscribe-before-snapshot sequence.
@@ -1429,6 +1486,29 @@ with `error.details` naming the field.
   (§2.5).
 - **`birthDate` is optional, and carried as entered.** Whether the store keeps it, and whether it is
   published, is live-client configuration (maintainer answer Q4). The contract only transports it.
+- **Bare values are wrapped by the store.** Class, Phase, Entry and Course bodies carry bare values,
+  because a vendor-neutral bridge has no per-field provenance to offer for them. The store presents
+  each such `Observed` field as `{ state: 'known', value, observedAt: <ingest time of the push>,
+  source: 'bridge', confidence: 'authoritative', provisional: false }`. A `null` in a nullable body
+  field (`club`, `nation`, `ageCategoryId`, `eventBib`, `courseId`, `scheduledStart`, `programmeOrder`,
+  `title`, and each member's `externalId`) becomes `unavailable{reason:'not-applicable'}`. Attempt
+  fields arrive already wrapped and keep the `source` the bridge states.
+- **Merge on the live tier** is §4 reduced to what the wire carries. The wire brings resolved
+  observations from one automated source, the bridge, plus operator writes (§8.5). So the store
+  applies INV-1 (omission), INV-3, INV-4, INV-5, INV-6 and INV-2 rule 4, and honours explicit
+  `not-yet`, `DELETE` and the Phase replace. It has nothing to apply INV-2 rules 1–3, INV-2b, INV-2c,
+  INV-2d or INV-7 to: those need the on-course stream, TCP connection events and scope snapshots,
+  which never leave the venue. A retraction reaches live already resolved, as explicit `not-yet`.
+  Among bridge observations of one field, the later-ingested one is presented (INV-6).
+  `CONFORMANCE-VECTORS.md` §2 marks which vectors apply to the live tier.
+- **What each push emits on the public stream** (§8.4): a partial Attempt `PUT` emits
+  `attempt.updated`; `DELETE` emits `attempt.deleted`; the whole-Phase `PUT` emits `scope.replaced`
+  with `{ kind: 'phase' }`; Class, Phase, Entry and Course `PUT`s emit their `*.updated`; every
+  affected Standing follows as `standing.updated`.
+- **Naming a round on the live tier.** With no format token, a client labels a Phase from its
+  organiser-authored `title` when present, else from the structural fields: `pair.role` and
+  `combination` ("run 1", "run 2", "best of two", "sum of two"), `heats`, `scoringKind`, and
+  `kind: 'classification'`. That is exactly what those fields exist for (`DECISIONS/ADR-007`).
 - **Forward references are allowed.** A Phase may name a `classId` or `courseId` not yet pushed. The
   store creates a stub. A bridge cannot guarantee discovery order under upstream's unsynchronised
   cadences.
@@ -1465,15 +1545,24 @@ out-of-band.
 | Method & path | 200 body | Error |
 |---|---|---|
 | `GET /public/events/{eventId}` | `{ asOfSeq, event: Event, classes: Class[], phases: Phase[], courses: Course[] }` | `404 event-not-found` |
-| `GET /public/events/{eventId}/classes/{classId}/entries` | `{ asOfSeq, entries: Entry[] }` (birth date per live-client configuration) | `404 event-not-found`, else `404 class-not-found` |
-| `GET /public/events/{eventId}/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }` | as above |
+| `GET /public/events/{eventId}/classes/{classId}/entries` | `{ asOfSeq, entries: Entry[] }`, birth data per the publication setting below | `404 event-not-found`, else `404 class-not-found` |
+| `GET /public/events/{eventId}/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`, each `Standing` **without `anomalies`** (§2.7) | as above |
 | `GET /public/events/{eventId}/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }` | `404 event-not-found`, else `404 phase-not-found` |
 
+**Birth-date publication is a live-mini-server setting, per event.** The store keeps whatever the
+bridge pushed, so the setting can change later without a re-push. The setting,
+`birthDatePublication: 'none' | 'year' | 'full'`, is provisioned out-of-band with the event's key
+(§8.1, like `organiserName`) and **defaults to `'year'`**: each member is served with `birthYear`
+only. `'full'` serves `birthDate` as pushed; `'none'` serves neither. Public reads and the stream
+apply the same setting.
+
 **Push transport: Server-Sent Events.** `GET /public/events/{eventId}/stream`, with
-`Accept: text/event-stream`. It carries `attempt.updated`, `phase.updated`, `entry.updated`,
-`class.updated`, `course.updated`, `standing.updated` and `scope.replaced`, in §7.2's shapes. A
-`scope.replaced` is applied as a replace, exactly as on-site. The stream never carries
-`write.updated`, `sources.updated`, `check.updated` or `flag.updated`. §1.6's subscribe-before-snapshot sequence applies.
+`Accept: text/event-stream`. It carries `attempt.updated`, `attempt.deleted` (`{ seq, attemptId }`,
+after a `DELETE`; the client removes the Attempt and its standing entries), `phase.updated`,
+`entry.updated`, `class.updated`, `course.updated`, `standing.updated` (without `anomalies`) and
+`scope.replaced`, in §7.2's shapes. A `scope.replaced` is applied as a replace, exactly as on-site.
+The stream never carries `write.updated`, `sources.updated`, `check.updated`, `flag.updated`,
+`oncourse.updated` or `event.changed`. §1.6's subscribe-before-snapshot and reconnection rules apply.
 
 ### 8.5 Corrections after the on-site session has ended
 

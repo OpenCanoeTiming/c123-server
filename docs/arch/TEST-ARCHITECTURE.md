@@ -118,7 +118,7 @@ cover:
 - run generations;
 - §5's standing assembly.
 
-The count is 75 as of the consolidated revision (round 3) (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
+The count is 78 as of the consolidated revision (round 4) (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
 a thin adapter that feeds these vectors into its own merge function and asserts the result — proving
 both satisfy the same data-defined contract without either depending on the other's code.
 
@@ -267,8 +267,9 @@ moved to `ARCHITECTURE.md` §2, stated there.
 **Harness shape:**
 
 1. Load a domain-state fixture.
-2. Initialise the client under test with its first entry as a hydration snapshot; set the fake clock
-   to that entry's `observedAt`.
+2. Initialise the client under test from the fixture's hydration step (§4): a `kind: "hydration"`
+   entry carrying the §7.1/§8.4 response bodies and their `asOfSeq`, applied exactly as the
+   subscribe-before-snapshot handshake would; set the fake clock to that entry's `observedAt`.
 3. For each subsequent entry: advance the fake clock to its `observedAt` (the real recorded gap,
    whether that gap came from a real recording or was chosen deliberately in a synthetic fixture),
    then apply the delta exactly as the real transport would deliver it.
@@ -307,9 +308,13 @@ on, is "not emulated by player"). So `c123-penalty-check#52`'s explicit goal —
 a replay server for round-trip correctness" — cannot be fully realised by tier 4 alone today. Tier 1
 can still test the *merge* half precisely (a synthetic "submitted write, then a synthetic echo"
 vector, §3.1) without needing a real echo at all; only the realistic upstream round trip is blocked,
-and only tier 4 needed it. Recorded as a genuine tooling gap in §9, not glossed over.
+and only tier 4 needed it. Recorded as a genuine tooling gap in §9, not glossed over. **Decided,
+not left open:** penalty-check's tier-4 smoke covers request → `WriteRequest{pending}` → push, and
+stops there; the echo half is tier 1's (`operator-write-*` vectors). A realistic upstream echo at tier
+4 waits for the player to emulate the terminal channel, and `c123-penalty-check#52` is met by the two
+tiers together, minus that.
 
-### 3.5 Outside the tiers: durable workflow state (#168)
+### 3.5 Outside the tiers: durable workflow state (#168) and tenant isolation
 
 Gate checks and flags (`CONTRACTS.md` §2.10) exist nowhere upstream, so they appear in no recording
 and no fixture, and tiers 2 and 3 cannot cover them. They do not need to. They are a bounded storage
@@ -329,6 +334,12 @@ Only the genuinely contract-level rules are tier-1 vectors: what `stale` compare
 against `0`, team sums, `gates` not known) and the re-run and re-bib interplay
 (`CONFORMANCE-VECTORS.md` §2).
 
+**Tenant isolation** (`CONTRACTS.md` §8.1) is the same kind of thing on live-mini-server: a storage
+property, verified by that store's own integration tests, not by a tier. The cases, one line each:
+two keys, same `classId`/`phaseId`/`entryId`/`bib`, no leakage in either direction through any §8.4
+read or the stream; a key never reads or writes another event; a revoked key gets `403` and changes
+nothing; a public read of an unknown `eventId` is `404`, never another organiser's data.
+
 ---
 
 ## 4. The fixture format
@@ -344,6 +355,8 @@ against `0`, team sums, `gates` not known) and the re-run and re-bib interplay
   "admitted": { "gate1": true, "gate2": true, "gate3": "human-checked-2026-09-16" },
   "asOfSeq": 0,
   "steps": [
+    { "kind": "hydration", "observedAt": "2026-09-15T10:13:50.000Z", "asOfSeq": 1040,
+      "responses": { "/api/events/current": { ... }, "/api/phases/K1M_ST_BR2_6/attempts": { ... } } },
     { "seq": 1044, "observedAt": "2026-09-15T10:14:02.083Z", "type": "attempt.updated",
       "attemptId": "K1M_ST_BR2_6:9", "fields": { "outcome": { "state": "known", "value": {...}, ... } } }
   ] }
@@ -354,7 +367,9 @@ against `0`, team sums, `gates` not known) and the re-run and re-bib interplay
 directly from a `CONTRACTS.md` clause or an invariant, the same way tier 1's vectors are).
 `domainLayerVersion` ties a fixture to the wire-protocol version it was captured against
 (`c123-server/CLAUDE.md`'s existing `VERSION` constant) — a fixture generated against one version is
-not silently assumed valid against a later one; see §6. **`admitted` is what distinguishes a
+not silently assumed valid against a later one; see §6. **A mismatch fails, loudly.** A warning would
+let a stale fixture keep passing, which is the silent-propagation failure §3.2's admission gates
+exist to prevent; a consumer that wants the older fixture re-pins deliberately. **`admitted` is what distinguishes a
 candidate from a golden baseline** (§3.2) — absent or incomplete, a fixture is a candidate still
 being checked, never something a consumer should pin to; only a fixture whose `admitted` block is
 complete is published to the catalogue at all (§6).
@@ -585,7 +600,7 @@ layer-implementation.md`, and the five named tools) — not the other way round.
 
 ## 10. Left open
 
-- ~~**The exact vector count and coverage for tier 1.**~~ **Resolved.** 35 vectors were written, then 75 after the consolidated revision; the estimate did undercount, as the review suspected. Coverage map and the gaps that remain are in `CONFORMANCE-VECTORS.md` §2–§3. Original text follows for the record.
+- ~~**The exact vector count and coverage for tier 1.**~~ **Resolved.** 35 vectors were written, then 78 after the consolidated revision; the estimate did undercount, as the review suspected. Coverage map and the gaps that remain are in `CONFORMANCE-VECTORS.md` §2–§3. Original text follows for the record.
 - **The exact vector count and coverage for tier 1.** §3.1 gives a target range (~25–30) and method,
   not the vectors themselves — writing them is implementation, test-first, the same relationship
   `CONTRACTS.md` has to the server code it precedes. Raised directly under review: the §4 ranking
@@ -618,6 +633,6 @@ layer-implementation.md`, and the five named tools) — not the other way round.
 - Which test runner/framework each repository uses for tier 3 is that repository's own choice; this
   document requires the clock-injection discipline (§5) and the fixture format (§4), not a specific
   library.
-- Whether `domainLayerVersion` mismatches between a fixture and a consumer should fail loudly or warn
-  — an operational policy question for whoever wires tier 3 into CI, not a contract question.
+- ~~Whether `domainLayerVersion` mismatches between a fixture and a consumer should fail loudly or
+  warn.~~ **Resolved (§4): fail.**
 - CI wiring, schedule, and enforcement generally — deliberately out of scope, per `CONSTRAINTS.md` §4.

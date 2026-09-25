@@ -84,9 +84,10 @@
       "enum": [
         "tcp",
         "xml",
-        "operator-write"
+        "operator-write",
+        "bridge"
       ],
-      "description": "CIS is not consumed (DECISIONS/ADR-011). operator-write sits outside INV-2's rules 1-3 (rule 4, CONTRACTS.md SS4). Kayak Cross heat order is tagged by the channel it arrived on."
+      "description": "CIS is not consumed (DECISIONS/ADR-011). operator-write sits outside INV-2's rules 1-3 (rule 4, CONTRACTS.md SS4). bridge appears only on the live tier, for resources a bridge pushes as bare values (SS8.3). Kayak Cross heat order is tagged by the channel it arrived on."
     },
     "unavailableReason": {
       "enum": [

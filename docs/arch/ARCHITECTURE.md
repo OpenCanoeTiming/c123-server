@@ -89,6 +89,14 @@ line):
   Attempt of the on-course list. Canoe123's own TV selection is offered as an optional alternative
   (`CONTRACTS.md` §7.1); a scoreboard may follow either.
 
+**Two things every rendering client must show, not may.** Layout is the client's; these are not:
+- **`provisional`** and **`underReview`** are shown, distinctly from each other and from a settled
+  value, on the scoreboard and in live results (maintainer answer Q7: the asterisks), and in
+  penalty-check too: a judge verifying penalties must see that judging is still in flight or that an
+  official is holding the result. How they are marked is presentation; that they are marked is not.
+- **A pending write** is shown as pending until confirmed, and never cleared by the client on its
+  own (`CONTRACTS.md` §2.9).
+
 **Display-lifetime code must re-evaluate on a clock tick, not only when new data arrives — a
 requirement on the client's own architecture, not a stylistic preference.** Found necessary under
 `TEST-ARCHITECTURE.md`'s review, not designed in from the start: a component that only recomputes
@@ -123,8 +131,17 @@ always mean one particular registry (`CONTRACTS.md` §2.5, `DECISIONS/ADR-006` R
 | **c123-server** | The domain layer entirely: ingest from the TCP push and the XML snapshot (UDP for discovery only; CIS not consumed, `DECISIONS/ADR-011`), the merge invariants (`CONTRACTS.md` §4), `Standing` assembly, write routing and confirmation tracking, translation into both the on-site and live-ingest contracts. | Any rendering decision. |
 | **c123-scoreboard** | Display-lifetime policy, layout, locale, visual emphasis — rendering the on-site contract (§7). | Finish detection, gate parsing, merge, precedence — all retired from its `providers/utils/` layer by having nothing left to decide there. |
 | **c123-penalty-check** | Write initiation (including against closed Phases, `CONTRACTS.md` §2.9), its own durable workflow state — gate checks carrying the penalty seen at check time, and flags (judges' review requests with comment, suggested value and resolution), `CONTRACTS.md` §2.10 — stored on the server per `eventId`, keyed on `(phaseId, bib, run, gate)` rather than a fourth incompatible fingerprint (`EVIDENCE.md` Exhibit 7's third entrant). Staleness ("the penalty changed after the check") is derived by the server, so every tablet agrees. | Gate parsing — retires its second, incompatible parser entirely. |
-| **live-mini-server** | A tenant-scoped store of exactly what the ingest contract asserts (`CONTRACTS.md` §8), applying the *same* merge invariants and the *same* standing assembly as c123-server (§4 and §5 are not on-site-specific), durability across on-site disconnection, tenant isolation, the public calendar (§8.4), accepting direct organiser corrections independent of the bridge being online (§8.5). | Ranking, lifecycle status, or any other recomputation — retires `EventLifecycleService`'s independent judgement and the two-parser XML re-ingestion of `EVIDENCE.md` Exhibit 9. |
+| **live-mini-server** | A tenant-scoped store of exactly what the ingest contract asserts (`CONTRACTS.md` §8), applying the merge invariants that a single resolved source admits (`CONTRACTS.md` §8.3, "Merge on the live tier": INV-1, 3, 4, 5, 6 and INV-2 rule 4; not the on-course, connection or snapshot rules, which never leave the venue) and the same standing assembly as c123-server without its anomaly checks (§5), durability across on-site disconnection, tenant isolation, the public calendar (§8.4), accepting direct organiser corrections independent of the bridge being online (§8.5). | Ranking, lifecycle status, or any other recomputation — retires `EventLifecycleService`'s independent judgement and the two-parser XML re-ingestion of `EVIDENCE.md` Exhibit 9. |
 | **live-mini-client** | Spectator-facing layout and locale, its own (likely lighter) display-lifetime policy. | Everything a client never owned. |
+
+**The shared types package, named.** The row in §5 that requires "a shared types/schema package
+underlying every DTO and the ingest schema" is `@opencanoetiming/c123-contract`: the TypeScript types
+of `CONTRACTS.md` §2 and the two JSON schemas of `docs/arch/schemas/`, and nothing else. No runtime
+logic ever (`DECISIONS/ADR-002`, `ADR-003`). It is published from `c123-server`'s repository, which
+already holds `shared/types/`, versioned with the wire-protocol version, and consumed by the four
+other deployables as a pinned dependency, exactly as every repository consumes
+`timing-design-system` today. Bumping it is the one place a shape change becomes visible to all
+five at once, which is the point.
 
 ---
 
@@ -215,14 +232,17 @@ A judge corrects a gate penalty on the tablet.
 - **The request.** The domain layer creates a `WriteRequest { status: 'pending' }` targeting the
   current run generation. In the same step it optimistically updates `Attempt.gates`:
   `source: 'operator-write'`, `provisional: true`. Every on-site client sees the correction in the same
-  push cycle.
+  push cycle. **The tablet itself shows nothing before that push**: it renders the server's optimistic
+  value and the write's `pending` state, never a local guess (`CONTRACTS.md` §2.9).
 - **The command.** The write is issued through Canoe123's correction command, which carries an explicit
   race id, so a closed Phase is writable.
 - **The echo.** Upstream recalculates and pushes the race immediately, and that push is the echo.
   - If it matches, the status is `confirmed`.
   - If it differs, the status is `mismatched`, and `gates` shows what upstream actually holds.
   - If a re-run starts first, the status is `superseded`.
-- **No echo** is not engineered as a timeout (`DECISIONS/ADR-010`).
+- **No echo** is not engineered as a timeout (`DECISIONS/ADR-010`). It is a failed write (maintainer
+  answer A6): the tablet keeps showing it as unconfirmed, with how long it has been pending, and the
+  judge re-submits or checks Canoe123 by hand. The client never clears it on its own.
 
 ### C — The venue without CIS, and the cold restart
 

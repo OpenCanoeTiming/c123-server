@@ -3154,6 +3154,171 @@
       }
     },
     {
+      "id": "oncourse-set-order-and-push",
+      "invariant": "oncourse",
+      "description": "The on-course set is ordered by courseOrder, shrinks when an Attempt leaves the list, and each change is pushed as one oncourse.updated.",
+      "context": {
+        "discipline": "cross",
+        "note": "Cross: leaving the list changes no status, so the set is the only signal a client has."
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "courseOrder",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:00:00.000",
+          "value": 2,
+          "confidence": "authoritative",
+          "attemptId": "K1M_BR1_19:57"
+        },
+        {
+          "ingestSeq": 2,
+          "field": "courseOrder",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:00:00.500",
+          "value": 1,
+          "confidence": "authoritative",
+          "attemptId": "K1M_BR1_19:58"
+        },
+        {
+          "ingestSeq": 3,
+          "event": "oncourse-left",
+          "observedAt": "2026-09-15T10:00:40.000",
+          "attemptId": "K1M_BR1_19:58"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 1,
+          "expect": {
+            "oncourse": [
+              "K1M_BR1_19:58",
+              "K1M_BR1_19:57"
+            ]
+          }
+        }
+      ],
+      "expect": {
+        "oncourse": [
+          "K1M_BR1_19:57"
+        ],
+        "notifications": {
+          "oncourse.updated": 3
+        }
+      }
+    },
+    {
+      "id": "live-bare-value-wrapped-as-bridge",
+      "invariant": "live-ingest",
+      "description": "On the live tier a bare Entry body is wrapped by the store: known values carry source bridge; a null becomes not-applicable.",
+      "context": {
+        "tier": "live"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "push": "entry",
+          "observedAt": "2026-09-15T09:00:00.000Z",
+          "body": {
+            "classId": "K1M",
+            "displayName": "NOVAK Jan",
+            "club": "USK Praha",
+            "nation": null,
+            "ageCategoryId": null,
+            "eventBib": "12",
+            "members": [
+              {
+                "givenName": "Jan",
+                "familyName": "Novak",
+                "externalId": null
+              }
+            ]
+          }
+        }
+      ],
+      "scope": "entry",
+      "expect": {
+        "club": {
+          "state": "known",
+          "value": "USK Praha",
+          "source": "bridge",
+          "confidence": "authoritative",
+          "provisional": false,
+          "observedAt": "2026-09-15T09:00:00.000Z"
+        },
+        "nation": {
+          "state": "unavailable",
+          "reason": "not-applicable"
+        },
+        "members[0].externalId": {
+          "state": "unavailable",
+          "reason": "not-applicable"
+        }
+      }
+    },
+    {
+      "id": "live-attempt-deleted",
+      "invariant": "live-ingest",
+      "description": "A DELETE on the live tier removes the Attempt and its standing entries, idempotently, and emits attempt.deleted.",
+      "context": {
+        "tier": "live"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:00:00.000",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 90.0,
+            "penaltySeconds": 0,
+            "totalSeconds": 90.0
+          },
+          "confidence": "authoritative",
+          "judgingComplete": true,
+          "attemptId": "K1M_BR1_19:9"
+        },
+        {
+          "ingestSeq": 2,
+          "field": "placement",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:00:00.000",
+          "value": {
+            "rank": 1,
+            "order": 1
+          },
+          "confidence": "authoritative",
+          "attemptId": "K1M_BR1_19:9"
+        },
+        {
+          "ingestSeq": 3,
+          "event": "delete",
+          "observedAt": "2026-09-15T10:05:00.000",
+          "attemptId": "K1M_BR1_19:9"
+        },
+        {
+          "ingestSeq": 4,
+          "event": "delete",
+          "observedAt": "2026-09-15T10:05:01.000",
+          "attemptId": "K1M_BR1_19:9"
+        }
+      ],
+      "expect": {
+        "attempts": [],
+        "standing": {
+          "phase:K1M_BR1_19/all": []
+        },
+        "notifications": {
+          "attempt.deleted": 1
+        }
+      }
+    },
+    {
       "id": "under-review-independent-of-provisional",
       "invariant": "under-review",
       "description": "underReview and provisional are independent fields.",
