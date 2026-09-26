@@ -130,6 +130,8 @@ These are never domain entities:
     day number, because **TCP `Schedule` has no `DisId` attribute**.
   - An attribute sub-race carries a suffix (`WX1J_XT_26_JUN`). The token is still the part before the
     day number.
+- **`stage`.** From the format token by `CONTRACTS.md` §2.4's mapping; an unknown token is `run`.
+  `confidence: 'authoritative'`, a lookup.
 - **`kind`, `scoringKind`, `pair`, `heats`.**
   - These come from `CONTRACTS.md` §2.4's token table, a lookup with no uncertainty, so
     `confidence: 'authoritative'`.
@@ -348,6 +350,13 @@ it carries: a DNF row can keep a time, even another athlete's finish (`CONTRACTS
 
 ### 4.4 `outcome` from a result row
 
+**Untimed rows** (`CONTRACTS.md` §2.6). A result row in a duration-scored Phase with a placement
+(`Rank`/`RankOrder` or `Rnk`/`RnkOrder`) but no finish time (`dtFinish` empty on the row, and no
+`dtFinish` ever seen on the on-course stream for this Attempt) presents `outcome:
+unavailable{not-applicable}`, whatever `Time` says. Recorded: junior Cross time-trial rows with
+`Time="100.00" Total="100.00" Pen="" Gates=""` and real ranks, later rank × 1000; 24 of 32 rows of
+one class kept the placeholder through the semi-finals.
+
 **TCP, single run or the first run of a pair.** `runSeconds = Results.Result@Time`,
 `penaltySeconds = @Pen`, `totalSeconds = @Total`.
 
@@ -455,7 +464,9 @@ slalom course every slot is a gate, so cell `i` is gate `i+1`.
   `unavailable{not-applicable}` for Cross Attempts.
 - **`faults` is derived from the cells plus the captions, on TCP and in the XML alike:** `count` is
   the number of cells marked `2`; `gates` lists those slots' captions (`ST`, `1`…`6`, `RZ`, `7`);
-  `lastCleanGate` is the highest gate number whose slot cell is `0` before the first fault. This
+  `lastCleanSlot` is upstream's 1-based **slot position** (not the gate number: `ST` and `RZ` count) of
+  the last slot judged `0` before the first fault; `0` if none; a clean run on the recorded 9-slot
+  course reads `9`, above its 7 numbered gates (values seen: 0 ×176, 9 ×122, then 3, 8, 6, 2, 1). This
   reproduced `XML.Results.NrFLT`/`FLT`/`LastCleanGate` exactly: 136 of 136 rows.
 - **Ignore `Pen` in Cross.** In the time trial the marks are never added into `Pen` (`Pen 0` and
   `Total = Time` in all 293 rows); in heats the on-course stream adds them while the result rows
@@ -645,6 +656,11 @@ mark on a row with no new finish, is presented.
 - **`tcp.upstreamInstance`** is `Canoe123@System` on every message: `Main`, `Backup` or `Offline`.
 - **`tcp.timingClockOffsetSeconds`** is `TimeOfDay` (Canoe123's timing clock, once a second) minus the
   server clock at receipt. It is diagnostic only.
+- **`live`** is the bridge's own delivery state (`CONTRACTS.md` §2.8): `connected` after an accepted
+  push with nothing pending; `retrying` while backing off; `unreachable` after the backoff has reached
+  its cap; `rejected` on `401`/`403`; `not-configured` with no key. `pendingResources` counts
+  resources whose current state is not yet accepted; `lastAcceptedAt` and `lastError` are what they
+  say.
 - **`xml.lastRewriteDetectedAt`** is the moment a change of the file was last detected. This is what
   INV-2's rule 2 means by "a rewrite detected after the disconnect", and what §4.12's write-time
   guard subtracts the poll interval from. The file is written on a timer (a venue setting, 65 s by
@@ -799,7 +815,8 @@ Items 1–7 and 13 were answered from the source on 2026-09-25 (#179; E1). Items
    broken by the better run; relayed, never computed (`CONTRACTS.md` §2.4).
 5. ~~The base class of an attribute sub-class.~~ **Answered:** none is stored; an ordinary separate
    class (§2.1). The maintainer's reading of what these classes were is pending; nothing speculative
-   is added.
+   is added. Their operator-typed time-trial rows are handled as untimed rows (§4.4), whatever the
+   reading turns out to be.
 6. ~~Per-gate marks in Kayak Cross on TCP.~~ **Answered:** fault marks in the cells, never `Pen`
    (§4.6(d)).
 7. ~~Does a re-run clear the row at staging or at the new finish?~~ **Answered:** the wizard wipes it

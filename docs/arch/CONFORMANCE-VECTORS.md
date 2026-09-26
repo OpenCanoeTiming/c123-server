@@ -36,7 +36,9 @@ Attempt deletion).
 **Gap 22** added 1: a confirmed write later changed upstream stays confirmed. **Round 6** added 1: a
 classification pushed to the live tier.
 
-**83 vectors:** 70 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
+**Round 7** added 1: an untimed placed row.
+
+**84 vectors:** 71 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
 needed, not a target.
 
 ---
@@ -154,7 +156,7 @@ optionally the resulting `checks` (only the fields listed are asserted).
 | `provisional` in both upstream modes | `provisional-incomplete-judging-then-settles`, `-first-push-already-complete`, `-run-closed-without-course` | 3 |
 | Ongoing recomputation before the result push | `ongoing-recomputation-provisional-total-revised-by-late-gate` | 1 |
 | Run generation (re-run) | `rerun-retracts-run-scoped-fields`, `rerun-old-generation-row-not-presented`, `rerun-status-transition-legal-only-with-generation`, `rerun-stale-mark-not-presented` | 4 |
-| Marks and review | `under-review-independent-of-provisional`, `second-run-dns-keeps-combined-placement`, `attemptstatus-finished-to-dsq-post-finish` | 3 |
+| Marks and review; untimed rows | `under-review-independent-of-provisional`, `second-run-dns-keeps-combined-placement`, `attemptstatus-finished-to-dsq-post-finish`, `untimed-row-outcome-not-applicable` | 4 |
 | Two-run | `two-run-br1-untouched-by-br2`, `-recovered-from-xml-cold`, `-unavailable-no-live-no-xml` | 3 |
 | Kayak Cross | `cross-outcome-not-yet-before-operator-entry`, `-from-placement-not-time`, `-corrected-after-next-heat-started` | 3 |
 | Phase status transition | `phasestatus-official-to-revised-skips-unofficial` | 1 |

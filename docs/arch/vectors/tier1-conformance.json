@@ -3802,6 +3802,76 @@
       }
     },
     {
+      "id": "untimed-row-outcome-not-applicable",
+      "invariant": "marks",
+      "description": "A placed result row with no finish time in a duration-scored Phase is an operator-typed row: outcome is not-applicable, placement is presented, the time is never shown.",
+      "context": {
+        "phase": "MX1J_XT_26",
+        "scoringKind": "duration",
+        "note": "recorded junior time-trial rows: Time 100.00 for everyone, real ranks and Q; rank x 1000 typed in later."
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "MX1J_XT_26",
+            "mode": "results",
+            "rows": [
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 100.0,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 100.0
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "untimed": true,
+                "qualified": true,
+                "bib": "4"
+              },
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 100.0,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 100.0
+                },
+                "placement": {
+                  "rank": 2,
+                  "order": 2
+                },
+                "untimed": true,
+                "qualified": true,
+                "bib": "7"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T09:10:00.000"
+        }
+      ],
+      "expect": {
+        "MX1J_XT_26:4.outcome": {
+          "state": "unavailable",
+          "reason": "not-applicable"
+        },
+        "MX1J_XT_26:4.placement": {
+          "state": "known",
+          "value": {
+            "rank": 1,
+            "order": 1
+          }
+        },
+        "MX1J_XT_26:7.outcome": {
+          "state": "unavailable",
+          "reason": "not-applicable"
+        }
+      }
+    },
+    {
       "id": "under-review-independent-of-provisional",
       "invariant": "under-review",
       "description": "underReview and provisional are independent fields.",

@@ -88,6 +88,14 @@ line):
 - **Which competitor to feature.** The default is the athlete next to pass the finish, the first
   Attempt of the on-course list. Canoe123's own TV selection is offered as an optional alternative
   (`CONTRACTS.md` §7.1); a scoreboard may follow either.
+- **Which Phase to display.** The server never nominates a "current race": that singleton is
+  `EVIDENCE.md` Exhibit 1's failure, and it made the old system unusable the moment Kayak Cross ran
+  up to four finals at once. The contract supplies what a choice needs: `Phase.status`, `stage` and
+  `programmeOrder`; the on-course set, whose Attempts name their Phases; and each Standing's `asOf`.
+  The choice is the client's. The recommended default: for the on-course view, the Phase of the
+  first Attempt in the on-course set; for results, the Standing that changed most recently; when
+  several Phases run at once, cycle or split as the layout allows. Penalty-check's selector follows
+  the same default and lets the judge override it.
 
 **Two things every rendering client must show, not may.** Layout is the client's; these are not:
 - **`provisional`** and **`underReview`** are shown, distinctly from each other and from a settled
@@ -130,7 +138,7 @@ always mean one particular registry (`CONTRACTS.md` §2.5, `DECISIONS/ADR-006` R
 |---|---|---|
 | **c123-server** | The domain layer entirely: ingest from the TCP push and the XML snapshot (UDP for discovery only; CIS not consumed, `DECISIONS/ADR-011`), the merge invariants (`CONTRACTS.md` §4), `Standing` assembly, write routing and confirmation tracking, translation into both the on-site and live-ingest contracts. | Any rendering decision. |
 | **c123-scoreboard** | Display-lifetime policy, layout, locale, visual emphasis — rendering the on-site contract (§7). | Finish detection, gate parsing, merge, precedence — all retired from its `providers/utils/` layer by having nothing left to decide there. |
-| **c123-penalty-check** | Write initiation (including against closed Phases, `CONTRACTS.md` §2.9), its own durable workflow state — gate checks carrying the penalty seen at check time, and flags (judges' review requests with comment, suggested value and resolution), `CONTRACTS.md` §2.10 — stored on the server per `eventId`, keyed on `(phaseId, bib, run, gate)` rather than a fourth incompatible fingerprint (`EVIDENCE.md` Exhibit 7's third entrant). Staleness ("the penalty changed after the check") is derived by the server, so every tablet agrees. Every write goes through the server (`CONTRACTS.md` §7.3); penalty-check keeps no terminal channel of its own. | Gate parsing — retires its second, incompatible parser entirely. |
+| **c123-penalty-check** | Write initiation (including against closed Phases, `CONTRACTS.md` §2.9), its own durable workflow state — gate checks carrying the penalty seen at check time, and flags (judges' review requests with comment, suggested value and resolution), `CONTRACTS.md` §2.10 — stored on the server per `eventId`, keyed on `(phaseId, bib, run, gate)` rather than a fourth incompatible fingerprint (`EVIDENCE.md` Exhibit 7's third entrant). Staleness ("the penalty changed after the check") is derived by the server, so every tablet agrees. Every write goes through the server (`CONTRACTS.md` §7.3); penalty-check keeps no terminal channel of its own. For Kayak Cross it is read-only (faults, placement), flags excepted. | Gate parsing — retires its second, incompatible parser entirely. |
 | **live-mini-server** | A tenant-scoped store of exactly what the ingest contract asserts (`CONTRACTS.md` §8), applying the merge invariants that a single resolved source admits (`CONTRACTS.md` §8.3, "Merge on the live tier": INV-1, 3, 4, 5, 6 and INV-2 rule 4; not the on-course, connection or snapshot rules, which never leave the venue) and the same standing assembly as c123-server without its anomaly checks (§5), durability across on-site disconnection, tenant isolation, the public calendar (§8.4), accepting direct organiser corrections independent of the bridge being online (§8.5). | Ranking, lifecycle status, or any other recomputation — retires `EventLifecycleService`'s independent judgement and the two-parser XML re-ingestion of `EVIDENCE.md` Exhibit 9. |
 | **live-mini-client** | Spectator-facing layout and locale, its own (likely lighter) display-lifetime policy; the on-course view with running time and penalties as they come in (`CONTRACTS.md` §8.4, a feature the maintainer named as important). | Everything a client never owned. |
 

@@ -410,6 +410,7 @@ type Phase = {
   scoringKind: 'duration' | 'ordinal' // [D] structural, from format
   pair: PairRole | null               // [D] structural, from format and schedule
   heats: boolean                      // [D] structural, from format
+  stage: Stage                        // [D] structural, from format — where in the progression this Phase sits
   date: string                        // YYYY-MM-DD, assigned once, immutable — INV-5
   courseId: Observed<string>          // [D] xml; not-applicable for a classification
   scheduledStart: Observed<Timestamp> // [D] xml, the scheduled start
@@ -454,9 +455,22 @@ pairing and combination behaviour.
   `placement` are relayed, and the `FI`/`SF` pairing is asserted only when the final's rows carry a
   combined total, with `confidence: 'inferred'` on `pair`.
 
+```ts
+type Stage = 'run' | 'time-trial' | 'heats' | 'quarter-final' | 'semi-final' | 'final'
+           | 'super-final' | 'classification'
+```
+
+**`stage` says where in a progression the Phase sits.** It is structural, not a vendor token, so it
+travels to the live tier too (§8.3): without it, a Cross semi-final and a Cross final are identical
+there (both heats, both ordinal), and only an organiser-typed title could tell them apart. From the
+format: `BR1`/`BR2`, `HT*`, `EL*`, `TR*`, `SR*`, `TS1`/`TS2` → `run`; `XT`, `XT1`, `XT2` →
+`time-trial`; `X8` → `heats`; `X4`, `QF` → `quarter-final`; `XS`, `SF`, `SFB` → `semi-final`; `XF`,
+`FI`, `FIB`, `TSF`, `TFI`, `SPF` → `final`; `SUF` → `super-final`; every `*ER` → `classification`;
+an unknown token → `run`.
+
 **Labelling a format** is a client-side lookup keyed on the token (§1.3). For a token the client does
-not know, it shows the token itself, verbatim, together with what the structural fields say (run 1 or
-2 of a pair, heats, classification). It never invents a name, and never fails to render.
+not know, it shows the token itself, verbatim, together with what the structural fields say (`stage`,
+run 1 or 2 of a pair, heats, classification). It never invents a name, and never fails to render.
 
 **`XER`, `SLER` and `WWER` are classifications, not rounds** ("ER" = event result, confirmed by the
 maintainer). Their rows are upstream's synthetic event result, assembled from the final, then the
@@ -584,7 +598,13 @@ type Outcome =
 
 type Gate = { number: number; penalty: number | null; memberPenalties?: (number | null)[] }
 type Split = { number: number; elapsedSeconds: number }
-type Faults = { count: number; gates: string[]; lastCleanGate: number }  // gate captions as upstream names them
+type Faults = {
+  count: number          // faulted judging slots
+  gates: string[]        // their captions, as upstream names them: 'ST', '1'…'6', 'RZ', '7'
+  lastCleanSlot: number  // upstream's 1-based SLOT position of the last slot judged clean before the
+}                        // first fault, counting the start ramp and roll zone; 0 = none; a clean run =
+                         // the slot count (9 on the recorded 9-slot, 7-gate course). Not a gate number:
+                         // map through Course.slots (§2.12) if a gate number is wanted
 type TimeToBeat = { mode: 'target' | 'delta'; seconds: number; holder?: string }
 type Placement = { rank: number | null; order: number }
 ```
@@ -641,6 +661,12 @@ and the run is raced again. Meanwhile, it looks as if the athlete never did that
   from `Time`.** Athletes with faults rank after every clean finisher, whatever their finish order
   (`DECISIONS/ADR-009` addendum).
 - **`no-result`:** a result mark that removes the run from the ranking.
+- **Untimed rows.** In a duration-scored Phase, a result row that carries a placement but **no finish
+  time** is an operator-typed row, not a measured run. Recorded: junior Cross time-trial rows carrying
+  a `100.00` placeholder for everyone, replaced by rank × 1000 at the end of the day, with real ranks
+  and `Q` throughout. Such a row presents `outcome: unavailable{reason:'not-applicable'}` and its
+  `placement` as stated; its time field is never presented, on either tier. A client shows the
+  placement and no time. Decided in the domain layer so that no client detects `100.00` on its own.
 - The earlier draft's gap, where running time had no shape (#166), is closed by the `running`
   variant. A client never has to cross-reference `status` to know whether a value is still
   accruing.
@@ -795,9 +821,26 @@ type SourceStatus = {
   tcp: { state: ConnState; upstreamInstance: 'main' | 'backup' | 'offline' | null;
          timingClockOffsetSeconds: number | null }
   xml: { state: ConnState | 'not-configured'; lastRewriteDetectedAt: Timestamp | null }
+  live: { state: 'connected' | 'retrying' | 'unreachable' | 'rejected' | 'not-configured';
+          pendingResources: number; lastAcceptedAt: Timestamp | null;
+          lastError: { code: string; at: Timestamp } | null }
 }
 type ConnState = 'connected' | 'reconnecting' | 'unreachable'
 ```
+
+**The bridge's delivery to live is part of the contract, because its absence was a defect.** In an
+end-to-end Cross test of the old system, the live push's circuit breaker opened after five failures
+and stayed open until c123-server was restarted, silently (`EVIDENCE.md` Exhibit 12). The rules:
+- the bridge keeps, per resource, only its **current** state awaiting delivery, coalesced; never a
+  queue of intermediate values;
+- delivery retries with exponential backoff from 1 s to a 60 s cap, **indefinitely**; there is no
+  breaker that stays open, and nothing needs a restart;
+- `429` honours `Retry-After`; `401`/`403` sets `state: 'rejected'`, stops retrying that key and
+  reports it, since only configuration can fix it;
+- after any outage, rejection cleared, or restart, the bridge re-pushes the current state of every
+  resource changed since `lastAcceptedAt`. Every push is an idempotent `PUT` (§1.5), so re-pushing
+  is always safe and needs no negotiation;
+- the state is visible in `SourceStatus.live` and pushed as `sources.updated` (§7.2), admin only.
 
 **`upstreamInstance`** reports which Canoe123 instance the TCP feed comes from. Every upstream message
 states it. Switching to a backup instance is the timekeeper's manual work: the server is re-pointed by
@@ -1494,6 +1537,13 @@ trigger is the first `oncourse.updated` (§7.2) whose `attemptIds` no longer con
 tablet may also simply disable the write while the Attempt is listed, which is the same rule applied
 before the request.
 
+**Kayak Cross: no penalty writes and no checks.** Cross judging cells are fault marks entered by the
+Cross judges, not penalty seconds (`DERIVATIONS.md` §4.6(d)), and upstream's correction command sets
+penalty seconds, so a write would be meaningless. A penalty write, or a check, on an Attempt of a
+Cross Phase is refused: `409 write-not-possible`, `reason: 'cross'`. Penalty-check is read-only for
+Cross (`faults`, `placement`, `underReview`), except that a **flag** may still be raised: a review
+request is workflow, and a Cross judge may want one.
+
 **Team boats: the operator corrects them in Canoe123, never the tablet** (maintainer, binding).
 The tablet knows a team boat from `Entry.isTeam` (§2.5) and hides or disables the write up front;
 the `409` is the backstop, not the interface.
@@ -1540,7 +1590,7 @@ targets the Attempt's current generation.
 
 | Method & path | Body | Response | Error |
 |---|---|---|---|
-| `PUT /api/attempts/{phaseId}/{bib}/checks/{gate}` | `{ "checkedBy"?: string }` | `200 GateCheck`: the check for the current generation, `valueAtCheck` set to the presented penalty at this moment, `status: 'verified'`. Repeating it replaces the snapshot, which is how a judge re-verifies after a correction | `404 attempt-not-found`; `400 validation-failed` (`gate` outside the Phase's course, or the course not configured) |
+| `PUT /api/attempts/{phaseId}/{bib}/checks/{gate}` | `{ "checkedBy"?: string }` | `200 GateCheck`: the check for the current generation, `valueAtCheck` set to the presented penalty at this moment, `status: 'verified'`. Repeating it replaces the snapshot, which is how a judge re-verifies after a correction | `404 attempt-not-found`; `400 validation-failed` (`gate` outside the Phase's course, or the course not configured); `409 write-not-possible`, `reason: 'cross'` on a Cross Attempt (§7.3) |
 | `DELETE /api/attempts/{phaseId}/{bib}/checks/{gate}` | — | `204`, whether or not a check existed | `404 attempt-not-found` |
 | `POST /api/attempts/{phaseId}/{bib}/flags` | `{ "gate": number, "comment": string, "suggestedValue"?: number, "createdBy"?: string }`, with `Idempotency-Key` (§1.5) | `201 GateFlag`, open | `404 attempt-not-found`; `400 validation-failed` |
 | `POST /api/flags/{flagId}/resolution` | `{ "note"?: string, "resolvedBy"?: string }` | `200 GateFlag`, resolved. Repeating it on a resolved flag returns `200` unchanged | `404 flag-not-found` |
@@ -1590,7 +1640,7 @@ with `error.details` naming the field.
 |---|---|
 | `PUT /ingest/v2/classes/{classId}` | `{ "code": string, "name": string, "discipline": "slalom"\|"cross", "ageCategories": [{ "ageCategoryId": string, "name": string }] }` |
 | `PUT /ingest/v2/courses/{courseId}` | `{ "gates": [{ "number": number, "kind": "downstream"\|"upstream" }], "sectorEndsAfterGate": number[], "splitsAfterGate": number[] }` |
-| `PUT /ingest/v2/phases/{phaseId}` | `{ "classId": string, "kind": "race"\|"classification", "scoringKind": "duration"\|"ordinal", "pair": { "role": "first"\|"second", "siblingPhaseId": string, "combination": "best"\|"sum" } \| null, "heats": boolean, "date": "YYYY-MM-DD", "courseId": string \| null, "scheduledStart": Timestamp \| null, "programmeOrder": number \| null, "title": string \| null, "status": PhaseStatus }` |
+| `PUT /ingest/v2/phases/{phaseId}` | `{ "classId": string, "kind": "race"\|"classification", "stage": Stage, "scoringKind": "duration"\|"ordinal", "pair": { "role": "first"\|"second", "siblingPhaseId": string, "combination": "best"\|"sum" } \| null, "heats": boolean, "date": "YYYY-MM-DD", "courseId": string \| null, "scheduledStart": Timestamp \| null, "programmeOrder": number \| null, "title": string \| null, "status": PhaseStatus }` |
 | `PUT /ingest/v2/entries/{entryId}` | `{ "classId": string, "displayName": string, "isTeam": boolean, "club": string \| null, "nation": string \| null, "ageCategoryId": string \| null, "eventBib": string \| null, "members": [{ "givenName": string, "familyName": string, "birthDate"?: "YYYY-MM-DD", "externalId": { "scheme": string, "value": string } \| null }] }` |
 | `PUT /ingest/v2/attempts/{phaseId}/{bib}` | any non-empty subset of the `Observed` fields of §2.6, each wrapped per §1.2. **An explicit `{ "state": "not-yet" }` resets that field** |
 | `PUT /ingest/v2/phases/{phaseId}/classification` | `{ "rows": [ { "entryId": string, "bib": string, "rank": number \| null, "order": number, "decidedIn": string } ], "asOf": Timestamp }`: **the rows of a classification Phase (§2.4), whole, replaced on every push**, as upstream last built them. The store assembles the `classification` Standing from them and emits `standing.updated`. The Phase must have `kind: 'classification'`, else `400 validation-failed` |
@@ -1648,9 +1698,10 @@ with `error.details` naming the field.
   with `{ kind: 'phase' }`; Class, Phase, Entry and Course `PUT`s emit their `*.updated`; the on-course
   `PUT` emits `oncourse.updated`; every affected Standing follows as `standing.updated`.
 - **Naming a round on the live tier.** With no format token, a client labels a Phase from its
-  organiser-authored `title` when present, else from the structural fields: `pair.role` and
-  `combination` ("run 1", "run 2", "best of two", "sum of two"), `heats`, `scoringKind`, and
-  `kind: 'classification'`. That is exactly what those fields exist for (`DECISIONS/ADR-007`).
+  organiser-authored `title` when present, else from the structural fields: `stage` ("time trial",
+  "semi-final", "final"…), `pair.role` and `combination` ("run 1", "run 2", "best of two", "sum of
+  two"), `heats`, `scoringKind`, and `kind: 'classification'`. That is exactly what those fields exist
+  for (`DECISIONS/ADR-007`); `stage` is what tells a Cross semi-final from its final.
 - **Forward references are allowed.** A Phase may name a `classId` or `courseId` not yet pushed. The
   store creates a stub. A bridge cannot guarantee discovery order under upstream's unsynchronised
   cadences.

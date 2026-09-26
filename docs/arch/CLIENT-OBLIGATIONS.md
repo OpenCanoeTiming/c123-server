@@ -64,11 +64,13 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Render `left-without-finish` as an observed removal with no reason; show a mark only once `status` carries one; never infer DNF (CONTRACTS §2.6, §3.2, §7.1; ARCHITECTURE §6.G).
 - [ ] Render `outcome.kind: 'no-result'` as its mark, whatever time the row carried; never let a time suppress a mark (CONTRACTS §2.6).
 - [ ] Show `non-ranked` as raced and timed but unranked, and `ral` where its `placement` puts it (CONTRACTS §2.6).
+- [ ] Show a placed row whose `outcome` is `unavailable{not-applicable}` with its placement and no time; never detect placeholder values such as `100.00` on the client (CONTRACTS §2.6; DERIVATIONS §4.4).
+- [ ] Choose which Phase to display itself, from `Phase.status`, `stage`, `programmeOrder`, the on-course set and each Standing's `asOf`; expect no "current race" from the server; default to the Phase of the first on-course Attempt and the most recently changed Standing, and cycle or split when several Phases run at once (ARCHITECTURE §2; CONTRACTS §7.1, §7.2).
 - [ ] Read a second-run mark as describing run 2 only; the combined result stays in `placement` and `pairTotal` (CONTRACTS §2.6, §5).
 - [ ] Render `Gate.penalty: null` as not judged, never `0`; accept team values that are member sums such as 4, 52, 100 or 150 (CONTRACTS §1.3, §2.6; ADR-014).
 - [ ] Expect `memberPenalties` to be absent until the next XML snapshot, and present afterwards (CONTRACTS §2.6; DERIVATIONS §4.6).
 - [ ] Expect `gates: unavailable{not-configured}` when no course is configured, with the penalty sum still in `outcome.penaltySeconds` (CONTRACTS §2.6, §2.12).
-- [ ] For Kayak Cross, show `faults` (its `gates` is `unavailable{not-applicable}`) and the heat order from `ordinal.order` (CONTRACTS §2.6).
+- [ ] For Kayak Cross, show `faults` (its `gates` is `unavailable{not-applicable}`) and the heat order from `ordinal.order`; read `faults.lastCleanSlot` as upstream's 1-based slot position counting the start ramp and roll zone, never as a gate number, and map through `Course.slots` if a gate is wanted (CONTRACTS §2.6, §2.12; DERIVATIONS §4.6).
 - [ ] Render `timeToBeat` by its `mode`, unsigned `target` or signed `delta`, with `holder`; never as a rank (CONTRACTS §2.6).
 - [ ] Show the six diagnostic kinds, `source-disagreement`, `contradicted-finish`, `duplicate-finish`, `stale-mark`, `member-sum-mismatch` and `unparseable-cell`, to the admin audience only (CONTRACTS §4, §7.1, §7.2).
 - [ ] While a half-correction stands, present exactly what upstream states, with no hiding and no marking (CONTRACTS §4; ARCHITECTURE §6.I).
@@ -144,6 +146,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Delete the run-2 merger `br1br2Merger` and its penalty fallback chain; show run 2 from `outcome` and the combined result from `pairTotal` (CONTRACTS §2.6; TEST-ARCHITECTURE §5).
 - [ ] Feature by default the first Attempt of the on-course set, the athlete next to pass the finish; offer `featuredByUpstream` only as an optional alternative, never the default (CONTRACTS §7.1; ARCHITECTURE §2; DERIVATIONS §4.8).
 - [ ] Show all four Kayak Cross competitors of a heat, ordered by the on-course set (CONTRACTS §7.1, §7.2; ADR-009).
+- [ ] Label a Cross Phase by its `stage` (time trial, semi-final, final) and `title`, never by guessing from the heat count (CONTRACTS §2.4).
 - [ ] Decide how long a finished Cross heat stays prominent as display policy, and test it at tier 3 over the gap between the order push and the next heat (ARCHITECTURE §6.D; TEST-ARCHITECTURE §3.3).
 - [ ] Show result and rank as soon as they are pushed, with the provisional mark while judging is in flight (ARCHITECTURE §2, §6.A).
 - [ ] Show `underReview` on the board (CONTRACTS §2.6; ARCHITECTURE §6.H).
@@ -161,6 +164,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Write only through `POST /api/attempts/{phaseId}/{bib}/penalty`, body `{ gate, value }` with `value` in {0, 2, 50}; it is the only write (CONTRACTS §2.9, §7.3).
 - [ ] Offer no status or mark write; the operator sets and clears marks in Canoe123 (CONTRACTS §2.9, §7.3; ADR-010).
 - [ ] Write only finished runs; never write for an athlete on course (CONTRACTS §7.3; ARCHITECTURE §6.B).
+- [ ] Offer no penalty write and no check on an Attempt of a Kayak Cross Phase; show `faults`, `placement` and `underReview` read-only; a flag may still be raised; treat `409 write-not-possible` with `reason: 'cross'` as the backstop (CONTRACTS §7.3, §7.4; ARCHITECTURE §3).
 - [ ] Send an `Idempotency-Key` on every write: generated once per correction attempt, a UUID sufficing; the same key on a retry; a new key for a revised correction (CONTRACTS §1.5, §7.3).
 - [ ] Handle `202` with `Location: /api/writes/{writeId}` and a pending `WriteRequest` on submit, and `200` with the current `WriteRequest` on a retry (CONTRACTS §7.3).
 - [ ] While the Attempt is in the on-course set, disable the write, or on `409 write-not-possible` with `reason: 'run-not-closed'` tell the judge (CONTRACTS §7.3; ARCHITECTURE §6.B).
@@ -198,6 +202,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Keep a check with the Attempt it was made on: a retraction, a contradiction, a result moved to another bib or a re-pointed `entry` never moves or deletes it (CONTRACTS §2.10; ADR-016).
 - [ ] Expect checks, flags and pending writes to survive a re-baseline, with each check's `status` recomputed (CONTRACTS §2.10, §4).
 - [ ] Drop its own event fingerprint; the server keys the store by `eventId` (CONTRACTS §2.10; ARCHITECTURE §3; ADR-016).
+- [ ] Follow the rendering clients' Phase-choice default in the race selector and let the judge override it (ARCHITECTURE §2).
 
 ---
 
@@ -207,6 +212,8 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Store exactly what the ingest contract asserts, per tenant, durable across on-site disconnection (ARCHITECTURE §3).
 - [ ] Apply INV-1, INV-3, INV-4, INV-5, INV-6 and INV-2 rule 4, and honour explicit `not-yet`, `DELETE` and the Phase replace; apply none of INV-2 rules 1 to 3, INV-2b, INV-2c, INV-2d or INV-7 (CONTRACTS §4, §8.3; ARCHITECTURE §3).
 - [ ] Among bridge observations of one field, present the later-ingested one (CONTRACTS §4, §8.3).
+- [ ] Accept `stage` on the Phase push and serve it; it is structural, not a vendor token (CONTRACTS §2.4, §8.3; ADR-007).
+- [ ] Expect the bridge to re-push the current state of every changed resource after an outage, a cleared rejection or a restart, and treat each as the idempotent `PUT` it is (CONTRACTS §1.5, §2.8, §8.3).
 - [ ] Assemble standings as c123-server does, from the pushed `placement` and `ageCategoryId`, without the category-rank check and without the order-anomaly check; rank nothing (CONTRACTS §5, §8; ADR-012).
 - [ ] Set each Standing's `asOf` to the ingest time of the latest observation behind any of its entries (CONTRACTS §5).
 - [ ] Accept `PUT /ingest/v2/phases/{phaseId}/classification` for a Phase of `kind: 'classification'`, replace its rows whole, assemble the `classification` Standing from them as delivered and emit `standing.updated`; refuse Attempts on a classification Phase and classifications pushed as Attempts (CONTRACTS §2.4, §5, §8.3, §8.6).
@@ -287,7 +294,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Take each on-course athlete's `status`, `running` outcome, judged `gates` and `timeToBeat` from `attempt.updated` (CONTRACTS §8.3).
 - [ ] On `attempt.deleted`, remove the Attempt and its standing entries (CONTRACTS §8.4).
 - [ ] Show a classification Standing (`XER`, `SLER`, `WWER`) as delivered, dated by its `asOf`, which lags the contributing Phases until the operator recalculates (CONTRACTS §2.4, §5, §8.3).
-- [ ] Label a Phase from its organiser-authored `title` when present, else from `pair.role`, `combination`, `heats`, `scoringKind` and `kind`; expect no `format` token (CONTRACTS §8.3; ADR-007; DERIVATIONS §9).
+- [ ] Label a Phase from its organiser-authored `title` when present, else from `stage`, `pair.role`, `combination`, `heats`, `scoringKind` and `kind`; expect no `format` token; `stage` is what tells a Cross semi-final from its final (CONTRACTS §2.4, §8.3; ADR-007; DERIVATIONS §9).
 - [ ] Show birth data only as served: `birthYear`, `birthDate` or neither, per the event's publication setting (CONTRACTS §8.4).
 - [ ] Expect no `anomalies`, diagnostics, `write.updated`, `sources.updated`, `check.updated`, `flag.updated` or `event.changed` on the live tier (CONTRACTS §2.7, §4, §8.4).
 

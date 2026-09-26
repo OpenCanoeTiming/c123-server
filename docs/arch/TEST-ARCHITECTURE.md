@@ -118,7 +118,7 @@ cover:
 - run generations;
 - §5's standing assembly.
 
-The count is 83 as of the consolidated revision (round 6) (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
+The count is 84 as of the consolidated revision (round 7) (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
 a thin adapter that feeds these vectors into its own merge function and asserts the result — proving
 both satisfy the same data-defined contract without either depending on the other's code.
 
@@ -607,7 +607,7 @@ layer-implementation.md`, and the five named tools) — not the other way round.
 
 ## 10. Left open
 
-- ~~**The exact vector count and coverage for tier 1.**~~ **Resolved.** 35 vectors were written, then 83 after the consolidated revision; the estimate did undercount, as the review suspected. Coverage map and the gaps that remain are in `CONFORMANCE-VECTORS.md` §2–§3. Original text follows for the record.
+- ~~**The exact vector count and coverage for tier 1.**~~ **Resolved.** 35 vectors were written, then 84 after the consolidated revision; the estimate did undercount, as the review suspected. Coverage map and the gaps that remain are in `CONFORMANCE-VECTORS.md` §2–§3. Original text follows for the record.
 - **The exact vector count and coverage for tier 1.** §3.1 gives a target range (~25–30) and method,
   not the vectors themselves — writing them is implementation, test-first, the same relationship
   `CONTRACTS.md` has to the server code it precedes. Raised directly under review: the §4 ranking

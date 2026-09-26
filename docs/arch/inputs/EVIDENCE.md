@@ -408,6 +408,12 @@ second-run row, a field emptied in the XML. Our code has no way to carry that:
   exactly as long as upstream keeps sending it, which is wrong: two recorded cases showed a false
   leader for 31 s and 71 s.
 
+A third finding on the same path, from an end-to-end Kayak Cross replay of the old system on
+2026-05-13 (E2, its server log): after five refused pushes the live push's circuit breaker opened
+and stayed open until c123-server was restarted, and the admin UI said nothing. The design makes
+the bridge's delivery a contract rule: indefinite backoff, no breaker that stays open, re-push of
+current state on recovery, and visible state (`CONTRACTS.md` §2.8).
+
 **Why it matters:** the maintainer's operating reality is that results move: a cleared DNS, a finish
 moved to the right bib, a deleted result, several results shifted back. An upsert-only pipeline can
 only ever add. The design's answer is `DECISIONS/ADR-015`: scope snapshots whose absence retracts,
