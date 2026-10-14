@@ -129,3 +129,12 @@ Any tier that stores upstream results with upsert-only semantics. Any client tha
 
 - Which operator action produced each recorded retraction cannot be read from the stream (E4).
 - Whether the live-mini XML ingest today overwrites results cleared on TCP is unverified (E4).
+
+## Revision — the write-time guard is INV-2c (2026-10-14)
+
+The guard this ADR introduced for XML retractions and for rule 2's mark exception — the snapshot's
+`lastRewriteDetectedAt` minus the poll interval must be later than the `tcp` observation's
+`observedAt` — turned out to be the general rule for any cross-source supersession, and INV-2c now
+states it as such (`ADR-003` Revision 5). Nothing changes for retraction except the name. One
+residual this ADR left open is closed by it: a snapshot rewrite that happened in the seconds before a
+TCP disconnect no longer takes over during the outage (`DERIVATIONS.md` §10 item 8).

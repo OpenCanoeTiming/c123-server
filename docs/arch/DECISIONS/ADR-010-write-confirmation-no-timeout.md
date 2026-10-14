@@ -81,3 +81,11 @@ penalty-check writes only closed runs. The status write has therefore left the c
 `WriteRequest.target.field` is `'gate-penalty'` only, and marks are set and cleared by the operator
 in Canoe123 (`CONTRACTS.md` §2.9, §7.3).
 
+
+## Revision 4 — the retry trigger is the closure (2026-10-14)
+
+Revision 2's rule refuses a write while the Attempt is on upstream's on-course list and names the
+first `oncourse.updated` without the Attempt as the tablet's retry trigger. `CONTRACTS.md` §7.1 had
+been dropping a finisher from that set at `finished`, 20 s before closure, so the trigger fired early
+(`ADR-009` addendum 2). §7.1 now keeps a finisher listed until upstream closes the run; the trigger
+fires at closure, as this ADR intended. No change to the write rule itself.

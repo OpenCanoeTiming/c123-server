@@ -118,7 +118,7 @@ cover:
 - run generations;
 - §5's standing assembly.
 
-The count is 84 as of the consolidated revision (round 7) (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
+The count is 85 as of round 8 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
 a thin adapter that feeds these vectors into its own merge function and asserts the result — proving
 both satisfy the same data-defined contract without either depending on the other's code.
 
@@ -245,12 +245,13 @@ the step index, the Attempt, the field and the property number.
 6. **Precedence (INV-2 rules 1–3).** (a) Once a result field presents a `result-row` observation, it
    never afterwards presents an `inference` for the same generation, except through a contradiction
    (property 7) or after a retraction (property 5). (b) `gates` is merged cell by cell: while
-   upstream still lists the Attempt (no `oncourse-left` for it yet in this generation), a judged cell
-   (`0`, `2`, `50`) never becomes `null`; after it has left, cells change only at a results-table
+   upstream still lists the Attempt (no `oncourse-left` for it yet in this generation; equivalently, it
+   is still in the latest `oncourse.updated`, **D**), a judged cell (`0`, `2`, `50`) never becomes
+   `null`; after it has left, cells change only at a results-table
    step. (c) A field presented from `tcp` flips to `xml` only if a `tcp-disconnected` occurred after
    the step that ingested the presented `tcp` observation, or the flip is rule 2's mark exception
-   (`status` from `not-started`, `at-start` or `left-without-finish` to a mark, under property 5's
-   write-time guard), or the step is a `rebaseline`. (d) Each field's presented `source` lies in the
+   (`status` from `not-started`, `at-start` or `left-without-finish` to a mark), or the step is a
+   `rebaseline`; in the first two cases property 8's content-age guard holds as well. (d) Each field's presented `source` lies in the
    set `DERIVATIONS.md` gives for it: `courseOrder`, `timeToBeat` and a `running` outcome only
    `tcp`; the superseded run's summary, age categories, members, event details and course numbers
    only `xml`.
@@ -261,9 +262,12 @@ the step index, the Attempt, the field and the property number.
    results-table `outcome` for the Attempt whose `eventTime` equals the contradicted finish. The
    diagnostic disappears only at a step presenting a different finish, a mark or a retraction, or at
    a listing of the Attempt with a finish. Kayak Cross Attempts never show this transition.
-8. **Event-time floor (INV-2c) D.** Within a generation, a field's presented `eventTime` never
-   moves directly to a strictly earlier value; it may reach one only after passing through `not-yet`
-   (a retraction) or a contradiction.
+8. **Content age across sources (INV-2c).** A presented results-table field flips from `tcp` to `xml`
+   only if the latest `xml-rewrite-detected` time minus the poll interval is later than the presented
+   `tcp` observation's `observedAt` (property 5's guard is this rule applied to retraction). A flip
+   from `xml` to `tcp` needs no such check: a `tcp` observation's content age is its `observedAt`.
+   From the same source, a later-ingested observation may present any `eventTime`, an earlier one
+   included; the checker never compares event times for precedence.
 9. **Idempotence (INV-5) D.** No delta carries a field whose envelope equals the presented one, or
    differs from it only in `observedAt`. A re-delivered identical observation is not client-visible.
 10. **Run generation (`ADR-013`).** `run` never decreases. It increments only at an on-course listing
@@ -273,8 +277,8 @@ the step index, the Attempt, the field and the property number.
     presented afterwards (`DERIVATIONS.md` §4.11).
 11. **Provisional (§1.2).** A presented result value has `provisional: true` exactly when: it is an
     inference (`kind: inference`, or `outcome.kind: 'running'`); or `gates` is `known` with a `null`
-    cell and upstream still lists the Attempt (no `oncourse-left` yet); or its `source` is
-    `operator-write` with a pending `WriteRequest`. It goes `false → true` only through a regression
+    cell and upstream still lists the Attempt (no `oncourse-left` yet; equivalently, it is in the latest
+    `oncourse.updated`); or its `source` is `operator-write` with a pending `WriteRequest`. It goes `false → true` only through a regression
     first (property 4). A `standing.updated` entry's `provisional` is the disjunction over its
     Attempt's `outcome`, `placement` and `pairTotal` (§5 step 5).
 12. **Marks (§2.6) D.** When `status` is a no-result mark, `outcome` is `{ kind: 'no-result' }` with
@@ -285,9 +289,12 @@ the step index, the Attempt, the field and the property number.
     `startOrder`, `heat`, `startLane`, every check and flag, and every `WriteRequest` are unchanged;
     afterwards every presented result value in scope has `source` `tcp` or `xml`, and none has
     `source: tcp` until a `tcp` observation of it follows.
-14. **On-course set (§7.1) D.** Every `attemptId` in `oncourse.updated` has presented status
-    `at-start` or `on-course`, and the list is ordered by presented `courseOrder` ascending, Attempts
-    without one last by `startOrder`.
+14. **On-course set (§7.1).** The set is upstream's list. An `attemptId` enters `oncourse.updated` only
+    at an on-course listing of that Attempt and leaves only at an `oncourse-left` or `oncourse-empty`
+    element — never because its `status` became `finished` or a mark, which keep it listed until
+    closure. **D:** every listed Attempt has a presented status other than `not-started` and
+    `left-without-finish`; the list is ordered by presented `courseOrder` ascending, Attempts without
+    one last by `startOrder`.
 15. **Standing (§5) D.** Every placed entry of a whole-class `standing.updated` has the `rank` and
     `order` of its Attempt's presented `placement`; entries sort by `order`; unplaced entries follow
     in step 3's order; an age-category `rank` is `1 +` the number of same-category entries with a

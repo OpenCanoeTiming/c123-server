@@ -374,7 +374,11 @@ contract:
 - **Several results shifted back.** Three athletes were credited with each other's finishes, then
   corrected one by one. Each correction is a results-grid edit, pushed immediately; each push is a
   complete statement of the race, so each athlete's row is replaced by its own value as the operator
-  reaches it. In between, the standing shows exactly what upstream's table shows. The XML snapshot
+  reaches it — including where an athlete's own finish is *earlier* than the one credited, which at
+  least one of the three must be: a later push of the same source supersedes whatever event time it
+  carries (§4 INV-2c compares content age across sources, never event times; the previous edition's
+  event-time floor would have refused that correction). In between, the standing shows exactly what
+  upstream's table shows. The XML snapshot
   written mid-correction shows two bibs with one finish; that is presented as upstream's state, with
   a diagnostic, and the next push resolves it.
 - **A stale value that nothing clears.** A wrong result stays in upstream's table on a path that

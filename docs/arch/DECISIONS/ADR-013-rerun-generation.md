@@ -91,3 +91,13 @@ pushes nothing) followed by a new start. A finish taken away from an athlete who
 neither: the on-course stream shows the same start with no finish, and `ADR-015`'s contradiction
 rule applies, within the same generation. `VerificationState` and pending `WriteRequest`s are still
 scoped to the generation and untouched by a retraction.
+
+## Revision 2 — the replaced run is kept out by attribution alone (2026-10-14)
+
+The Decision says "INV-2c already protects this boundary, because a re-run's finish is later than the
+run it replaces." INV-2c no longer compares event times (`ADR-003` Revision 5), so that sentence is
+superseded. The boundary rests on the attribution rule stated beside it: a results-table observation
+whose finish precedes the current generation's start describes the replaced run, is retained as
+history and is never presented (`DERIVATIONS.md` §4.11). A replaced run's row that carries no finish —
+a mark — is covered by the stale-mark rule (`CONTRACTS.md` §2.6; `DERIVATIONS.md` §4.12). Vector
+`rerun-old-generation-row-not-presented` already tests attribution, not INV-2c.

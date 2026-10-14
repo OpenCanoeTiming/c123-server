@@ -38,7 +38,10 @@ classification pushed to the live tier.
 
 **Round 7** added 1: an untimed placed row.
 
-**84 vectors:** 71 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
+**Round 8** (2026-10-14) rewrote the two INV-2c vectors — content age across sources, and a same-source
+earlier finish superseding — and added 1: a finisher stays in the on-course set until closure.
+
+**85 vectors:** 72 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
 needed, not a target.
 
 ---
@@ -72,6 +75,10 @@ Each vector has:
   (this Attempt stopped being listed) and `rebaseline` (with `scope`). They exist because INV-2's
   rule 2 depends on TCP continuity, INV-7's guard on the rewrite time, and the re-baseline is an
   event in the ingest sequence.
+- **Content age** (INV-2c and INV-7's guard). An `xml` observation's or snapshot's content age is the
+  latest preceding `xml-rewrite-detected` time minus `context.xmlPollIntervalSeconds`, which defaults
+  to 5 where absent; with no preceding rewrite event, its own `observedAt` minus the interval. A `tcp`
+  observation's content age is its `observedAt`.
 - **Scope snapshots** (INV-7). `{ ingestSeq, snapshot: { source, phaseId, mode, rows }, observedAt }`.
   `mode` is `results` or `start-list`; each row carries `bib` and the resolved fields the row states
   (`outcome`, `placement`, `pairTotal`, `status` for a mark, `finishTime`, `judgingComplete`, and
@@ -145,12 +152,12 @@ optionally the resulting `checks` (only the fields listed are asserted).
 | Marks over time; half-corrections | `status-overrides-time`, `half-correction-snapshot-duplicate-finish` | 2 |
 | Re-baseline | `rebaseline-discards-stale-tcp-and-rebuilds-from-xml`, `rebaseline-keeps-writes-and-generation` | 2 |
 | Live tier: explicit reset, bare values wrapped, deletion, on-course set and running state, classification rows | `live-explicit-not-yet-resets-field`, `live-bare-value-wrapped-as-bridge`, `live-attempt-deleted`, `live-oncourse-set-replaced-whole`, `live-running-then-finished-latest-wins`, `live-classification-rows-replaced-whole` | 6 |
-| The on-course set and `oncourse.updated` | `oncourse-set-order-and-push` | 1 |
+| The on-course set and `oncourse.updated` | `oncourse-set-order-and-push`, `oncourse-finisher-stays-listed-until-closure` | 2 |
 | Workflow state (§2.10): what `stale` compares against (`null` vs `0`, team sums, `gates` not known), the re-run and re-bib interplay | `check-stale-definition`, `check-null-vs-zero-distinct`, `check-team-sum-compared`, `check-not-carried-to-new-generation`, `check-stays-with-bib-when-result-moves` | 5 |
 | INV-2 rule 3 (single-source fields) | `inv2-rule3-single-source-field` | 1 |
 | INV-2 rule 4 (operator writes) | the six `operator-write-*` and `operator-correction-*` vectors, including `superseded`, plus `operator-write-confirmed-then-changed-upstream` | 7 |
 | INV-2b (surfaced, never adopted) | `inv2b-disagreement-surfaced-not-adopted` | 1 |
-| INV-2c (older event refused) | `inv2c-older-event-refused`, `inv2c-does-not-apply-without-eventtime` | 2 |
+| INV-2c (content age across sources; the same source always supersedes) | `inv2c-snapshot-older-than-push-refused-during-outage`, `inv2c-same-source-earlier-finish-supersedes` | 2 |
 | INV-3 and the trichotomy | `trichotomy-known-zero-not-confused-with-absence`, `trichotomy-unavailable-persists-explicitly`, `inv3-not-applicable-external-id` | 3 |
 | INV-4, INV-5, INV-6 | one each | 3 |
 | `provisional` in both upstream modes | `provisional-incomplete-judging-then-settles`, `-first-push-already-complete`, `-run-closed-without-course` | 3 |
@@ -205,3 +212,6 @@ presented-state fact, covered by `inv2b-disagreement-surfaced-not-adopted`.
 7. **Workflow state needed a third shape** (round 3). Its rules are functions over stored checks and
    the presented state, not over observations. Only those rules are vectors; durability and the flag
    lifecycle are store tests (`TEST-ARCHITECTURE.md` §3.5).
+8. **INV-2c needed content age, not event times** (round 8). An event-time floor could not express a
+   finish legitimately moved earlier. The rewrite event and the poll interval of decision 6 now carry
+   INV-2c too, with a stated default for the interval.

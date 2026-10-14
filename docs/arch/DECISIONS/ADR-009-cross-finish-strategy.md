@@ -77,3 +77,18 @@ populates the placement in the result push. As a **source tag** it is withdrawn.
 us as ordinary result rows, on TCP and in the snapshot, and it must be merged by the same rules as
 every other result row. A separate tag outside the merge rules let a stale snapshot row displace a
 fresher TCP push of a corrected order.
+
+## Addendum 2 — the on-course set is upstream's list (2026-10-14)
+
+`CONTRACTS.md` §7.1 made `/api/oncourse` plural so that Kayak Cross's four simultaneous competitors
+fit, and the addendum above gave them an order. Its membership rule was wrong by one step: it dropped
+an Attempt the moment its `status` became `finished`, while §7.3's write rule and retry trigger,
+INV-2's `gates` exception and `provisional`'s "run not yet closed" all mean *upstream's* list, which
+keeps a finisher for about 20 s until the run is closed (E3; found while restating the gate-2
+checker). The retry trigger therefore fired at the finish and earned a second `409`. The set is now
+upstream's list, in course order, each Attempt's `status` saying where it is; a finisher stays listed
+as `finished` (or a mark) until upstream stops listing it, and that `oncourse.updated` is the closure
+signal. How long a finisher is *displayed* was always the client's policy (`ARCHITECTURE.md` §2;
+`FINISHED_GRACE_PERIOD` today) and stays so: the set is not a display rule. Kayak Cross is unchanged:
+a heat leaves together and its statuses do not move. Vector
+`oncourse-finisher-stays-listed-until-closure`.

@@ -802,16 +802,20 @@
       }
     },
     {
-      "id": "inv2c-older-event-refused",
+      "id": "inv2c-snapshot-older-than-push-refused-during-outage",
       "invariant": "INV-2c",
-      "description": "A candidate describing an earlier event (earlier eventTime) never supersedes a value about a later one.",
+      "description": "During a TCP outage a snapshot takes over (rule 2) only if its content is newer than TCP's last observation of the field: a rewrite detected within one poll interval of the push may predate it and is refused; the next rewrite supersedes.",
+      "context": {
+        "xmlPollIntervalSeconds": 5,
+        "note": "closes DERIVATIONS §10 item 8; TCP's last push corrected the gate penalty from 2 to 0 just before the outage, the first snapshot still carries 2."
+      },
       "given": [
         {
           "ingestSeq": 1,
           "field": "outcome",
           "source": "tcp",
           "kind": "result-row",
-          "observedAt": "2026-09-15T10:40:00.000Z",
+          "observedAt": "2026-09-15T10:40:59.500Z",
           "value": {
             "kind": "duration",
             "runSeconds": 84.0,
@@ -819,7 +823,7 @@
             "totalSeconds": 84.0
           },
           "confidence": "authoritative",
-          "eventTime": "2026-09-15T10:39:58.000Z",
+          "eventTime": "2026-09-15T10:40:55.000Z",
           "judgingComplete": true
         },
         {
@@ -829,18 +833,63 @@
         },
         {
           "ingestSeq": 3,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:41:02.000Z"
+        },
+        {
+          "ingestSeq": 4,
           "field": "outcome",
           "source": "xml",
           "kind": "result-row",
-          "observedAt": "2026-09-15T10:41:10.000Z",
+          "observedAt": "2026-09-15T10:41:02.000Z",
           "value": {
             "kind": "duration",
-            "runSeconds": 86.5,
+            "runSeconds": 84.0,
             "penaltySeconds": 2,
-            "totalSeconds": 88.5
+            "totalSeconds": 86.0
           },
           "confidence": "authoritative",
-          "eventTime": "2026-09-15T10:14:02.079Z",
+          "eventTime": "2026-09-15T10:40:55.000Z",
+          "judgingComplete": true
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 3,
+          "expect": {
+            "outcome": {
+              "state": "known",
+              "value": {
+                "kind": "duration",
+                "runSeconds": 84.0,
+                "penaltySeconds": 0,
+                "totalSeconds": 84.0
+              },
+              "source": "tcp"
+            }
+          }
+        }
+      ],
+      "then": [
+        {
+          "ingestSeq": 5,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:41:37.000Z"
+        },
+        {
+          "ingestSeq": 6,
+          "field": "outcome",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:41:37.000Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 84.0,
+            "penaltySeconds": 50,
+            "totalSeconds": 134.0
+          },
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:40:55.000Z",
           "judgingComplete": true
         }
       ],
@@ -850,61 +899,116 @@
           "value": {
             "kind": "duration",
             "runSeconds": 84.0,
-            "penaltySeconds": 0,
-            "totalSeconds": 84.0
+            "penaltySeconds": 50,
+            "totalSeconds": 134.0
           },
-          "source": "tcp",
-          "eventTime": "2026-09-15T10:39:58.000Z"
+          "source": "xml"
         },
-        "note": "rule 2 alone would let the post-disconnect xml row win; its eventTime is 25 minutes earlier, so INV-2c refuses it."
+        "note": "first snapshot: content age 10:41:02 - 5 s = 10:40:57 < 10:40:59.5, refused, tcp stays; second snapshot: 10:41:32 > 10:40:59.5, presented (a 50 given during the outage)."
       }
     },
     {
-      "id": "inv2c-does-not-apply-without-eventtime",
+      "id": "inv2c-same-source-earlier-finish-supersedes",
       "invariant": "INV-2c",
-      "description": "Where the candidate carries no eventTime, INV-2c does not apply and rule 2 governs alone.",
+      "description": "Two athletes credited with each other's finishes are corrected in the results grid: the later push of the same source supersedes for both, including the one whose true finish is the earlier (ARCHITECTURE Scenario I). The previous edition's event-time floor refused that row.",
+      "context": {
+        "tcpConnectedThroughout": true,
+        "note": "recorded shapes: nkz-19so 10:05-10:30 (bibs 42/43 swapped and reverted); jarni-ne-odp 12:55-13:05 (three shifted back one by one)."
+      },
       "given": [
         {
           "ingestSeq": 1,
-          "field": "placement",
+          "attemptId": "K1M_BR1_19:42",
+          "field": "outcome",
           "source": "tcp",
           "kind": "result-row",
-          "observedAt": "2026-09-15T10:40:00.000Z",
+          "observedAt": "2026-09-15T10:15:00.400Z",
           "value": {
-            "rank": 2,
-            "order": 2
+            "kind": "duration",
+            "runSeconds": 90.0,
+            "penaltySeconds": 0,
+            "totalSeconds": 90.0
           },
           "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:14:58.000Z",
           "judgingComplete": true
         },
         {
           "ingestSeq": 2,
-          "event": "tcp-disconnected",
-          "observedAt": "2026-09-15T10:41:00.000Z"
+          "attemptId": "K1M_BR1_19:43",
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:15:00.400Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 84.0,
+            "penaltySeconds": 0,
+            "totalSeconds": 84.0
+          },
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:14:02.000Z",
+          "judgingComplete": true
         },
         {
           "ingestSeq": 3,
-          "field": "placement",
-          "source": "xml",
+          "attemptId": "K1M_BR1_19:42",
+          "field": "outcome",
+          "source": "tcp",
           "kind": "result-row",
-          "observedAt": "2026-09-15T10:41:10.000Z",
+          "observedAt": "2026-09-15T10:16:30.200Z",
           "value": {
-            "rank": 3,
-            "order": 3
+            "kind": "duration",
+            "runSeconds": 84.0,
+            "penaltySeconds": 0,
+            "totalSeconds": 84.0
           },
           "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:14:02.000Z",
+          "judgingComplete": true
+        },
+        {
+          "ingestSeq": 4,
+          "attemptId": "K1M_BR1_19:43",
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:16:30.200Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 90.0,
+            "penaltySeconds": 0,
+            "totalSeconds": 90.0
+          },
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:14:58.000Z",
           "judgingComplete": true
         }
       ],
       "expect": {
-        "placement": {
+        "K1M_BR1_19:42.outcome": {
           "state": "known",
           "value": {
-            "rank": 3,
-            "order": 3
+            "kind": "duration",
+            "runSeconds": 84.0,
+            "penaltySeconds": 0,
+            "totalSeconds": 84.0
           },
-          "source": "xml"
-        }
+          "source": "tcp",
+          "eventTime": "2026-09-15T10:14:02.000Z"
+        },
+        "K1M_BR1_19:43.outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 90.0,
+            "penaltySeconds": 0,
+            "totalSeconds": 90.0
+          },
+          "source": "tcp",
+          "eventTime": "2026-09-15T10:14:58.000Z"
+        },
+        "note": "bib 42's corrected finish is 56 s earlier than the one presented for it; same source, later ingest, presented. Event times are never compared for precedence."
       }
     },
     {
@@ -1611,7 +1715,8 @@
       "description": "A no-result mark set on a silent path arrives in the snapshot and supersedes the TCP left-without-finish, while TCP stays connected.",
       "context": {
         "discipline": "slalom",
-        "tcpConnectedThroughout": true
+        "tcpConnectedThroughout": true,
+        "xmlPollIntervalSeconds": 5
       },
       "given": [
         {
@@ -3207,6 +3312,77 @@
         "notifications": {
           "oncourse.updated": 3
         }
+      }
+    },
+    {
+      "id": "oncourse-finisher-stays-listed-until-closure",
+      "invariant": "oncourse",
+      "description": "The on-course set is upstream's list: a finish changes status, not membership; the Attempt leaves the set only when upstream stops listing it, about 20 s later, and that oncourse.updated is the closure the write rule's retry waits for.",
+      "context": {
+        "discipline": "slalom"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "attemptId": "K1M_BR1_19:57",
+          "field": "courseOrder",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:00:00.000Z",
+          "value": 1,
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 2,
+          "attemptId": "K1M_BR1_19:57",
+          "field": "status",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:00:00.000Z",
+          "value": "on-course",
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 3,
+          "attemptId": "K1M_BR1_19:57",
+          "field": "status",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:01:25.400Z",
+          "value": "finished",
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:01:25.000Z",
+          "judgingComplete": true
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 2,
+          "expect": {
+            "oncourse": [
+              "K1M_BR1_19:57"
+            ],
+            "K1M_BR1_19:57.status": {
+              "state": "known",
+              "value": "finished"
+            }
+          }
+        }
+      ],
+      "then": [
+        {
+          "ingestSeq": 4,
+          "event": "oncourse-left",
+          "observedAt": "2026-09-15T10:01:45.000Z",
+          "attemptId": "K1M_BR1_19:57"
+        }
+      ],
+      "expect": {
+        "oncourse": [],
+        "notifications": {
+          "oncourse.updated": 2
+        },
+        "note": "one push when the Attempt entered the set, one when upstream stopped listing it; the finish produced an attempt.updated, never an oncourse.updated."
       }
     },
     {

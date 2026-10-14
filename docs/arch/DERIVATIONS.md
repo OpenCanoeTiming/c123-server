@@ -525,6 +525,12 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
 
 - **`courseOrder`** is `OnCourse@Position`: 1 is closest to the finish. It is a property of the
   message, which carries one participant. Slalom showed up to 12 simultaneous positions.
+- **The on-course set** (`CONTRACTS.md` §7.1) is upstream's list as the stream shows it. An Attempt
+  enters at its first on-course message and leaves at `oncourse-left` (§4.1: upstream stopped listing
+  it) or at the explicit course-empty message. A finish transition changes `status`, not membership:
+  upstream keeps the finisher listed until it closes the run, about 20 s later (`Completed="Y"` where
+  auto-complete is on, else removal). The set is ordered by each listed Attempt's `courseOrder`; an
+  Attempt whose message carries no `Position` sorts last by `startOrder`.
 - **`featuredByUpstream`** (`CONTRACTS.md` §7.1) is the Attempt named by `TVS@Odd_Bib`/`@Odd_RaceId`
   when that bib is on the on-course list, else by `@Even_Bib`/`@Even_RaceId`, else `null`. Upstream
   alternates the two channels by starter. It is optional; the default featured competitor is the
@@ -604,14 +610,23 @@ came from results-table observations:
 
 **Retraction from an XML snapshot.** The row carries no time, no finish time and no mark, for an
 Attempt previously known from a results-table observation: retract as the TCP first-run case.
-**Guard:** apply it against a `tcp` observation only when `xml.lastRewriteDetectedAt` minus the poll
-interval is later than that observation's `observedAt`. Otherwise the snapshot may predate the push,
-and it is ignored for that field until the next snapshot. The same guard applies to the mark
-exception of INV-2 rule 2. Recorded: the XML was five minutes *ahead* of TCP's rotation on one
+**Guard (INV-2c, content age):** apply it against a `tcp` observation only when
+`xml.lastRewriteDetectedAt` minus the poll interval is later than that observation's `observedAt`.
+Otherwise the snapshot may predate the push, and it is ignored for that field until the next
+snapshot. The same guard applies to the mark exception of INV-2 rule 2, and to any snapshot value
+displacing a `tcp` value during an outage. Recorded: the XML was five minutes *ahead* of TCP's rotation on one
 cleared wrong-race row, and 7 s behind TCP on a cleared DNS.
 
 **After a retraction,** `status` is what the on-course stream currently shows for the Attempt
 (`at-start`, `on-course`), else `not-started`.
+
+**A finish moved earlier.** A results-grid edit that gives an athlete an earlier finish than the one
+presented — two athletes' finishes swapped, three results shifted back to their owners one by one —
+arrives as an ordinary push of the race. The later-ingested row of the same source supersedes,
+whatever its `dtFinish` (`CONTRACTS.md` §4 INV-2c compares content age across sources, never event
+times). Recorded: jarni-ne-odp 12:55–13:05, three athletes corrected one by one; nkz-19so
+10:05–10:30, bibs 42 and 43 swapped and reverted. The previous edition's event-time floor would have
+refused the correction for every athlete whose true finish was the earlier one.
 
 **Contradiction by the on-course stream** (INV-2d). Track per Attempt and generation the finish time
 last presented from a results-table observation. When an on-course message lists the Attempt with
@@ -745,6 +760,13 @@ changes: a late correction, a retraction, a contradiction, a re-baseline. The di
     snapshot are complete statements of a race; their stated absence retracts. The on-course stream
     contradicts a finish taken away on the on-course grid, which upstream never clears. A mark
     overrides a time. A result row observed cleared is a retraction, not a new run generation.
+16. **INV-2c compared event times; it now compares content age across sources** (round 8,
+    2026-10-14; §4.12). The event-time floor refused a corrected finish earlier than the presented one,
+    the routine shape of a swap or a shift back. The replaced run of a re-run is kept out by
+    generation attribution alone (§4.11).
+17. **The on-course set is upstream's list** (round 8; §4.8). A finisher stays in it as `finished`
+    until closure; the earlier `CONTRACTS.md` §7.1 dropped it at the finish, 20 s before the write
+    rule's closure.
 
 ---
 
@@ -802,7 +824,8 @@ but no code path or recording ever filled it.
 
 ## 10. Open technical questions
 
-Items 1–7 and 13 were answered from the source on 2026-09-25 (#179; E1). Items 8, 9, 11 and 12 remain.
+Items 1–7 and 13 were answered from the source on 2026-09-25 (#179; E1); item 8 was closed by INV-2c
+on 2026-10-14. Items 9, 11 and 12 remain.
 
 1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
    hardware judge terminals on their own port and raises a flag on the scoring service for about
@@ -821,9 +844,11 @@ Items 1–7 and 13 were answered from the source on 2026-09-25 (#179; E1). Items
    (§4.6(d)).
 7. ~~Does a re-run clear the row at staging or at the new finish?~~ **Answered:** the wizard wipes it
    at once with no push; staging without the wizard never clears it (§4.11).
-8. After a TCP disconnect, the first snapshot rewrite detected afterwards takes over (INV-2, rule 2).
+8. ~~After a TCP disconnect, the first snapshot rewrite detected afterwards takes over (INV-2, rule 2).
    If that rewrite happened in the few seconds *before* the disconnect, its content can predate TCP's
-   last push. The window is bounded by the file-watch interval. Accepted as residual.
+   last push.~~ **Closed (round 8, 2026-10-14):** INV-2c compares content age across sources; a
+   snapshot whose `lastRewriteDetectedAt` minus the poll interval predates TCP's last observation of
+   the field is not presented, and the next snapshot is.
 9. Rule 2's exception lets an XML mark supersede a TCP `at-start`. If a DNS is *cleared* in the grid,
    which pushes immediately, and the athlete is staged again within one snapshot interval, a
    snapshot written before the clearing can show DNS for up to about 35 s. This is rare, and accepted

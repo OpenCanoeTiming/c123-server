@@ -128,7 +128,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Read `birthYear: number | null`; the on-site tier carries no birth date (CONTRACTS §2.5, §7; ADR-006).
 - [ ] Use `format` and `phaseId` as Canoe123-native tokens, verbatim (CONTRACTS §7; ADR-007).
 - [ ] Show an unknown `format` token verbatim, with what the structural fields say; never invent a name and never fail to render (CONTRACTS §2.4; DERIVATIONS §9).
-- [ ] Keep the on-course set from `/api/oncourse` and `oncourse.updated`, in `courseOrder` with those lacking one last by `startOrder`; several at once and an empty set are both valid (CONTRACTS §7.1, §7.2).
+- [ ] Keep the on-course set from `/api/oncourse` and `oncourse.updated`, in `courseOrder` with those lacking one last by `startOrder`; several at once and an empty set are both valid. The set is upstream's list: a finisher stays in it as `finished` or a mark until upstream closes the run, about 20 s; leaving the set is the closure, never the finish (CONTRACTS §7.1, §7.2; ADR-009).
 - [ ] Keep a Kayak Cross heat that has left the on-course list at `on-course` until its order arrives; never treat leaving the list as a finish (CONTRACTS §7.1, §7.2; ARCHITECTURE §6.D).
 - [ ] Ignore `Standing.anomalies`, which on-site serves for the admin UI only (CONTRACTS §2.7, §5).
 - [ ] Treat `/api/sources`, `/api/diagnostics`, `diagnostics.updated` and `POST /api/rebaseline` as admin-audience only; ignore diagnostics and never expose the re-baseline (CONTRACTS §2.8, §4, §7.1, §7.2).
@@ -152,6 +152,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Show `underReview` on the board (CONTRACTS §2.6; ARCHITECTURE §6.H).
 - [ ] Show "off course" at once for `left-without-finish`, and the mark when it is known (ARCHITECTURE §6.G).
 - [ ] Put grace-period and stale-competitor eviction under the `Clock` and a tier-3 test; today it recomputes only when an action is dispatched (ARCHITECTURE §2; TEST-ARCHITECTURE §3.3).
+- [ ] Decide how long a finisher stays in the on-course display as display policy (`FINISHED_GRACE_PERIOD` today), from `status: finished` and the injected `Clock`; never from the Attempt leaving the set, which is upstream's closure about 20 s later (CONTRACTS §7.1; ARCHITECTURE §2; TEST-ARCHITECTURE §3.3).
 - [ ] Route today's timing sites (`context/constants.ts`, `useDeparting.ts`, `useAutoScroll.ts`, `useHighlight.ts`) through the `Clock` (TEST-ARCHITECTURE §5).
 - [ ] Do not expose the re-baseline on a venue board (CONTRACTS §4).
 - [ ] Keep client configuration and remote control (ConfigPush, `clientId`, per-IP records) on today's mechanism, outside the contract, pinned by regression tests (ARCHITECTURE §8).
@@ -167,7 +168,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Offer no penalty write and no check on an Attempt of a Kayak Cross Phase; show `faults`, `placement` and `underReview` read-only; a flag may still be raised; treat `409 write-not-possible` with `reason: 'cross'` as the backstop (CONTRACTS §7.3, §7.4; ARCHITECTURE §3).
 - [ ] Send an `Idempotency-Key` on every write: generated once per correction attempt, a UUID sufficing; the same key on a retry; a new key for a revised correction (CONTRACTS §1.5, §7.3).
 - [ ] Handle `202` with `Location: /api/writes/{writeId}` and a pending `WriteRequest` on submit, and `200` with the current `WriteRequest` on a retry (CONTRACTS §7.3).
-- [ ] While the Attempt is in the on-course set, disable the write, or on `409 write-not-possible` with `reason: 'run-not-closed'` tell the judge (CONTRACTS §7.3; ARCHITECTURE §6.B).
+- [ ] While the Attempt is in the on-course set — which lists a finisher as `finished` until upstream's closure, about 20 s after the finish — disable the write, or on `409 write-not-possible` with `reason: 'run-not-closed'` tell the judge (CONTRACTS §7.1, §7.3; ARCHITECTURE §6.B).
 - [ ] Retry a write refused as `run-not-closed` on the first `oncourse.updated` whose `attemptIds` no longer contain the Attempt; reusing the `Idempotency-Key` or taking a new one are both correct, since a `409` creates no `WriteRequest` (CONTRACTS §1.5, §7.3).
 - [ ] Hide or disable the penalty write up front for an Attempt whose Entry has `isTeam: true`, since the operator corrects team boats in Canoe123; treat `409 write-not-possible` with `reason: 'team-boat'` only as the backstop (CONTRACTS §2.5, §7.3; ARCHITECTURE §6.B).
 - [ ] Handle `404 attempt-not-found` and `400 validation-failed` with `error.details`: a value outside {0, 2, 50}, a gate outside the course, a course not configured (CONTRACTS §1.4, §7.3).
@@ -292,6 +293,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Take the on-course set's age from `asOf` on the on-course read and on `oncourse.updated` (CONTRACTS §2.6, §7.2, §8.4).
 - [ ] Feature by default the first Attempt of the on-course set; offer `featuredByUpstream` only as the optional alternative (CONTRACTS §8.4; ARCHITECTURE §2).
 - [ ] Take each on-course athlete's `status`, `running` outcome, judged `gates` and `timeToBeat` from `attempt.updated` (CONTRACTS §8.3).
+- [ ] Show a listed Attempt whose `status` is `finished` or a mark as a finisher still on upstream's list; how long it stays visible is the client's own policy (CONTRACTS §8.3, §8.4; ARCHITECTURE §2).
 - [ ] On `attempt.deleted`, remove the Attempt and its standing entries (CONTRACTS §8.4).
 - [ ] Show a classification Standing (`XER`, `SLER`, `WWER`) as delivered, dated by its `asOf`, which lags the contributing Phases until the operator recalculates (CONTRACTS §2.4, §5, §8.3).
 - [ ] Label a Phase from its organiser-authored `title` when present, else from `stage`, `pair.role`, `combination`, `heats`, `scoringKind` and `kind`; expect no `format` token; `stage` is what tells a Cross semi-final from its final (CONTRACTS §2.4, §8.3; ADR-007; DERIVATIONS §9).

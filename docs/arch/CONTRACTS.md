@@ -113,7 +113,8 @@ The fields, precisely:
   holds:
   - it is an on-course inference not yet superseded by a results-table observation of the same run;
   - it is a result whose judging is incomplete (at least one gate of the Phase's course is still
-    blank) and whose run is not yet closed;
+    blank) and whose run is not yet closed — closure is upstream removing the Attempt from its
+    on-course list, about 20 s after the finish, which is when it leaves the on-course set (§7.1);
   - it is an optimistic write still awaiting its echo (§2.9).
 
   Otherwise it is `false`. This marks the state honestly in either mode of Canoe123's "ranking with
@@ -1149,8 +1150,8 @@ implementation must satisfy, not an algorithm.
      result push arrives (`DECISIONS/ADR-011` gives the measured latency).
 
      **`gates` is the exception: it is merged cell by cell.**
-     - While the Attempt is on upstream's on-course list, each gate cell takes the newest *judged*
-       value from either kind of observation.
+     - While the Attempt is in the on-course set (§7.1: upstream's list, which keeps a finisher until
+       closure), each gate cell takes the newest *judged* value from either kind of observation.
      - A cell that is blank in a result row never overwrites a cell the on-course stream has already
        judged. Upstream pushes nothing when the last missing gate is judged clean, so for up to about
        20 s its result row shows that cell blank while the on-course stream already shows `0`
@@ -1177,10 +1178,12 @@ implementation must satisfy, not an algorithm.
      So an `xml` observation of `status` carrying a no-result mark supersedes a presented `tcp` status
      of `not-started`, `at-start` or `left-without-finish`. None of those is a mark, and none can be a
      finish. This is how the reason for `left-without-finish` arrives at the next save, not at TCP's
-     next incidental push (§2.6). The write-time guard of INV-7 applies: the snapshot must have been
-     written after the `tcp` observation it displaces. **Otherwise the later-ingested observation
-     wins.** This covers two cases:
-     - During an outage, a snapshot rewrite *detected after the disconnect* takes over.
+     next incidental push (§2.6). INV-2c's content-age guard applies: the snapshot's content must be
+     newer than the `tcp` observation it displaces. **Otherwise the later-ingested observation wins,
+     under the same guard.** This covers two cases:
+     - During an outage, a snapshot rewrite *detected after the disconnect* takes over, provided its
+       content age postdates TCP's last observation of the field (INV-2c); a rewrite that happened in
+       the seconds before the disconnect does not, and the next one does.
      - After reconnection, TCP's pre-outage observations no longer outrank a snapshot that was read
        later.
 
@@ -1214,10 +1217,25 @@ implementation must satisfy, not an algorithm.
   value by itself. There is no
   re-query: no on-demand source remains (`DECISIONS/ADR-011`), and neither remaining source can hold
   a correction back.
-- **INV-2c (an older event does not displace a newer one).** Where the presented value and a candidate
-  both carry an `eventTime`, a candidate with a strictly earlier `eventTime` never supersedes,
-  whatever rule 2 says. In practice this protects a re-run: the re-run's finish is later than the run
-  it replaces, so a stale row describing the replaced run cannot come back (`DECISIONS/ADR-013`).
+- **INV-2c (content age across sources).** A results-table observation supersedes a presented
+  results-table value from the *other* source only when its content is newer than the presented
+  observation. Content age: for an `xml` observation, the snapshot's `lastRewriteDetectedAt` minus
+  the poll interval, since the file may have been written at any moment of that interval; for a
+  `tcp` observation, its own `observedAt`, since a push is upstream's table at the moment of
+  sending. A candidate whose content age is earlier than the presented observation's `observedAt` is
+  retained and not presented, whatever rule 2 would otherwise allow; the next observation from that
+  source settles it. It is a guard, never a grant: it lets nothing supersede that rule 2 refuses.
+  **From the same source, the later-ingested observation always supersedes, whatever event time it
+  carries.** An operator who moves a finish to an earlier time, or hands three athletes' finishes back
+  to their owners one by one (`ARCHITECTURE.md` Scenario I), produces rows whose finish times are
+  earlier than the presented ones, and each is upstream's current table. The earlier edition of this
+  invariant compared `eventTime` instead and would have refused those corrections; the recorded
+  jarni-ne-odp shift and the nkz-19so swap-and-revert are the evidence (`DECISIONS/ADR-003`
+  Revision 5). A stale row of a *replaced* run is kept out by generation attribution, not by this
+  rule: a row whose finish precedes the current generation's start describes the replaced run and is
+  never presented (`DERIVATIONS.md` §4.11, `DECISIONS/ADR-013` Revision 2). Like INV-7's guard, which
+  is this rule applied to retraction, it is a content-age comparison on our own clock, not an
+  ordering rule; INV-6 still orders the merge.
 - **INV-2d (the on-course stream contradicts a stale finish).** When the on-course stream lists an
   Attempt with the current generation's start and no finish, after a finish was presented for it
   from a results-table observation, that finish is **contradicted**:
@@ -1245,12 +1263,12 @@ implementation must satisfy, not an algorithm.
   - **XML:** the row carries no time, no finish time and no mark: as the TCP first-run case.
   - **Never retracted:** an on-course inference, `entry`, `bib`, `startOrder`, `heat`, `startLane`,
     `run`, or a field whose Attempt was never present in a results-table observation.
-  - **XML retractions are guarded by write time.** The snapshot lags TCP by up to a save cycle, so a
-    snapshot written before a result push must not undo it. An XML retraction, and the mark
-    exception of rule 2, apply to a `tcp` observation only when the rewrite was detected more than
-    one poll interval after that observation was ingested. Otherwise the snapshot is ignored for that
-    field, and the next snapshot settles it. This is a content-age guard on our own clock, like
-    INV-2c, not an ordering rule; INV-6 still orders the merge.
+  - **XML retractions are guarded by content age (INV-2c).** The snapshot lags TCP by up to a save
+    cycle, so a snapshot written before a result push must not undo it. An XML retraction, and the
+    mark exception of rule 2, apply to a `tcp` observation only when the snapshot's content age —
+    `lastRewriteDetectedAt` minus the poll interval — is later than that observation's `observedAt`.
+    Otherwise the snapshot is ignored for that field, and the next snapshot settles it. A guard on
+    our own clock, not an ordering rule; INV-6 still orders the merge.
   - A retraction is an explicit observation with its own ingest sequence, pushed as `not-yet`
     values. It is the routine case of a cleared DNS, a deleted result, or a finish moved to the
     right bib.
@@ -1422,7 +1440,7 @@ Every response except `/api/sources` carries `asOfSeq: number` (§1.6) at the to
 | `GET /api/classes/{classId}/entries` | `{ asOfSeq, entries: Entry[] }` | `404 class-not-found` |
 | `GET /api/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }` | `404 phase-not-found` |
 | `GET /api/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`: every scope of §5, for the whole class and per age category | `404 class-not-found` |
-| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null }`: every Attempt currently on upstream's on-course list with status `at-start` or `on-course`, across every running Phase. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8). Kept current by `oncourse.updated` (§7.2) | — |
+| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null }`: **every Attempt upstream currently lists on its on-course list**, across every running Phase, whatever its `status`: `at-start`, `on-course`, and, for the ~20 s between a finish and upstream's closure of the run, `finished` or a mark. The set is upstream's list; `status` says where each Attempt is. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8). Kept current by `oncourse.updated` (§7.2) | — |
 | `GET /api/phases/{phaseId}/checks` | `{ asOfSeq, checks: GateCheck[], flags: GateFlag[] }`: every check and flag of the Phase, all run generations, `status` derived at serialisation (§2.10) | `404 phase-not-found` |
 | `GET /api/sources` | `SourceStatus`, unwrapped | — |
 | `GET /api/diagnostics` | `{ asOfSeq, diagnostics: Diagnostic[] }`: every current diagnostic of the six kinds in §4 (source disagreement, contradicted finish, duplicate finish, stale mark, member-sum mismatch, unparseable cell). Admin audience only | — |
@@ -1432,14 +1450,20 @@ Every response except `/api/sources` carries `asOfSeq: number` (§1.6) at the to
 maintainer named is the athlete next to pass the finish: the first Attempt in this list.
 `featuredByUpstream` is offered as an optional alternative, never as the default.
 
-Membership of the on-course list is tracked from the on-course stream.
-- An Attempt leaves the list when:
-  - its status becomes `finished` or a no-result status;
-  - upstream stops listing it;
-  - upstream sends its explicit "course empty" message.
-- **In slalom**, an Attempt that leaves the list with no finish recorded becomes
+Membership of the on-course set is tracked from the on-course stream, and the set is upstream's
+list.
+- An Attempt enters the set when upstream first lists it.
+- An Attempt leaves the set only when upstream stops listing it — at closure, about 20 s after a
+  finish; when the operator removes it; when a heat leaves — or on upstream's explicit "course empty"
+  message. **A finish does not remove it.** Upstream keeps a finisher listed until closure, and so
+  does this set, with `status: finished` or a mark. The `oncourse.updated` that drops the Attempt is
+  therefore the closure signal that §7.3's write rule and INV-2's `gates` exception rely on. How long
+  a finisher stays *displayed* is the client's policy (`ARCHITECTURE.md` §2), never read from the
+  set. The earlier text dropped a finisher at `finished`, which made §7.3's retry trigger fire 20 s
+  early (`DECISIONS/ADR-009` addendum 2).
+- **In slalom**, an Attempt that leaves the set with no finish recorded becomes
   `left-without-finish` (§2.6). It is never inferred as DNF.
-- **In Kayak Cross**, leaving the list never changes `status`. A heat leaves together, before the
+- **In Kayak Cross**, leaving the set never changes `status`. A heat leaves together, before the
   operator has asserted the order, and so stays `on-course` until that assertion arrives through its
   result row (`DERIVATIONS.md` §4.1).
 
@@ -1459,8 +1483,11 @@ Every message carries `seq` (§1.6).
 - **`oncourse.updated`** carries the whole on-course set: `{ attemptIds: string[], featuredByUpstream:
   string | null, asOf: Timestamp }`, `attemptIds` in `courseOrder` (§7.1), `asOf` the ingest time of
   the latest on-course observation behind it. It is sent whenever membership, order or the
-  featured competitor changes. The Attempts themselves arrive by `attempt.updated`; this message is
-  what keeps the set current, including in Kayak Cross, where leaving the list changes no `status`.
+  featured competitor changes. A finish changes `status`, not membership: it arrives as an
+  `attempt.updated`, and the Attempt leaves the set at upstream's closure, about 20 s later, which is
+  the `oncourse.updated` §7.3's retry waits for. The Attempts themselves arrive by `attempt.updated`;
+  this message is what keeps the set current, including in Kayak Cross, where leaving the set changes
+  no `status`.
 - **`diagnostics.updated`** carries the whole current `Diagnostic[]` whenever it changes. Admin
   audience only; a scoreboard ignores it.
 - **`event.changed`** carries the whole `Event`. It is sent when the current event changes: on the
@@ -1527,15 +1554,17 @@ command, and its back-fill of earlier blank gates, are outside the contract enti
 closure, the athlete is still on upstream's on-course list, and upstream rewrites the stored row from
 the on-course state at the next save and always at closure. A correction sent then is confirmed by
 echo and silently lost (`EVIDENCE.md` Exhibit 14 is today's code doing exactly that). The server
-therefore **refuses** a write while the Attempt is still on the on-course list:
-`409 write-not-possible`, `reason: 'run-not-closed'`. The tablet says so and retries once the Attempt
-has left the list (`oncourse.updated`, §7.2). Holding the write server-side and sending it at
+therefore **refuses** a write while the Attempt is still in the on-course set (§7.1, which is
+upstream's list and keeps a finisher as `finished` until closure): `409 write-not-possible`,
+`reason: 'run-not-closed'`. The tablet says so and retries once the Attempt has left the set
+(`oncourse.updated`, §7.2). Holding the write server-side and sending it at
 closure was rejected: it needs a queued state, and it goes wrong quietly when the run is retracted
 or re-run meanwhile. A refusal is loud, and the wait is seconds.
 
 **Retrying after `409 run-not-closed`.** A `409` creates no `WriteRequest` and binds no
 `Idempotency-Key`, so the retry may reuse the key or take a new one; either is one correction. The
-trigger is the first `oncourse.updated` (§7.2) whose `attemptIds` no longer contain the Attempt. A
+trigger is the first `oncourse.updated` (§7.2) whose `attemptIds` no longer contain the Attempt — the
+closure, not the finish, since a finisher stays listed as `finished` until upstream closes the run. A
 tablet may also simply disable the write while the Attempt is listed, which is the same rule applied
 before the request.
 
@@ -1675,8 +1704,9 @@ with `error.details` naming the field.
 - **On-course state is carried, because live shows who is on course and how their time and
   penalties come in** (maintainer, gap 21: "an important feature"). It rides on two things already
   here. **The set** is its own resource: `PUT /ingest/v2/oncourse`, whole, in course order, pushed
-  whenever membership, order or the featured competitor changes, which is rare (a start, a finish,
-  a heat leaving). Its order is the order; `courseOrder` on an Attempt is informational and may lag.
+  whenever membership, order or the featured competitor changes, which is rare (a start, a closure
+  about 20 s after a finish, a heat leaving; a finish itself changes `status`, not membership, as on
+  site, §7.1). Its order is the order; `courseOrder` on an Attempt is informational and may lag.
   **The per-athlete state** rides on the partial Attempt `PUT`: `status` (`at-start`, `on-course`,
   `left-without-finish`), `outcome` as `running`, `gates` as cells are judged, `timeToBeat`. The
   bridge pushes only what the on-site domain layer presents, in its own ingest order, so an

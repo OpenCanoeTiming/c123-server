@@ -61,6 +61,11 @@ and an XML snapshot are complete statements of a race, their stated absence retr
 stream contradicts a stale finish, and an operator re-baseline rebuilds a race or event and pushes
 it everywhere as a replace.
 
+**Rounds 3–8** (2026-09-24 to 2026-10-14) added durable workflow state (`DECISIONS/ADR-016`), closed
+the client-side gaps, restated the tier-2 gate-2 checker as properties over the replay, and, in round
+8, made INV-2c a content-age rule across sources and the on-course set upstream's own list
+(`ADR-003` Revision 5, `ADR-009` addendum 2).
+
 Cross-references, section numbers, JSON validity and internal
 counts were mechanically verified. Hunting for internal inconsistency is largely spent ground.
 
