@@ -1,0 +1,613 @@
+{
+  "2026-04-18-jarni-so-do": {
+    "chunks": 9,
+    "records": 540978,
+    "bySrc": {
+      "xml": 267,
+      "udp27333": 251345,
+      "cis": 126193,
+      "tcp": 117516,
+      "udp10600": 45657
+    },
+    "tcp": {
+      "messages": 117516,
+      "unparseable": 0,
+      "unparseableSamples": [],
+      "unknownTypes": {},
+      "types": {
+        "RaceConfig": 757,
+        "Schedule": 383,
+        "TimeOfDay": 15218,
+        "OnCourse": 98765,
+        "Results": 1162,
+        "TimingInput": 943,
+        "TVS": 288
+      },
+      "unknownFormatTokens": {},
+      "unparseableCells": {
+        "results": 0,
+        "oncourse": 0,
+        "samples": []
+      },
+      "fabricatedRaceConfig": 0,
+      "raceConfigs": 757,
+      "fabricatedSamples": [],
+      "resultsRowsWithDtFinish": 0,
+      "resultsRows": 91936,
+      "resultsGatesWidths": {
+        "0": 54420,
+        "57": 90,
+        "90": 37426
+      },
+      "oncourse": {
+        "listings": 93851,
+        "emptyMsgs": 4914,
+        "unassigned": 0,
+        "finisherListings": 6771,
+        "finisherWithPosition": 6771,
+        "finisherNoPosition": 0,
+        "notArmedNoStart": 36312,
+        "armedNoStart": 13259,
+        "maxResendGapMs": 2478,
+        "resendOver2500": 0,
+        "reappearAfter2500": 10
+      },
+      "maxSilenceMs": 1344,
+      "silencesOver5s": []
+    },
+    "xml": {
+      "snapshots": 267,
+      "invalid": 0,
+      "invalidReasons": {},
+      "unknownFormatTokens": {},
+      "unparseableCells": 0,
+      "cellSamples": [],
+      "emptyCourses": 267,
+      "coursesSeen": {
+        "1": "NNRRSNNNRSNRNSNNNSNRNSNRS",
+        "2": "NNNNSRNRSNNRSNNRSRNSRNNS",
+        "3": ""
+      },
+      "phasesOnEmptyCourse": {},
+      "secondRunRows": 154860,
+      "secondRunRowsCatIdEmptyButCategorised": 105620,
+      "untimedRows": 0
+    },
+    "wallClockMs": 39675
+  },
+  "2026-04-18-jarni-so-odp": {
+    "chunks": 6,
+    "records": 339837,
+    "bySrc": {
+      "xml": 255,
+      "cis": 74749,
+      "tcp": 69300,
+      "udp27333": 164249,
+      "udp10600": 31284
+    },
+    "tcp": {
+      "messages": 69300,
+      "unparseable": 0,
+      "unparseableSamples": [],
+      "unknownTypes": {},
+      "types": {
+        "OnCourse": 55902,
+        "RaceConfig": 519,
+        "Schedule": 269,
+        "TimeOfDay": 10424,
+        "Results": 1027,
+        "TVS": 257,
+        "TimingInput": 902
+      },
+      "unknownFormatTokens": {},
+      "unparseableCells": {
+        "results": 0,
+        "oncourse": 0,
+        "samples": []
+      },
+      "fabricatedRaceConfig": 0,
+      "raceConfigs": 519,
+      "fabricatedSamples": [],
+      "resultsRowsWithDtFinish": 0,
+      "resultsRows": 45768,
+      "resultsGatesWidths": {
+        "0": 23405,
+        "30": 18,
+        "57": 130,
+        "90": 22215
+      },
+      "oncourse": {
+        "listings": 54194,
+        "emptyMsgs": 432,
+        "unassigned": 1276,
+        "finisherListings": 6026,
+        "finisherWithPosition": 6026,
+        "finisherNoPosition": 0,
+        "notArmedNoStart": 1070,
+        "armedNoStart": 10842,
+        "maxResendGapMs": 1477,
+        "resendOver2500": 0,
+        "reappearAfter2500": 4
+      },
+      "maxSilenceMs": 1272,
+      "silencesOver5s": []
+    },
+    "xml": {
+      "snapshots": 255,
+      "invalid": 0,
+      "invalidReasons": {},
+      "unknownFormatTokens": {},
+      "unparseableCells": 0,
+      "cellSamples": [],
+      "emptyCourses": 255,
+      "coursesSeen": {
+        "1": "NNRRSNNNRSNRNSNNNSNRNSNRS",
+        "2": "NNNNSRNRSNNRSNNRSRNSRNNS",
+        "3": ""
+      },
+      "phasesOnEmptyCourse": {},
+      "secondRunRows": 147900,
+      "secondRunRowsCatIdEmptyButCategorised": 74139,
+      "untimedRows": 0
+    },
+    "wallClockMs": 27170
+  },
+  "2026-04-19-jarni-ne-do": {
+    "chunks": 5,
+    "records": 326789,
+    "bySrc": {
+      "xml": 217,
+      "udp27333": 135618,
+      "cis": 85055,
+      "tcp": 80708,
+      "udp10600": 25191
+    },
+    "tcp": {
+      "messages": 80708,
+      "unparseable": 0,
+      "unparseableSamples": [],
+      "unknownTypes": {},
+      "types": {
+        "OnCourse": 69630,
+        "RaceConfig": 422,
+        "Schedule": 217,
+        "TimeOfDay": 8359,
+        "TimingInput": 756,
+        "TVS": 248,
+        "Results": 1076
+      },
+      "unknownFormatTokens": {},
+      "unparseableCells": {
+        "results": 1364,
+        "oncourse": 0,
+        "samples": [
+          "results K1M_BR2_19:22: [{\"slot\":8,\"text\":\"poz\"},{\"slot\":9,\"text\":\"or\"}]",
+          "results K1M_BR2_19:22: [{\"slot\":8,\"text\":\"poz\"},{\"slot\":9,\"text\":\"or\"},{\"slot\":10,\"text\":\"!!!\"},{\"slot\":11,\"text\":\"!!\"}]",
+          "results K1M_BR2_19:22: [{\"slot\":8,\"text\":\"poz\"},{\"slot\":9,\"text\":\"or\"},{\"slot\":10,\"text\":\"!!!\"},{\"slot\":11,\"text\":\"!!\"}]",
+          "results K1M_BR2_19:22: [{\"slot\":8,\"text\":\"poz\"},{\"slot\":9,\"text\":\"or\"},{\"slot\":10,\"text\":\"!!!\"},{\"slot\":11,\"text\":\"!!\"}]",
+          "results K1M_BR2_19:20: [{\"slot\":9,\"text\":\"!!!\"},{\"slot\":10,\"text\":\"!!!\"},{\"slot\":11,\"text\":\"!\"}]",
+          "results K1M_BR2_19:22: [{\"slot\":8,\"text\":\"poz\"},{\"slot\":9,\"text\":\"or\"},{\"slot\":10,\"text\":\"!!!\"},{\"slot\":11,\"text\":\"!!\"}]",
+          "results K1M_BR2_19:20: [{\"slot\":9,\"text\":\"!!!\"},{\"slot\":10,\"text\":\"!!!\"},{\"slot\":11,\"text\":\"!\"}]",
+          "results K1M_BR2_19:22: [{\"slot\":8,\"text\":\"poz\"},{\"slot\":9,\"text\":\"or\"},{\"slot\":10,\"text\":\"!!!\"},{\"slot\":11,\"text\":\"!!\"}]",
+          "results K1M_BR2_19:20: [{\"slot\":9,\"text\":\"!!!\"},{\"slot\":10,\"text\":\"!!!\"},{\"slot\":11,\"text\":\"!\"}]",
+          "results K1M_BR2_19:22: [{\"slot\":8,\"text\":\"poz\"},{\"slot\":9,\"text\":\"or\"},{\"slot\":10,\"text\":\"!!!\"},{\"slot\":11,\"text\":\"!!\"}]"
+        ]
+      },
+      "fabricatedRaceConfig": 0,
+      "raceConfigs": 422,
+      "fabricatedSamples": [],
+      "resultsRowsWithDtFinish": 0,
+      "resultsRows": 84756,
+      "resultsGatesWidths": {
+        "0": 46728,
+        "3": 1,
+        "6": 1,
+        "9": 2,
+        "12": 1,
+        "15": 2,
+        "18": 1,
+        "21": 1,
+        "24": 1,
+        "27": 1,
+        "30": 16,
+        "33": 1,
+        "36": 1,
+        "39": 1,
+        "42": 2,
+        "45": 1,
+        "48": 1,
+        "51": 1,
+        "54": 70,
+        "57": 30,
+        "90": 37438,
+        "92": 1,
+        "94": 360,
+        "127": 94
+      },
+      "oncourse": {
+        "listings": 69577,
+        "emptyMsgs": 53,
+        "unassigned": 0,
+        "finisherListings": 5887,
+        "finisherWithPosition": 5887,
+        "finisherNoPosition": 0,
+        "notArmedNoStart": 24108,
+        "armedNoStart": 10971,
+        "maxResendGapMs": 2083,
+        "resendOver2500": 0,
+        "reappearAfter2500": 7
+      },
+      "maxSilenceMs": 167708,
+      "silencesOver5s": [
+        {
+          "at": "2026-04-19T08:58:33.097Z",
+          "ms": 167650
+        },
+        {
+          "at": "2026-04-19T09:01:43.606Z",
+          "ms": 167708
+        },
+        {
+          "at": "2026-04-19T09:06:05.587Z",
+          "ms": 14039
+        }
+      ]
+    },
+    "xml": {
+      "snapshots": 217,
+      "invalid": 0,
+      "invalidReasons": {},
+      "unknownFormatTokens": {},
+      "unparseableCells": 306,
+      "cellSamples": [
+        "K1M_BR2_19:22 [{\"slot\":8,\"text\":\"poz\"},{\"slot\":9,\"text\":\"or\"},{\"slot\":10,\"text\":\"!!!\"},{\"slot\":11,\"text\":\"!!\"}]",
+        "K1M_BR2_19:20 [{\"slot\":9,\"text\":\"!!!\"},{\"slot\":10,\"text\":\"!!!\"},{\"slot\":11,\"text\":\"!\"}]",
+        "K1M_BR2_19:22 [{\"slot\":8,\"text\":\"poz\"},{\"slot\":9,\"text\":\"or\"},{\"slot\":10,\"text\":\"!!!\"},{\"slot\":11,\"text\":\"!!\"}]",
+        "K1M_BR2_19:20 [{\"slot\":9,\"text\":\"!!!\"},{\"slot\":10,\"text\":\"!!!\"},{\"slot\":11,\"text\":\"!\"}]",
+        "K1M_BR2_19:22 [{\"slot\":8,\"text\":\"poz\"},{\"slot\":9,\"text\":\"or\"},{\"slot\":10,\"text\":\"!!!\"},{\"slot\":11,\"text\":\"!!\"}]",
+        "K1M_BR2_19:20 [{\"slot\":9,\"text\":\"!!!\"},{\"slot\":10,\"text\":\"!!!\"},{\"slot\":11,\"text\":\"!\"}]",
+        "K1M_BR2_19:22 [{\"slot\":8,\"text\":\"poz\"},{\"slot\":9,\"text\":\"or\"},{\"slot\":10,\"text\":\"!!!\"},{\"slot\":11,\"text\":\"!!\"}]",
+        "K1M_BR2_19:26 [{\"slot\":10,\"text\":\"!!\"}]",
+        "K1M_BR2_19:20 [{\"slot\":9,\"text\":\"!!!\"},{\"slot\":10,\"text\":\"!!!\"},{\"slot\":11,\"text\":\"!\"}]",
+        "K1M_BR2_19:22 [{\"slot\":8,\"text\":\"poz\"},{\"slot\":9,\"text\":\"or\"},{\"slot\":10,\"text\":\"!!!\"},{\"slot\":11,\"text\":\"!!\"}]"
+      ],
+      "emptyCourses": 217,
+      "coursesSeen": {
+        "1": "NNRRSNNNRSNRNSNNNSNRNSNRS",
+        "2": "NRRSNNRSNNRSNNNSRNSRNNNS",
+        "3": ""
+      },
+      "phasesOnEmptyCourse": {},
+      "secondRunRows": 125860,
+      "secondRunRowsCatIdEmptyButCategorised": 24937,
+      "untimedRows": 0
+    },
+    "wallClockMs": 28583
+  },
+  "2026-04-19-jarni-ne-odp": {
+    "chunks": 4,
+    "records": 248685,
+    "bySrc": {
+      "xml": 184,
+      "udp27333": 117759,
+      "cis": 56462,
+      "tcp": 52833,
+      "udp10600": 21447
+    },
+    "tcp": {
+      "messages": 52833,
+      "unparseable": 0,
+      "unparseableSamples": [],
+      "unknownTypes": {},
+      "types": {
+        "RaceConfig": 357,
+        "Schedule": 185,
+        "OnCourse": 43514,
+        "TimeOfDay": 7141,
+        "Results": 813,
+        "TimingInput": 630,
+        "TVS": 193
+      },
+      "unknownFormatTokens": {},
+      "unparseableCells": {
+        "results": 0,
+        "oncourse": 0,
+        "samples": []
+      },
+      "fabricatedRaceConfig": 0,
+      "raceConfigs": 357,
+      "fabricatedSamples": [],
+      "resultsRowsWithDtFinish": 0,
+      "resultsRows": 41357,
+      "resultsGatesWidths": {
+        "0": 14571,
+        "30": 12,
+        "54": 35,
+        "57": 27,
+        "90": 26688,
+        "94": 24
+      },
+      "oncourse": {
+        "listings": 43169,
+        "emptyMsgs": 306,
+        "unassigned": 39,
+        "finisherListings": 5976,
+        "finisherWithPosition": 5976,
+        "finisherNoPosition": 0,
+        "notArmedNoStart": 3502,
+        "armedNoStart": 8149,
+        "maxResendGapMs": 2037,
+        "resendOver2500": 0,
+        "reappearAfter2500": 0
+      },
+      "maxSilenceMs": 1230,
+      "silencesOver5s": []
+    },
+    "xml": {
+      "snapshots": 184,
+      "invalid": 0,
+      "invalidReasons": {},
+      "unknownFormatTokens": {},
+      "unparseableCells": 0,
+      "cellSamples": [],
+      "emptyCourses": 184,
+      "coursesSeen": {
+        "1": "NNRRSNNNRSNRNSNNNSNRNSNRS",
+        "2": "NRRSNNRSNNRSNNNSRNSRNNNS",
+        "3": ""
+      },
+      "phasesOnEmptyCourse": {},
+      "secondRunRows": 106720,
+      "secondRunRowsCatIdEmptyButCategorised": 4900,
+      "untimedRows": 0
+    },
+    "wallClockMs": 27691
+  },
+  "2026-04-26-cp3-cross": {
+    "chunks": 15,
+    "records": 419186,
+    "bySrc": {
+      "xml": 98,
+      "cis": 92290,
+      "tcp": 80387,
+      "udp27333": 173373,
+      "udp10600": 73038
+    },
+    "tcp": {
+      "messages": 80387,
+      "unparseable": 0,
+      "unparseableSamples": [],
+      "unknownTypes": {},
+      "types": {
+        "RaceConfig": 1213,
+        "Schedule": 646,
+        "TimeOfDay": 24347,
+        "OnCourse": 46247,
+        "Results": 7328,
+        "TimingInput": 452,
+        "TVS": 154
+      },
+      "unknownFormatTokens": {},
+      "unparseableCells": {
+        "results": 0,
+        "oncourse": 0,
+        "samples": []
+      },
+      "fabricatedRaceConfig": 0,
+      "raceConfigs": 1213,
+      "fabricatedSamples": [],
+      "resultsRowsWithDtFinish": 0,
+      "resultsRows": 64599,
+      "resultsGatesWidths": {
+        "0": 25500,
+        "3": 3,
+        "27": 966,
+        "90": 38130
+      },
+      "oncourse": {
+        "listings": 33668,
+        "emptyMsgs": 12579,
+        "unassigned": 0,
+        "finisherListings": 4265,
+        "finisherWithPosition": 4265,
+        "finisherNoPosition": 0,
+        "notArmedNoStart": 19141,
+        "armedNoStart": 3654,
+        "maxResendGapMs": 1414,
+        "resendOver2500": 0,
+        "reappearAfter2500": 5
+      },
+      "maxSilenceMs": 10682,
+      "silencesOver5s": [
+        {
+          "at": "2026-04-26T09:18:38.463Z",
+          "ms": 10682
+        }
+      ]
+    },
+    "xml": {
+      "snapshots": 98,
+      "invalid": 0,
+      "invalidReasons": {},
+      "unknownFormatTokens": {},
+      "unparseableCells": 0,
+      "cellSamples": [],
+      "emptyCourses": 98,
+      "coursesSeen": {
+        "1": "DSNSNSRSNSNSNSESRS",
+        "2": "NNRNSNINRNSNRNRS",
+        "3": "NNNNSRNNRNSNNNNSNRNNRSNNNRSNNRS",
+        "4": "NNNNSRNNRNSNNNNSNRINNRSNNNRSNNRS",
+        "5": "DSNSNSNSRSNSNSNSESRS",
+        "6": ""
+      },
+      "phasesOnEmptyCourse": {},
+      "secondRunRows": 0,
+      "secondRunRowsCatIdEmptyButCategorised": 0,
+      "untimedRows": 6349
+    },
+    "wallClockMs": 8767
+  },
+  "2026-09-19-2026-nkz-19so": {
+    "chunks": 19,
+    "records": 952553,
+    "bySrc": {
+      "xml": 610,
+      "cis": 203792,
+      "tcp": 186189,
+      "udp27333": 466096,
+      "udp10600": 95866
+    },
+    "tcp": {
+      "messages": 186189,
+      "unparseable": 0,
+      "unparseableSamples": [],
+      "unknownTypes": {},
+      "types": {
+        "RaceConfig": 1590,
+        "Schedule": 833,
+        "TimeOfDay": 31941,
+        "OnCourse": 145639,
+        "Results": 3175,
+        "TimingInput": 2384,
+        "TVS": 627
+      },
+      "unknownFormatTokens": {},
+      "unparseableCells": {
+        "results": 0,
+        "oncourse": 0,
+        "samples": []
+      },
+      "fabricatedRaceConfig": 0,
+      "raceConfigs": 1590,
+      "fabricatedSamples": [],
+      "resultsRowsWithDtFinish": 0,
+      "resultsRows": 175873,
+      "resultsGatesWidths": {
+        "0": 100801,
+        "3": 1,
+        "18": 1,
+        "60": 1,
+        "66": 1,
+        "69": 83,
+        "90": 74985
+      },
+      "oncourse": {
+        "listings": 137878,
+        "emptyMsgs": 7761,
+        "unassigned": 0,
+        "finisherListings": 24978,
+        "finisherWithPosition": 24978,
+        "finisherNoPosition": 0,
+        "notArmedNoStart": 189,
+        "armedNoStart": 11465,
+        "maxResendGapMs": 1891,
+        "resendOver2500": 0,
+        "reappearAfter2500": 1
+      },
+      "maxSilenceMs": 1537,
+      "silencesOver5s": []
+    },
+    "xml": {
+      "snapshots": 610,
+      "invalid": 0,
+      "invalidReasons": {},
+      "unknownFormatTokens": {},
+      "unparseableCells": 0,
+      "cellSamples": [],
+      "emptyCourses": 610,
+      "coursesSeen": {
+        "1": "RNNNSNRNSNRNSNRNSNNNRSNNRSNNNS",
+        "2": "NN",
+        "3": ""
+      },
+      "phasesOnEmptyCourse": {},
+      "secondRunRows": 357460,
+      "secondRunRowsCatIdEmptyButCategorised": 196621,
+      "untimedRows": 0
+    },
+    "wallClockMs": 68930
+  },
+  "2026-09-20-2026-nkz-20ne": {
+    "chunks": 18,
+    "records": 905985,
+    "bySrc": {
+      "xml": 605,
+      "udp27333": 451556,
+      "cis": 190339,
+      "tcp": 173965,
+      "udp10600": 89520
+    },
+    "tcp": {
+      "messages": 173965,
+      "unparseable": 0,
+      "unparseableSamples": [],
+      "unknownTypes": {},
+      "types": {
+        "TimeOfDay": 29807,
+        "OnCourse": 136087,
+        "RaceConfig": 1485,
+        "Schedule": 784,
+        "Results": 2915,
+        "TimingInput": 2275,
+        "TVS": 612
+      },
+      "unknownFormatTokens": {},
+      "unparseableCells": {
+        "results": 0,
+        "oncourse": 0,
+        "samples": []
+      },
+      "fabricatedRaceConfig": 0,
+      "raceConfigs": 1485,
+      "fabricatedSamples": [],
+      "resultsRowsWithDtFinish": 0,
+      "resultsRows": 163099,
+      "resultsGatesWidths": {
+        "0": 66493,
+        "18": 64,
+        "69": 100,
+        "90": 96442
+      },
+      "oncourse": {
+        "listings": 130361,
+        "emptyMsgs": 5619,
+        "unassigned": 107,
+        "finisherListings": 14991,
+        "finisherWithPosition": 14991,
+        "finisherNoPosition": 0,
+        "notArmedNoStart": 131,
+        "armedNoStart": 11145,
+        "maxResendGapMs": 2297,
+        "resendOver2500": 0,
+        "reappearAfter2500": 6
+      },
+      "maxSilenceMs": 21532,
+      "silencesOver5s": [
+        {
+          "at": "2026-09-20T11:53:51.872Z",
+          "ms": 21532
+        }
+      ]
+    },
+    "xml": {
+      "snapshots": 605,
+      "invalid": 0,
+      "invalidReasons": {},
+      "unknownFormatTokens": {},
+      "unparseableCells": 0,
+      "cellSamples": [],
+      "emptyCourses": 605,
+      "coursesSeen": {
+        "1": "RNNNSNRNSNRNNSRNNSNNRNSNRNSNNS",
+        "2": "NNRNSNNNSRRNNSNNNSNRNNSNRRSNNS",
+        "3": ""
+      },
+      "phasesOnEmptyCourse": {},
+      "secondRunRows": 354530,
+      "secondRunRowsCatIdEmptyButCategorised": 0,
+      "untimedRows": 0
+    },
+    "wallClockMs": 93013
+  }
+}

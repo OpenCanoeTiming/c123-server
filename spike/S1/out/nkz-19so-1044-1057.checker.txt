@@ -1,16 +1,16 @@
 steps 4697
-P 1  checked   13886  violations 0
-P 2  checked   30025  violations 0
-P 3  checked   13529  violations 0
+P 1  checked    5459  violations 0
+P 2  checked   30004  violations 0
+P 3  checked   13502  violations 0
 P 4  checked       5  violations 0
-P 5  checked    2575  violations 0
-P 6  checked   15681  violations 1  {"status":1}
+P 5  checked    2566  violations 0
+P 6  checked   15654  violations 0
 P 7  checked       0  violations 0
 P 8  checked       1  violations 0
-P 9  checked    7035  violations 0
+P 9  checked    7014  violations 0
 P10  checked       0  violations 0
-P11  checked   17157  violations 1594  {"status":1544,"outcome":3,"placement":16,"pairTotal":16,"underReview":3,"countingRun":12}
+P11  checked   17073  violations 2  {"placement":1,"pairTotal":1}
 P12  checked      29  violations 0
 P13  checked       0  violations 0
 P14  checked     201  violations 0
-P15  checked    8581  violations 12  {"-":12}
+P15  checked     162  violations 0

@@ -3,17 +3,17 @@
   "properties": [
     {
       "property": 1,
-      "checked": 46820,
+      "checked": 10051,
       "violations": 0
     },
     {
       "property": 2,
-      "checked": 33358,
+      "checked": 33317,
       "violations": 0
     },
     {
       "property": 3,
-      "checked": 16465,
+      "checked": 16418,
       "violations": 0
     },
     {
@@ -23,12 +23,12 @@
     },
     {
       "property": 5,
-      "checked": 3738,
+      "checked": 3711,
       "violations": 0
     },
     {
       "property": 6,
-      "checked": 21456,
+      "checked": 21409,
       "violations": 0
     },
     {
@@ -43,7 +43,7 @@
     },
     {
       "property": 9,
-      "checked": 10327,
+      "checked": 10286,
       "violations": 0
     },
     {
@@ -53,8 +53,8 @@
     },
     {
       "property": 11,
-      "checked": 44612,
-      "violations": 4066
+      "checked": 44356,
+      "violations": 0
     },
     {
       "property": 12,
@@ -73,23 +73,11 @@
     },
     {
       "property": 15,
-      "checked": 37168,
-      "violations": 42
+      "checked": 426,
+      "violations": 0
     }
   ],
-  "byField": {
-    "P11": {
-      "status": 3944,
-      "outcome": 3,
-      "placement": 40,
-      "pairTotal": 40,
-      "underReview": 3,
-      "countingRun": 36
-    },
-    "P15": {
-      "-": 42
-    }
-  },
+  "byField": {},
   "rebaselineSteps": 0,
   "firstPerProperty": {
     "1": [],
@@ -102,72 +90,10 @@
     "8": [],
     "9": [],
     "10": [],
-    "11": [
-      {
-        "property": 11,
-        "step": 2,
-        "attemptId": "K1M_BR2_19:29",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
-      },
-      {
-        "property": 11,
-        "step": 3,
-        "attemptId": "K1M_BR2_19:28",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
-      },
-      {
-        "property": 11,
-        "step": 4,
-        "attemptId": "K1M_BR2_19:27",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
-      },
-      {
-        "property": 11,
-        "step": 5,
-        "attemptId": "K1M_BR2_19:26",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
-      },
-      {
-        "property": 11,
-        "step": 6,
-        "attemptId": "K1M_BR2_19:28",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
-      }
-    ],
+    "11": [],
     "12": [],
     "13": [],
     "14": [],
-    "15": [
-      {
-        "property": 15,
-        "step": 63,
-        "detail": "phase:K1M_BR2_19/ZM changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
-      },
-      {
-        "property": 15,
-        "step": 63,
-        "detail": "phase:K1M_BR2_19/ZS changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
-      },
-      {
-        "property": 15,
-        "step": 63,
-        "detail": "phase:K1M_BR2_19/DM changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
-      },
-      {
-        "property": 15,
-        "step": 63,
-        "detail": "phase:K1M_BR2_19/DS changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
-      },
-      {
-        "property": 15,
-        "step": 63,
-        "detail": "phase:K1M_BR2_19/VM changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
-      }
-    ]
+    "15": []
   }
 }

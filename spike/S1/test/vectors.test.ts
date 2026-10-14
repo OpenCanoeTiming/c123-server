@@ -6,7 +6,7 @@ const file = new URL('../../../docs/arch/vectors/tier1-conformance.json', import
 const vectors = JSON.parse(readFileSync(file, 'utf8')).vectors as any[];
 
 describe('tier-1 conformance vectors', () => {
-  it('has 85 vectors (round 8)', () => expect(vectors.length).toBe(85));
+  it('has 93 vectors (round 9 trailing)', () => expect(vectors.length).toBe(93));
   for (const v of vectors) {
     it(`${v.id} [${v.invariant}]`, () => {
       const r = runVector(v);

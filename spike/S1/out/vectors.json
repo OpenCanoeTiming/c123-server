@@ -60,6 +60,12 @@
     "failures": []
   },
   {
+    "id": "placement-not-yet-while-rank-empty",
+    "invariant": "placement",
+    "pass": true,
+    "failures": []
+  },
+  {
     "id": "provisional-incomplete-judging-then-settles",
     "invariant": "provisional",
     "pass": true,
@@ -73,6 +79,18 @@
   },
   {
     "id": "provisional-run-closed-without-course",
+    "invariant": "provisional",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "provisional-pair-fields-while-run-2-on-course",
+    "invariant": "provisional",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "status-never-provisional",
     "invariant": "provisional",
     "pass": true,
     "failures": []
@@ -186,6 +204,12 @@
     "failures": []
   },
   {
+    "id": "rerun-tcp-row-before-new-finish-not-presented",
+    "invariant": "run-generation",
+    "pass": true,
+    "failures": []
+  },
+  {
     "id": "rerun-status-transition-legal-only-with-generation",
     "invariant": "attempt-status-transition",
     "pass": true,
@@ -270,6 +294,14 @@
     "failures": []
   },
   {
+    "id": "retraction-first-run-row-present-empty",
+    "invariant": "INV-7",
+    "pass": false,
+    "failures": [
+      "notifications.attempt.updated: expected 3, got 2"
+    ]
+  },
+  {
     "id": "retraction-xml-guard-rewrite-before-push",
     "invariant": "INV-7 guard",
     "pass": true,
@@ -277,6 +309,12 @@
   },
   {
     "id": "contradiction-oncourse-running-again",
+    "invariant": "INV-2d",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "contradiction-lift-keeps-stale-rows-unpresented",
     "invariant": "INV-2d",
     "pass": true,
     "failures": []
@@ -324,6 +362,20 @@
     "failures": []
   },
   {
+    "id": "oncourse-unstaged-before-start-returns-to-not-started",
+    "invariant": "oncourse",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "standing-not-resent-on-running-tick",
+    "invariant": "standing-push",
+    "pass": false,
+    "failures": [
+      "notifications.standing.updated: expected 2, got 4"
+    ]
+  },
+  {
     "id": "live-bare-value-wrapped-as-bridge",
     "invariant": "live-ingest",
     "pass": true,
@@ -338,12 +390,8 @@
   {
     "id": "rerun-stale-mark-not-presented",
     "invariant": "run-generation",
-    "pass": false,
-    "failures": [
-      "K1M_BR1_19:9.status.value: expected \"finished\", got \"dsq\"",
-      "K1M_BR1_19:9.outcome.value.totalSeconds: expected 88.2, got undefined",
-      "diagnostics: expected 1 items, got 0: []"
-    ]
+    "pass": true,
+    "failures": []
   },
   {
     "id": "live-oncourse-set-replaced-whole",

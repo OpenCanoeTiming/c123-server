@@ -61,7 +61,7 @@ export type SnapshotRow = {
   scheduledStart?: string | null;
   status?: string;            // mark, as an AttemptStatus
   outcome?: unknown;          // resolved Outcome value when the row states a time
-  placement?: { rank: number | null; order: number } | null;
+  placement?: { rank: number; order: number } | null;   // known only when upstream ranks the row (D2)
   pairTotal?: number | null;
   countingRun?: 1 | 2;
   gates?: Gate[] | null;      // null = the row states no gate vector

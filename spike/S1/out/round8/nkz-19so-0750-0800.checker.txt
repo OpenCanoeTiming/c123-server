@@ -1,0 +1,16 @@
+steps 4700
+P 1  checked    7094  violations 0
+P 2  checked   29686  violations 0
+P 3  checked   11732  violations 0
+P 4  checked       2  violations 0
+P 5  checked    3831  violations 0
+P 6  checked   13934  violations 0
+P 7  checked       2  violations 0
+P 8  checked       0  violations 0
+P 9  checked    6697  violations 0
+P10  checked       0  violations 0
+P11  checked   15134  violations 1850  {"status":1832,"outcome":6,"placement":6,"underReview":6}
+P12  checked      49  violations 0
+P13  checked       0  violations 0
+P14  checked     266  violations 0
+P15  checked     453  violations 24  {"-":24}

@@ -3,17 +3,17 @@
   "properties": [
     {
       "property": 1,
-      "checked": 31179,
+      "checked": 6842,
       "violations": 0
     },
     {
       "property": 2,
-      "checked": 30606,
+      "checked": 30584,
       "violations": 0
     },
     {
       "property": 3,
-      "checked": 13598,
+      "checked": 13570,
       "violations": 0
     },
     {
@@ -23,13 +23,13 @@
     },
     {
       "property": 5,
-      "checked": 2848,
+      "checked": 2831,
       "violations": 0
     },
     {
       "property": 6,
-      "checked": 16746,
-      "violations": 1
+      "checked": 16718,
+      "violations": 0
     },
     {
       "property": 7,
@@ -43,7 +43,7 @@
     },
     {
       "property": 9,
-      "checked": 7617,
+      "checked": 7595,
       "violations": 0
     },
     {
@@ -53,12 +53,12 @@
     },
     {
       "property": 11,
-      "checked": 24792,
-      "violations": 2510
+      "checked": 24626,
+      "violations": 2
     },
     {
       "property": 12,
-      "checked": 20,
+      "checked": 19,
       "violations": 0
     },
     {
@@ -68,29 +68,19 @@
     },
     {
       "property": 14,
-      "checked": 349,
+      "checked": 351,
       "violations": 0
     },
     {
       "property": 15,
-      "checked": 24564,
-      "violations": 30
+      "checked": 244,
+      "violations": 0
     }
   ],
   "byField": {
     "P11": {
-      "status": 2424,
-      "outcome": 4,
-      "placement": 28,
-      "pairTotal": 27,
-      "underReview": 4,
-      "countingRun": 23
-    },
-    "P15": {
-      "-": 30
-    },
-    "P6": {
-      "gates": 1
+      "placement": 1,
+      "pairTotal": 1
     }
   },
   "rebaselineSteps": 0,
@@ -100,15 +90,7 @@
     "3": [],
     "4": [],
     "5": [],
-    "6": [
-      {
-        "property": 6,
-        "step": 3672,
-        "attemptId": "K1M_BR2_19:68",
-        "field": "gates",
-        "detail": "(c) gates flipped tcp→xml with TCP connected"
-      }
-    ],
+    "6": [],
     "7": [],
     "8": [],
     "9": [],
@@ -116,69 +98,22 @@
     "11": [
       {
         "property": 11,
-        "step": 2,
-        "attemptId": "K1M_BR2_19:81",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
+        "step": 64,
+        "attemptId": "K1M_BR2_19:78",
+        "field": "placement",
+        "detail": "placement provisional false→true without a regression, a run start or a course binding"
       },
       {
         "property": 11,
-        "step": 3,
-        "attemptId": "K1M_BR2_19:80",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
-      },
-      {
-        "property": 11,
-        "step": 4,
-        "attemptId": "K1M_BR2_19:79",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
-      },
-      {
-        "property": 11,
-        "step": 5,
-        "attemptId": "K1M_BR2_19:81",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
-      },
-      {
-        "property": 11,
-        "step": 6,
-        "attemptId": "K1M_BR2_19:80",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
+        "step": 64,
+        "attemptId": "K1M_BR2_19:78",
+        "field": "pairTotal",
+        "detail": "pairTotal provisional false→true without a regression, a run start or a course binding"
       }
     ],
     "12": [],
     "13": [],
     "14": [],
-    "15": [
-      {
-        "property": 15,
-        "step": 99,
-        "detail": "phase:K1M_BR2_19/ZM changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
-      },
-      {
-        "property": 15,
-        "step": 99,
-        "detail": "phase:K1M_BR2_19/ZS changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
-      },
-      {
-        "property": 15,
-        "step": 99,
-        "detail": "phase:K1M_BR2_19/DM changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
-      },
-      {
-        "property": 15,
-        "step": 99,
-        "detail": "phase:K1M_BR2_19/DS changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
-      },
-      {
-        "property": 15,
-        "step": 99,
-        "detail": "phase:K1M_BR2_19/VM changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
-      }
-    ]
+    "15": []
   }
 }

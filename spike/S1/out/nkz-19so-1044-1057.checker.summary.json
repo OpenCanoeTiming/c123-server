@@ -3,17 +3,17 @@
   "properties": [
     {
       "property": 1,
-      "checked": 13886,
+      "checked": 5459,
       "violations": 0
     },
     {
       "property": 2,
-      "checked": 30025,
+      "checked": 30004,
       "violations": 0
     },
     {
       "property": 3,
-      "checked": 13529,
+      "checked": 13502,
       "violations": 0
     },
     {
@@ -23,13 +23,13 @@
     },
     {
       "property": 5,
-      "checked": 2575,
+      "checked": 2566,
       "violations": 0
     },
     {
       "property": 6,
-      "checked": 15681,
-      "violations": 1
+      "checked": 15654,
+      "violations": 0
     },
     {
       "property": 7,
@@ -43,7 +43,7 @@
     },
     {
       "property": 9,
-      "checked": 7035,
+      "checked": 7014,
       "violations": 0
     },
     {
@@ -53,8 +53,8 @@
     },
     {
       "property": 11,
-      "checked": 17157,
-      "violations": 1594
+      "checked": 17073,
+      "violations": 2
     },
     {
       "property": 12,
@@ -73,24 +73,14 @@
     },
     {
       "property": 15,
-      "checked": 8581,
-      "violations": 12
+      "checked": 162,
+      "violations": 0
     }
   ],
   "byField": {
     "P11": {
-      "status": 1544,
-      "outcome": 3,
-      "placement": 16,
-      "pairTotal": 16,
-      "underReview": 3,
-      "countingRun": 12
-    },
-    "P15": {
-      "-": 12
-    },
-    "P6": {
-      "status": 1
+      "placement": 1,
+      "pairTotal": 1
     }
   },
   "rebaselineSteps": 0,
@@ -100,15 +90,7 @@
     "3": [],
     "4": [],
     "5": [],
-    "6": [
-      {
-        "property": 6,
-        "step": 3896,
-        "attemptId": "C1M_BR1_19:7",
-        "field": "status",
-        "detail": "(c) status flipped tcp→xml with TCP connected"
-      }
-    ],
+    "6": [],
     "7": [],
     "8": [],
     "9": [],
@@ -116,69 +98,22 @@
     "11": [
       {
         "property": 11,
-        "step": 2,
-        "attemptId": "C1W_BR2_19:13",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
+        "step": 95,
+        "attemptId": "C1W_BR2_19:11",
+        "field": "placement",
+        "detail": "placement provisional false→true without a regression, a run start or a course binding"
       },
       {
         "property": 11,
-        "step": 3,
-        "attemptId": "C1W_BR2_19:15",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
-      },
-      {
-        "property": 11,
-        "step": 4,
-        "attemptId": "C1W_BR2_19:14",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
-      },
-      {
-        "property": 11,
-        "step": 7,
-        "attemptId": "C1W_BR2_19:12",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
-      },
-      {
-        "property": 11,
-        "step": 10,
-        "attemptId": "C1W_BR2_19:12",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
+        "step": 95,
+        "attemptId": "C1W_BR2_19:11",
+        "field": "pairTotal",
+        "detail": "pairTotal provisional false→true without a regression, a run start or a course binding"
       }
     ],
     "12": [],
     "13": [],
     "14": [],
-    "15": [
-      {
-        "property": 15,
-        "step": 165,
-        "detail": "phase:C1W_BR2_19/ZS changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
-      },
-      {
-        "property": 15,
-        "step": 165,
-        "detail": "phase:C1W_BR2_19/DM changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
-      },
-      {
-        "property": 15,
-        "step": 165,
-        "detail": "phase:C1W_BR2_19/DS changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
-      },
-      {
-        "property": 15,
-        "step": 165,
-        "detail": "pair:C1W_BR2_19/ZS changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
-      },
-      {
-        "property": 15,
-        "step": 165,
-        "detail": "pair:C1W_BR2_19/DM changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
-      }
-    ]
+    "15": []
   }
 }

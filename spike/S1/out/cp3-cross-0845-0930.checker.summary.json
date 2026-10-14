@@ -3,17 +3,17 @@
   "properties": [
     {
       "property": 1,
-      "checked": 4355,
+      "checked": 4346,
       "violations": 0
     },
     {
       "property": 2,
-      "checked": 5892,
+      "checked": 5895,
       "violations": 0
     },
     {
       "property": 3,
-      "checked": 3147,
+      "checked": 3150,
       "violations": 0
     },
     {
@@ -23,12 +23,12 @@
     },
     {
       "property": 5,
-      "checked": 722,
+      "checked": 719,
       "violations": 0
     },
     {
       "property": 6,
-      "checked": 3369,
+      "checked": 3372,
       "violations": 0
     },
     {
@@ -43,7 +43,7 @@
     },
     {
       "property": 9,
-      "checked": 1880,
+      "checked": 1883,
       "violations": 0
     },
     {
@@ -53,8 +53,8 @@
     },
     {
       "property": 11,
-      "checked": 5589,
-      "violations": 611
+      "checked": 5566,
+      "violations": 0
     },
     {
       "property": 12,
@@ -73,15 +73,11 @@
     },
     {
       "property": 15,
-      "checked": 82,
+      "checked": 76,
       "violations": 0
     }
   ],
-  "byField": {
-    "P11": {
-      "status": 611
-    }
-  },
+  "byField": {},
   "rebaselineSteps": 0,
   "firstPerProperty": {
     "1": [],
@@ -94,43 +90,7 @@
     "8": [],
     "9": [],
     "10": [],
-    "11": [
-      {
-        "property": 11,
-        "step": 3,
-        "attemptId": "MX1_XT_26:7",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
-      },
-      {
-        "property": 11,
-        "step": 4,
-        "attemptId": "MX1_XT_26:8",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
-      },
-      {
-        "property": 11,
-        "step": 6,
-        "attemptId": "MX1_XT_26:8",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
-      },
-      {
-        "property": 11,
-        "step": 11,
-        "attemptId": "MX1_XT_26:7",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
-      },
-      {
-        "property": 11,
-        "step": 14,
-        "attemptId": "MX1_XT_26:7",
-        "field": "status",
-        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
-      }
-    ],
+    "11": [],
     "12": [],
     "13": [],
     "14": [],

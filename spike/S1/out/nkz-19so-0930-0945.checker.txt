@@ -1,16 +1,16 @@
 steps 7003
-P 1  checked   31179  violations 0
-P 2  checked   30606  violations 0
-P 3  checked   13598  violations 0
+P 1  checked    6842  violations 0
+P 2  checked   30584  violations 0
+P 3  checked   13570  violations 0
 P 4  checked       4  violations 0
-P 5  checked    2848  violations 0
-P 6  checked   16746  violations 1  {"gates":1}
+P 5  checked    2831  violations 0
+P 6  checked   16718  violations 0
 P 7  checked       2  violations 0
 P 8  checked       2  violations 0
-P 9  checked    7617  violations 0
+P 9  checked    7595  violations 0
 P10  checked       0  violations 0
-P11  checked   24792  violations 2510  {"status":2424,"outcome":4,"placement":28,"pairTotal":27,"underReview":4,"countingRun":23}
-P12  checked      20  violations 0
+P11  checked   24626  violations 2  {"placement":1,"pairTotal":1}
+P12  checked      19  violations 0
 P13  checked       0  violations 0
-P14  checked     349  violations 0
-P15  checked   24564  violations 30  {"-":30}
+P14  checked     351  violations 0
+P15  checked     244  violations 0

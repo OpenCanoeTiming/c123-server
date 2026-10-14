@@ -1,0 +1,77 @@
+{
+  "excerpt": "/workspace/timing/c123-protocol-docs/qa/excerpts/nkz-19so-0750-0800",
+  "source": {
+    "recording": "2026-09-19-2026-nkz-19so",
+    "event": {
+      "name": "2026_NKZ_19so",
+      "date": "2026-09-19"
+    },
+    "race": null,
+    "from": 3235773,
+    "to": 3835773
+  },
+  "checksum": "sha256:e1ae3c4030ed639efd5d906287a3d5bc555abb1a9e1030a16b07c424b5e97342",
+  "window": {
+    "first": "2026-09-19T07:50:00.031Z",
+    "last": "2026-09-19T07:59:59.999Z"
+  },
+  "records": 20769,
+  "steps": 4700,
+  "deltas": 7094,
+  "deltaTypes": {
+    "sources.updated": 615,
+    "attempt.updated": 5624,
+    "oncourse.updated": 50,
+    "phase.updated": 42,
+    "class.updated": 10,
+    "standing.updated": 453,
+    "course.updated": 4,
+    "entry.updated": 293,
+    "event.changed": 1,
+    "diagnostics.updated": 2
+  },
+  "ignored": {
+    "udp27333/unknown": 6233,
+    "cis/CIS-GetStatus": 596,
+    "cis/CIS-GetOnCourse": 3568,
+    "udp10600/mobile-app": 1800,
+    "udp27333/TimeOfDay": 489,
+    "udp27333/OnCourse": 3008,
+    "cis/CIS-GetSchedule": 20,
+    "cis/CIS-GetResult": 494,
+    "udp27333/Results": 67,
+    "udp27333/Schedule": 12,
+    "udp27333/RaceConfig": 24,
+    "udp27333/TimingInput": 49,
+    "udp27333/TVS": 18
+  },
+  "ingest": {
+    "tcp.messages": 4374,
+    "tcp.type.OnCourse": 3548,
+    "tcp.type.RaceConfig": 30,
+    "tcp.oncourse.finisherWithPosition": 683,
+    "tcp.type.TimeOfDay": 600,
+    "tcp.type.Schedule": 15,
+    "tcp.type.Results": 94,
+    "tcp.results.mode.results": 78,
+    "tcp.type.TimingInput": 67,
+    "tcp.type.TVS": 20,
+    "xml.snapshots": 17,
+    "tcp.results.mode.start-list": 16
+  },
+  "domain": {
+    "elements": 4700,
+    "deltas": 7094,
+    "retractions": 0,
+    "contradictions": 1,
+    "generations": 0,
+    "inv2cRefusals": 0,
+    "staleMarks": 0
+  },
+  "inv2cRefusals": [],
+  "attempts": 1172,
+  "stepsSha256": "77e49b500913947f72a4415f26044038e23c36f4de1845a6b80a1eb2577d4c03",
+  "finalStateSha256": "6430950a0c20df48472648bb9a4711b5fe97056a1bacfc842c733f10c7d8ea36",
+  "wallClockMs": 12790,
+  "rssMB": 232
+}

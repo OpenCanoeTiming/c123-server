@@ -35,12 +35,13 @@ type Slot = Partial<Record<SlotName, Obs>> & { lastValueSeq: number };
 type AttemptS = {
   id: string; phaseId: string; bib: string;
   gen: number; genStart: string | null; markAtGen: string | null;
-  listed: boolean; leftThisGen: boolean; completedThisGen: boolean; finishSeenThisGen: boolean;
+  listed: boolean; leftThisGen: boolean; completedThisGen: boolean; finishSeenThisGen: boolean; startSeenThisGen: boolean;
+  tcpAttributed: boolean;   // D1: a TCP row of this generation matched its on-course finish
   listing: { status: string | null; dtStart: string | null; dtFinish: string | null; observedAt: string; seq: number } | null;
   lastOnCourseFinish: { eventTime: string | null; runSeconds: number | null } | null;
   slots: Record<string, Slot>; presented: Record<string, Envelope>; from: Record<string, Obs | null>;
   contradiction: { finishTime: string | null; runSeconds: number | null; seq?: number } | null;
-  dead: { finishTime: string | null; runSeconds: number | null; beforeSeq: number }[];
+  dead: { finishTime: string | null; runSeconds: number | null }[];
   oldRunSeconds: number[];
   cells: Map<number, { penalty: number | null; kind: Kind }>; cellsFrom: Obs | null;
   staleMark: string | null;
@@ -69,6 +70,7 @@ const NON_PROVISIONAL = new Set(['status', ...IDENTITY_FIELDS]);
 const RETRACT_FIRST = ['status', 'outcome', 'gates', 'placement', 'underReview', 'qualified'];
 const RETRACT_SECOND_ABSENT = [...RETRACT_FIRST, 'pairTotal', 'countingRun'];
 const RETRACT_TIME_EMPTY = ['status', 'outcome', 'gates'];
+const ROW_FIELDS = [...RETRACT_SECOND_ABSENT.filter((f) => f !== 'gates'), 'faults'];   // gates fold cell-wise
 
 export class Domain {
   cfg: DomainConfig;
@@ -166,10 +168,11 @@ export class Domain {
     this.step!.oncourseDirty = true;
     this.lastListingAt = observedAt;
     const ph = this.phaseInfo(a.phaseId);
-    // DERIVATIONS §4.1: left with dtFinish never observed → left-without-finish (slalom only).
+    // DERIVATIONS §4.1 (round 9): left with a dtStart observed and no dtFinish → left-without-finish (slalom only);
+    // unstaged before any start → not-started.
     if (!ph.cross && !a.finishSeenThisGen) {
-      this.put(a, 'status', { seq, observedAt, source: 'tcp', kind: 'inference', state: 'known', value: 'left-without-finish',
-        confidence: 'authoritative', gen: a.gen }, 'inf');
+      this.put(a, 'status', { seq, observedAt, source: 'tcp', kind: 'inference', state: 'known',
+        value: a.startSeenThisGen ? 'left-without-finish' : 'not-started', confidence: 'authoritative', gen: a.gen }, 'inf');
     }
     this.recompute(a, ['status', ...RESULT_VALUE_FIELDS]);
   }
@@ -186,7 +189,7 @@ export class Domain {
     const phaseId = id.slice(0, i), bib = id.slice(i + 1);
     a = {
       id, phaseId, bib, gen: 1, genStart: null, markAtGen: null,
-      listed: false, leftThisGen: false, completedThisGen: false, finishSeenThisGen: false, listing: null,
+      listed: false, leftThisGen: false, completedThisGen: false, finishSeenThisGen: false, startSeenThisGen: false, tcpAttributed: false, listing: null,
       lastOnCourseFinish: null, slots: {}, presented: {}, from: {}, contradiction: null, dead: [], oldRunSeconds: [],
       cells: new Map(), cellsFrom: null, staleMark: null, unparseable: {}, upstreamCatRank: null, xmlUntimed: null,
       emitted: false, lastEmitted: {}, deleted: false, forceEmit: new Set(), standingSig: null,
@@ -256,6 +259,8 @@ export class Domain {
     for (const st of el.fields) {
       if (st.field === 'run') { this.applyRunObservation(a, st, el, seq); continue; }
       if (name === 'inf' && el.kind === 'inference') { a.listed = true; this.listedIds.add(a.id); }   // the on-course stream lists it
+      // an on-course status of on-course or finished means the stream showed a start (vectors carry no listing)
+      if (el.kind === 'inference' && st.field === 'status' && ['on-course', 'finished'].includes(st.value as string)) a.startSeenThisGen = true;
       const o = this.toObs(st, el.source, el.kind, el.observedAt, seq, a.gen, el.finishTime, el.runSeconds);
       if (el.kind === 'operator') {
         o.writeId = `w-${seq}`;
@@ -266,6 +271,11 @@ export class Domain {
         }
       }
       if (el.source === 'xml') o.detectedAt = this.lastRewriteDetectedAt ?? el.observedAt;
+      if (el.kind === 'inference' && st.field === 'outcome' && st.eventTime && (st.value as any)?.kind === 'duration') {
+        a.finishSeenThisGen = true;
+        a.lastOnCourseFinish = { eventTime: st.eventTime, runSeconds: (st.value as any).runSeconds ?? null };
+        this.attributeRetained(a, (f) => fields.push(f));
+      }
       if (el.rowStatus !== undefined) o.rowStatus = el.rowStatus;
       this.put(a, st.field, o, st.state && st.state !== 'known' && !el.source ? 'det' : name);
       fields.push(st.field);
@@ -322,7 +332,7 @@ export class Domain {
     if (prevOutcome.state === 'known' && typeof (prevOutcome.value as any).runSeconds === 'number') a.oldRunSeconds.push((prevOutcome.value as any).runSeconds);
     a.gen = to ?? a.gen + 1;
     a.genStart = start;
-    a.leftThisGen = false; a.completedThisGen = false; a.finishSeenThisGen = false; a.lastOnCourseFinish = null;
+    a.leftThisGen = false; a.completedThisGen = false; a.finishSeenThisGen = false; a.startSeenThisGen = false; a.tcpAttributed = false; a.lastOnCourseFinish = null;
     a.contradiction = null; a.dead = []; a.cells = new Map(); a.cellsFrom = null; a.staleMark = null;
     for (const f of RUN_SCOPED) { a.slots[f] = { lastValueSeq: 0 }; this.setPresented(a, f, NOT_YET, null); a.forceEmit.add(f); }
     a.forceEmit.add('run');
@@ -347,20 +357,25 @@ export class Domain {
       this.newGeneration(a, seq, el.observedAt, startEt, 'tcp');
       incremented = true;
     } else if (startEt && !a.genStart) a.genStart = startEt;
+    if (startEt) a.startSeenThisGen = true;
     a.listed = true;
     this.listedIds.add(a.id);
     this.onCourseStreamSeen = true;
     this.lastListingAt = el.observedAt;
     this.step!.oncourseDirty = true;
     if (el.completed) a.completedThisGen = true;
-    if (finishEt) { a.finishSeenThisGen = true; a.lastOnCourseFinish = { eventTime: finishEt, runSeconds: el.finishRunSeconds ?? null }; }
+    if (finishEt) {
+      a.finishSeenThisGen = true;
+      a.lastOnCourseFinish = { eventTime: finishEt, runSeconds: el.finishRunSeconds ?? null };
+      this.attributeRetained(a, (f) => fields.add(f));
+    }
     // INV-2d: listed with the generation's start and no finish after a results-table finish was presented.
     if (!ph.cross && !incremented && startEt && !finishEt && startEt === a.genStart && !a.contradiction) {
       const fin = this.presentedResultFinish(a);
       if (fin) {
         a.contradiction = { ...fin, seq };
         this.stats.contradictions++;
-        this.diagnostics.set(`contradicted-finish|${a.id}`, { kind: 'contradicted-finish', attemptId: a.id, finishTime: fin.finishTime });
+        this.diagnostics.set(`contradicted-finish|${a.id}`, { kind: 'contradicted-finish', attemptId: a.id, finishTime: fin.finishTime, runSeconds: fin.runSeconds } as Diagnostic);
         for (const f of ['status', 'outcome', 'placement', 'pairTotal', 'countingRun']) fields.add(f);
       }
     } else if (a.contradiction && finishEt) {
@@ -399,33 +414,79 @@ export class Domain {
       if (env.state !== 'known') continue;
       if (f === 'status' && env.value !== 'finished') continue;
       if (f === 'outcome' && (env.value as any).kind !== 'duration') continue;
-      return { finishTime: from.finishTime ?? null, runSeconds: from.runSeconds ?? null };
+      const rs = from.runSeconds ?? (a.presented.outcome.state === 'known' ? ((a.presented.outcome as Known).value as any).runSeconds ?? null : null);
+      return { finishTime: from.finishTime ?? null, runSeconds: rs };
     }
     return null;
   }
 
   private liftContradiction(a: AttemptS, seq: number) {
     if (!a.contradiction) return;
-    a.dead.push({ finishTime: a.contradiction.finishTime, runSeconds: a.contradiction.runSeconds, beforeSeq: seq });
+    a.dead.push({ finishTime: a.contradiction.finishTime, runSeconds: a.contradiction.runSeconds });
+    void seq;
     a.contradiction = null;
     this.diagnostics.delete(`contradicted-finish|${a.id}`);
   }
 
-  /** Whether a results-table observation describes the contradicted (or a dead, or a replaced) finish. */
+  /**
+   * ADR-017 D1 (trailing round): a TCP row of this generation that arrived before its on-course finish is retained,
+   * and attributed when the finish arrives with the same Time (recorded: the result push 108 ms before the finish).
+   */
+  private attributeRetained(a: AttemptS, add: (f: string) => void) {
+    const fin = a.lastOnCourseFinish;
+    if (!fin || fin.runSeconds == null) return;
+    let hit = false;
+    for (const f of ROW_FIELDS) {
+      const s = a.slots[f];
+      const o = s?.tcp;
+      if (!s || !o || o.absent || o.gen !== a.gen || o.kind !== 'result-row' || o.finishTime != null || o.runSeconds !== fin.runSeconds) continue;
+      const n: Obs = { ...o, finishTime: fin.eventTime };
+      // INV-5: an identical redelivery since the presented row does not move its observedAt
+      const p = a.presented[f];
+      if (p?.state === 'known' && a.from[f]?.source === 'tcp' && a.from[f]?.kind === 'result-row' && canonical(p.value) === canonical(o.value)) n.observedAt = p.observedAt;
+      // as at a row's arrival: status and outcome carry the finish as eventTime
+      if (f === 'status' && ['finished', 'non-ranked'].includes(o.value as string) && fin.eventTime) n.eventTime = fin.eventTime;
+      if (f === 'outcome' && o.state === 'known' && (o.value as any)?.kind !== 'no-result' && fin.eventTime) n.eventTime = fin.eventTime;
+      s.tcp = n;
+      if (n.state === 'known' && n.seq > s.lastValueSeq) s.lastValueSeq = n.seq;
+      add(f);
+      hit = true;
+    }
+    if (hit && a.gen > 1) {
+      a.tcpAttributed = true;
+      // the retained row's gate vector, held back until now, folds as it would have at arrival
+      const s = a.slots.gates;
+      const g = s?.tcp;
+      if (s && g && !g.absent && g.state === 'known' && g.gen === a.gen && g.runSeconds === fin.runSeconds) {
+        if (g.seq > s.lastValueSeq) s.lastValueSeq = g.seq;
+        if (this.rule2(a, 'gates', s) === g && !this.refusedMarkRow(a, g)) this.foldCells(a, g, false);
+        add('gates');
+      }
+    }
+  }
+
+  /** INV-2d / ADR-017 D1: same finish by dtFinish where both carry one, else by run time. */
+  private sameFinish(o: { finishTime?: string | null; runSeconds?: number | null }, fin: { finishTime: string | null; runSeconds: number | null }): boolean {
+    if (o.finishTime != null && fin.finishTime != null) return o.finishTime === fin.finishTime;
+    return o.runSeconds != null && fin.runSeconds != null && o.runSeconds === fin.runSeconds;
+  }
+
+  /** Whether a results-table observation describes the contradicted finish, a lifted one, or the replaced run. */
   private unusable(a: AttemptS, o: Obs): boolean {
     if (o.absent || o.kind === 'inference' || o.kind === 'operator') return false;
-    const same = (fin: { finishTime: string | null; runSeconds: number | null }) =>
-      (o.finishTime != null && fin.finishTime != null) ? o.finishTime === fin.finishTime
-        : (o.runSeconds != null && fin.runSeconds != null && o.runSeconds === fin.runSeconds);
-    if (a.contradiction && same(a.contradiction)) return true;
+    if (a.contradiction && this.sameFinish(o, a.contradiction)) return true;
+    // ADR-017 D1: rows carrying a contradicted finish stay unpresented, also after the lift
+    for (const d of a.dead) if (this.sameFinish(o, d)) return true;
     // INV-2d: placement, pairTotal and countingRun are not-yet while contradicted, unless a later observation states them
     if (a.contradiction && a.contradiction.seq !== undefined && o.seq < a.contradiction.seq && o.field && ['placement', 'pairTotal', 'countingRun'].includes(o.field)) return true;
-    for (const d of a.dead) if (o.seq < d.beforeSeq && same(d)) return true;
     if (a.gen > 1) {
-      // DERIVATIONS §4.11: a row whose finish precedes the generation's start describes the replaced run.
-      if (o.finishTime && a.genStart && o.finishTime < a.genStart) return true;
-      if (!o.finishTime && o.runSeconds != null && a.oldRunSeconds.includes(o.runSeconds)
-          && !(a.lastOnCourseFinish && a.lastOnCourseFinish.runSeconds === o.runSeconds)) return true;
+      // DERIVATIONS §4.11 (D1): an XML row by dtFinish; a TCP row, which carries no finish time, is this generation's
+      // only once its finish was seen on the on-course stream and the row's Time equals it; until then it is the
+      // replaced run's. After that, upstream's one row per bib is the new run's.
+      if (o.finishTime) return a.genStart ? o.finishTime < a.genStart : false;
+      if (o.source === 'tcp' && o.runSeconds != null && !a.tcpAttributed) {
+        return !(a.lastOnCourseFinish && a.lastOnCourseFinish.runSeconds === o.runSeconds);
+      }
     }
     return false;
   }
@@ -506,6 +567,7 @@ export class Domain {
     let finishTime = row.finishTime ?? null;
     if (!finishTime && src === 'tcp' && a.lastOnCourseFinish && row.runSeconds != null && a.lastOnCourseFinish.runSeconds === row.runSeconds) {
       finishTime = a.lastOnCourseFinish.eventTime;
+      if (a.gen > 1) a.tcpAttributed = true;
     }
     let mark = row.status ?? null;
     // DERIVATIONS §4.12: a mark carried over a re-run is not presented on a row with the new run's finish.
@@ -525,8 +587,8 @@ export class Domain {
       this.put(a, f, { ...base, ...meta, state: 'known', value: v, ...extra }, src);
       fields.push(f);
     };
-    if (a.contradiction && (mark || (finishTime && a.contradiction.finishTime && finishTime !== a.contradiction.finishTime)
-        || (!finishTime && row.runSeconds != null && a.contradiction.runSeconds != null && row.runSeconds !== a.contradiction.runSeconds))) {
+    const rowFinish = { finishTime: row.finishTime ?? null, runSeconds: row.runSeconds ?? null };
+    if (a.contradiction && (mark || ((rowFinish.finishTime != null || rowFinish.runSeconds != null) && !this.sameFinish(rowFinish, a.contradiction)))) {
       this.liftContradiction(a, seq);   // a row carrying a different finish, or a mark
       fields.push('status', 'outcome', 'placement', 'pairTotal', 'countingRun');
     }
@@ -686,6 +748,11 @@ export class Domain {
     if (o.source === 'operator-write') return o.provisionalOverride !== false && o.supersededAt === undefined;
     if (o.source === 'bridge') return false;
     if (o.kind === 'inference') return true;
+    // CONTRACTS §1.2 (D4): a second run's placement, pairTotal and countingRun carried over from run 1 (the row had no
+    // run-2 time) are provisional while run 2 is on course.
+    const st = a.presented.status;
+    if (['placement', 'pairTotal', 'countingRun'].includes(f) && this.phaseInfo(a.phaseId).pairRole === 'second'
+        && a.listed && !a.leftThisGen && st.state === 'known' && st.value === 'on-course') return true;
     // Where gates are presented, property 11's reading: a result value is provisional exactly while the presented
     // gates have a blank cell and upstream still lists the Attempt (run not closed). Where no gate vector is
     // presented (no course; vectors), the observation's own judging flag decides, until the run closes (§1.2, §4.4).
@@ -693,10 +760,12 @@ export class Domain {
     if (Array.isArray(gv) && this.gateCount(a.phaseId)) {
       return (gv as Gate[]).some((c) => c.penalty === null) && a.listed && !a.leftThisGen;
     }
-    // Closure is upstream no longer listing the Attempt (CONTRACTS §1.2, round 8). With the on-course stream ingested
-    // that is known for every Attempt; the vectors, which carry no listing, state it as runClosed.
-    if (this.onCourseStreamSeen && !a.listed) return false;
-    if (o.runClosed || this.closed(a)) return false;
+    // Closure is upstream removing the Attempt from its list (CONTRACTS §1.2, round 9). With the on-course stream
+    // ingested that is known for every Attempt; the vectors, which carry no listing, state it as runClosed.
+    if (this.onCourseStreamSeen) {
+      if (!a.listed || a.leftThisGen) return false;
+      if (!this.gateCount(a.phaseId)) return true;   // no course bound: completeness cannot be judged yet (D4)
+    } else if (o.runClosed || this.closed(a)) return false;
     const complete = o.judgingComplete === undefined ? true : o.judgingComplete === true;
     return !complete;
   }
@@ -773,7 +842,7 @@ export class Domain {
     if (set.has('gates') || set.has('outcome')) { set.add('gates'); set.add('outcome'); }
     // provisional of every result field can move with closure and judging completeness
     for (const f of RESULT_VALUE_FIELDS) if (a.presented[f]?.state === 'known') set.add(f);
-    const order = ['status', 'gates', ...[...set].filter((f) => f !== 'status' && f !== 'gates').sort()];
+    const order = ['status', 'gates', 'outcome', ...[...set].filter((f) => f !== 'status' && f !== 'gates' && f !== 'outcome').sort()];
     for (const f of order) {
       if (!set.has(f) || f === 'run') continue;
       let { env, from } = f === 'gates' ? this.chooseGates(a) : this.choose(a, f);
@@ -879,7 +948,7 @@ export class Domain {
     const phases = new Set(ids.map((id) => this.attempts.get(id)!.phaseId));
     this.refreshStandings(phases, true);
     const standings = [...this.standings.entries()].filter(([, st]) => this.standingInScope(st, phases)).map(([, st]) => st);
-    for (const st of standings) this.standingsEmitted.set(st.standingKey as string, canonical(st));
+    for (const st of standings) { const { asOf: _a, ...content } = st; this.standingsEmitted.set(st.standingKey as string, canonical(content)); }
     this.pushDelta({ type: 'scope.replaced', scope: rb.scope, attempts, standings });
   }
 
@@ -1317,7 +1386,7 @@ export class Domain {
   private standingSig(a: AttemptS): string | null {
     const i = this.standingInput(a);
     if (!i) return null;
-    return canonical([i, a.upstreamCatRank, ['placement', 'outcome', 'pairTotal'].map((f) => (a.presented[f].state === 'known' ? (a.presented[f] as Known).observedAt : null))]);
+    return canonical([i, a.upstreamCatRank]);
   }
 
   standingInputs(phaseId: string): StandingInput[] {
@@ -1333,9 +1402,11 @@ export class Domain {
     {
       const pl = a.presented.placement, oc = a.presented.outcome, st = a.presented.status, pt = a.presented.pairTotal;
       const placed = pl.state === 'known' && pl.value && typeof (pl.value as any).order === 'number';
-      // Unplaced entries: Attempts with a result or a no-result mark but no placement yet (S1 reading, DESIGN-GAPS).
-      const hasResult = oc.state === 'known' && ['duration', 'no-result', 'ordinal'].includes((oc.value as any).kind);
-      if (!placed && !hasResult) return null;
+      // CONTRACTS §5 step 3 (D2): an unplaced entry presents an outcome other than pending or running, or a mark.
+      const isResult = oc.state === 'known' && ['duration', 'no-result', 'ordinal'].includes((oc.value as any).kind);
+      const otherOutcome = oc.state !== 'not-yet' && !(oc.state === 'known' && ['pending', 'running'].includes((oc.value as any).kind));
+      const marked = st.state === 'known' && NO_RESULT_MARKS.includes(st.value as string);
+      if (!placed && !otherOutcome && !marked) return null;
       const entryId = a.presented.entry.state === 'known' ? (a.presented.entry.value as any).entryId : a.id;
       const entry = this.entities.get(`entry:${entryId}`);
       const cat = entry?.presented.ageCategoryId;
@@ -1343,7 +1414,8 @@ export class Domain {
       return {
         entryId, bib: a.bib, status: st.state === 'known' ? (st.value as string) : null,
         placement: placed ? (pl.value as any) : null,
-        result: oc.state === 'known' ? oc.value : { kind: 'pending' },
+        // §2.7 (D3): the outcome when it is a result; pending while pending or running
+        result: isResult ? (oc as Known).value : { kind: 'pending' },
         pairTotal: pt.state === 'known' ? (pt.value as number) : null,
         ageCategoryId: cat?.state === 'known' ? (cat.value as string) : null,
         provisional: [oc, pl, pt].some((e) => e.state === 'known' && e.provisional),
@@ -1372,8 +1444,7 @@ export class Domain {
     for (const pid of phases) {
       const ph = this.entities.get(`phase:${pid}`);
       const info = this.phaseInfo(pid);
-      // On site a standing belongs to a known Class; the live tier also assembles a pushed classification on its own.
-      if (!ph || (!ph.plain.classId && (this.cfg.tier === 'onsite' || info.kind !== 'classification'))) continue;
+      if (!ph) continue;   // classId is null until a Results header or the snapshot names the class
       const classId = (ph.plain.classId as string) ?? null;
       const cls = this.entities.get(`class:${classId}`);
       const cats = cls?.presented.ageCategories?.state === 'known' ? (cls.presented.ageCategories.value as { ageCategoryId: string }[]).map((c) => c.ageCategoryId) : [];
@@ -1417,12 +1488,15 @@ export class Domain {
           }
           const { entries, anomalies } = assembleStanding(inputs, { scope: sc.scope, ageCategoryId: cat, durationScored,
             heatPhase: sc.heatPhase ?? false, upstreamCategoryRanks: upstream, withAnomalies: this.cfg.tier === 'onsite' });
-          const standing: Record<string, unknown> = { standingKey: key, classId, scope: sc.scope, ageCategoryId: cat, asOf, entries };
-          if (this.cfg.tier === 'onsite') standing.anomalies = anomalies;
-          const c = canonical(standing);
+          // §5 step 1 (D3): pushed only when the serialised standing changes; asOf is the ingest time of the
+          // observation that changed it (a classification's: its last row observation).
+          const content: Record<string, unknown> = { standingKey: key, classId, scope: sc.scope, ageCategoryId: cat, entries };
+          if (this.cfg.tier === 'onsite') content.anomalies = anomalies;
+          const c = canonical(content);
           const prevC = this.standingsEmitted.get(key);
           if (prevC === c) continue;
           if (prevC === undefined && entries.length === 0) continue;   // an empty standing is not published until it has entries
+          const standing = { ...content, asOf: sc.scope.kind === 'classification' ? asOf : (this.step?.observedAt ?? asOf) };
           this.standings.set(key, standing);
           this.dirty.add(`standing:${key}`);
           if (!silent) { this.standingsEmitted.set(key, c); this.pushDelta({ type: 'standing.updated', standing }); }

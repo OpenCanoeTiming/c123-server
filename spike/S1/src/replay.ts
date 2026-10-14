@@ -1,5 +1,5 @@
 // Direct-injection replay of one excerpt (BRIEFS S1 step 3). Usage:
-//   node dist/replay.js --excerpt <dir> --recording <dir> --out <dir> [--zone +02:00] [--leave-ms 2500]
+//   node dist/replay.js --excerpt <dir> --recording <dir> --out <dir> [--zone +02:00] [--leave-ms 3000]
 // Writes <out>/steps.jsonl (one canonical JSON line per element) and <out>/final-state.json (canonical
 // presented state), and prints both sha256s. No clock of the process feeds the domain: observedAt is
 // recording start + excerpt offset + the record's ts. The wall-clock duration is measured for the report only.
@@ -19,7 +19,7 @@ function arg(name: string, def?: string): string {
 async function main() {
   const t0 = process.hrtime.bigint();
   const excerpt = arg('excerpt'), recording = arg('recording'), out = arg('out');
-  const zone = arg('zone', '+02:00'), leaveMs = Number(arg('leave-ms', '2500'));
+  const zone = arg('zone', '+02:00'), leaveMs = Number(arg('leave-ms', '3000'));   // onCourseLeaveAfterSeconds = 3 s (DERIVATIONS §4.1, round 9)
   mkdirSync(out, { recursive: true });
   const recManifest = JSON.parse(readFileSync(join(recording, 'manifest.json'), 'utf8'));
   // Excerpt metadata: excerpt.json in the layout of protocol-docs main 4ab91d2 (manifest.json is then the v3 player

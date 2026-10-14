@@ -251,7 +251,8 @@ export class Ingest {
         rows.push(row);
         continue;
       }
-      if (order !== undefined) row.placement = { rank: rank ?? null, order };
+      // DERIVATIONS §4.7 (D2): placement is known iff upstream's Rank is non-empty; RankOrder alone is a sort key.
+      if (rank !== undefined) row.placement = { rank, order: order ?? rank };
       this.gatesInto(row, r.Gates, course, 'tcp');
       // The cells parse without the course (fixed width, 30 cells); only presenting them as Gate[] needs it.
       const cellSum = row.gates ? row.gates.reduce((s, g) => s + (g.penalty ?? 0), 0)
@@ -273,7 +274,8 @@ export class Ingest {
       if ((r.Q ?? '').trim() === 'Q') row.qualified = true;
       rows.push(row);
     }
-    const mode = rows.some((x) => x.placement || x.status || x.underReview) ? 'results' : 'start-list';
+    // §0.3: results mode when any row carries a placement or a mark (a Cross heat being judged has neither yet)
+    const mode = rows.some((x) => x.placement || x.status || x.underReview || x.outcome) ? 'results' : 'start-list';
     this.count(`tcp.results.mode.${mode}`);
     const el: Element = { type: 'snapshot', observedAt, source: 'tcp', phaseId: m.raceId, mode, rows, classId: m.classId, mainTitle: m.mainTitle };
     this.emit(el, { class: 'scope-snapshot', source: 'tcp', phaseId: m.raceId, mode, current: m.current, observedAt, rows });
@@ -290,12 +292,12 @@ export class Ingest {
       row.heat = heatNr && heatNr > 0 ? heatNr : null;
       const lane = num(startTime);
       if (lane !== undefined) row.startLane = lane;
-      if (order !== undefined && (rank !== undefined || time !== undefined)) {
-        row.placement = { rank: rank ?? null, order };
-        row.outcome = { kind: 'ordinal', order };
+      if (rank !== undefined) {
+        row.placement = { rank, order: order ?? rank };
+        row.outcome = { kind: 'ordinal', order: order ?? rank };
       }
     } else {
-      if (order !== undefined && (rank !== undefined || time !== undefined)) row.placement = { rank: rank ?? null, order };
+      if (rank !== undefined) row.placement = { rank, order: order ?? rank };
       if (time !== undefined) { row.runSeconds = time; row.outcome = { kind: 'duration', runSeconds: time, penaltySeconds: 0, totalSeconds: time }; }
     }
     if (gates && gates.trim() && course.state === 'known') {
@@ -408,8 +410,8 @@ export class Ingest {
     if (dtFinish) row.finishTime = dtFinish;
     const timeMs = num(x.Time), pen = num(x.Pen), totalMs = num(x.Total);
     if (info.kind === 'classification') {
-      const o = num(x.RnkOrder);
-      if (o !== undefined) row.placement = { rank: num(x.Rnk) ?? null, order: o };
+      const rk = num(x.Rnk);
+      if (rk !== undefined) row.placement = { rank: rk, order: num(x.RnkOrder) ?? rk };
       if ((x.RecordType ?? '').trim()) row.decidedIn = x.RecordType!.trim();
       return row;
     }
@@ -420,7 +422,7 @@ export class Ingest {
       return row;
     }
     const rank = num(second ? x.TotalRnk : x.Rnk), order = num(second ? x.TotalRnkOrder : x.RnkOrder);
-    if (order !== undefined) row.placement = { rank: rank ?? null, order };
+    if (rank !== undefined) row.placement = { rank, order: order ?? rank };   // D2
     this.gatesInto(row, x.Gates, course, 'xml');
     if (timeMs !== undefined) {
       const run = r3(timeMs / 1000);

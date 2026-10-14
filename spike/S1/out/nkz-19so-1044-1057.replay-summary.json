@@ -17,14 +17,14 @@
   },
   "records": 24359,
   "steps": 4697,
-  "deltas": 13886,
+  "deltas": 5459,
   "deltaTypes": {
     "sources.updated": 798,
-    "attempt.updated": 4119,
+    "attempt.updated": 4111,
     "oncourse.updated": 38,
+    "standing.updated": 162,
     "class.updated": 10,
     "phase.updated": 42,
-    "standing.updated": 8581,
     "course.updated": 4,
     "entry.updated": 293,
     "event.changed": 1
@@ -60,7 +60,7 @@
   },
   "domain": {
     "elements": 4697,
-    "deltas": 13886,
+    "deltas": 5459,
     "retractions": 0,
     "contradictions": 0,
     "generations": 0,
@@ -69,8 +69,8 @@
   },
   "inv2cRefusals": [],
   "attempts": 1172,
-  "stepsSha256": "ea837833ba17340d62d1d68a84a1663108cf5f628f61a124f6bd9dfad7c15607",
-  "finalStateSha256": "e8c40942b9e9ae1c66709e9b8796c6f23df1db16d205b38e8a79ede16805f105",
-  "wallClockMs": 19450,
-  "rssMB": 266
+  "stepsSha256": "e033296760a8c2963abd5c6f830bbefbccb9447a2d82f326622a93252564271e",
+  "finalStateSha256": "c3424872fa5c953f1210ee469f3e26478a087ce0a579dddd77668af2d9a16a17",
+  "wallClockMs": 15677,
+  "rssMB": 265
 }

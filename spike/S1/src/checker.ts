@@ -19,6 +19,7 @@ type FieldMeta = { kind: 'inference' | 'result-row' | 'other'; step: number; ret
 type A = {
   id: string; phaseId: string; bib: string; fields: Record<string, Env>; meta: Record<string, FieldMeta>;
   gen: number; genStart: string | null; contradicted: { finish: string | null; runSeconds: number | null } | null;
+  dead: { finish: string | null; runSeconds: number | null }[];
   contradictedThisGen: boolean; leftThisGen: boolean; created: boolean;
 };
 
@@ -35,6 +36,8 @@ export class Checker {
   private lastRewrite: string | null = null;
   private lastDisconnectStep = 0;
   private rebaselineSteps = 0;
+  private phaseCourse = new Map<string, string>();     // phaseId -> courseId (from phase.updated)
+  private courseGates = new Map<string, boolean>();    // courseId -> gates known (from course.updated)
   constructor(private pollMs = 5000, private maxPerProperty = 50) {}
 
   private v(property: number, step: number, detail: string, attemptId?: string, field?: string) {
@@ -49,7 +52,7 @@ export class Checker {
     let a = this.attempts.get(id);
     if (!a) {
       const i = id.lastIndexOf(':');
-      a = { id, phaseId: id.slice(0, i), bib: id.slice(i + 1), fields: {}, meta: {}, gen: 1, genStart: null, contradicted: null,
+      a = { id, phaseId: id.slice(0, i), bib: id.slice(i + 1), fields: {}, meta: {}, gen: 1, genStart: null, contradicted: null, dead: [],
         contradictedThisGen: false, leftThisGen: false, created: false };
       this.attempts.set(id, a);
     }
@@ -75,6 +78,12 @@ export class Checker {
     let increments = 0;
 
     for (const d of rec.deltas) {
+      if (d.type === 'phase.updated' && d.fields?.courseId?.state === 'known') this.phaseCourse.set(d.phaseId, String(d.fields.courseId.value));
+      if (d.type === 'course.updated' && d.course) this.courseGates.set(String(d.course.courseId), d.course.gates?.state === 'known');
+    }
+    const incrementIds = new Set(rec.deltas.filter((d) => d.type === 'attempt.updated' && d.fields?.run?.state === 'known'
+      && this.attempts.get(d.attemptId)?.fields.run?.state === 'known' && d.fields.run.value > this.attempts.get(d.attemptId)!.fields.run!.value).map((d) => d.attemptId));
+    for (const d of rec.deltas) {
       // ── P1 (D): seq strictly increasing; observedAt values are recorded ones
       this.c(1);
       if (!(d.seq > this.lastSeq)) this.v(1, s, `seq ${d.seq} not greater than ${this.lastSeq}`);
@@ -96,7 +105,8 @@ export class Checker {
         if (['attemptId', 'phaseId', 'bib'].includes(field)) continue;
         const prev = this.f(a, field);
         // ── P9 (D): no delta carries an equal envelope, or one differing only in observedAt
-        if (!creation) {
+        // round 9: the run-increment delta carries every run-scoped field explicitly (property 10)
+        if (!creation && !(incrementIds.has(a.id) && d.fields.run && RUN_SCOPED.includes(field))) {
           this.c(9);
           if (sameButObservedAt(prev, e)) this.v(9, s, `${field} re-sent ${canonical(prev) === canonical(e) ? 'unchanged' : 'differing only in observedAt'}`, a.id, field);
         }
@@ -130,7 +140,10 @@ export class Checker {
         if (canonical(prev) !== canonical(e)) ch.add(field);
         // kind of the presented value: set where value/source/eventTime changed; provisional-only changes keep it
         const valueChanged = !(prev.state === e.state && canonical(prev.value) === canonical(e.value) && prev.source === e.source && prev.eventTime === e.eventTime && prev.confidence === e.confidence);
-        if (valueChanged) {
+        // D1 (trailing round): a retained TCP row attributed at its on-course finish gains only eventTime; same observation
+        const attributed = prev.state === 'known' && e.state === 'known' && canonical(prev.value) === canonical(e.value)
+          && prev.source === e.source && prev.observedAt === e.observedAt && !prev.eventTime && !!e.eventTime;
+        if (valueChanged && !attributed) {
           // kind of the presented value: outcome by its content; other fields by the element that changed them
           const kind: FieldMeta['kind'] = e.state !== 'known' ? 'other'
             : field === 'outcome' ? ((e.value?.kind === 'running' || e.confidence === 'inferred') ? 'inference' : 'result-row')
@@ -159,7 +172,7 @@ export class Checker {
               if (rf === 'status') { if (!x || x.state !== 'known' || !['at-start', 'on-course'].includes(x.value)) this.v(10, s, `increment delta: status ${x ? canonical(x) : 'omitted'}`, a.id, rf); }
               else if (!x || x.state !== 'not-yet') this.v(10, s, `increment delta: ${rf} ${x ? x.state : 'omitted'}`, a.id, rf);
             }
-            a.gen = r.value; a.genStart = r.eventTime ?? el.dtStart ?? null; a.contradicted = null; a.contradictedThisGen = false; a.leftThisGen = false;
+            a.gen = r.value; a.genStart = r.eventTime ?? el.dtStart ?? null; a.contradicted = null; a.dead = []; a.contradictedThisGen = false; a.leftThisGen = false;
             for (const k of Object.keys(a.meta)) if (RUN_SCOPED.includes(k)) delete a.meta[k];
           }
         }
@@ -254,7 +267,12 @@ export class Checker {
           this.c(6); this.c(8);
           const disc = this.lastDisconnectStep > (a.meta[field]?.step ?? 0) - 1 && this.lastDisconnectStep > 0;
           const markExc = field === 'status' && ['not-started', 'at-start', 'left-without-finish'].includes(p.value) && NO_RESULT.includes(n.value);
-          if (!disc && !markExc && el.event !== 'rebaseline') this.v(6, s, `(c) ${field} flipped tcp→xml with TCP connected`, id, field);
+          const atOwnSnapshot = el.class === 'scope-snapshot' && el.source === 'xml' && el.phaseId === a.phaseId;
+          // round 9: an INV-7 retraction from the snapshot (status back to not-started), and rule 1 (a snapshot result
+          // row superseding an on-course inference), both under property 8's guard
+          const retraction = atOwnSnapshot && field === 'status' && n.value === 'not-started';
+          const rule1 = atOwnSnapshot && metaBefore.get(id)?.[field]?.kind === 'inference';
+          if (!disc && !markExc && !retraction && !rule1 && el.event !== 'rebaseline') this.v(6, s, `(c) ${field} flipped tcp→xml with TCP connected`, id, field);
           if (!this.guard(p)) this.v(8, s, `${field} flipped tcp(observed ${p.observedAt})→xml with content age ${this.lastRewrite ? new Date(Date.parse(this.lastRewrite) - this.pollMs).toISOString() : 'n/a'}`, id, field);
         }
       }
@@ -268,14 +286,17 @@ export class Checker {
         if (!(a.fields.outcome?.state === 'known' && a.fields.outcome.value?.kind === 'running')) this.v(7, s, `outcome not running at the contradiction: ${canonical(a.fields.outcome)}`, id, 'outcome');
         for (const ff of ['placement', 'pairTotal', 'countingRun']) if (a.fields[ff]?.state === 'known') this.v(7, s, `${ff} still known at the contradiction`, id, ff);
         if (!newDiag) this.v(7, s, 'no contradicted-finish diagnostic in the contradiction step', id);
-        a.contradicted = { finish: newDiag?.finishTime ?? null, runSeconds: prev.outcome?.value?.runSeconds ?? null };
+        else if (!('finishTime' in newDiag) || typeof newDiag.runSeconds !== 'number') this.v(7, s, `contradicted-finish lacks finishTime/runSeconds: ${canonical(newDiag)}`, id);
+        a.contradicted = { finish: newDiag?.finishTime ?? null, runSeconds: newDiag?.runSeconds ?? prev.outcome?.value?.runSeconds ?? null };
         a.contradictedThisGen = true;
       }
-      if (a.contradicted) {
+      // while the diagnostic stands and after its lift: no results-table outcome carrying the contradicted finish,
+      // by eventTime where both have one, else by run time
+      for (const c of [...(a.contradicted ? [a.contradicted] : []), ...a.dead]) {
         const o = a.fields.outcome!;
-        if (o.state === 'known' && o.value?.kind === 'duration' && o.confidence === 'authoritative' && a.contradicted.finish && o.eventTime === a.contradicted.finish && newDiag) {
-          this.v(7, s, `presented a results-table outcome with the contradicted finish ${a.contradicted.finish}`, id, 'outcome');
-        }
+        if (!ch.has('outcome') || o.state !== 'known' || o.value?.kind !== 'duration' || o.confidence !== 'authoritative') continue;
+        const same = o.eventTime && c.finish ? o.eventTime === c.finish : (c.runSeconds != null && o.value.runSeconds === c.runSeconds);
+        if (same) this.v(7, s, `presented a results-table outcome carrying the contradicted finish (${c.finish ?? 'run ' + c.runSeconds})`, id, 'outcome');
       }
       // P11 is checked below for every Attempt touched or leaving the set
     }
@@ -286,18 +307,29 @@ export class Checker {
       const prev = before.get(id) ?? a.fields;
       const ch = changedThisStep.get(id) ?? new Set<string>();
       const listed = this.oncourse.includes(id);
+      const g = a.fields.gates;
+      const nullCell = g?.state === 'known' && Array.isArray(g.value) && g.value.some((x: any) => x.penalty === null);
+      const cid = this.phaseCourse.get(a.phaseId);
+      const noCourse = g?.state !== 'known' && !(cid !== undefined && this.courseGates.get(cid) === true);
+      const second = SECOND_FMT.test(a.phaseId + '_');
+      const startsRun = el.class === 'on-course-listing' && el.attemptId === id && !!el.dtStart && prev.status?.value !== 'on-course' && a.fields.status?.value === 'on-course';
+      const pg = prev.gates;
+      const courseBoundBlank = pg?.state !== 'known' && nullCell;
       for (const field of RUN_SCOPED) {
         const e = a.fields[field];
         if (!e || e.state !== 'known') continue;
         this.c(11);
+        if (field === 'status') { if (e.provisional !== false) this.v(11, s, 'status is never provisional', id, field); continue; }
         const kind = a.meta[field]?.kind;
         const inference = kind === 'inference' || (field === 'outcome' && e.value?.kind === 'running') || field === 'courseOrder' || field === 'timeToBeat';
-        const g = a.fields.gates;
-        const nullCell = g?.state === 'known' && Array.isArray(g.value) && g.value.some((x: any) => x.penalty === null);
-        const want = inference || (nullCell && listed) || (e.source === 'operator-write');
-        if (e.provisional !== want) this.v(11, s, `${field} provisional=${e.provisional}, property 11 says ${want} (kind=${kind}, nullCell=${nullCell}, listed=${listed})`, id, field);
+        // "a second run's placement, pairTotal or countingRun while that run is on course": listed and status on-course
+        const carried = ['placement', 'pairTotal', 'countingRun'].includes(field) && second && listed && a.fields.status?.value === 'on-course';
+        const want = inference || (listed && (nullCell || noCourse)) || carried || (e.source === 'operator-write');
+        if (e.provisional !== want) this.v(11, s, `${field} provisional=${e.provisional}, property 11 says ${want} (kind=${kind}, nullCell=${nullCell}, noCourse=${noCourse}, carried=${carried}, listed=${listed})`, id, field);
         const p = prev[field];
-        if (ch.has(field) && p?.state === 'known' && p.provisional === false && e.provisional === true) this.v(11, s, `${field} provisional false→true without a regression`, id, field);
+        if (ch.has(field) && p?.state === 'known' && p.provisional === false && e.provisional === true && !startsRun && !courseBoundBlank) {
+          this.v(11, s, `${field} provisional false→true without a regression, a run start or a course binding`, id, field);
+        }
       }
     }
     for (const [id] of changedThisStep) {
@@ -319,6 +351,7 @@ export class Checker {
         || (ch && (ch.has('outcome') || ch.has('status')))
         || el.event === 'rebaseline';
       if (!ok) this.v(7, s, `contradicted-finish disappeared at a ${el.class}`, a.id);
+      if (a.contradicted) a.dead.push(a.contradicted);
       a.contradicted = null;
     }
     // P12 (D): duplicate finish
@@ -384,7 +417,8 @@ export class Checker {
     }
     // P15: standings
     const stDeltas = rec.deltas.filter((d) => d.type === 'standing.updated');
-    for (const d of stDeltas) this.checkStanding(d.standing, s, changedThisStep, rec.deltas.some((x) => x.type === 'scope.replaced'));
+    const entryCatStep = rec.deltas.some((d) => d.type === 'entry.updated' && d.fields && 'ageCategoryId' in d.fields);
+    for (const d of stDeltas) this.checkStanding(d.standing, s, changedThisStep, before, rec.deltas.some((x) => x.type === 'scope.replaced'), entryCatStep, el);
     // P13: re-baseline (none expected in recorded windows)
     if (rec.deltas.some((d) => d.type === 'scope.replaced')) { this.c(13); if (el.event !== 'rebaseline' && el.class !== 'scope-snapshot') this.v(13, s, 'scope.replaced outside a re-baseline'); }
     void increments;
@@ -401,7 +435,8 @@ export class Checker {
     return m ? (m.kind === 'result-row' || (m.tableSeen && !m.retractedSinceTable && m.kind !== 'inference')) : false;
   }
 
-  private checkStanding(st: any, s: number, changed: Map<string, Set<string>>, replaced: boolean) {
+  private checkStanding(st: any, s: number, changed: Map<string, Set<string>>, before: Map<string, Record<string, Env>>, replaced: boolean,
+                        entryCatStep: boolean, el: any) {
     this.c(15);
     const key = st.standingKey as string;
     const prevSt = this.standings.get(key);
@@ -409,10 +444,30 @@ export class Checker {
     const sc = st.scope;
     const phaseId = sc.kind === 'pair' ? sc.secondPhaseId : sc.phaseId;
     const attempt = (bib: string) => this.attempts.get(`${phaseId}:${bib}`);
-    // a standing changes only at a step that changed one of its Attempts' placement/outcome/pairTotal/provisional/underReview
-    const relevant = [...changed.entries()].some(([id, fs]) => id.startsWith(`${phaseId}:`) && ['placement', 'outcome', 'pairTotal', 'underReview'].some((f) => fs.has(f)));
-    if (!relevant && !replaced) this.v(15, s, `${key} changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview${prevSt ? '' : ' (first publication)'}`);
+    const strip = (x: any) => { const { asOf: _a, ...r } = x; return canonical(r); };
+    // round 9 (D3): pushed only when the serialised standing changed
+    if (prevSt && strip(prevSt) === strip(st)) this.v(15, s, `${key} re-sent without a serialised change`);
+    const isResult = (e?: Env) => e?.state === 'known' && ['duration', 'ordinal', 'no-result'].includes(e.value?.kind);
+    // ... and only at a step that changed an Attempt's placement, a result outcome, pairTotal, provisional or underReview;
+    // an Entry's ageCategoryId becoming known; a snapshot's category ranks raising or clearing an anomaly; or scope.replaced
+    const attemptChange = [...changed.entries()].some(([id, fs]) => {
+      if (!id.startsWith(`${phaseId}:`)) return false;
+      if (['placement', 'pairTotal', 'underReview'].some((f) => fs.has(f))) return true;
+      if (!fs.has('outcome')) return false;
+      const p = before.get(id)?.outcome, n = this.attempts.get(id)?.fields.outcome;
+      return isResult(p) || isResult(n) || p?.provisional !== n?.provisional;
+    });
+    const categoryFirst = entryCatStep && st.ageCategoryId !== null;
+    const anomalyOnly = el.class === 'scope-snapshot' && el.source === 'xml' && prevSt
+      && strip({ ...prevSt, anomalies: null }) === strip({ ...st, anomalies: null });
+    if (!attemptChange && !replaced && !categoryFirst && !anomalyOnly) {
+      this.v(15, s, `${key} changed at a step that changed none of its Attempts' placement, result outcome, pairTotal, provisional or underReview${prevSt ? '' : ' (first publication)'}`);
+    }
     const entries = st.entries as any[];
+    for (const e of entries) {
+      const a = attempt(e.bib);
+      if (a && !isResult(a.fields.outcome) && e.result?.kind !== 'pending') this.v(15, s, `${key}: entry ${e.bib} result ${canonical(e.result)} while its Attempt is not a result`, a.id);
+    }
     if (st.ageCategoryId === null) {
       let lastOrder = -Infinity, unplaced = false, lastU: any = null;
       for (const e of entries) {

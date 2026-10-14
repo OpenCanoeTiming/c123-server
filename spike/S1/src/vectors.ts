@@ -56,8 +56,14 @@ class MergeRun {
     // The format has no default Attempt; when the vector's own expect keys name exactly one Attempt, that is it.
     const keys = [v.expect, ...(v.expectSequence ?? []).map((e: any) => e.expect)].flatMap((e: any) => Object.keys(e ?? {}));
     const named = [...new Set(keys.filter((k) => k.includes(':')).map((k) => k.slice(0, k.indexOf('.', k.indexOf(':')))))];
-    this.defaultPhase = ctx.phase ?? (named.length === 1 ? named[0]!.slice(0, named[0]!.lastIndexOf(':')) : 'K1M_BR1_6');
-    this.defaultAttempt = named.length === 1 && !ctx.phase ? named[0]! : `${this.defaultPhase}:9`;
+    // Round 9 (CONFORMANCE-VECTORS §1): a vector names its Attempt in context.attemptId (default K1M_BR1_6:9).
+    if (ctx.attemptId) {
+      this.defaultAttempt = ctx.attemptId;
+      this.defaultPhase = ctx.phase ?? ctx.attemptId.slice(0, ctx.attemptId.lastIndexOf(':'));
+    } else {
+      this.defaultPhase = ctx.phase ?? (named.length === 1 ? named[0]!.slice(0, named[0]!.lastIndexOf(':')) : 'K1M_BR1_6');
+      this.defaultAttempt = named.length === 1 && !ctx.phase ? named[0]! : `${this.defaultPhase}:9`;
+    }
   }
 
   run(g: any): Delta[] {
