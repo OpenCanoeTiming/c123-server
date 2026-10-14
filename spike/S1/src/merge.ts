@@ -38,7 +38,6 @@ type AttemptS = {
   listing: { status: string | null; dtStart: string | null; dtFinish: string | null; observedAt: string; seq: number } | null;
   lastOnCourseFinish: { eventTime: string | null; runSeconds: number | null } | null;
   slots: Record<string, Slot>; presented: Record<string, Envelope>; from: Record<string, Obs | null>;
-  floor: Record<string, string | null>;
   contradiction: { finishTime: string | null; runSeconds: number | null } | null;
   dead: { finishTime: string | null; runSeconds: number | null; beforeSeq: number }[];
   oldRunSeconds: number[];
@@ -173,7 +172,7 @@ export class Domain {
     a = {
       id, phaseId, bib, gen: 1, genStart: null, markAtGen: null,
       listed: false, leftThisGen: false, completedThisGen: false, finishSeenThisGen: false, listing: null,
-      lastOnCourseFinish: null, slots: {}, presented: {}, from: {}, floor: {}, contradiction: null, dead: [], oldRunSeconds: [],
+      lastOnCourseFinish: null, slots: {}, presented: {}, from: {}, contradiction: null, dead: [], oldRunSeconds: [],
       cells: new Map(), cellsFrom: null, staleMark: null, unparseable: {}, upstreamCatRank: null, xmlUntimed: null,
       emitted: false, lastEmitted: {}, deleted: false, forceEmit: new Set(),
     };
@@ -309,7 +308,7 @@ export class Domain {
     a.genStart = start;
     a.leftThisGen = false; a.completedThisGen = false; a.finishSeenThisGen = false; a.lastOnCourseFinish = null;
     a.contradiction = null; a.dead = []; a.cells = new Map(); a.cellsFrom = null; a.staleMark = null;
-    for (const f of RUN_SCOPED) { a.slots[f] = { lastValueSeq: 0 }; a.floor[f] = null; this.setPresented(a, f, NOT_YET, null); a.forceEmit.add(f); }
+    for (const f of RUN_SCOPED) { a.slots[f] = { lastValueSeq: 0 }; this.setPresented(a, f, NOT_YET, null); a.forceEmit.add(f); }
     a.forceEmit.add('run');
     this.diagnostics.delete(`contradicted-finish|${a.id}`);
     this.diagnostics.delete(`stale-mark|${a.id}`);
@@ -344,7 +343,7 @@ export class Domain {
         a.contradiction = fin;
         this.stats.contradictions++;
         this.diagnostics.set(`contradicted-finish|${a.id}`, { kind: 'contradicted-finish', attemptId: a.id, finishTime: fin.finishTime ?? '' });
-        for (const f of ['status', 'outcome', 'placement', 'pairTotal', 'countingRun']) { a.floor[f] = null; fields.add(f); }
+        for (const f of ['status', 'outcome', 'placement', 'pairTotal', 'countingRun']) fields.add(f);
       }
     } else if (a.contradiction && finishEt) {
       this.liftContradiction(a, seq);
@@ -564,16 +563,28 @@ export class Domain {
     if (!t) return x;
     if (!x) return t;
     const continuous = this.tcpConnected && t.seq > this.lastDisconnectSeq;
+    // INV-2c: across sources, an xml observation supersedes a tcp one only when its content is newer.
+    const newer = this.contentAge(x) > Date.parse(t.observedAt);
     if (continuous) {
       if (x.seq > t.seq) {
         const xMark = !x.absent && NO_RESULT_MARKS.includes(x.rowStatus ?? '');
         const tSilent = t.absent || t.rowStatus == null || ['not-started', 'at-start', 'left-without-finish'].includes(t.rowStatus);
-        const guard = x.detectedAt != null && Date.parse(x.detectedAt) - this.cfg.pollIntervalMs > Date.parse(t.observedAt);
-        if ((x.absent || (xMark && tSilent && (f === 'status' || f === 'outcome'))) && guard) return x;
+        if ((x.absent || (xMark && tSilent && (f === 'status' || f === 'outcome'))) && newer) return x;
       }
       return t;
     }
-    return x.seq > t.seq ? x : t;
+    // Rule 2 "otherwise the later-ingested observation wins, under the same guard"
+    if (x.seq > t.seq) {
+      if (!newer && isA && this.step) { this.stats.inv2cRefusals++; this.step.inv2c.push({ attemptId: (a as AttemptS).id, field: f, tcpObservedAt: t.observedAt, xmlContentAge: new Date(this.contentAge(x)).toISOString() }); }
+      return newer ? x : t;
+    }
+    return t;
+  }
+
+  /** CONTRACTS §4 INV-2c content age: xml = lastRewriteDetectedAt minus the poll interval; tcp = observedAt. */
+  private contentAge(o: Obs): number {
+    if (o.source === 'xml') return Date.parse(o.detectedAt ?? o.observedAt) - this.cfg.pollIntervalMs;
+    return Date.parse(o.observedAt);
   }
 
   private choose(a: AttemptS, f: string): { env: Envelope; from: Obs | null } {
@@ -582,9 +593,15 @@ export class Domain {
     if (op && op.provisionalOverride === false && !op.displaced) return { env: this.envOf(a, f, op), from: op };
     if (op && op.provisionalOverride !== false && op.supersededAt === undefined) return { env: this.envOf(a, f, op), from: op };
     if (s.bridge) return { env: this.envOf(a, f, s.bridge), from: s.bridge };
-    const R = this.rule2(a, f, s);
-    if (R && !R.absent) return { env: this.envOf(a, f, R), from: R };
+    let R = this.rule2(a, f, s);
     const inf = s.inf && s.inf.gen === a.gen ? s.inf : undefined;
+    const P = a.from[f];
+    // The mark exception's guard (INV-2 rule 2 / INV-2c): the snapshot must be newer than the tcp status it displaces.
+    if (R && R.source === 'xml' && f === 'status' && P && P === inf && P.source === 'tcp'
+        && ['not-started', 'at-start', 'left-without-finish'].includes(P.value as string) && !(this.contentAge(R) > Date.parse(P.observedAt))) {
+      R = undefined;
+    }
+    if (R && !R.absent) return { env: this.envOf(a, f, R), from: R };
     if (f === 'status' && R?.absent) {
       // After a retraction, status is what the on-course stream currently shows, else not-started.
       if (a.listed && inf) return { env: this.envOf(a, f, inf), from: inf };
@@ -715,14 +732,6 @@ export class Domain {
 
   private present(a: AttemptS, f: string, env: Envelope, from: Obs | null) {
     const prev = a.presented[f] ?? NOT_YET;
-    // INV-2c: a candidate with a strictly earlier eventTime never supersedes (floor sticky within the generation).
-    if (env.state === 'known' && env.eventTime && a.floor[f] && env.eventTime < a.floor[f]!) {
-      if (canonical(prev) !== canonical(env)) {
-        this.stats.inv2cRefusals++;
-        this.step?.inv2c.push({ attemptId: a.id, field: f, presented: a.floor[f], candidate: env.eventTime, candidateSource: env.source });
-      }
-      return;
-    }
     // INV-5: an envelope that differs only in observedAt is not a change.
     if (prev.state === 'known' && env.state === 'known') {
       const { observedAt: _p, ...pr } = prev; const { observedAt: _e, ...en } = env;
@@ -734,8 +743,6 @@ export class Domain {
   private setPresented(a: AttemptS, f: string, env: Envelope, from: Obs | null) {
     a.presented[f] = env;
     a.from[f] = from;
-    if (env.state !== 'known') a.floor[f] = null;
-    else if (env.eventTime && (!a.floor[f] || env.eventTime > a.floor[f]!)) a.floor[f] = env.eventTime;
     this.step?.touchedPhases.add(a.phaseId);
     if (f === 'status' || f === 'courseOrder' || f === 'startOrder') this.step && (this.step.oncourseDirty = true);
   }
@@ -787,7 +794,6 @@ export class Domain {
       for (const f of ['status', 'outcome', 'gates', 'splits', 'faults', 'placement', 'pairTotal', 'countingRun', 'underReview', 'qualified']) {
         const s = this.slot(a, f);
         delete s.tcp; delete s.xml; delete s.inf; delete s.op; s.lastValueSeq = 0;
-        a.floor[f] = null;
       }
       a.cells = new Map(); a.cellsFrom = null; a.contradiction = null; a.dead = [];
       for (const k of [...this.diagnostics.keys()]) if (k.includes(`|${a.id}`)) this.diagnostics.delete(k);
@@ -1211,12 +1217,8 @@ export class Domain {
 
   oncourseSet(): string[] {
     if (this.liveOncourse) return this.liveOncourse.attemptIds;
-    const left = new Set(['finished', 'non-ranked', 'left-without-finish', ...NO_RESULT_MARKS]);
-    const members = [...this.attempts.values()].filter((a) => {
-      if (!a.listed) return false;
-      const s = a.presented.status;
-      return !(s.state === 'known' && left.has(s.value as string));
-    });
+    // The set is upstream's list: a finish changes status, not membership (round 8).
+    const members = [...this.attempts.values()].filter((a) => a.listed);
     const co = (a: AttemptS) => (a.presented.courseOrder.state === 'known' ? (a.presented.courseOrder.value as number) : Infinity);
     const so = (a: AttemptS) => (a.presented.startOrder.state === 'known' ? (a.presented.startOrder.value as number) : Infinity);
     members.sort((x, y) => co(x) - co(y) || so(x) - so(y) || (x.id < y.id ? -1 : 1));
@@ -1360,7 +1362,7 @@ export class Domain {
 
   private attemptInternal(a: AttemptS) {
     return { r: this.attemptResource(a), gen: a.gen, gs: a.genStart, mg: a.markAtGen, l: a.listed, lt: a.leftThisGen, c: a.completedThisGen,
-      f: a.finishSeenThisGen, lof: a.lastOnCourseFinish, s: a.slots, fl: a.floor, k: a.contradiction, d: a.dead, o: a.oldRunSeconds,
+      f: a.finishSeenThisGen, lof: a.lastOnCourseFinish, s: a.slots, k: a.contradiction, d: a.dead, o: a.oldRunSeconds,
       cells: [...a.cells.entries()], sm: a.staleMark, uc: a.upstreamCatRank, xu: a.xmlUntimed, lst: a.listing };
   }
 
