@@ -620,8 +620,10 @@ turn out, even a week later, to have raced under the wrong bib.
 
 **Run generation** (`DECISIONS/ADR-013`, maintainer answer Q2). A re-run deletes the recorded result,
 and the run is raced again. Meanwhile, it looks as if the athlete never did that run.
-- `run` increments on explicit upstream evidence of a re-run. That is either a new start observed
-  for a bib whose run was already recorded, or the recorded result row cleared.
+- `run` increments on exactly one piece of upstream evidence: a new start observed on the on-course
+  stream for a bib whose run was already recorded (`DERIVATIONS.md` §4.11). A recorded result row
+  observed cleared is a retraction (§4 INV-7), not a generation change (`DECISIONS/ADR-013`
+  Revision); a re-run appears as that retraction followed by the new start.
 - On increment, every run-scoped field becomes `not-yet`, and the change is pushed:
   - `status`, `outcome`, `gates` and `splits`;
   - `faults`, `placement`, `pairTotal` and `countingRun`;
