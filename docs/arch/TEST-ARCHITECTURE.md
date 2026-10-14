@@ -183,20 +183,127 @@ exactly as any real client must, and record every message received, in order, to
 **Gate 1 — determinism (necessary, not sufficient).** Feed the same ingest fixture into the domain
 layer twice — replaying the captured raw messages directly against the ingest boundary, not
 re-running the player against real time, so player/network jitter is removed from the question
-entirely — and diff the two resulting candidates byte for byte, `observedAt` included. A non-empty
-diff fails the candidate outright: a real non-determinism bug (uninitialised state, a race condition)
-that would otherwise poison every downstream tier silently. Passing proves only self-consistency.
+entirely — and diff the two resulting candidates byte for byte, `observedAt` included. **The replay
+carries everything `CONTRACTS.md` §4's determinism paragraph names:** every message with its recorded
+`observedAt`, the TCP connect and disconnect events, the detection time of every XML rewrite, and any
+re-baseline, in recorded order; the domain layer reads no clock of its own while replaying. Without
+the events, INV-2 rule 2 and INV-7's write-time guard are never exercised and gate 1 passes
+trivially. A non-empty diff fails the candidate outright: a real non-determinism bug (uninitialised
+state, a race condition) that would otherwise poison every downstream tier silently. Passing proves
+only self-consistency.
 
-**Gate 2 — invariant conformance, checked as a property of the sequence, not against a known answer.**
-Replay the candidate's own step sequence and assert it never violates a `CONTRACTS.md` §4 invariant
-structurally: no field ever regresses from `known` to `not-yet`/`unavailable` without an explicit
-correction (INV-1); no lower-ranked source's observation is ever presented while a higher-ranked one
-remains available and has reported (INV-2); no `provisional: true` reverts to `true` after becoming
-`false` for the same fact; `seq` is strictly increasing. This is a mechanical, oracle-free check —
-it needs no ground truth, only the shape the invariants already commit to — and it catches the whole
-class of "deterministic but wrong" merge bugs that violate the contract's own stated structure, which
-is most of them. It does not catch a bug that is invariant-conformant and still numerically wrong
-(a unit error, a misparsed field) — gate 3 is what catches that.
+**Gate 2 — invariant conformance, checked as a property of the replay, not against a known answer.**
+
+*What the checker reads.* The admission replay, step by step. A step is one ingested element and the
+deltas (§7.2 shapes) it produced. Elements are classified in `CONFORMANCE-VECTORS.md` §1's own
+vocabulary, which the direct-injection path emits beside each step's deltas: an **observation**
+(`attemptId`, `source`, `kind: inference | result-row | operator | fragment`, the fields it carries,
+`run`, `observedAt`, optional `eventTime`); an **event** (`tcp-connected`, `tcp-disconnected`,
+`xml-rewrite-detected`, `oncourse-empty`, `oncourse-left`, `rebaseline` with `scope`); a **scope
+snapshot** (`source`, `phaseId`, `mode`, `rows`); an **on-course listing** of one Attempt. The §4
+fixture is the deltas alone. So gate 2 runs once, at admission, on the replay log; the properties
+marked **D** read deltas only and can be re-run by any consumer on the published fixture.
+
+*The properties.* Each is a check on consecutive presented states, S<sub>i−1</sub> and S<sub>i</sub>,
+and the element e<sub>i</sub> between them. "Regression" means a field's `state` going from `known`
+to `not-yet` or `unavailable`. Unless stated, everything is per Attempt and per run generation;
+"result fields" are the run-scoped fields `CONTRACTS.md` §2.6 lists. A violation is reported with
+the step index, the Attempt, the field and the property number.
+
+1. **Sequence (INV-6) D.** `seq` strictly increases across deltas, and the first delta's `seq`
+   exceeds the hydration step's `asOfSeq`. No `observedAt` in any delta is a replay-time clock
+   value: each equals the recorded `observedAt` of the element that produced it.
+2. **Envelopes (§1.2) D.** Every presented envelope validates against `schemas/observed.schema.json`:
+   `eventTime` omitted when absent, never `null`; `unavailable.reason` in the closed set; `source`
+   never `bridge` on site.
+3. **No spontaneous change.** A presented field of an Attempt changes at step i only if
+   e<sub>i</sub> is: an observation or snapshot carrying that field for that Attempt; a scope
+   snapshot of the Attempt's race (INV-7); an on-course listing of the Attempt (INV-2d, `ADR-013`,
+   `left-without-finish`); `oncourse-left` or `oncourse-empty` covering it; or a `rebaseline` whose
+   scope contains its Phase. A connection event, an `xml-rewrite-detected` on its own, a `fragment`,
+   an observation of another Attempt or a snapshot of another race changes nothing presented. In
+   particular, a `tcp-connected` never flips a presented value back to `tcp` by itself: TCP's
+   pre-outage observations do not outrank a snapshot read during the outage (INV-2 rule 2, second
+   case). `SourceStatus` and diagnostics may change at any step.
+4. **No regression by omission (INV-1, INV-3).** A regression occurs only at: a scope snapshot of
+   the Attempt's race (property 5); a listing of the Attempt that increments `run` in the same delta
+   (property 10) or contradicts a finish (property 7); a `rebaseline` of its scope (property 13).
+   `unavailable` appears only with a closed reason and never at any other kind of step (INV-3).
+5. **Retraction is scoped and guarded (INV-7).** At a scope-snapshot step for race R, a regression
+   of an Attempt of R touches only the fields INV-7 names for the case — first or single run:
+   `outcome`, `gates`, `placement`, `underReview`, `qualified` and a mark in `status`; paired second
+   run with the row absent: those plus `pairTotal` and `countingRun`; second run with an empty time:
+   `outcome` and `gates` only — and never `entry`, `bib`, `startOrder`, `heat`, `startLane` or
+   `run`. It never touches a field whose presented value is an on-course inference
+   (`kind: inference`, or `outcome.kind: 'running'`). Afterwards `status` is `at-start` or
+   `on-course` if the on-course listing holds the Attempt, else `not-started`. For an `xml` snapshot
+   retracting or displacing a `tcp`-presented field, the latest `xml-rewrite-detected` time minus
+   the poll interval is later than that field's `observedAt`; otherwise the field is unchanged at
+   that step. Where the replay log carries the snapshot's rows, as the vector format does, the
+   checker also asserts completeness: every Attempt of R presenting results-table values whose row
+   states no result is retracted in that step.
+6. **Precedence (INV-2 rules 1–3).** (a) Once a result field presents a `result-row` observation, it
+   never afterwards presents an `inference` for the same generation, except through a contradiction
+   (property 7) or after a retraction (property 5). (b) `gates` is merged cell by cell: while
+   upstream still lists the Attempt (no `oncourse-left` for it yet in this generation), a judged cell
+   (`0`, `2`, `50`) never becomes `null`; after it has left, cells change only at a results-table
+   step. (c) A field presented from `tcp` flips to `xml` only if a `tcp-disconnected` occurred after
+   the step that ingested the presented `tcp` observation, or the flip is rule 2's mark exception
+   (`status` from `not-started`, `at-start` or `left-without-finish` to a mark, under property 5's
+   write-time guard), or the step is a `rebaseline`. (d) Each field's presented `source` lies in the
+   set `DERIVATIONS.md` gives for it: `courseOrder`, `timeToBeat` and a `running` outcome only
+   `tcp`; the superseded run's summary, age categories, members, event details and course numbers
+   only `xml`.
+7. **Contradiction (INV-2d).** `status` goes `finished → on-course` only at an on-course listing of
+   the Attempt with the generation's start and no finish, and in that same step `outcome` becomes
+   `running`, `placement`, `pairTotal` and `countingRun` become `not-yet`, and `diagnostics.updated`
+   carries a `contradicted-finish` for the Attempt. While that diagnostic stands, no step presents a
+   results-table `outcome` for the Attempt whose `eventTime` equals the contradicted finish. The
+   diagnostic disappears only at a step presenting a different finish, a mark or a retraction, or at
+   a listing of the Attempt with a finish. Kayak Cross Attempts never show this transition.
+8. **Event-time floor (INV-2c) D.** Within a generation, a field's presented `eventTime` never
+   moves directly to a strictly earlier value; it may reach one only after passing through `not-yet`
+   (a retraction) or a contradiction.
+9. **Idempotence (INV-5) D.** No delta carries a field whose envelope equals the presented one, or
+   differs from it only in `observedAt`. A re-delivered identical observation is not client-visible.
+10. **Run generation (`ADR-013`).** `run` never decreases. It increments only at an on-course listing
+    of the Attempt with a start different from the current generation's, and in that same delta
+    every run-scoped field is explicitly `not-yet` — none omitted — and `status` is `at-start` or
+    `on-course`. No results-table observation whose finish precedes the new generation's start is
+    presented afterwards (`DERIVATIONS.md` §4.11).
+11. **Provisional (§1.2).** A presented result value has `provisional: true` exactly when: it is an
+    inference (`kind: inference`, or `outcome.kind: 'running'`); or `gates` is `known` with a `null`
+    cell and upstream still lists the Attempt (no `oncourse-left` yet); or its `source` is
+    `operator-write` with a pending `WriteRequest`. It goes `false → true` only through a regression
+    first (property 4). A `standing.updated` entry's `provisional` is the disjunction over its
+    Attempt's `outcome`, `placement` and `pairTotal` (§5 step 5).
+12. **Marks (§2.6) D.** When `status` is a no-result mark, `outcome` is `{ kind: 'no-result' }` with
+    the same status, whatever time the row carried. Two Attempts of one Phase presenting the same
+    finish `eventTime` have a `duplicate-finish` diagnostic in that step.
+13. **Re-baseline (`ADR-015`).** `scope.replaced` appears only at a `rebaseline` step and carries every
+    Attempt of the scope and the Standings §7.2 names. Across it, `entry`, `bib`, `run`,
+    `startOrder`, `heat`, `startLane`, every check and flag, and every `WriteRequest` are unchanged;
+    afterwards every presented result value in scope has `source` `tcp` or `xml`, and none has
+    `source: tcp` until a `tcp` observation of it follows.
+14. **On-course set (§7.1) D.** Every `attemptId` in `oncourse.updated` has presented status
+    `at-start` or `on-course`, and the list is ordered by presented `courseOrder` ascending, Attempts
+    without one last by `startOrder`.
+15. **Standing (§5) D.** Every placed entry of a whole-class `standing.updated` has the `rank` and
+    `order` of its Attempt's presented `placement`; entries sort by `order`; unplaced entries follow
+    in step 3's order; an age-category `rank` is `1 +` the number of same-category entries with a
+    strictly smaller class rank; `provisional` and `underReview` follow step 5. A standing changes
+    only at a step that changed one of its Attempts' `placement`, `outcome`, `pairTotal`,
+    `provisional` or `underReview`, or at `scope.replaced`.
+
+*What this gate is, and is not.* It is a mechanical, oracle-free check: it needs no ground truth,
+only the shape the invariants already commit to, and it catches the whole class of "deterministic
+but wrong" merge bugs that violate the contract's own stated structure, which is most of them. It
+does not catch a bug that is invariant-conformant and still numerically wrong (a unit error, a
+misparsed field, a wrong gate cell) — gate 3 is what catches that. Nor does it see the retained,
+non-presented observations: INV-2b's `source-disagreement` diagnostics are its only trace of them,
+and whether such a disagreement *should* have been raised is a tier-1 question. A property that a
+correct replay cannot satisfy is a finding against the contract, not against the replay: it is
+reported to the design authority, never relaxed in the checker.
 
 **Gate 3 — cross-checked against tier 1 where they overlap, and against one human check of the real
 numbers.** Where a candidate exercises a shape tier 1 already has a synthetic vector for (a two-run
