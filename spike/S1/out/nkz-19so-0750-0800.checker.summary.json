@@ -1,0 +1,171 @@
+{
+  "steps": 4700,
+  "properties": [
+    {
+      "property": 1,
+      "checked": 7094,
+      "violations": 0
+    },
+    {
+      "property": 2,
+      "checked": 29686,
+      "violations": 0
+    },
+    {
+      "property": 3,
+      "checked": 11732,
+      "violations": 0
+    },
+    {
+      "property": 4,
+      "checked": 2,
+      "violations": 0
+    },
+    {
+      "property": 5,
+      "checked": 3831,
+      "violations": 0
+    },
+    {
+      "property": 6,
+      "checked": 13934,
+      "violations": 0
+    },
+    {
+      "property": 7,
+      "checked": 2,
+      "violations": 0
+    },
+    {
+      "property": 8,
+      "checked": 0,
+      "violations": 0
+    },
+    {
+      "property": 9,
+      "checked": 6697,
+      "violations": 0
+    },
+    {
+      "property": 10,
+      "checked": 0,
+      "violations": 0
+    },
+    {
+      "property": 11,
+      "checked": 15134,
+      "violations": 1850
+    },
+    {
+      "property": 12,
+      "checked": 49,
+      "violations": 0
+    },
+    {
+      "property": 13,
+      "checked": 0,
+      "violations": 0
+    },
+    {
+      "property": 14,
+      "checked": 266,
+      "violations": 0
+    },
+    {
+      "property": 15,
+      "checked": 453,
+      "violations": 24
+    }
+  ],
+  "byField": {
+    "P11": {
+      "status": 1832,
+      "outcome": 6,
+      "placement": 6,
+      "underReview": 6
+    },
+    "P15": {
+      "-": 24
+    }
+  },
+  "rebaselineSteps": 0,
+  "firstPerProperty": {
+    "1": [],
+    "2": [],
+    "3": [],
+    "4": [],
+    "5": [],
+    "6": [],
+    "7": [],
+    "8": [],
+    "9": [],
+    "10": [],
+    "11": [
+      {
+        "property": 11,
+        "step": 2,
+        "attemptId": "K1M_BR1_19:65",
+        "field": "status",
+        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
+      },
+      {
+        "property": 11,
+        "step": 4,
+        "attemptId": "K1M_BR1_19:70",
+        "field": "status",
+        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
+      },
+      {
+        "property": 11,
+        "step": 5,
+        "attemptId": "K1M_BR1_19:69",
+        "field": "status",
+        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
+      },
+      {
+        "property": 11,
+        "step": 6,
+        "attemptId": "K1M_BR1_19:67",
+        "field": "status",
+        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
+      },
+      {
+        "property": 11,
+        "step": 8,
+        "attemptId": "K1M_BR1_19:66",
+        "field": "status",
+        "detail": "status provisional=false, property 11 says true (kind=inference, nullCell=false, listed=true)"
+      }
+    ],
+    "12": [],
+    "13": [],
+    "14": [],
+    "15": [
+      {
+        "property": 15,
+        "step": 283,
+        "detail": "phase:K1M_BR1_19/ZM changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
+      },
+      {
+        "property": 15,
+        "step": 283,
+        "detail": "phase:K1M_BR1_19/ZS changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
+      },
+      {
+        "property": 15,
+        "step": 283,
+        "detail": "phase:K1M_BR1_19/DM changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
+      },
+      {
+        "property": 15,
+        "step": 283,
+        "detail": "phase:K1M_BR1_19/DS changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
+      },
+      {
+        "property": 15,
+        "step": 283,
+        "detail": "phase:K1M_BR1_19/V changed at a step that changed none of its Attempts' placement, outcome, pairTotal, provisional or underReview (first publication)"
+      }
+    ]
+  }
+}

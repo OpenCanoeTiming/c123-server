@@ -65,7 +65,7 @@ export type SnapshotRow = {
   pairTotal?: number | null;
   countingRun?: 1 | 2;
   gates?: Gate[] | null;      // null = the row states no gate vector
-  gatesUnavailable?: 'not-configured';
+  gatesUnavailable?: 'not-configured' | 'not-applicable';
   finishTime?: string | null; // the row's own finish time of day as eventTime, XML only on the wire
   startTime?: string | null;  // the row's own start time (XML dtStart) as eventTime
   runSeconds?: number | null; // run time the row states (for INV-2d value matching)
@@ -77,6 +77,10 @@ export type SnapshotRow = {
   upstreamCatRank?: number | null;
   unparseable?: { slot: number; text: string }[];
   explicitEntry?: boolean;
+  heat?: number | null;       // Cross heats; null = not applicable
+  startLane?: number | null;  // Cross heats: upstream's StartTime carries the lane
+  faults?: { count: number; gates: string[]; lastCleanSlot: number };
+  decidedIn?: string;         // classification rows: RecordType
 };
 
 export type Element =

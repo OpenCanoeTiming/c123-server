@@ -174,6 +174,7 @@ export class Checker {
         const stated: [string, unknown][] = [];
         if (row.gates) stated.push(['gates', row.gates]);
         if (row.placement) stated.push(['placement', row.placement]);
+        if (row.faults) stated.push(['faults', row.faults]);
         for (const [field, val] of stated) {
           const e = a.fields[field];
           if (e?.state === 'known' && e.source === el.source && canonical(e.value) === canonical(val)) {
@@ -420,8 +421,11 @@ export class Checker {
           if (unplaced) this.v(15, s, `${key}: placed entry ${e.bib} after unplaced ones`);
           const pl = a?.fields.placement;
           if (!(pl?.state === 'known' && pl.value.rank === e.rank && pl.value.order === e.order)) this.v(15, s, `${key}: entry ${e.bib} rank/order ${e.rank}/${e.order} vs placement ${canonical(pl)}`, a?.id, 'placement');
-          if (e.order < lastOrder && sc.kind !== 'heat') this.v(15, s, `${key}: entries not sorted by order at ${e.bib}`);
-          lastOrder = e.order;
+          // §5 step 2: a heat Phase's phase standing sorts by (heat, order)
+          const h = a?.fields.heat?.state === 'known' ? a.fields.heat.value : 0;
+          const ko = h * 1e6 + e.order;
+          if (ko < lastOrder && sc.kind !== 'heat') this.v(15, s, `${key}: entries not sorted by ${h ? '(heat, order)' : 'order'} at ${e.bib}`);
+          lastOrder = ko;
         } else {
           unplaced = true;
           const sa = a?.fields.status?.value ?? null;

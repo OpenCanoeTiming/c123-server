@@ -1,0 +1,77 @@
+{
+  "excerpt": "/workspace/timing/c123-protocol-docs/qa/excerpts/cp3-cross-0845-0930",
+  "source": {
+    "recording": "2026-04-26-cp3-cross",
+    "event": {
+      "name": "CP3 Kayak Cross",
+      "date": "2026-04-26"
+    },
+    "race": null,
+    "from": 12492443,
+    "to": 15192443
+  },
+  "checksum": "sha256:e12d5621178ccca636fafde7f1e7d6ab065fd9f6b0593f576e8654ff849e3c30",
+  "window": {
+    "first": "2026-04-26T08:45:00.009Z",
+    "last": "2026-04-26T09:29:59.981Z"
+  },
+  "records": 70242,
+  "steps": 13458,
+  "deltas": 4355,
+  "deltaTypes": {
+    "sources.updated": 2699,
+    "attempt.updated": 1322,
+    "oncourse.updated": 67,
+    "class.updated": 9,
+    "phase.updated": 44,
+    "standing.updated": 82,
+    "course.updated": 7,
+    "entry.updated": 124,
+    "event.changed": 1
+  },
+  "ignored": {
+    "cis/CIS-GetStatus": 2676,
+    "udp27333/TimeOfDay": 2653,
+    "udp10600/mobile-app": 8070,
+    "udp27333/OnCourse": 8755,
+    "udp27333/unknown": 20746,
+    "udp27333/TVS": 15,
+    "cis/CIS-GetOnCourse": 8999,
+    "cis/CIS-GetResult": 2974,
+    "udp27333/TimingInput": 75,
+    "udp27333/Results": 1525,
+    "udp27333/Schedule": 75,
+    "udp27333/RaceConfig": 133,
+    "cis/CIS-GetSchedule": 103
+  },
+  "ingest": {
+    "tcp.messages": 13433,
+    "tcp.type.TimeOfDay": 2690,
+    "tcp.type.OnCourse": 8909,
+    "tcp.type.TimingInput": 75,
+    "tcp.type.Results": 1534,
+    "tcp.results.mode.results": 814,
+    "tcp.oncourse.finisherWithPosition": 308,
+    "xml.snapshots": 10,
+    "tcp.type.TVS": 14,
+    "tcp.type.Schedule": 76,
+    "tcp.type.RaceConfig": 135,
+    "tcp.results.mode.start-list": 720,
+    "tcp.oncourse.listedNotArmedNoStart": 7644
+  },
+  "domain": {
+    "elements": 13458,
+    "deltas": 4355,
+    "retractions": 0,
+    "contradictions": 0,
+    "generations": 0,
+    "inv2cRefusals": 0,
+    "staleMarks": 0
+  },
+  "inv2cRefusals": [],
+  "attempts": 172,
+  "stepsSha256": "7f7544ad602b428f6625d3c4154936ab3f7b977703d83bca820532c6202ac5f6",
+  "finalStateSha256": "905075ddc3133c52506775cf4db0157c6288be85dc386327cecfa306e9495b23",
+  "wallClockMs": 11775,
+  "rssMB": 140
+}

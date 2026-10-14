@@ -446,7 +446,11 @@ export class Domain {
     }
     this.step!.touchedPhases.add(el.phaseId);
     if (info.kind === 'classification') {
-      this.classification.set(el.phaseId, { rows: el.rows.filter((r) => r.placement), asOf: el.observedAt });
+      // DERIVATIONS §4.10: classification rows feed the classification Standing directly; no Attempts.
+      const rows = el.rows.filter((r) => r.placement).map((r) => ({ entryId: r.entryId ?? r.bib, bib: r.bib, rank: r.placement!.rank, order: r.placement!.order,
+        ...(r.decidedIn ? { decidedIn: r.decidedIn } : {}) }));
+      this.classification.set(el.phaseId, { rows, asOf: el.observedAt });
+      this.standingDirty.add(el.phaseId);
       return;
     }
     const second = info.pairRole === 'second';
@@ -485,6 +489,8 @@ export class Domain {
     if (row.entryId) plain('entry', { entryId: row.entryId });
     if (row.startOrder !== undefined) plain('startOrder', row.startOrder);
     if (row.scheduledStart) plain('scheduledStart', row.scheduledStart);
+    if (row.heat !== undefined) row.heat === null ? (this.put(a, 'heat', { ...base, state: 'unavailable', reason: 'not-applicable' }, src), fields.push('heat')) : plain('heat', row.heat);
+    if (row.startLane !== undefined && row.startLane !== null) plain('startLane', row.startLane);
     if (src === 'xml') {
       if (row.upstreamCatRank !== undefined) a.upstreamCatRank = row.upstreamCatRank;
       if (row.outcome !== undefined || row.untimed) a.xmlUntimed = row.untimed === true;
@@ -547,6 +553,7 @@ export class Domain {
       }
       if (row.underReview !== undefined) val('underReview', row.underReview);
       if (row.qualified !== undefined) val('qualified', row.qualified);
+      if (row.faults) val('faults', row.faults);
     } else if (second) {
       // Paired second run, row present with an empty time and no mark: run 2 retracted; placement and pairTotal follow the row.
       this.applyAbsent(a, RETRACT_TIME_EMPTY, src, seq, el.observedAt, detectedAt, fields);
@@ -561,7 +568,7 @@ export class Domain {
     if (fields.includes('gates')) {
       const s = this.slot(a, 'gates');
       const w = this.rule2(a, 'gates', s);
-      if (w && w.seq === seq && !w.absent && w.state === 'known') this.foldCells(a, w, false);
+      if (w && w.seq === seq && !w.absent && w.state === 'known' && !this.refusedMarkRow(a, w)) this.foldCells(a, w, false);
     }
     this.recompute(a, fields);
   }
@@ -638,9 +645,7 @@ export class Domain {
     const inf = s.inf && s.inf.gen === a.gen ? s.inf : undefined;
     // The mark exception's guard (INV-2 rule 2 / INV-2c): an xml mark row must be newer than the tcp status it
     // displaces, here an on-course inference; a refused row leaves the inference presented, for status and outcome.
-    const P = a.from.status;
-    if (R && R.source === 'xml' && (f === 'status' || f === 'outcome') && NO_RESULT_MARKS.includes(R.rowStatus ?? '') && P && P.kind === 'inference'
-        && P.source === 'tcp' && ['not-started', 'at-start', 'left-without-finish'].includes(P.value as string) && !(this.contentAge(R) > Date.parse(P.observedAt))) {
+    if (R && (f === 'status' || f === 'outcome') && this.refusedMarkRow(a, R)) {
       if (inf) return { env: this.envOf(a, f, inf), from: inf };
       R = undefined;
       return { env: a.presented[f] ?? NOT_YET, from: a.from[f] ?? null };
@@ -655,6 +660,16 @@ export class Domain {
     if (R?.absent) return { env: NOT_YET, from: R };
     if (s.det && s.det.gen === a.gen) return { env: this.envOf(a, f, s.det), from: s.det };
     return { env: NOT_YET, from: null };
+  }
+
+  /**
+   * Rule 2's mark exception under INV-2c: an xml mark row displacing a tcp status of not-started, at-start or
+   * left-without-finish (here an on-course inference) must be newer content; a refused row is held back whole.
+   */
+  private refusedMarkRow(a: AttemptS, R: Obs): boolean {
+    const P = a.from.status;
+    return R.source === 'xml' && NO_RESULT_MARKS.includes(R.rowStatus ?? '') && !!P && P.kind === 'inference' && P.source === 'tcp'
+      && ['not-started', 'at-start', 'left-without-finish'].includes(P.value as string) && !(this.contentAge(R) > Date.parse(P.observedAt));
   }
 
   private envOf(a: AttemptS, f: string, o: Obs): Envelope {
@@ -765,14 +780,6 @@ export class Domain {
       if (f === 'outcome' && env.state === 'known') env = this.secondRunOutcome(a, env, from);
       this.present(a, f, env, from);
       this.disagreement(a, f);
-    }
-    // a mark presents no-result whatever time the row carried (§2.6); closure may have changed provisional
-    const st = a.presented.status;
-    if (st.state === 'known' && NO_RESULT_MARKS.includes(st.value as string)) {
-      for (const f of RESULT_VALUE_FIELDS) {
-        const e = a.presented[f];
-        if (e?.state === 'known' && e.provisional) this.present(a, f, { ...e, provisional: false }, a.from[f] ?? null);
-      }
     }
   }
 
@@ -1374,6 +1381,11 @@ export class Domain {
       if (info.kind === 'classification') scopes.push({ scope: { kind: 'classification', phaseId: pid }, inputsFrom: pid });
       else {
         scopes.push({ scope: { kind: 'phase', phaseId: pid }, inputsFrom: pid, heatPhase: info.heats });
+        if (info.heats) {
+          const heats = new Set<number>();
+          for (const id of this.phaseAttempts.get(pid) ?? []) { const h = this.attempts.get(id)!.presented.heat; if (h.state === 'known') heats.add(h.value as number); }
+          for (const h of [...heats].sort((x, y) => x - y)) scopes.push({ scope: { kind: 'heat', phaseId: pid, heat: h }, inputsFrom: pid });
+        }
         if (info.pairRole === 'second') {
           const sib = (ph.plain.pair as any)?.siblingPhaseId ?? this.siblingPhase(pid);
           if (sib) scopes.push({ scope: { kind: 'pair', firstPhaseId: sib, secondPhaseId: pid }, inputsFrom: pid });
@@ -1389,6 +1401,7 @@ export class Domain {
           asOf = c?.asOf ?? null;
         } else {
           inputs = this.standingInputs(sc.inputsFrom);
+          if (sc.scope.kind === 'heat') { const h = sc.scope.heat; inputs = inputs.filter((i) => i.heat === h); }
           asOf = this.standingAsOf(sc.inputsFrom, inputs);
         }
         const durationScored = info.scoringKind === 'duration' && sc.scope.kind !== 'classification';
