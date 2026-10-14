@@ -868,3 +868,7 @@ on 2026-10-14. Items 9, 11 and 12 remain.
     confirmed from the source; the conditions are stated in §5 and `CONTRACTS.md` §2.8. TCP carries
     it regardless, and the maintainer confirms the file is always saved at the end, so the gap is a
     transient window, never lasting.
+15. Whether upstream's on-course message still carries `Position` for a finisher it keeps listed until
+    closure (E4; no recording was checked for it). If not, such an Attempt sorts last in the on-course
+    set by `startOrder` (§4.8; `CONTRACTS.md` §7.1), and nothing else depends on it. S1's parse sweep
+    can answer it.
