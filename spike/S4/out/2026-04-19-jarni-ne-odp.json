@@ -1,0 +1,46 @@
+{
+  "event": "2026-04-19-jarni-ne-odp",
+  "window": {
+    "first_ts": "2026-04-19T11:28:39.953000+00:00",
+    "last_ts": "2026-04-19T13:27:35.478000+00:00",
+    "duration_s": 7135.525
+  },
+  "cold_start_attempt_count": 1160,
+  "connect_burst_rows": 152,
+  "steady_state": {
+    "attempt_pushes_uncoalesced": 18171,
+    "attempt_pushes_coalesced": 14879,
+    "oncourse_set_pushes_uncoalesced": 332,
+    "oncourse_set_pushes_coalesced": 324,
+    "results_row_pushes": 1833,
+    "results_row_pushes_content": 353,
+    "results_row_pushes_placement_only": 1480,
+    "oncourse_messages_total": 43208,
+    "results_messages_total": 813,
+    "left_without_finish_inferred": 9,
+    "busiest_minute_attempt_coalesced": [
+      "2026-04-19T13:21",
+      181
+    ],
+    "busiest_minute_attempt_uncoalesced": [
+      "2026-04-19T13:21",
+      224
+    ],
+    "busiest_minute_set_coalesced": [
+      "2026-04-19T12:52",
+      5
+    ],
+    "busiest_minute_set_uncoalesced": [
+      "2026-04-19T12:47",
+      5
+    ],
+    "busiest_minute_results_rows": [
+      "2026-04-19T11:39",
+      158
+    ],
+    "busiest_minute_all_coalesced_pushes_combined": [
+      "2026-04-19T11:39",
+      285
+    ]
+  }
+}

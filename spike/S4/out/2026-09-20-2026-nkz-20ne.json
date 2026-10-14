@@ -1,0 +1,46 @@
+{
+  "event": "2026-09-20-2026-nkz-20ne",
+  "window": {
+    "first_ts": "2026-09-20T06:53:23.003000+00:00",
+    "last_ts": "2026-09-20T15:10:33.006000+00:00",
+    "duration_s": 29830.003
+  },
+  "cold_start_attempt_count": 1172,
+  "connect_burst_rows": 586,
+  "steady_state": {
+    "attempt_pushes_uncoalesced": 72785,
+    "attempt_pushes_coalesced": 58975,
+    "oncourse_set_pushes_uncoalesced": 1164,
+    "oncourse_set_pushes_coalesced": 1143,
+    "results_row_pushes": 21518,
+    "results_row_pushes_content": 1071,
+    "results_row_pushes_placement_only": 20447,
+    "oncourse_messages_total": 130468,
+    "results_messages_total": 2915,
+    "left_without_finish_inferred": 15,
+    "busiest_minute_attempt_coalesced": [
+      "2026-09-20T08:41",
+      248
+    ],
+    "busiest_minute_attempt_uncoalesced": [
+      "2026-09-20T08:41",
+      310
+    ],
+    "busiest_minute_set_coalesced": [
+      "2026-09-20T14:32",
+      5
+    ],
+    "busiest_minute_set_uncoalesced": [
+      "2026-09-20T10:34",
+      6
+    ],
+    "busiest_minute_results_rows": [
+      "2026-09-20T08:31",
+      599
+    ],
+    "busiest_minute_all_coalesced_pushes_combined": [
+      "2026-09-20T08:31",
+      733
+    ]
+  }
+}

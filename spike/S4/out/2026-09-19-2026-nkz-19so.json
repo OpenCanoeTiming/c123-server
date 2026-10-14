@@ -1,0 +1,46 @@
+{
+  "event": "2026-09-19-2026-nkz-19so",
+  "window": {
+    "first_ts": "2026-09-19T06:56:04.919000+00:00",
+    "last_ts": "2026-09-19T15:48:22.833000+00:00",
+    "duration_s": 31937.914
+  },
+  "cold_start_attempt_count": 1172,
+  "connect_burst_rows": 1167,
+  "steady_state": {
+    "attempt_pushes_uncoalesced": 70592,
+    "attempt_pushes_coalesced": 57512,
+    "oncourse_set_pushes_uncoalesced": 1179,
+    "oncourse_set_pushes_coalesced": 1171,
+    "results_row_pushes": 24106,
+    "results_row_pushes_content": 1348,
+    "results_row_pushes_placement_only": 22758,
+    "oncourse_messages_total": 137878,
+    "results_messages_total": 3175,
+    "left_without_finish_inferred": 10,
+    "busiest_minute_attempt_coalesced": [
+      "2026-09-19T08:42",
+      214
+    ],
+    "busiest_minute_attempt_uncoalesced": [
+      "2026-09-19T08:42",
+      259
+    ],
+    "busiest_minute_set_coalesced": [
+      "2026-09-19T08:42",
+      6
+    ],
+    "busiest_minute_set_uncoalesced": [
+      "2026-09-19T09:48",
+      7
+    ],
+    "busiest_minute_results_rows": [
+      "2026-09-19T08:32",
+      444
+    ],
+    "busiest_minute_all_coalesced_pushes_combined": [
+      "2026-09-19T08:25",
+      542
+    ]
+  }
+}

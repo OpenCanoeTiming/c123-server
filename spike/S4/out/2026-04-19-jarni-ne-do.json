@@ -1,0 +1,46 @@
+{
+  "event": "2026-04-19-jarni-ne-do",
+  "window": {
+    "first_ts": "2026-04-19T06:54:34.025000+00:00",
+    "last_ts": "2026-04-19T09:19:37.442000+00:00",
+    "duration_s": 8703.417
+  },
+  "cold_start_attempt_count": 1160,
+  "connect_burst_rows": 327,
+  "steady_state": {
+    "attempt_pushes_uncoalesced": 21104,
+    "attempt_pushes_coalesced": 17181,
+    "oncourse_set_pushes_uncoalesced": 420,
+    "oncourse_set_pushes_coalesced": 407,
+    "results_row_pushes": 6893,
+    "results_row_pushes_content": 536,
+    "results_row_pushes_placement_only": 6357,
+    "oncourse_messages_total": 69577,
+    "results_messages_total": 1076,
+    "left_without_finish_inferred": 19,
+    "busiest_minute_attempt_coalesced": [
+      "2026-04-19T07:57",
+      180
+    ],
+    "busiest_minute_attempt_uncoalesced": [
+      "2026-04-19T07:57",
+      218
+    ],
+    "busiest_minute_set_coalesced": [
+      "2026-04-19T08:52",
+      7
+    ],
+    "busiest_minute_set_uncoalesced": [
+      "2026-04-19T08:52",
+      9
+    ],
+    "busiest_minute_results_rows": [
+      "2026-04-19T08:00",
+      281
+    ],
+    "busiest_minute_all_coalesced_pushes_combined": [
+      "2026-04-19T07:50",
+      382
+    ]
+  }
+}

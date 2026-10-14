@@ -1,0 +1,46 @@
+{
+  "event": "2026-04-18-jarni-so-do",
+  "window": {
+    "first_ts": "2026-04-18T07:28:28.290000+00:00",
+    "last_ts": "2026-04-18T11:42:07.940000+00:00",
+    "duration_s": 15219.65
+  },
+  "cold_start_attempt_count": 1160,
+  "connect_burst_rows": 865,
+  "steady_state": {
+    "attempt_pushes_uncoalesced": 27550,
+    "attempt_pushes_coalesced": 22122,
+    "oncourse_set_pushes_uncoalesced": 495,
+    "oncourse_set_pushes_coalesced": 476,
+    "results_row_pushes": 4483,
+    "results_row_pushes_content": 374,
+    "results_row_pushes_placement_only": 4109,
+    "oncourse_messages_total": 93851,
+    "results_messages_total": 1162,
+    "left_without_finish_inferred": 19,
+    "busiest_minute_attempt_coalesced": [
+      "2026-04-18T10:17",
+      199
+    ],
+    "busiest_minute_attempt_uncoalesced": [
+      "2026-04-18T10:17",
+      247
+    ],
+    "busiest_minute_set_coalesced": [
+      "2026-04-18T10:08",
+      6
+    ],
+    "busiest_minute_set_uncoalesced": [
+      "2026-04-18T09:51",
+      10
+    ],
+    "busiest_minute_results_rows": [
+      "2026-04-18T07:51",
+      250
+    ],
+    "busiest_minute_all_coalesced_pushes_combined": [
+      "2026-04-18T07:51",
+      386
+    ]
+  }
+}

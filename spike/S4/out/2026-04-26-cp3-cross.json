@@ -1,0 +1,46 @@
+{
+  "event": "2026-04-26-cp3-cross",
+  "window": {
+    "first_ts": "2026-04-26T05:16:48.015000+00:00",
+    "last_ts": "2026-04-26T12:02:43.986000+00:00",
+    "duration_s": 24355.971
+  },
+  "cold_start_attempt_count": 124,
+  "connect_burst_rows": 124,
+  "steady_state": {
+    "attempt_pushes_uncoalesced": 6758,
+    "attempt_pushes_coalesced": 5776,
+    "oncourse_set_pushes_uncoalesced": 157,
+    "oncourse_set_pushes_coalesced": 156,
+    "results_row_pushes": 3427,
+    "results_row_pushes_content": 1149,
+    "results_row_pushes_placement_only": 2278,
+    "oncourse_messages_total": 33668,
+    "results_messages_total": 7328,
+    "left_without_finish_inferred": 6,
+    "busiest_minute_attempt_coalesced": [
+      "2026-04-26T08:13",
+      90
+    ],
+    "busiest_minute_attempt_uncoalesced": [
+      "2026-04-26T08:13",
+      106
+    ],
+    "busiest_minute_set_coalesced": [
+      "2026-04-26T08:29",
+      3
+    ],
+    "busiest_minute_set_uncoalesced": [
+      "2026-04-26T07:35",
+      4
+    ],
+    "busiest_minute_results_rows": [
+      "2026-04-26T06:13",
+      528
+    ],
+    "busiest_minute_all_coalesced_pushes_combined": [
+      "2026-04-26T06:13",
+      528
+    ]
+  }
+}
