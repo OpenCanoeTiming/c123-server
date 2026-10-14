@@ -21,6 +21,8 @@ type A = {
   gen: number; genStart: string | null; contradicted: { finish: string | null; runSeconds: number | null } | null;
   dead: { finish: string | null; runSeconds: number | null }[];
   contradictedThisGen: boolean; leftThisGen: boolean; created: boolean;
+  started: boolean;   // a listing of this generation carried dtStart (property 11's run start)
+  rowOwn: Record<string, boolean>;   // `${source}:${field}` -> the last row stating it carried a time or a mark
 };
 
 export class Checker {
@@ -53,7 +55,7 @@ export class Checker {
     if (!a) {
       const i = id.lastIndexOf(':');
       a = { id, phaseId: id.slice(0, i), bib: id.slice(i + 1), fields: {}, meta: {}, gen: 1, genStart: null, contradicted: null, dead: [],
-        contradictedThisGen: false, leftThisGen: false, created: false };
+        contradictedThisGen: false, leftThisGen: false, created: false, started: false, rowOwn: {} };
       this.attempts.set(id, a);
     }
     return a;
@@ -172,7 +174,7 @@ export class Checker {
               if (rf === 'status') { if (!x || x.state !== 'known' || !['at-start', 'on-course'].includes(x.value)) this.v(10, s, `increment delta: status ${x ? canonical(x) : 'omitted'}`, a.id, rf); }
               else if (!x || x.state !== 'not-yet') this.v(10, s, `increment delta: ${rf} ${x ? x.state : 'omitted'}`, a.id, rf);
             }
-            a.gen = r.value; a.genStart = r.eventTime ?? el.dtStart ?? null; a.contradicted = null; a.dead = []; a.contradictedThisGen = false; a.leftThisGen = false;
+            a.gen = r.value; a.genStart = r.eventTime ?? el.dtStart ?? null; a.contradicted = null; a.dead = []; a.contradictedThisGen = false; a.leftThisGen = false; a.started = false; a.rowOwn = {};
             for (const k of Object.keys(a.meta)) if (RUN_SCOPED.includes(k)) delete a.meta[k];
           }
         }
@@ -184,6 +186,8 @@ export class Checker {
       for (const row of el.rows ?? []) {
         const a = this.attempts.get(`${el.phaseId}:${row.bib}`);
         if (!a) continue;
+        // property 11 (round 10): whether the row that states a carried field is run 2's own row (a time or a mark)
+        for (const f of ['placement', 'pairTotal', 'countingRun']) if (row[f] != null) a.rowOwn[`${el.source}:${f}`] = !!(row.outcome || row.status);
         const stated: [string, unknown][] = [];
         if (row.gates) stated.push(['gates', row.gates]);
         if (row.placement) stated.push(['placement', row.placement]);
@@ -313,6 +317,9 @@ export class Checker {
       const noCourse = g?.state !== 'known' && !(cid !== undefined && this.courseGates.get(cid) === true);
       const second = SECOND_FMT.test(a.phaseId + '_');
       const startsRun = el.class === 'on-course-listing' && el.attemptId === id && !!el.dtStart && prev.status?.value !== 'on-course' && a.fields.status?.value === 'on-course';
+      if (el.class === 'on-course-listing' && el.attemptId === id && el.dtStart) a.started = true;
+      // round 10 (S1-30): a listing of the Attempt while no course is bound (a cold start) may also turn it true
+      const listsNoCourse = el.class === 'on-course-listing' && el.attemptId === id && noCourse;
       const pg = prev.gates;
       const courseBoundBlank = pg?.state !== 'known' && nullCell;
       for (const field of RUN_SCOPED) {
@@ -322,13 +329,14 @@ export class Checker {
         if (field === 'status') { if (e.provisional !== false) this.v(11, s, 'status is never provisional', id, field); continue; }
         const kind = a.meta[field]?.kind;
         const inference = kind === 'inference' || (field === 'outcome' && e.value?.kind === 'running') || field === 'courseOrder' || field === 'timeToBeat';
-        // "a second run's placement, pairTotal or countingRun while that run is on course": listed and status on-course
-        const carried = ['placement', 'pairTotal', 'countingRun'].includes(field) && second && listed && a.fields.status?.value === 'on-course';
+        // round 10 (S1-29): carried over from run 1, from the listing that starts run 2 until run 2's own row replaces them
+        // field by field: TCP never states countingRun, so the XML row with run 2 replaces it (DERIVATIONS §4.4)
+        const carried = ['placement', 'pairTotal', 'countingRun'].includes(field) && second && a.started && !a.rowOwn[`${e.source}:${field}`];
         const want = inference || (listed && (nullCell || noCourse)) || carried || (e.source === 'operator-write');
         if (e.provisional !== want) this.v(11, s, `${field} provisional=${e.provisional}, property 11 says ${want} (kind=${kind}, nullCell=${nullCell}, noCourse=${noCourse}, carried=${carried}, listed=${listed})`, id, field);
         const p = prev[field];
-        if (ch.has(field) && p?.state === 'known' && p.provisional === false && e.provisional === true && !startsRun && !courseBoundBlank) {
-          this.v(11, s, `${field} provisional false→true without a regression, a run start or a course binding`, id, field);
+        if (ch.has(field) && p?.state === 'known' && p.provisional === false && e.provisional === true && !startsRun && !listsNoCourse && !courseBoundBlank) {
+          this.v(11, s, `${field} provisional false→true without a regression, a run start, a listing with no course bound or a course binding`, id, field);
         }
       }
     }

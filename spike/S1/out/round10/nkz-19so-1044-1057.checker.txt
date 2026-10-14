@@ -1,0 +1,16 @@
+steps 4697
+P 1  checked    5463  violations 0
+P 2  checked   29996  violations 0
+P 3  checked   13494  violations 0
+P 4  checked       5  violations 0
+P 5  checked    2570  violations 0
+P 6  checked   15646  violations 0
+P 7  checked       0  violations 0
+P 8  checked       1  violations 0
+P 9  checked    7006  violations 0
+P10  checked       0  violations 0
+P11  checked   17109  violations 0
+P12  checked      29  violations 0
+P13  checked       0  violations 0
+P14  checked     201  violations 0
+P15  checked     162  violations 0

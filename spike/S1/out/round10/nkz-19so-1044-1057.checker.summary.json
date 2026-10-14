@@ -1,0 +1,99 @@
+{
+  "steps": 4697,
+  "properties": [
+    {
+      "property": 1,
+      "checked": 5463,
+      "violations": 0
+    },
+    {
+      "property": 2,
+      "checked": 29996,
+      "violations": 0
+    },
+    {
+      "property": 3,
+      "checked": 13494,
+      "violations": 0
+    },
+    {
+      "property": 4,
+      "checked": 5,
+      "violations": 0
+    },
+    {
+      "property": 5,
+      "checked": 2570,
+      "violations": 0
+    },
+    {
+      "property": 6,
+      "checked": 15646,
+      "violations": 0
+    },
+    {
+      "property": 7,
+      "checked": 0,
+      "violations": 0
+    },
+    {
+      "property": 8,
+      "checked": 1,
+      "violations": 0
+    },
+    {
+      "property": 9,
+      "checked": 7006,
+      "violations": 0
+    },
+    {
+      "property": 10,
+      "checked": 0,
+      "violations": 0
+    },
+    {
+      "property": 11,
+      "checked": 17109,
+      "violations": 0
+    },
+    {
+      "property": 12,
+      "checked": 29,
+      "violations": 0
+    },
+    {
+      "property": 13,
+      "checked": 0,
+      "violations": 0
+    },
+    {
+      "property": 14,
+      "checked": 201,
+      "violations": 0
+    },
+    {
+      "property": 15,
+      "checked": 162,
+      "violations": 0
+    }
+  ],
+  "byField": {},
+  "rebaselineSteps": 0,
+  "firstPerProperty": {
+    "1": [],
+    "2": [],
+    "3": [],
+    "4": [],
+    "5": [],
+    "6": [],
+    "7": [],
+    "8": [],
+    "9": [],
+    "10": [],
+    "11": [],
+    "12": [],
+    "13": [],
+    "14": [],
+    "15": []
+  }
+}

@@ -1,0 +1,560 @@
+[
+  {
+    "id": "inv1-untouched-field-not-regressed",
+    "invariant": "INV-1",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "inv1-never-observed-stays-not-yet",
+    "invariant": "INV-1",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "inv2-rule1-result-row-supersedes-inference",
+    "invariant": "INV-2 rule 1",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "inv2-rule1-inference-never-supersedes-result-row",
+    "invariant": "INV-2 rule 1",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "inv2-rule2-connected-tcp-beats-later-xml",
+    "invariant": "INV-2 rule 2",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "inv2-rule2-xml-takes-over-after-disconnect",
+    "invariant": "INV-2 rule 2",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "inv2-rule2-reconnect-does-not-restore-stale-tcp",
+    "invariant": "INV-2 rule 2",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "inv2-rule2-fresh-tcp-after-reconnect-wins",
+    "invariant": "INV-2 rule 2",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "inv2-rule2-xml-alone-at-cold-start",
+    "invariant": "INV-2 rule 2",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "inv2-rule3-single-source-field",
+    "invariant": "INV-2 rule 3",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "placement-not-yet-while-rank-empty",
+    "invariant": "placement",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "provisional-incomplete-judging-then-settles",
+    "invariant": "provisional",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "provisional-first-push-already-complete",
+    "invariant": "provisional",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "provisional-run-closed-without-course",
+    "invariant": "provisional",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "provisional-pair-fields-while-run-2-on-course",
+    "invariant": "provisional",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "status-never-provisional",
+    "invariant": "provisional",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "ongoing-recomputation-provisional-total-revised-by-late-gate",
+    "invariant": "ongoing-recomputation",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "inv2b-disagreement-surfaced-not-adopted",
+    "invariant": "INV-2b",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "inv2c-snapshot-older-than-push-refused-during-outage",
+    "invariant": "INV-2c",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "inv2c-same-source-earlier-finish-supersedes",
+    "invariant": "INV-2c",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "trichotomy-known-zero-not-confused-with-absence",
+    "invariant": "trichotomy",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "trichotomy-unavailable-persists-explicitly",
+    "invariant": "INV-3",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "inv3-not-applicable-external-id",
+    "invariant": "INV-3",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "inv4-entry-correction-is-a-field-update",
+    "invariant": "INV-4",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "inv5-identical-redelivery-is-a-noop",
+    "invariant": "INV-5",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "inv6-clock-jump-does-not-reorder-merge",
+    "invariant": "INV-6",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "operator-write-provisional-presented-immediately",
+    "invariant": "operator-write",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "operator-write-confirmed-by-matching-echo",
+    "invariant": "operator-write",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "operator-write-mismatched-echo-wins",
+    "invariant": "operator-write",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "operator-write-superseded-by-rerun",
+    "invariant": "operator-write",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "operator-correction-not-displaced-by-redelivery",
+    "invariant": "operator-write",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "operator-correction-displaced-by-changed-upstream-value",
+    "invariant": "operator-write",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "rerun-retracts-run-scoped-fields",
+    "invariant": "run-generation",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "rerun-old-generation-row-not-presented",
+    "invariant": "run-generation",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "rerun-tcp-row-before-new-finish-not-presented",
+    "invariant": "run-generation",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "rerun-status-transition-legal-only-with-generation",
+    "invariant": "attempt-status-transition",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "left-without-finish-observed-not-dnf",
+    "invariant": "left-without-finish",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "left-without-finish-then-mark-from-xml",
+    "invariant": "INV-2 rule 2 exception",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "xml-mark-does-not-override-tcp-finish",
+    "invariant": "INV-2 rule 2 exception",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "gates-blank-result-cell-keeps-judged-oncourse-cell",
+    "invariant": "INV-2 rule 1 gates",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "gates-result-vector-authoritative-after-leaving",
+    "invariant": "INV-2 rule 1 gates",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "retraction-vanished-row-first-run",
+    "invariant": "INV-7",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "retraction-dns-cleared-then-races",
+    "invariant": "INV-7",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "retraction-not-from-fragment",
+    "invariant": "INV-1",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "retraction-not-in-other-race-snapshot",
+    "invariant": "INV-1",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "retraction-start-list-mode-clears-all",
+    "invariant": "INV-7",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "retraction-does-not-touch-inference",
+    "invariant": "INV-7",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "retraction-second-run-time-empty-keeps-placement",
+    "invariant": "INV-7",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "retraction-from-xml-row-cleared",
+    "invariant": "INV-7",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "retraction-first-run-row-present-empty",
+    "invariant": "INV-7",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "retraction-xml-guard-rewrite-before-push",
+    "invariant": "INV-7 guard",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "contradiction-oncourse-running-again",
+    "invariant": "INV-2d",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "contradiction-lift-keeps-stale-rows-unpresented",
+    "invariant": "INV-2d",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "status-overrides-time",
+    "invariant": "marks",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "half-correction-snapshot-duplicate-finish",
+    "invariant": "half-correction",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "rebaseline-discards-stale-tcp-and-rebuilds-from-xml",
+    "invariant": "rebaseline",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "rebaseline-keeps-writes-and-generation",
+    "invariant": "rebaseline",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "live-explicit-not-yet-resets-field",
+    "invariant": "live-ingest",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "oncourse-set-order-and-push",
+    "invariant": "oncourse",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "oncourse-finisher-stays-listed-until-closure",
+    "invariant": "oncourse",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "oncourse-unstaged-before-start-returns-to-not-started",
+    "invariant": "oncourse",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "standing-not-resent-on-running-tick",
+    "invariant": "standing-push",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "live-bare-value-wrapped-as-bridge",
+    "invariant": "live-ingest",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "live-attempt-deleted",
+    "invariant": "live-ingest",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "rerun-stale-mark-not-presented",
+    "invariant": "run-generation",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "live-oncourse-set-replaced-whole",
+    "invariant": "live-ingest",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "live-running-then-finished-latest-wins",
+    "invariant": "live-ingest",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "operator-write-confirmed-then-changed-upstream",
+    "invariant": "operator-write",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "live-classification-rows-replaced-whole",
+    "invariant": "live-ingest",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "untimed-row-outcome-not-applicable",
+    "invariant": "marks",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "under-review-independent-of-provisional",
+    "invariant": "under-review",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "second-run-dns-keeps-combined-placement",
+    "invariant": "marks",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "two-run-br1-untouched-by-br2",
+    "invariant": "two-run",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "two-run-br1-recovered-from-xml-cold",
+    "invariant": "two-run",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "two-run-br1-unavailable-no-live-no-xml",
+    "invariant": "two-run",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "cross-outcome-not-yet-before-operator-entry",
+    "invariant": "cross-outcome",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "cross-outcome-from-placement-not-time",
+    "invariant": "cross-outcome",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "cross-outcome-corrected-after-next-heat-started",
+    "invariant": "cross-outcome",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "phasestatus-official-to-revised-skips-unofficial",
+    "invariant": "phase-status-transition",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "attemptstatus-finished-to-dsq-post-finish",
+    "invariant": "attempt-status-transition",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "standing-relays-upstream-order",
+    "invariant": "standing-assembly",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "standing-combined-tie-broken-upstream-no-anomaly",
+    "invariant": "standing-assembly",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "standing-unplaced-listed-after-with-null-rank",
+    "invariant": "standing-assembly",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "standing-age-category-assembled",
+    "invariant": "standing-assembly",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "standing-category-rank-disagreement-recorded",
+    "invariant": "standing-assembly",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "standing-order-disagreement-anomaly",
+    "invariant": "standing-assembly",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "standing-cross-never-checked",
+    "invariant": "standing-assembly",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "standing-behind-and-flags",
+    "invariant": "standing-assembly",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "check-stale-definition",
+    "invariant": "workflow-state",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "check-null-vs-zero-distinct",
+    "invariant": "workflow-state",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "check-team-sum-compared",
+    "invariant": "workflow-state",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "check-not-carried-to-new-generation",
+    "invariant": "workflow-state",
+    "pass": true,
+    "failures": []
+  },
+  {
+    "id": "check-stays-with-bib-when-result-moves",
+    "invariant": "workflow-state",
+    "pass": true,
+    "failures": []
+  }
+]

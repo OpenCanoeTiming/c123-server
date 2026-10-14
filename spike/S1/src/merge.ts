@@ -748,11 +748,10 @@ export class Domain {
     if (o.source === 'operator-write') return o.provisionalOverride !== false && o.supersededAt === undefined;
     if (o.source === 'bridge') return false;
     if (o.kind === 'inference') return true;
-    // CONTRACTS §1.2 (D4): a second run's placement, pairTotal and countingRun carried over from run 1 (the row had no
-    // run-2 time) are provisional while run 2 is on course.
-    const st = a.presented.status;
+    // CONTRACTS §1.2 (D4, round 10): a second run's placement, pairTotal and countingRun carried over from run 1 (a row
+    // with no run-2 time and no mark) are provisional from the start of run 2 until run 2's own row replaces them.
     if (['placement', 'pairTotal', 'countingRun'].includes(f) && this.phaseInfo(a.phaseId).pairRole === 'second'
-        && a.listed && !a.leftThisGen && st.state === 'known' && st.value === 'on-course') return true;
+        && a.startSeenThisGen && o.kind === 'result-row' && o.rowStatus == null) return true;
     // Where gates are presented, property 11's reading: a result value is provisional exactly while the presented
     // gates have a blank cell and upstream still lists the Attempt (run not closed). Where no gate vector is
     // presented (no course; vectors), the observation's own judging flag decides, until the run closes (§1.2, §4.4).
