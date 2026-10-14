@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opencanoetiming.org/schemas/observed.schema.json",
+  "title": "Observed",
+  "description": "The observation envelope, CONTRACTS.md §1.2/§1.4. Every value in both the on-site and live-ingest contracts that comes from outside the domain layer is wrapped in exactly this shape. `value`'s own schema is not fixed here — a concrete usage (e.g. Observed<Outcome>) composes this schema with `properties.value` refined for that field. This file is the authority on envelope shape: field presence, the omission rule for `eventTime`, and the closed `reason` vocabulary; it does not attempt to describe every concrete `value` type used throughout CONTRACTS.md §2.",
+  "oneOf": [
+    {
+      "title": "known",
+      "type": "object",
+      "properties": {
+        "state": {
+          "const": "known"
+        },
+        "value": {},
+        "observedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "eventTime": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "source": {
+          "$ref": "#/$defs/sourceTag"
+        },
+        "confidence": {
+          "enum": [
+            "authoritative",
+            "inferred"
+          ]
+        },
+        "provisional": {
+          "type": "boolean",
+          "description": "true while the value may still move (CONTRACTS.md SS1.2): an on-course inference not yet superseded by a result row; a result whose judging is incomplete and whose run is not closed; or an optimistic write awaiting its echo."
+        }
+      },
+      "required": [
+        "state",
+        "value",
+        "observedAt",
+        "source",
+        "confidence",
+        "provisional"
+      ],
+      "additionalProperties": false,
+      "description": "eventTime is OPTIONAL and, per CONTRACTS.md §1.2, MUST be omitted (key absent) rather than sent as null when there is no applicable event time. It is never appropriate to add eventTime to 'required' when refining this schema for a concrete field."
+    },
+    {
+      "title": "not-yet",
+      "type": "object",
+      "properties": {
+        "state": {
+          "const": "not-yet"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "title": "unavailable",
+      "type": "object",
+      "properties": {
+        "state": {
+          "const": "unavailable"
+        },
+        "reason": {
+          "$ref": "#/$defs/unavailableReason"
+        }
+      },
+      "required": [
+        "state",
+        "reason"
+      ],
+      "additionalProperties": false
+    }
+  ],
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601, always wall-clock, always with an explicit offset or Z. Never used for merge ordering (CONTRACTS.md §4 INV-6) — display and staleness computation only."
+    },
+    "sourceTag": {
+      "enum": [
+        "tcp",
+        "xml",
+        "operator-write",
+        "bridge"
+      ],
+      "description": "CIS is not consumed (DECISIONS/ADR-011). operator-write sits outside INV-2's rules 1-3 (rule 4, CONTRACTS.md SS4). bridge appears only on the live tier, for resources a bridge pushes as bare values (SS8.3). Kayak Cross heat order is tagged by the channel it arrived on."
+    },
+    "unavailableReason": {
+      "enum": [
+        "not-configured",
+        "source-unreachable",
+        "not-applicable"
+      ],
+      "description": "Closed vocabulary, never free text (CONTRACTS.md SS1.2). 'not-applicable' differs in kind from the other two: the fact does not exist for this entity at all, permanently. Examples: a person with no registry identity, a heat number in a race without heats."
+    }
+  }
+}
