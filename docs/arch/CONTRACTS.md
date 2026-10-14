@@ -112,12 +112,16 @@ The fields, precisely:
 - **`provisional`.** `true` while **the value may still move**. That is the case while any of these
   holds:
   - it is an on-course inference not yet superseded by a results-table observation of the same run;
-  - it is a result whose judging is incomplete (at least one gate of the Phase's course is still
-    blank) and whose run is not yet closed — closure is upstream removing the Attempt from its
-    on-course list, about 20 s after the finish, which is when it leaves the on-course set (§7.1);
+  - it is a result whose judging is incomplete — a presented gate cell is still blank (§4 rule 1
+    merges the cells) — or whose completeness cannot be judged yet because no course is bound, and
+    whose run is not yet closed; closure is upstream removing the Attempt from its on-course list
+    after its auto-complete delay, which is when it leaves the on-course set (§7.1);
+  - it is a second run's `placement`, `pairTotal` or `countingRun`, carried over from run 1, while
+    run 2 is on course: they move when it finishes;
   - it is an optimistic write still awaiting its echo (§2.9).
 
-  Otherwise it is `false`. This marks the state honestly in either mode of Canoe123's "ranking with
+  Otherwise it is `false`. **`status` is never provisional:** that the run started or finished is a
+  fact even while its outcome may move (`DERIVATIONS.md` §4.1). This marks the state honestly in either mode of Canoe123's "ranking with
   incomplete penalties" setting:
   - **setting on:** the first result push can precede the last gate's judgement, and the value stays
     provisional until judging completes;
@@ -248,8 +252,9 @@ own just-submitted correction is a second legitimate `WriteRequest`, not a retry
 ### 1.6 Snapshot and subscription ordering
 
 **`seq` is one counter per server.** Every push-capable stream (§7's WebSocket, §8.4's public feed)
-stamps each outbound message with `seq`: the ingest sequence number (INV-6, §4) of the change that
-produced it. It is the same number on every connection and in every `asOfSeq` a REST response
+stamps each outbound message with `seq`. Each outbound message takes the next value of the counter;
+an element's ingest sequence (INV-6, §4) is the value the counter had when it was ingested, so one
+element may produce many messages, each with its own `seq`. It is the same number on every connection and in every `asOfSeq` a REST response
 carries, because all of them read one counter. It is strictly increasing, and it **never regresses
 across a server restart**: the counter's high-water mark is persisted with the same discipline as
 §2.10. `seq` only lets a client tell whether it has already incorporated a given change, the way a
@@ -288,8 +293,9 @@ and §8.4 each restate only the connection-specific detail, not this sequence.
 
 ### 1.7 Machine-readable schemas — scoped narrowly, deliberately
 
-`docs/arch/schemas/observed.schema.json` and `error.schema.json` are real JSON Schema, not
-illustration — every envelope and every error response in §7 and §8 validates against one of them.
+`docs/arch/schemas/observed.schema.json`, `error.schema.json` and `fixture-admitted.schema.json` (the
+fixture admission block of `TEST-ARCHITECTURE.md` §4: a machine-checked gate, not a wire shape) are
+real JSON Schema, not illustration — every envelope and every error response in §7 and §8 validates against one of them.
 They exist because these two shapes appear in nearly every response either contract sends, so a
 single machine-checkable definition of each is worth more than the same prose repeated at every use
 site staying in sync by discipline alone.
@@ -412,7 +418,7 @@ type Phase = {
   pair: PairRole | null               // [D] structural, from format and schedule
   heats: boolean                      // [D] structural, from format
   stage: Stage                        // [D] structural, from format — where in the progression this Phase sits
-  date: string                        // YYYY-MM-DD, assigned once, immutable — INV-5
+  date: string                        // YYYY-MM-DD, the snapshot's, then immutable — INV-5
   courseId: Observed<string>          // [D] xml; not-applicable for a classification
   scheduledStart: Observed<Timestamp> // [D] xml, the scheduled start
   programmeOrder: Observed<number>    // [D] tcp, xml — position in the event's running order
@@ -486,7 +492,9 @@ observation, which moves only when the operator recalculates, so a client compar
 that never holds rows.
 
 **`date` is assigned once and never changes**, even if a correction to the Phase's results is pushed a
-week later. That is what keeps multi-day grouping correct under late correction.
+week later. That is what keeps multi-day grouping correct under late correction. Before the snapshot
+is read it is inferred from the Phase's first observation and is replaced by the snapshot's date
+exactly once (`DERIVATIONS.md` §2.1); the snapshot's value never changes.
 
 ### 2.5 Entry
 
@@ -607,7 +615,7 @@ type Faults = {
                          // the slot count (9 on the recorded 9-slot, 7-gate course). Not a gate number:
                          // map through Course.slots (§2.12) if a gate number is wanted
 type TimeToBeat = { mode: 'target' | 'delta'; seconds: number; holder?: string }
-type Placement = { rank: number | null; order: number }
+type Placement = { rank: number; order: number }   // known only when upstream ranks the row — §5
 ```
 
 **Identity is `(phaseId, bib)`.** What is physically stable is the fact that whoever wore bib 9 went
@@ -631,6 +639,11 @@ and the run is raced again. Meanwhile, it looks as if the athlete never did that
   - `underReview`, `qualified`, `courseOrder` and `timeToBeat`.
 - The old result is **not** shown while the re-run happens. A client that wants to say "re-run" reads
   `run > 1`.
+- Observations are attributed to a generation by the finish they carry, else by run time
+  (`DERIVATIONS.md` §4.11): an XML row by `dtFinish`; a TCP row, which carries no finish time, is the
+  current generation's only once that generation's finish has been seen on the on-course stream and
+  the row's `Time` equals it. Until then a TCP row with a time describes the replaced run and is never
+  presented.
 
 **Outcome, by phase of the run.**
 - **`pending`:** nothing yet.
@@ -670,6 +683,9 @@ and the run is raced again. Meanwhile, it looks as if the athlete never did that
   and `Q` throughout. Such a row presents `outcome: unavailable{reason:'not-applicable'}` and its
   `placement` as stated; its time field is never presented, on either tier. A client shows the
   placement and no time. Decided in the domain layer so that no client detects `100.00` on its own.
+  Untimed is read from the snapshot row (`dtFinish` empty, time and placement present) and inherited
+  by the Attempt's TCP row, which carries no finish time of its own; before the first snapshot a TCP
+  row is presumed timed.
 - The earlier draft's gap, where running time had no shape (#166), is closed by the `running`
   variant. A client never has to cross-reference `status` to know whether a value is still
   accruing.
@@ -703,8 +719,10 @@ upstream's on-course grid does not clear the stored result, so later pushes keep
 recorded cases showed a false leader for 31 s and 71 s. The only immediate evidence is the on-course
 stream listing the bib running again, with the same start and no finish. When that happens:
 - `status` returns to `on-course`, `outcome` to `running`, and `placement` to `not-yet`;
-- rows carrying the contradicted finish time stay unpresented until a row carries a different
-  finish, a mark or a retraction, or the on-course stream shows a finish again;
+- rows carrying the contradicted finish stay unpresented — matched by `dtFinish` where the row has
+  one, else by run time, since a TCP row carries no finish time — until a row carries a different
+  finish by the same comparison, a mark or a retraction, or the on-course stream shows a finish again;
+  after a lift by the on-course stream they stay unpresented;
 - the contradiction is surfaced as a `contradicted-finish` diagnostic (§7.1).
 
 **A mark overrides a time.** A result row can carry a mark and a time at once; a duplicate finish
@@ -712,7 +730,9 @@ was once resolved by marking one athlete DNF while both rows kept the same finis
 with a mark presents `no-result`, whatever time it carries.
 
 **Duplicate finishes are surfaced, never resolved by us.** Two Attempts of one Phase presenting the
-same finish time raise a `duplicate-finish` diagnostic. The operator resolves it upstream.
+same finish `eventTime` raise a `duplicate-finish` diagnostic. A TCP row carries no finish time and
+takes part only once the snapshot supplies its `dtFinish`; two rows with the same run time are a tie,
+never a duplicate. The operator resolves it upstream.
 
 **Marks.**
 - `status` carries upstream's full result-mark vocabulary (`DERIVATIONS.md` §4.1).
@@ -721,7 +741,8 @@ same finish time raise a `duplicate-finish` diagnostic. The operator resolves it
   - `dsq-r` and `dqb` are distinct disqualifications that the earlier draft lost into `other`.
 - **In a second run of a pair, a mark describes run 2 only.** The athlete keeps a combined placement
   from run 1. For example, one athlete was marked `dns` for run 2 and ranked 110th. `placement` and
-  `pairTotal` carry that, independently of `status`.
+  `pairTotal` carry that, independently of `status`. While run 2 is on course, `placement`,
+  `pairTotal` and `countingRun` carried over from run 1 are `provisional: true` (§1.2).
 - **A mark left over from before a re-run is stale.** Upstream does not clear an old mark when a
   re-run finishes over it (observed upstream behaviour; no recorded instance). So on a row of the
   current generation whose finish time is the new run's, a mark identical to the one the Attempt
@@ -799,7 +820,7 @@ type StandingEntry = {
   bib: string
   rank: number | null          // relayed; age-category rank assembled — §5
   order: number | null         // null until placed
-  result: Outcome              // the Attempt's own outcome (for a pair: the second run's own)
+  result: Outcome              // the Attempt's outcome when it is a result; { kind: 'pending' } while pending or running — §5
   pairTotalSeconds?: number | null // pair scope only: the combined result the placement is based on
   behindSeconds: number | null // this entry's ranked value minus the leader's; duration scopes only
   provisional: boolean
@@ -814,6 +835,11 @@ type Anomaly =
 
 `anomalies` is an on-site diagnostic. It is served and pushed in §7 (the admin UI reads it; a
 scoreboard ignores it) and **never in §8.4**: the public `Standing` is serialised without the field.
+
+**A standing is pushed only when its serialised form changes** (§5 step 1; INV-5 applied to a whole
+resource). A running athlete's ticks never reach a standing: `result` is `{ kind: 'pending' }` while
+the Attempt is on course, and the live time is an on-course fact read from the Attempt and the
+on-course set. Measured before this rule, one 25-minute window re-sent its standings 37,168 times.
 
 ### 2.8 Source status
 
@@ -843,6 +869,9 @@ and stayed open until c123-server was restarted, silently (`EVIDENCE.md` Exhibit
 - after any outage, rejection cleared, or restart, the bridge re-pushes the current state of every
   resource changed since `lastAcceptedAt`. Every push is an idempotent `PUT` (§1.5), so re-pushing
   is always safe and needs no negotiation;
+- a TCP (re)connect on site brings the current race's whole results table at once
+  (`DERIVATIONS.md` §0.3), so a bridge restart or reconnect incurs, besides the cold-start burst of
+  every Attempt in the snapshot, a burst of the current race's rows: 152–1,167 rows in the recordings;
 - the state is visible in `SourceStatus.live` and pushed as `sources.updated` (§7.2), admin only.
 
 **`upstreamInstance`** reports which Canoe123 instance the TCP feed comes from. Every upstream message
@@ -1094,6 +1123,11 @@ reliable signal that a Phase's results changed is ordinary field-level change: a
   - `at-start`: staged in the start gate, armed for the start impulse and not yet started. It is 8% of
     on-course traffic in recordings, and #166 had no status for it.
   - `not-started → on-course` directly is legal too, when staging is not observed.
+  - `at-start → not-started`, when the Attempt is unstaged before any start (observed: a bib staged
+    for 5 s in the next day's race, then removed).
+  - `left-without-finish → at-start | on-course`, when upstream lists it again in the same
+    generation; this is also what makes a false leave under `DERIVATIONS.md` §4.1's leave rule
+    harmless.
 - **No-results:**
   - `not-started | at-start → dns`;
   - `on-course → dnf | dsq | dsq-r | dqb | cap | ral | other`.
@@ -1203,11 +1237,14 @@ implementation must satisfy, not an algorithm.
        assertion: genuinely new upstream information. A re-delivery of the value that source already
        held never displaces an assertion (INV-5).
 - **INV-2b (disagreement is surfaced, never silently adopted).** A retained, non-presented observation
-  can disagree with the presented one after both have settled. Such a disagreement is surfaced as an
+  can disagree with the presented one after both have settled: neither is provisional, and the
+  snapshot's content age (INV-2c) is later than the `tcp` observation it disagrees with; without the
+  second condition every save in the seconds after a push would raise and clear a disagreement. Such
+  a disagreement is surfaced as an
   admin diagnostic,
   `{ kind: 'source-disagreement'; attemptId: string; field: string; sources: SourceTag[] }`, served by
   `GET /api/diagnostics` (§7.1), the same audience as `SourceStatus`. Two further diagnostic kinds
-  live there: `{ kind: 'contradicted-finish'; attemptId; finishTime }` (INV-2d) and
+  live there: `{ kind: 'contradicted-finish'; attemptId; finishTime: Timestamp | null; runSeconds: number }` (INV-2d) and
   `{ kind: 'duplicate-finish'; phaseId; finishTime; bibs: string[] }` (§2.6), and
   `{ kind: 'stale-mark'; attemptId; run; mark }` (§2.6, a mark carried over a re-run),
   `{ kind: 'member-sum-mismatch'; attemptId; gate; crew: number; members: (number | null)[] }` (§2.6)
@@ -1241,10 +1278,14 @@ implementation must satisfy, not an algorithm.
   from a results-table observation, that finish is **contradicted**:
   - `status` returns to `on-course`, `outcome` to the on-course `running` value, `placement`,
     `pairTotal` and `countingRun` to `not-yet`;
-  - every results-table observation of this Attempt whose finish time equals the contradicted one
-    stays retained and unpresented;
-  - the contradiction is lifted by a results-table observation carrying a different finish time, a
-    mark, or a retraction (INV-7), or by the on-course stream listing the Attempt with a finish again.
+  - the contradicted finish is recorded as `{ finishTime: Timestamp | null; runSeconds: number }`:
+    `finishTime` is the presented `eventTime` where the finish was observed on the on-course stream
+    or in the XML, else `null`, since a TCP row carries no finish time;
+  - every results-table observation of this Attempt carrying the contradicted finish — by `dtFinish`
+    where the row has one, else by run time — stays retained and unpresented, also after the lift;
+  - the contradiction is lifted by a results-table observation carrying a different finish by the
+    same comparison, a mark, or a retraction (INV-7), or by the on-course stream listing the Attempt
+    with a finish again.
 
   Evidence: taking a finish away on upstream's on-course grid does not clear the stored result, so
   later pushes keep carrying it. Seven recorded cases; two of them showed a false leader for 31 s and
@@ -1257,10 +1298,13 @@ implementation must satisfy, not an algorithm.
     ranked, which is what "delete all results" produces). Retracted: `outcome`, `gates`,
     `placement`, `underReview`, `qualified`, and any mark in `status`.
   - **TCP, paired second run:** the row is absent: as above, plus `pairTotal` and `countingRun`. The
-    row is present with an empty time and no mark: `outcome` and `gates` of run 2 are retracted;
+    row is present with an empty time and no mark: `outcome`, `gates` **and any mark in `status`** of
+    run 2 are retracted (recorded: a second-run `dns` cleared in place, the athlete then raced);
     `placement` and `pairTotal` follow the row, since an athlete with only a first-run result is
     listed that way.
-  - **XML:** the row carries no time, no finish time and no mark: as the TCP first-run case.
+  - **XML:** a first-run or single-run row carrying no time, no finish time and no mark: as the TCP
+    first-run case. A second-run row so carrying: as the TCP time-empty case — before run 2, every
+    second-run row in the snapshot already carries the combined placement and total with no time.
   - **Never retracted:** an on-course inference, `entry`, `bib`, `startOrder`, `heat`, `startLane`,
     `run`, or a field whose Attempt was never present in a results-table observation.
   - **XML retractions are guarded by content age (INV-2c).** The snapshot lags TCP by up to a save
@@ -1335,20 +1379,24 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
 
    `standingKey = "<scope.kind>:<phaseId>[:<heat>]/<ageCategoryId | 'all'>"`, with `phaseId` being the
    second Phase for a pair.
-   **`asOf`** is the ingest time of the latest observation that contributed to any entry of the
-   standing: for a race or pair standing, the latest `placement`, `outcome` or `pairTotal`
-   observation of its Attempts; for a classification, the latest row observation (§2.4).
+   **`asOf`** is the ingest time of the latest observation that changed the standing as serialised;
+   for a classification, the latest row observation (§2.4). **A standing is pushed only when its
+   serialised form changes:** an entry added or removed, or an entry's `rank`, `order`, `result`,
+   `pairTotalSeconds`, `behindSeconds`, `provisional`, `underReview` or `decidedIn`, or `anomalies`.
 2. **Whole-class entries.**
-   - Each Attempt of the Phase with a `known` `placement` is an entry. It gets that `placement`'s
-     `rank` and `order`.
+   - Each Attempt of the Phase with a `known` `placement` is an entry; `placement` is `known` only
+     when upstream ranks the row (§2.6). It gets that `placement`'s `rank` and `order`.
    - Entries sort by `order`.
    - In a heat Phase's `phase` standing, entries sort by `(heat, order)`, as upstream does.
    - For a `pair`, the Attempts are the second Phase's. Their placement is already the combined one,
      and upstream pushes it as soon as the *first* run changes. `result` is the second run's own
-     outcome, and `pairTotalSeconds` is `pairTotal`.
+     outcome when it is a result, and `{ kind: 'pending' }` while the second run is pending or on
+     course; `pairTotalSeconds` is `pairTotal`.
    - A `classification` takes its rows from the classification Phase's rows (`DERIVATIONS.md` §4.10);
      on the live tier, from the classification push (§8.3), which carries them already placed.
-3. **Unplaced entries** are listed after all placed ones, with `rank: null`, `order: null`. They are
+3. **Unplaced entries** — Attempts presenting an outcome other than `pending` or `running`, or a
+   mark, and no placement; start-list rows and running athletes are not entries — are listed after
+   all placed ones, with `rank: null`, `order: null`. They are
    ordered by `status`, in the declaration order of `AttemptStatus` (§2.6), then by `bib`, compared
    numerically where both bibs are integers and as strings otherwise. This order is deterministic and
    carries no ranking meaning.
@@ -1366,7 +1414,9 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    0 mismatches. It makes category standings available at class-rank latency. Upstream's own category
    ranks reach only the snapshot, a median of ~20 s after the finish. When the snapshot's category
    rank arrives and differs from the assembled one, a `category-rank-disagreement` anomaly is
-   recorded. The assembled rank stays presented.
+   recorded. The assembled rank stays presented. The check reads only rows whose `CatId` is set: on a
+   second-run row with an empty `CatId`, `TotalCatRnk` repeats the class rank and is not a category
+   rank (observed in up to 196,621 row-instances per recording).
 5. **`provisional` and `underReview`** are copied from the entry's own Attempt. They are `true` if any
    of `outcome`, `placement` or `pairTotal` is provisional.
 6. **`behindSeconds`** is the entry's ranked value minus the first-ordered entry's, for duration
@@ -1440,7 +1490,7 @@ Every response except `/api/sources` carries `asOfSeq: number` (§1.6) at the to
 | `GET /api/classes/{classId}/entries` | `{ asOfSeq, entries: Entry[] }` | `404 class-not-found` |
 | `GET /api/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }` | `404 phase-not-found` |
 | `GET /api/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`: every scope of §5, for the whole class and per age category | `404 class-not-found` |
-| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null }`: **every Attempt upstream currently lists on its on-course list**, across every running Phase, whatever its `status`: `at-start`, `on-course`, and, for the ~20 s between a finish and upstream's closure of the run, `finished` or a mark. The set is upstream's list; `status` says where each Attempt is. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8). Kept current by `oncourse.updated` (§7.2) | — |
+| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null, asOf: Timestamp \| null }`: **every Attempt upstream currently lists on its on-course list**, across every running Phase, whatever its `status`: `at-start`, `on-course`, and, between a finish and upstream's closure of the run — upstream's auto-complete delay, a venue setting, about 20 s at the recorded venues — `finished` or a mark. The set is upstream's list; `status` says where each Attempt is. `asOf` is the ingest time of the latest on-course observation behind the set, `null` before any. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8). Kept current by `oncourse.updated` (§7.2) | — |
 | `GET /api/phases/{phaseId}/checks` | `{ asOfSeq, checks: GateCheck[], flags: GateFlag[] }`: every check and flag of the Phase, all run generations, `status` derived at serialisation (§2.10) | `404 phase-not-found` |
 | `GET /api/sources` | `SourceStatus`, unwrapped | — |
 | `GET /api/diagnostics` | `{ asOfSeq, diagnostics: Diagnostic[] }`: every current diagnostic of the six kinds in §4 (source disagreement, contradicted finish, duplicate finish, stale mark, member-sum mismatch, unparseable cell). Admin audience only | — |
@@ -1453,8 +1503,9 @@ maintainer named is the athlete next to pass the finish: the first Attempt in th
 Membership of the on-course set is tracked from the on-course stream, and the set is upstream's
 list.
 - An Attempt enters the set when upstream first lists it.
-- An Attempt leaves the set only when upstream stops listing it — at closure, about 20 s after a
-  finish; when the operator removes it; when a heat leaves — or on upstream's explicit "course empty"
+- An Attempt leaves the set only when upstream stops listing it — at closure, upstream's
+  auto-complete delay after a finish (a venue setting, about 20 s at the recorded venues); when the
+  operator removes it; when a heat leaves — or on upstream's explicit "course empty"
   message. **A finish does not remove it.** Upstream keeps a finisher listed until closure, and so
   does this set, with `status: finished` or a mark. The `oncourse.updated` that drops the Attempt is
   therefore the closure signal that §7.3's write rule and INV-2's `gates` exception rely on. How long
@@ -1474,6 +1525,8 @@ Every message carries `seq` (§1.6).
   fields. An omitted field is untouched, never reset. A run-generation change is sent as explicit
   `not-yet` values (INV-1).
 - `standing.updated`, `course.updated`, `write.updated` and `sources.updated` carry the whole resource.
+  `standing.updated` is sent only when the standing's serialised form changed (§5 step 1), never for a
+  running athlete's ticks.
 - **`check.updated`** carries `{ attemptId, run, gate, check: GateCheck | null }`, whole; `null` means
   the check was removed. It is sent on every check write and **whenever a check's derived `status`
   changes** because the presented gate penalty changed (§2.10). **`flag.updated`** carries the whole
@@ -1518,7 +1571,7 @@ Every message carries `seq` (§1.6).
 { "seq": 1049, "type": "scope.replaced", "scope": { "kind": "phase", "phaseId": "K1M_BR1_19" },
   "attempts": [ ...Attempt... ], "standings": [ ...Standing... ] }
 { "seq": 1051, "type": "oncourse.updated", "attemptIds": ["K1M_BR1_19:57", "K1M_BR1_19:58"],
-  "featuredByUpstream": "K1M_BR1_19:57" }
+  "featuredByUpstream": "K1M_BR1_19:57", "asOf": "2026-09-15T10:00:01.500Z" }
 { "seq": 1052, "type": "event.changed", "event": { ...Event... } }
 ```
 
@@ -1710,7 +1763,10 @@ with `error.details` naming the field.
   **The per-athlete state** rides on the partial Attempt `PUT`: `status` (`at-start`, `on-course`,
   `left-without-finish`), `outcome` as `running`, `gates` as cells are judged, `timeToBeat`. The
   bridge pushes only what the on-site domain layer presents, in its own ingest order, so an
-  on-course inference never follows a result row for the same generation on the wire. **Rate:** the
+  on-course inference never follows a result row for the same generation on the wire. A Results push
+  becomes an Attempt `PUT` only for rows whose **presented** fields changed: upstream's row-level sort
+  keys that the domain does not present, such as a marked row's `RankOrder`, never trigger a push
+  (§2.6: `placement` is known only when upstream ranks the row). **Rate:** the
   bridge coalesces on-course pushes to at most one per Attempt per second, and pushes at once on a
   status change or a gate judgement; upstream sends about two on-course messages per competitor per
   second, and a spectator gains nothing from the second. The live client ticks locally between
@@ -1728,7 +1784,8 @@ with `error.details` naming the field.
 - **What each push emits on the public stream** (§8.4): a partial Attempt `PUT` emits
   `attempt.updated`; `DELETE` emits `attempt.deleted`; the whole-Phase `PUT` emits `scope.replaced`
   with `{ kind: 'phase' }`; Class, Phase, Entry and Course `PUT`s emit their `*.updated`; the on-course
-  `PUT` emits `oncourse.updated`; every affected Standing follows as `standing.updated`.
+  `PUT` emits `oncourse.updated`; every affected Standing follows as `standing.updated`, only where
+  its serialised form changed (§5).
 - **Naming a round on the live tier.** With no format token, a client labels a Phase from its
   organiser-authored `title` when present, else from the structural fields: `stage` ("time trial",
   "semi-final", "final"…), `pair.role` and `combination` ("run 1", "run 2", "best of two", "sum of

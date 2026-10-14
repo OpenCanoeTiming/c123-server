@@ -83,6 +83,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Where standings are shown, show age-category standings alongside the class standing, not instead of it (CONTRACTS §2.3; ADR-014).
 - [ ] Render a `classification` Standing from its own entries, with `decidedIn`, as upstream last built it; a classification Phase has no Attempts (CONTRACTS §2.4, §2.7; DERIVATIONS §4.10).
 - [ ] Show a classification's age from its `Standing.asOf`, compared with the `asOf` of its contributing Phases' standings, so that a lag behind them is visible (CONTRACTS §2.4, §5).
+- [ ] Read a running athlete's live time from the Attempt and the on-course set, never from a standing: a standing entry's `result` is `pending` while the athlete is on course, and `standing.updated` arrives only when the standing changed (CONTRACTS §2.7, §5, §7.2; ADR-017).
 - [ ] Identify each Standing by its `standingKey` (CONTRACTS §2.7, §5).
 
 **Push, snapshot and sequencing**
@@ -128,7 +129,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Read `birthYear: number | null`; the on-site tier carries no birth date (CONTRACTS §2.5, §7; ADR-006).
 - [ ] Use `format` and `phaseId` as Canoe123-native tokens, verbatim (CONTRACTS §7; ADR-007).
 - [ ] Show an unknown `format` token verbatim, with what the structural fields say; never invent a name and never fail to render (CONTRACTS §2.4; DERIVATIONS §9).
-- [ ] Keep the on-course set from `/api/oncourse` and `oncourse.updated`, in `courseOrder` with those lacking one last by `startOrder`; several at once and an empty set are both valid. The set is upstream's list: a finisher stays in it as `finished` or a mark until upstream closes the run, about 20 s; leaving the set is the closure, never the finish (CONTRACTS §7.1, §7.2; ADR-009).
+- [ ] Keep the on-course set from `/api/oncourse` and `oncourse.updated`, in `courseOrder` with those lacking one last by `startOrder`; several at once and an empty set are both valid. The set is upstream's list: a finisher stays in it as `finished` or a mark until upstream closes the run, about 20 s; leaving the set is the closure, never the finish; take the set's age from `asOf` on `/api/oncourse` and on `oncourse.updated` (CONTRACTS §7.1, §7.2; ADR-009).
 - [ ] Keep a Kayak Cross heat that has left the on-course list at `on-course` until its order arrives; never treat leaving the list as a finish (CONTRACTS §7.1, §7.2; ARCHITECTURE §6.D).
 - [ ] Ignore `Standing.anomalies`, which on-site serves for the admin UI only (CONTRACTS §2.7, §5).
 - [ ] Treat `/api/sources`, `/api/diagnostics`, `diagnostics.updated` and `POST /api/rebaseline` as admin-audience only; ignore diagnostics and never expose the re-baseline (CONTRACTS §2.8, §4, §7.1, §7.2).
@@ -215,7 +216,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Among bridge observations of one field, present the later-ingested one (CONTRACTS §4, §8.3).
 - [ ] Accept `stage` on the Phase push and serve it; it is structural, not a vendor token (CONTRACTS §2.4, §8.3; ADR-007).
 - [ ] Expect the bridge to re-push the current state of every changed resource after an outage, a cleared rejection or a restart, and treat each as the idempotent `PUT` it is (CONTRACTS §1.5, §2.8, §8.3).
-- [ ] Assemble standings as c123-server does, from the pushed `placement` and `ageCategoryId`, without the category-rank check and without the order-anomaly check; rank nothing (CONTRACTS §5, §8; ADR-012).
+- [ ] Assemble standings as c123-server does, from the pushed `placement` and `ageCategoryId`, without the category-rank check and without the order-anomaly check; rank nothing; emit `standing.updated` only when the standing's serialised form changed, never for a running athlete's ticks (CONTRACTS §5, §8, §8.3; ADR-012; ADR-017).
 - [ ] Set each Standing's `asOf` to the ingest time of the latest observation behind any of its entries (CONTRACTS §5).
 - [ ] Accept `PUT /ingest/v2/phases/{phaseId}/classification` for a Phase of `kind: 'classification'`, replace its rows whole, assemble the `classification` Standing from them as delivered and emit `standing.updated`; refuse Attempts on a classification Phase and classifications pushed as Attempts (CONTRACTS §2.4, §5, §8.3, §8.6).
 - [ ] Recompute nothing else: retire `EventLifecycleService`'s independent judgement, the independent ranking and the second XML parser (ARCHITECTURE §3; CONTRACTS §8).
