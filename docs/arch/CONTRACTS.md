@@ -117,8 +117,10 @@ The fields, precisely:
     whose run is not yet closed; closure is upstream removing the Attempt from its on-course list
     after its auto-complete delay, which is when it leaves the on-course set (§7.1);
   - it is a second run's `placement`, `pairTotal` or `countingRun` carried over from run 1, from the
-    listing that starts run 2 until run 2's own result row replaces them (that row usually arrives
-    before the on-course finish message, §2.6);
+    listing that starts run 2 until a row of run 2 — one carrying its time or its mark — restates that
+    field: field by field, since `placement` and `pairTotal` come with the TCP row and `countingRun`
+    only with the XML row (`DERIVATIONS.md` §4.4; the TCP row usually arrives before the on-course
+    finish message, §2.6);
   - it is an optimistic write still awaiting its echo (§2.9).
 
   Otherwise it is `false`. **`status` is never provisional:** that the run started or finished is a
@@ -747,9 +749,9 @@ never a duplicate. The operator resolves it upstream.
   - `dsq-r` and `dqb` are distinct disqualifications that the earlier draft lost into `other`.
 - **In a second run of a pair, a mark describes run 2 only.** The athlete keeps a combined placement
   from run 1. For example, one athlete was marked `dns` for run 2 and ranked 110th. `placement` and
-  `pairTotal` carry that, independently of `status`. From the listing that starts run 2 until run 2's
-  own result row replaces them, `placement`, `pairTotal` and `countingRun` carried over from run 1 are
-  `provisional: true` (§1.2).
+  `pairTotal` carry that, independently of `status`. From the listing that starts run 2 until a row of
+  run 2 restates them — `placement` and `pairTotal` at the TCP row, `countingRun` at the XML row —
+  the values carried over from run 1 are `provisional: true` (§1.2).
 - **A mark left over from before a re-run is stale.** Upstream does not clear an old mark when a
   re-run finishes over it (observed upstream behaviour; no recorded instance). So on a row of the
   current generation whose finish time is the new run's, a mark identical to the one the Attempt

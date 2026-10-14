@@ -291,8 +291,9 @@ the step index, the Attempt, the field and the property number.
     `outcome.kind: 'running'`); or upstream still lists the Attempt (no `oncourse-left` yet;
     equivalently, it is in the latest `oncourse.updated`) and either a presented `gates` cell is `null`
     or `gates` is not `known` because no course is bound; or it is a second run's `placement`,
-    `pairTotal` or `countingRun` carried over from run 1, from the listing that starts run 2 until run
-    2's own result row replaces them; or its `source` is `operator-write` with a pending
+    `pairTotal` or `countingRun` carried over from run 1, from the listing that starts run 2 until a
+    row of run 2, carrying its time or its mark, restates that field — judged field by field, since
+    `countingRun` arrives only with the XML row; or its `source` is `operator-write` with a pending
     `WriteRequest`. It goes `false → true` only through a regression first (property 4), at an
     on-course listing of the Attempt that starts a run or that lists it while no course is bound (a
     cold start: the results push precedes the first snapshot), or when a course binds and shows a

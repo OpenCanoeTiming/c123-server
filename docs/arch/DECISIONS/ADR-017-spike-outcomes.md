@@ -235,3 +235,14 @@ arrives before the finish); property 11's transition clause gains the cold-start
 listed while no course is bound (S1-30, CHECKER-FAIL, two steps); and D1's retain-and-attribute is the
 normal path in every generation — the result push preceded the on-course finish message in 86 of 120
 recorded finishes, by 0.055–0.709 s (S1-31, E1). 93 vectors.
+
+## Revision 3 — the spike is closed on the design side (2026-10-14)
+
+S1's round-10 re-run (`spike/m0` b7e0ee0): 93 of 93 vectors; the two affected windows (09:30–09:45,
+10:44–10:57) replayed twice with matching hashes; 0 gate-2 violations in both. Every CHECKER-FAIL the
+spike raised is closed. One last wording gap, S1-32: the carried second-run fields settle field by
+field — `placement` and `pairTotal` at run 2's TCP row, `countingRun` only at its XML row, which is the
+sole carrier of `BetterRunNr` (recorded: K1M_BR2_19:78, TCP row 09:31:51.169Z, XML row 09:31:56.698Z).
+`CONTRACTS.md` §1.2/§2.6 and property 11 now say "until a row of run 2, with its time or mark, restates
+that field". No code re-run is needed. What remains is execution, not design: S5's run on the venue
+laptop, and M1's data gates listed above.
