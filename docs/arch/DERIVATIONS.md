@@ -85,7 +85,9 @@ current race within seconds (`CONTRACTS.md` §2.8 counts it for the bridge).
 rename. Readers validate every read (well-formed, root closing tag present) and retry on failure. No
 torn read was observed in 2,236 reads by a 5 s poller, but the window is real. The read is triggered
 when the file's modification time or size changes; the detection time is `xml.lastRewriteDetectedAt`
-(§5), and the write happened within one poll interval before it.
+(§5), and the write happened within one poll interval before it. The watcher polls; `fs.watch` is not
+used: it is unreliable over network shares and under some Windows filter drivers, and the poll interval
+already has contractual meaning, since INV-7's guard is stated in it (spike S5).
 
 ### 0.4 Ingest filters
 
@@ -365,6 +367,8 @@ it carries: a DNF row can keep a time, even another athlete's finish (`CONTRACTS
 - `Completed` is upstream's own "run closed" mark. It is sent only when upstream auto-completes the
   run, which needs penalties complete, a finish and the configured delay, or when a terminal asserts
   it. A run the operator removes by hand never sends it. So it is a trigger, not *the* trigger.
+  Measured: `Completed="Y"` coincided with the bib leaving the list in only 34–70 % of closures across
+  the seven recordings.
 - **Envelope:** `source: 'tcp'`, `confidence: 'inferred'`, `provisional: true`.
 
 **Failure mode:** `not-yet` before the finish. Never `unavailable`.
@@ -615,13 +619,24 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   A result row observed cleared is a **retraction** (§4.12), not a generation change
   (`DECISIONS/ADR-013` Revision). A re-run therefore appears as a retraction, often invisible on TCP
   because the re-run wizard pushes nothing, followed by a new start.
+- **The recorded episode** (nkz-19so, C1M_BR1_19 bib 7, the same participant both times; E1): run 1 on
+  course 10:46:44Z, finish 10:48:37, result push Pen 6 / 96.69 / rank 1, closure 10:48:45. At 10:56:58
+  the TCP row was wiped in place — empty time, rank, penalty and gates: a retraction, INV-7's
+  present-and-empty case (the XML had emptied it at 10:51:53). By 12:02:04 the row was gone: a
+  retraction again, a no-op. Run 2 on course 12:40:09 (the generation increments), result push
+  12:41:44.250 with the new score, on-course finish 12:41:44.358 — the row arrived 108 ms before the
+  finish and was attributed when the finish arrived with the same `Time`; closure 12:42:47. Upstream's
+  sequence is present-with-score → present-empty → gone → present-with-new-score, never a straight
+  wipe. M1 replays it (`DECISIONS/ADR-017`).
 - On increment, the run-scoped fields become `not-yet`, and the change is pushed.
 - **Attribution per source.** An XML row whose `dtFinish` precedes the new generation's start
   describes the replaced run. A TCP row carries no finish time: within a generation that began with
   an observed new start, it is the current generation's only once that generation's finish has been
   seen on the on-course stream and the row's `Time` equals the on-course `Time` at that finish (the
-  two are identical, §4.4); until then a TCP row carrying a time describes the replaced run; a TCP row
-  carrying a mark and no time follows the stale-mark rule (§4.12). Either way the replaced run's row
+  two are identical, §4.4); a TCP row carrying a time that arrives before that finish is retained and
+  attributed when the finish arrives with the same `Time` — recorded: the run-2 result push 108 ms
+  before the on-course `dtFinish` message — else it describes the replaced run; a TCP row carrying a
+  mark and no time follows the stale-mark rule (§4.12). Either way the replaced run's row
   is retained as history and never presented. After the new finish, upstream's one row per bib is the
   new run's, so a later TCP row with a different `Time` is a correction and supersedes (same source,
   INV-2c).
@@ -638,9 +653,10 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
 
 **Retraction from a TCP push** (INV-7). For each Attempt of the race whose presented result fields
 came from results-table observations:
-- **First-run or single-run race.** The row is absent, or the message is in start-list mode:
-  retract `outcome`, `gates`, `placement`, `underReview`, `qualified` and any mark in `status`.
-  Recorded: three cleared DNSs vanished this way, and all three athletes then raced.
+- **First-run or single-run race.** The row is absent, present with no time and no mark, or the
+  message is in start-list mode: retract `outcome`, `gates`, `placement`, `underReview`, `qualified`
+  and any mark in `status`. Recorded: three cleared DNSs vanished this way, and all three athletes then
+  raced; a jury-invalidated run was wiped in place and later re-run (§4.11).
 - **Paired second run.** The row is absent: retract as above plus `pairTotal` and `countingRun`. The
   row is present with `Time` empty and `IRM` empty: retract run 2's `outcome`, `gates` and any mark in
   `status`; take `placement` and `pairTotal` from the row, since an athlete with only a first-run
@@ -658,7 +674,7 @@ second-run row already carries `TotalRnk` and `TotalTotal` with no time.
 Otherwise the snapshot may predate the push, and it is ignored for that field until the next
 snapshot. The same guard applies to the mark exception of INV-2 rule 2, and to any snapshot value
 displacing a `tcp` value during an outage. Recorded: the XML was five minutes *ahead* of TCP's rotation on one
-cleared wrong-race row, and 7 s behind TCP on a cleared DNS.
+jury-invalidated row (C1M_BR1_19 bib 7, later re-run, §4.11), and 7 s behind TCP on a cleared DNS.
 
 **After a retraction,** `status` is what the on-course stream currently shows for the Attempt
 (`at-start`, `on-course`), else `not-started`.
@@ -881,7 +897,8 @@ but no code path or recording ever filled it.
 ## 10. Open technical questions
 
 Items 1–7 and 13 were answered from the source on 2026-09-25 (#179; E1); item 8 was closed by INV-2c
-on 2026-10-14; item 15 was answered by the spike. Items 9, 11, 12, 16 and 17 remain.
+on 2026-10-14; items 15 and 17 were answered by the spike and the exit-delay measurement. Items 9, 11,
+12, 16 and 18 remain.
 
 1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
    hardware judge terminals on their own port and raises a flag on the scoring service for about
@@ -930,6 +947,11 @@ on 2026-10-14; item 15 was answered by the spike. Items 9, 11, 12, 16 and 17 rem
 16. The distribution of re-listing gaps behind `onCourseLeaveAfterSeconds` (§4.1): 33 re-listings
     after a gap above 2.5 s were counted across seven recordings; the constant is 3 s until measured
     (M1).
-17. The finish → on-course-exit interval per recording. `C123-PROTOCOL.md` says about 4 s, the
-    recordings behind `CONTRACTS.md` §7.1 about 20 s; it is upstream's auto-complete delay, a venue
-    setting. Being measured; the range lands in §7.1 when known.
+17. ~~The finish → on-course-exit interval per recording.~~ **Measured (E1, seven recordings, 1,995
+    closures):** about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % in [18, 20) s), about
+    47 s at cp3-cross (p90 57 s), manual closes under 5 s on the two NKZ days (12.6 %, 34.9 %) — the
+    path `C123-PROTOCOL.md`'s "~4 s" describes — and a tail to 126–781 s. A venue setting;
+    `CONTRACTS.md` §7.1 states the range. The protocol doc's figure is corrected in that repository.
+18. The XML poll interval (`pollIntervalMs`, 5 s in the spike and the vectors) and the torn-read retry
+    budget are deployment settings; INV-7's guard is stated in the interval. The venue values come from
+    S5's execution against Canoe123's real copy-over writer (maintainer).

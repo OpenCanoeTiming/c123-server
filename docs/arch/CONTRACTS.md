@@ -642,8 +642,10 @@ and the run is raced again. Meanwhile, it looks as if the athlete never did that
 - Observations are attributed to a generation by the finish they carry, else by run time
   (`DERIVATIONS.md` §4.11): an XML row by `dtFinish`; a TCP row, which carries no finish time, is the
   current generation's only once that generation's finish has been seen on the on-course stream and
-  the row's `Time` equals it. Until then a TCP row with a time describes the replaced run and is never
-  presented.
+  the row's `Time` equals it. A TCP row with a time that arrives before that finish is retained: it is
+  attributed to the current generation if the on-course finish then arrives with the same `Time`
+  (recorded: the result push 108 ms before the on-course finish message), else it describes the
+  replaced run and is never presented.
 
 **Outcome, by phase of the run.**
 - **`pending`:** nothing yet.
@@ -1293,9 +1295,10 @@ implementation must satisfy, not an algorithm.
 - **INV-7 (a scope snapshot's stated absence is a retraction).** For an Attempt whose presented
   result fields came from results-table observations, a scope snapshot of its race that states no
   result is a retraction observation:
-  - **TCP, first-run or single-run race:** the row is absent, or the message is in start-list mode
-    (no row carries a placement or a mark; upstream falls back to that mode exactly when nobody is
-    ranked, which is what "delete all results" produces). Retracted: `outcome`, `gates`,
+  - **TCP, first-run or single-run race:** the row is absent, **or present with no time and no mark**
+    (recorded: a jury-invalidated run wiped in place at 10:56:58, the row gone an hour later), or the
+    message is in start-list mode (no row carries a placement or a mark; upstream falls back to that
+    mode exactly when nobody is ranked, which is what "delete all results" produces). Retracted: `outcome`, `gates`,
     `placement`, `underReview`, `qualified`, and any mark in `status`.
   - **TCP, paired second run:** the row is absent: as above, plus `pairTotal` and `countingRun`. The
     row is present with an empty time and no mark: `outcome`, `gates` **and any mark in `status`** of
@@ -1490,7 +1493,7 @@ Every response except `/api/sources` carries `asOfSeq: number` (§1.6) at the to
 | `GET /api/classes/{classId}/entries` | `{ asOfSeq, entries: Entry[] }` | `404 class-not-found` |
 | `GET /api/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }` | `404 phase-not-found` |
 | `GET /api/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`: every scope of §5, for the whole class and per age category | `404 class-not-found` |
-| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null, asOf: Timestamp \| null }`: **every Attempt upstream currently lists on its on-course list**, across every running Phase, whatever its `status`: `at-start`, `on-course`, and, between a finish and upstream's closure of the run — upstream's auto-complete delay, a venue setting, about 20 s at the recorded venues — `finished` or a mark. The set is upstream's list; `status` says where each Attempt is. `asOf` is the ingest time of the latest on-course observation behind the set, `null` before any. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8). Kept current by `oncourse.updated` (§7.2) | — |
+| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null, asOf: Timestamp \| null }`: **every Attempt upstream currently lists on its on-course list**, across every running Phase, whatever its `status`: `at-start`, `on-course`, and, between a finish and upstream's closure of the run — upstream's auto-complete setting, measured over seven recordings and 1,995 closures: about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % of closures in [18, 20) s), about 47 s at one (medians 47 s, p90 57 s), a minority of manual closes under 5 s (12.6 % and 34.9 % on two days) and a long tail to 126–781 s. **No client may assume a fixed value.** Meanwhile the Attempt is listed as `finished` or a mark. The set is upstream's list; `status` says where each Attempt is. `asOf` is the ingest time of the latest on-course observation behind the set, `null` before any. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8). Kept current by `oncourse.updated` (§7.2) | — |
 | `GET /api/phases/{phaseId}/checks` | `{ asOfSeq, checks: GateCheck[], flags: GateFlag[] }`: every check and flag of the Phase, all run generations, `status` derived at serialisation (§2.10) | `404 phase-not-found` |
 | `GET /api/sources` | `SourceStatus`, unwrapped | — |
 | `GET /api/diagnostics` | `{ asOfSeq, diagnostics: Diagnostic[] }`: every current diagnostic of the six kinds in §4 (source disagreement, contradicted finish, duplicate finish, stale mark, member-sum mismatch, unparseable cell). Admin audience only | — |
@@ -1504,7 +1507,8 @@ Membership of the on-course set is tracked from the on-course stream, and the se
 list.
 - An Attempt enters the set when upstream first lists it.
 - An Attempt leaves the set only when upstream stops listing it — at closure, upstream's
-  auto-complete delay after a finish (a venue setting, about 20 s at the recorded venues); when the
+  auto-complete delay after a finish (a venue setting: typically about 20 s, 47 s at one venue, under
+  5 s when the operator closes by hand); when the
   operator removes it; when a heat leaves — or on upstream's explicit "course empty"
   message. **A finish does not remove it.** Upstream keeps a finisher listed until closure, and so
   does this set, with `status: finished` or a mark. The `oncourse.updated` that drops the Attempt is
@@ -1537,7 +1541,8 @@ Every message carries `seq` (§1.6).
   string | null, asOf: Timestamp }`, `attemptIds` in `courseOrder` (§7.1), `asOf` the ingest time of
   the latest on-course observation behind it. It is sent whenever membership, order or the
   featured competitor changes. A finish changes `status`, not membership: it arrives as an
-  `attempt.updated`, and the Attempt leaves the set at upstream's closure, about 20 s later, which is
+  `attempt.updated`, and the Attempt leaves the set at upstream's closure, typically about 20 s later
+  (a venue setting, §7.1), which is
   the `oncourse.updated` §7.3's retry waits for. The Attempts themselves arrive by `attempt.updated`;
   this message is what keeps the set current, including in Kayak Cross, where leaving the set changes
   no `status`.
@@ -1603,7 +1608,8 @@ athlete on course. So the only upstream write command in this contract is the **
 command**, which carries the race id and edits the stored row; upstream's on-course scoring
 command, and its back-fill of earlier blank gates, are outside the contract entirely.
 
-**The window after the finish, decided: refuse, never hold.** For about 20 s after a finish, until
+**The window after the finish, decided: refuse, never hold.** Between a finish and closure — typically
+about 20 s, a venue setting (§7.1) — until
 closure, the athlete is still on upstream's on-course list, and upstream rewrites the stored row from
 the on-course state at the next save and always at closure. A correction sent then is confirmed by
 echo and silently lost (`EVIDENCE.md` Exhibit 14 is today's code doing exactly that). The server
@@ -1758,7 +1764,7 @@ with `error.details` naming the field.
   penalties come in** (maintainer, gap 21: "an important feature"). It rides on two things already
   here. **The set** is its own resource: `PUT /ingest/v2/oncourse`, whole, in course order, pushed
   whenever membership, order or the featured competitor changes, which is rare (a start, a closure
-  about 20 s after a finish, a heat leaving; a finish itself changes `status`, not membership, as on
+  typically about 20 s after a finish, a heat leaving; a finish itself changes `status`, not membership, as on
   site, §7.1). Its order is the order; `courseOrder` on an Attempt is informational and may lag.
   **The per-athlete state** rides on the partial Attempt `PUT`: `status` (`at-start`, `on-course`,
   `left-without-finish`), `outcome` as `running`, `gates` as cells are judged, `timeToBeat`. The

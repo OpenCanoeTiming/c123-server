@@ -118,7 +118,7 @@ cover:
 - run generations;
 - §5's standing assembly.
 
-The count is 85 as of round 8 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
+The count is 93 as of round 9 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
 a thin adapter that feeds these vectors into its own merge function and asserts the result — proving
 both satisfy the same data-defined contract without either depending on the other's code.
 
