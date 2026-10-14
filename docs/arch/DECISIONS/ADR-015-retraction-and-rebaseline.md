@@ -138,3 +138,17 @@ The guard this ADR introduced for XML retractions and for rule 2's mark exceptio
 states it as such (`ADR-003` Revision 5). Nothing changes for retraction except the name. One
 residual this ADR left open is closed by it: a snapshot rewrite that happened in the seconds before a
 TCP disconnect no longer takes over during the outage (`DERIVATIONS.md` §10 item 8).
+
+## Revision 2 — contradiction matched by finish or run time; the lift keeps contradicted rows unpresented (2026-10-14)
+
+INV-2d held back "rows whose finish time equals the contradicted one". A TCP row has no finish time
+(`ADR-017` D1), and in both contradictions the spike replayed no on-course finish preceded the false
+row either, so the contradicted finish itself had no time. The record is now
+`{ finishTime: Timestamp | null; runSeconds }`; a retained row carries the contradicted finish when its
+`dtFinish` equals `finishTime` (XML) or, having none, its `Time` equals `runSeconds` (TCP); the lift
+is a different finish by the same comparison, a mark, a retraction, or the on-course stream listing a
+finish. After a lift by the on-course stream the contradicted rows stay unpresented; only rows carrying
+the new finish present (S1-20). The second-run retraction cases are completed: a time-empty row
+retracts the mark in `status` too (recorded: a cleared second-run DNS, then the athlete raced), and an
+XML second-run row with no time is the time-empty case, not a first-run retraction, since before run 2
+every such row already carries the combined placement with no time (S1-6, S1-7).

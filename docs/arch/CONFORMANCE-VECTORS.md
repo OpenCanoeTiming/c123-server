@@ -41,7 +41,13 @@ classification pushed to the live tier.
 **Round 8** (2026-10-14) rewrote the two INV-2c vectors — content age across sources, and a same-source
 earlier finish superseding — and added 1: a finisher stays in the on-course set until closure.
 
-**85 vectors:** 72 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
+**Round 9** (2026-10-14, `DECISIONS/ADR-017`) fixed `rerun-stale-mark-not-presented` (its `then` mark is
+presented), dropped `finishTime` from TCP snapshot rows, gave every merge vector a `context.attemptId`,
+and added 7: TCP attribution by run time, the INV-2d lift, placement only when ranked, no standing
+re-send on a running tick, pair fields provisional while run 2 runs, `status` never provisional, and an
+Attempt unstaged before its start.
+
+**92 vectors:** 79 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
 needed, not a target.
 
 ---
@@ -66,7 +72,8 @@ Each vector has:
   - optionally `eventTime` and `run`, the run generation;
   - optionally `judgingComplete` (whether every course gate is judged in this observation; `null`
     where no course is configured) and `runClosed`;
-  - optionally `attemptId`, when a vector involves more than one Attempt.
+  - optionally `attemptId`; a vector whose observations carry none names its Attempt in
+    `context.attemptId` (default `K1M_BR1_6:9`), so no vector has an implicit Attempt.
 
   Observations are *resolved*: `DERIVATIONS.md` has already turned wire fields into these values.
   These vectors test the merge, not the derivation.
@@ -81,8 +88,11 @@ Each vector has:
   observation's content age is its `observedAt`.
 - **Scope snapshots** (INV-7). `{ ingestSeq, snapshot: { source, phaseId, mode, rows }, observedAt }`.
   `mode` is `results` or `start-list`; each row carries `bib` and the resolved fields the row states
-  (`outcome`, `placement`, `pairTotal`, `status` for a mark, `finishTime`, `judgingComplete`, and
-  `timeEmpty` for a second-run row with no run-2 time). A row that carries nothing states no result.
+  (`outcome`, `placement`, `pairTotal`, `status` for a mark, `judgingComplete`, `timeEmpty` for a
+  second-run row with no run-2 time, and `finishTime` **on XML rows only**: a TCP row carries no finish
+  time, and INV-2d and generation attribution match it by `outcome.runSeconds`). A row's `placement` is
+  given resolved: `null` where upstream's `Rank` is empty, whatever its `RankOrder`
+  (`DERIVATIONS.md` §4.7). A row that carries nothing states no result.
 - **On-course listing.** An observation with `field: 'onCourse'` and
   `value: { dtStart, dtFinish }` states what the on-course stream lists for the Attempt (INV-2d).
 - A `kind: 'fragment'` observation stands for any single-row, non-snapshot message.
@@ -108,7 +118,8 @@ wire carries (a generation change reaches live as explicit `not-yet`). `ARCHITEC
 **`expect` is the presented state after the last given.**
 - An envelope field left out of `expect` is not asserted.
 - Keys may be prefixed by an `attemptId` (`K1M_BR1_6:9.outcome`).
-- `diagnostics` asserts INV-2b's surfaced disagreements.
+- `diagnostics` asserts the current diagnostics; a `stale-mark` is current only while the withheld
+  mark is on the presented row.
 - `writeRequest` asserts the write status.
 - `notifications` asserts the number of client-visible changes.
 
@@ -148,11 +159,13 @@ optionally the resulting `checks` (only the fields listed are asserted).
 | `left-without-finish` | `left-without-finish-observed-not-dnf` | 1 |
 | INV-7 (retraction) | `retraction-vanished-row-first-run`, `-dns-cleared-then-races`, `-start-list-mode-clears-all`, `-does-not-touch-inference`, `-second-run-time-empty-keeps-placement`, `-from-xml-row-cleared`; the guard: `retraction-xml-guard-rewrite-before-push` | 7 |
 | INV-1 against retraction (omission is not absence) | `retraction-not-from-fragment`, `retraction-not-in-other-race-snapshot` | 2 |
-| INV-2d (contradiction by the on-course stream) | `contradiction-oncourse-running-again` | 1 |
+| INV-2d (contradiction by the on-course stream; the lift) | `contradiction-oncourse-running-again`, `contradiction-lift-keeps-stale-rows-unpresented` | 2 |
 | Marks over time; half-corrections | `status-overrides-time`, `half-correction-snapshot-duplicate-finish` | 2 |
 | Re-baseline | `rebaseline-discards-stale-tcp-and-rebuilds-from-xml`, `rebaseline-keeps-writes-and-generation` | 2 |
 | Live tier: explicit reset, bare values wrapped, deletion, on-course set and running state, classification rows | `live-explicit-not-yet-resets-field`, `live-bare-value-wrapped-as-bridge`, `live-attempt-deleted`, `live-oncourse-set-replaced-whole`, `live-running-then-finished-latest-wins`, `live-classification-rows-replaced-whole` | 6 |
-| The on-course set and `oncourse.updated` | `oncourse-set-order-and-push`, `oncourse-finisher-stays-listed-until-closure` | 2 |
+| The on-course set and `oncourse.updated` | `oncourse-set-order-and-push`, `oncourse-finisher-stays-listed-until-closure`, `oncourse-unstaged-before-start-returns-to-not-started` | 3 |
+| Placement known only when upstream ranks the row | `placement-not-yet-while-rank-empty` | 1 |
+| No standing re-send on a running tick | `standing-not-resent-on-running-tick` | 1 |
 | Workflow state (§2.10): what `stale` compares against (`null` vs `0`, team sums, `gates` not known), the re-run and re-bib interplay | `check-stale-definition`, `check-null-vs-zero-distinct`, `check-team-sum-compared`, `check-not-carried-to-new-generation`, `check-stays-with-bib-when-result-moves` | 5 |
 | INV-2 rule 3 (single-source fields) | `inv2-rule3-single-source-field` | 1 |
 | INV-2 rule 4 (operator writes) | the six `operator-write-*` and `operator-correction-*` vectors, including `superseded`, plus `operator-write-confirmed-then-changed-upstream` | 7 |
@@ -160,9 +173,9 @@ optionally the resulting `checks` (only the fields listed are asserted).
 | INV-2c (content age across sources; the same source always supersedes) | `inv2c-snapshot-older-than-push-refused-during-outage`, `inv2c-same-source-earlier-finish-supersedes` | 2 |
 | INV-3 and the trichotomy | `trichotomy-known-zero-not-confused-with-absence`, `trichotomy-unavailable-persists-explicitly`, `inv3-not-applicable-external-id` | 3 |
 | INV-4, INV-5, INV-6 | one each | 3 |
-| `provisional` in both upstream modes | `provisional-incomplete-judging-then-settles`, `-first-push-already-complete`, `-run-closed-without-course` | 3 |
+| `provisional` in both upstream modes; pair fields; `status` | `provisional-incomplete-judging-then-settles`, `-first-push-already-complete`, `-run-closed-without-course`, `-pair-fields-while-run-2-on-course`, `status-never-provisional` | 5 |
 | Ongoing recomputation before the result push | `ongoing-recomputation-provisional-total-revised-by-late-gate` | 1 |
-| Run generation (re-run) | `rerun-retracts-run-scoped-fields`, `rerun-old-generation-row-not-presented`, `rerun-status-transition-legal-only-with-generation`, `rerun-stale-mark-not-presented` | 4 |
+| Run generation (re-run) | `rerun-retracts-run-scoped-fields`, `rerun-old-generation-row-not-presented`, `rerun-tcp-row-before-new-finish-not-presented`, `rerun-status-transition-legal-only-with-generation`, `rerun-stale-mark-not-presented` | 5 |
 | Marks and review; untimed rows | `under-review-independent-of-provisional`, `second-run-dns-keeps-combined-placement`, `attemptstatus-finished-to-dsq-post-finish`, `untimed-row-outcome-not-applicable` | 4 |
 | Two-run | `two-run-br1-untouched-by-br2`, `-recovered-from-xml-cold`, `-unavailable-no-live-no-xml` | 3 |
 | Kayak Cross | `cross-outcome-not-yet-before-operator-entry`, `-from-placement-not-time`, `-corrected-after-next-heat-started` | 3 |
@@ -215,3 +228,6 @@ presented-state fact, covered by `inv2b-disagreement-surfaced-not-adopted`.
 8. **INV-2c needed content age, not event times** (round 8). An event-time floor could not express a
    finish legitimately moved earlier. The rewrite event and the poll interval of decision 6 now carry
    INV-2c too, with a stated default for the interval.
+9. **TCP rows carry no `finishTime`; every vector names its Attempt** (round 9, spike S1-1/2/4). A
+   vector that gave a TCP row a finish time was testing a rule the wire cannot satisfy; the match is by
+   run time. An implicit Attempt per vector made one vector ambiguous.

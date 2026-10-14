@@ -174,11 +174,16 @@ still leaves available in test.
   `c123-server` itself emits on `/ws`. The QA spec noticed this gap and assigned it to be solved
   separately, inside `c123-server`'s own repo (spec lines 138–143) — the duplication §1 opens with.
 
-**The one new tool this design requires**, living alongside the others in `c123-protocol-docs`:
-start `player.js` against an ingest fixture, start (or attach to) a `c123-server` instance pointed at
-it, open its `/ws` connection following `CONTRACTS.md` §1.6's subscribe-before-snapshot sequence
-exactly as any real client must, and record every message received, in order, to a file — a
-**candidate** domain-state fixture. Candidate, not golden, until it passes the three gates below.
+**The one new tool this design requires**, living alongside the others in `c123-protocol-docs`: the
+**capture tool projects the direct-injection replay onto the §4 format**. The replay emits one step per
+ingested element — the element classified in `CONFORMANCE-VECTORS.md` §1's vocabulary, the §7.2 deltas
+it produced, and a state hash — and the tool folds the cold-start portion into the hydration step, then
+writes every later delta with its producing element's recorded `observedAt`. The result is a
+**candidate** domain-state fixture: candidate, not golden, until it passes the three gates below. A
+`/ws` capture of a player-driven server is **not** a candidate (spike S2-6): its `observedAt` values are
+the server's clock during playback, two captures differ, and gate 1 could not diff them; it is a tier-4
+smoke artefact. Measured in the spike: excerpt → replay twice → checker → projection twice → admission
+in 1 m 48 s, and the fixture alone (hydration plus deltas) reproduces the replay's final state exactly.
 
 **Gate 1 — determinism (necessary, not sufficient).** Feed the same ingest fixture into the domain
 layer twice — replaying the captured raw messages directly against the ingest boundary, not
@@ -212,7 +217,8 @@ the step index, the Attempt, the field and the property number.
 
 1. **Sequence (INV-6) D.** `seq` strictly increases across deltas, and the first delta's `seq`
    exceeds the hydration step's `asOfSeq`. No `observedAt` in any delta is a replay-time clock
-   value: each equals the recorded `observedAt` of the element that produced it.
+   value: each is the recorded `observedAt` of the element that produced that observation, at or
+   before the step (a creation message or a standing legitimately carries earlier envelopes).
 2. **Envelopes (§1.2) D.** Every presented envelope validates against `schemas/observed.schema.json`:
    `eventTime` omitted when absent, never `null`; `unavailable.reason` in the closed set; `source`
    never `bridge` on site.
@@ -248,20 +254,23 @@ the step index, the Attempt, the field and the property number.
    upstream still lists the Attempt (no `oncourse-left` for it yet in this generation; equivalently, it
    is still in the latest `oncourse.updated`, **D**), a judged cell (`0`, `2`, `50`) never becomes
    `null`; after it has left, cells change only at a results-table
-   step. (c) A field presented from `tcp` flips to `xml` only if a `tcp-disconnected` occurred after
-   the step that ingested the presented `tcp` observation, or the flip is rule 2's mark exception
-   (`status` from `not-started`, `at-start` or `left-without-finish` to a mark), or the step is a
-   `rebaseline`; in the first two cases property 8's content-age guard holds as well. (d) Each field's presented `source` lies in the
+   step. (c) A field presented from `tcp` flips to `xml` only: after a `tcp-disconnected` that
+   followed the step that ingested the presented `tcp` observation; by rule 2's mark exception
+   (`status` from `not-started`, `at-start` or `left-without-finish` to a mark); by an INV-7
+   retraction from the snapshot (property 5); by rule 1, a snapshot result row superseding an on-course
+   inference; or at a `rebaseline` — the first four under property 8's content-age guard. (d) Each field's presented `source` lies in the
    set `DERIVATIONS.md` gives for it: `courseOrder`, `timeToBeat` and a `running` outcome only
    `tcp`; the superseded run's summary, age categories, members, event details and course numbers
    only `xml`.
 7. **Contradiction (INV-2d).** `status` goes `finished → on-course` only at an on-course listing of
    the Attempt with the generation's start and no finish, and in that same step `outcome` becomes
    `running`, `placement`, `pairTotal` and `countingRun` become `not-yet`, and `diagnostics.updated`
-   carries a `contradicted-finish` for the Attempt. While that diagnostic stands, no step presents a
-   results-table `outcome` for the Attempt whose `eventTime` equals the contradicted finish. The
-   diagnostic disappears only at a step presenting a different finish, a mark or a retraction, or at
-   a listing of the Attempt with a finish. Kayak Cross Attempts never show this transition.
+   carries a `contradicted-finish` for the Attempt, with `finishTime` (`null` where no finish time is
+   known) and `runSeconds`. While that diagnostic stands, no step presents a results-table `outcome`
+   for the Attempt carrying the contradicted finish: equal `eventTime` where both have one, else equal
+   run time (`DERIVATIONS.md` §4.12). The diagnostic disappears only at a step presenting a different
+   finish by the same comparison, a mark or a retraction, or at a listing of the Attempt with a
+   finish; after such a lift the contradicted rows stay unpresented. Kayak Cross Attempts never show this transition.
 8. **Content age across sources (INV-2c).** A presented results-table field flips from `tcp` to `xml`
    only if the latest `xml-rewrite-detected` time minus the poll interval is later than the presented
    `tcp` observation's `observedAt` (property 5's guard is this rule applied to retraction). A flip
@@ -270,17 +279,23 @@ the step index, the Attempt, the field and the property number.
    included; the checker never compares event times for precedence.
 9. **Idempotence (INV-5) D.** No delta carries a field whose envelope equals the presented one, or
    differs from it only in `observedAt`. A re-delivered identical observation is not client-visible.
+   The one exception is the run-increment delta, whose run-scoped fields property 10 requires
+   explicitly even when already `not-yet`.
 10. **Run generation (`ADR-013`).** `run` never decreases. It increments only at an on-course listing
     of the Attempt with a start different from the current generation's, and in that same delta
     every run-scoped field is explicitly `not-yet` — none omitted — and `status` is `at-start` or
     `on-course`. No results-table observation whose finish precedes the new generation's start is
     presented afterwards (`DERIVATIONS.md` §4.11).
-11. **Provisional (§1.2).** A presented result value has `provisional: true` exactly when: it is an
-    inference (`kind: inference`, or `outcome.kind: 'running'`); or `gates` is `known` with a `null`
-    cell and upstream still lists the Attempt (no `oncourse-left` yet; equivalently, it is in the latest
-    `oncourse.updated`); or its `source` is `operator-write` with a pending `WriteRequest`. It goes `false → true` only through a regression
-    first (property 4). A `standing.updated` entry's `provisional` is the disjunction over its
-    Attempt's `outcome`, `placement` and `pairTotal` (§5 step 5).
+11. **Provisional (§1.2).** `status` is never provisional. Any other presented result value has
+    `provisional: true` exactly when: it is an inference (`kind: inference`, or
+    `outcome.kind: 'running'`); or upstream still lists the Attempt (no `oncourse-left` yet;
+    equivalently, it is in the latest `oncourse.updated`) and either a presented `gates` cell is `null`
+    or `gates` is not `known` because no course is bound; or it is a second run's `placement`,
+    `pairTotal` or `countingRun` while that run is on course; or its `source` is `operator-write` with
+    a pending `WriteRequest`. It goes `false → true` only through a regression first (property 4), at
+    the on-course listing that starts a run of the Attempt, or when a course binds and shows a blank
+    cell. A `standing.updated` entry's `provisional` is the disjunction over its Attempt's `outcome`,
+    `placement` and `pairTotal` (§5 step 5).
 12. **Marks (§2.6) D.** When `status` is a no-result mark, `outcome` is `{ kind: 'no-result' }` with
     the same status, whatever time the row carried. Two Attempts of one Phase presenting the same
     finish `eventTime` have a `duplicate-finish` diagnostic in that step.
@@ -298,9 +313,12 @@ the step index, the Attempt, the field and the property number.
 15. **Standing (§5) D.** Every placed entry of a whole-class `standing.updated` has the `rank` and
     `order` of its Attempt's presented `placement`; entries sort by `order`; unplaced entries follow
     in step 3's order; an age-category `rank` is `1 +` the number of same-category entries with a
-    strictly smaller class rank; `provisional` and `underReview` follow step 5. A standing changes
-    only at a step that changed one of its Attempts' `placement`, `outcome`, `pairTotal`,
-    `provisional` or `underReview`, or at `scope.replaced`.
+    strictly smaller class rank; `provisional` and `underReview` follow step 5; an entry's `result`
+    is `pending` while its Attempt is `pending` or `running`. A `standing.updated` appears only at a
+    step that changed the standing as serialised (§5 step 1): an Attempt's `placement`, a result
+    outcome, `pairTotal`, `provisional` or `underReview`; an Entry's `ageCategoryId` becoming known (a
+    category standing's first publication); a snapshot's category ranks raising or clearing an
+    anomaly; or `scope.replaced`. A running athlete's tick never produces one.
 
 *What this gate is, and is not.* It is a mechanical, oracle-free check: it needs no ground truth,
 only the shape the invariants already commit to, and it catches the whole class of "deterministic
@@ -312,13 +330,19 @@ and whether such a disagreement *should* have been raised is a tier-1 question. 
 correct replay cannot satisfy is a finding against the contract, not against the replay: it is
 reported to the design authority, never relaxed in the checker.
 
-**Gate 3 — cross-checked against tier 1 where they overlap, and against one human check of the real
-numbers.** Where a candidate exercises a shape tier 1 already has a synthetic vector for (a two-run
-BR2 case, a Cross ordinal outcome), the candidate's result for that shape must agree with the vector's
-`expect` — contract-derived ground truth checking real data, not real data self-authorising. For the
-specific numbers a real recording produces that no synthetic vector covers, one human check against
-the actual published results of that race, once, at admission time — not repeated per CI run, and not
-a substitute for gates 1–2, which are what makes the check repeatable afterward.
+**Gate 3 — cross-checked against tier 1 where they overlap, mechanically against upstream's own XML,
+and once by a person.** Where a candidate exercises a shape tier 1 already has a synthetic vector for
+(a two-run BR2 case, a Cross ordinal outcome), the candidate's result for that shape must agree with the
+vector's `expect` — contract-derived ground truth checking real data, not real data self-authorising.
+**Mechanical part:** for every Attempt that finished inside the window, `outcome`, `gates`, `pairTotal`
+and `placement` are compared with the same Attempt's row in **upstream's XML at the window end** (the
+window's last snapshot), in `DERIVATIONS.md`'s units; every field whose day-final value differs is
+listed as "changed after the window" with its final value, never counted as a mismatch — a window that
+ends mid-race cannot have its placements checked against the final results at all (spike S2-7: 21 of
+21 placements moved as later finishers pushed ranks down, and 0 real mismatches). **Human part:** the
+maintainer confirms once, per day, that the day's final XML equals the published results
+(`CONTRACTS.md` §2.8: the file is always saved at the end). Not repeated per CI run, and not a
+substitute for gates 1–2, which are what makes the check repeatable afterward.
 
 **Only a candidate that passes all three is published and pinned (§6).** From that point, this tier's
 job changes from admission to **regression**: a future ingest of the *same* ingest fixture is diffed
@@ -383,13 +407,18 @@ moved to `ARCHITECTURE.md` §2, stated there.
 1. Load a domain-state fixture.
 2. Initialise the client under test from the fixture's hydration step (§4): a `kind: "hydration"`
    entry carrying the §7.1/§8.4 response bodies and their `asOfSeq`, applied exactly as the
-   subscribe-before-snapshot handshake would; set the fake clock to that entry's `observedAt`.
-3. For each subsequent entry: advance the fake clock to its `observedAt` (the real recorded gap,
-   whether that gap came from a real recording or was chosen deliberately in a synthetic fixture),
-   then apply the delta exactly as the real transport would deliver it.
+   subscribe-before-snapshot handshake would; set the fake clock to **a stated non-zero offset from
+   that entry's `observedAt`** (the harness names it, e.g. +37 s), never to `observedAt` itself: a
+   client that anchors any display lifetime on a payload's `observedAt` instead of its own receipt
+   time must fail here, and with the clock equal to `observedAt` it could not (spike S3-2).
+3. For each subsequent entry: advance the fake clock by the gap between its `observedAt` and the
+   previous entry's (the real recorded gap, whether that gap came from a real recording or was chosen
+   deliberately in a synthetic fixture), keeping the offset, then apply the delta exactly as the real
+   transport would deliver it.
 4. Assert on rendered output — DOM via testing-library, or the view-model a render function consumes
    — at whatever points matter: immediately after a step, or after advancing the clock further with
-   **no new fixture entry**, to test a grace period or TTL expiring on elapsed time alone.
+   **no new fixture entry**, to test a grace period expiring on elapsed time alone. The assertion
+   instant is the deadline plus the client's stated tick period (§5), never deadline + 1 ms.
 
 **Fixtures for this tier may be captured from a real recording (tier 2's natural output) or
 hand-authored, in the identical format, to land exactly on a threshold** — a real recording is
@@ -468,8 +497,15 @@ nothing; a public read of an unknown `eventId` is `404`, never another organiser
 ```json
 { "fixtureId": "slalom-br2-finale",
   "source": { "kind": "recording", "excerpt": "2026-04-19-jarni-ne-odp#003", "sha256": "…" },
-  "domainLayerVersion": "2.0.0",
-  "admitted": { "gate1": true, "gate2": true, "gate3": "human-checked-2026-09-16" },
+  "domainLayerVersion": { "contract": "3.0.0", "generator": "c123-server 1.0.0 (a1b2c3d)" },
+  "admitted": { "gate1": true, "gate2": true,
+                "gate3": { "mechanical": { "attempts": 21, "fields": 84, "match": 59, "mismatch": 0,
+                                           "changedAfterWindow": 25, "changedAfterWindowEqualsWindowEnd": 25,
+                                           "noFinalRow": 0, "report": { "file": "…gate3.json", "sha256": "…" } },
+                           "human": "human-checked-2026-09-16 by <name>" },
+                "evidence": { "gate1": { "stepLogSha256": ["…", "…"], "finalStateSha256": ["…", "…"],
+                                         "candidateSha256": ["…", "…"] },
+                              "gate2": { "checker": "…", "violations": {} } } },
   "asOfSeq": 0,
   "steps": [
     { "kind": "hydration", "observedAt": "2026-09-15T10:13:50.000Z", "asOfSeq": 1040,
@@ -482,14 +518,33 @@ nothing; a public read of an unknown `eventId` is `404`, never another organiser
 `source.kind` is `"recording"` (traceable to an excerpt's checksum, tier 2's natural output) or
 `"synthetic"` (hand-authored, with a `reason` string instead of an excerpt reference — written
 directly from a `CONTRACTS.md` clause or an invariant, the same way tier 1's vectors are).
-`domainLayerVersion` ties a fixture to the wire-protocol version it was captured against
-(`c123-server/CLAUDE.md`'s existing `VERSION` constant) — a fixture generated against one version is
-not silently assumed valid against a later one; see §6. **A mismatch fails, loudly.** A warning would
-let a stale fixture keep passing, which is the silent-propagation failure §3.2's admission gates
-exist to prevent; a consumer that wants the older fixture re-pins deliberately. **`admitted` is what distinguishes a
-candidate from a golden baseline** (§3.2) — absent or incomplete, a fixture is a candidate still
-being checked, never something a consumer should pin to; only a fixture whose `admitted` block is
-complete is published to the catalogue at all (§6).
+`source.excerpt` is `<recording>#<chunk>` or `<recording>#<fromMs>-<toMs>` for a time window;
+`source.sha256` is the excerpt's `data.jsonl` checksum, which must not include free text such as a
+label (spike S2-3).
+
+**`domainLayerVersion` has two axes** (`DECISIONS/ADR-017` D5). `contract` is the version of the §7/§8
+wire shapes: the server's wire-protocol `VERSION` once the new contract is implemented (it leaves
+today's 2.0.0, since every client renegotiates), and until then a `docs/arch@<commit>` ref.
+`generator` is the c123-server release and commit that produced the deltas. **A `contract` mismatch
+fails, loudly** — a warning would let a stale fixture keep passing, which is the silent-propagation
+failure §3.2's admission gates exist to prevent; a consumer that wants the older fixture re-pins
+deliberately. A `generator` change is not a consumer's concern: it requires re-admission through gates
+1–3 and a new fixture revision (§6). One identifier conflated the two and never moved when the merge
+logic did (spike S2-4).
+
+**The hydration step** holds every §7.1 (or §8.4) GET body of the event at one `asOfSeq`, taken at the
+step that completes the cold-start snapshot read; its `observedAt` is the recorded time of the last
+element those bodies reflect. The file-level `asOfSeq` is the counter when capture began, 0 for a cold
+replay. A delta step's `observedAt` is the recorded `observedAt` of the element that produced it
+(spike S2-1).
+
+**`admitted` is what distinguishes a candidate from a golden baseline** (§3.2), and it has a schema:
+`schemas/fixture-admitted.schema.json`. **Complete** means `gate1` and `gate2` true,
+`gate3.mechanical.mismatch` 0, and `gate3.human` matching `human-checked-<date> by <name>`; the
+`evidence` block carries the two step-log, final-state and candidate hashes of gate 1 and the checker's
+violation counts. Absent or incomplete, a fixture is a candidate still being checked, never something
+a consumer should pin to; only a complete fixture is published to the catalogue at all (§6). Gate 2 is
+never relaxed to admit: a candidate waits for the contract amendment and the pipeline is re-run.
 
 **A fixture is a captured, file-based instance of exactly what a real client already has to consume
 live.** No second data model, no translation step between "what a test feeds a client" and "what
@@ -548,7 +603,11 @@ the run-2 merger and the on-course penalty cache. Once the server interprets ups
 rewritten or deleted, so a retrofit would be thrown away. The rule is part of every client
 migration's definition of done:
 - every display-lifetime rule reads time through the `Clock`;
-- every such rule is also re-evaluated on a clock tick;
+- every such rule is also re-evaluated on a clock tick, and **takes effect no later than one tick
+  period after its deadline**; the client states its tick period with its policy (§3.3), a period
+  above 1 s with a stated reason, and its tier-3 tests assert at deadline + that period (spike S3-1:
+  without a stated period a test cannot pick its instant, and a correct periodic client fails at
+  deadline + 1 ms);
 - every such rule has a tier-3 test that advances a fake `Clock`.
 
 The fake `Clock` is not a global fake-timer patch.
@@ -588,8 +647,10 @@ authorial location, many pinned consumers, instead of four repositories each own
 the same question. Only an *admitted* fixture (§3.2's three gates) is ever published this way — a
 candidate that fails admission is never a coordination question for anyone downstream.
 
-Whether one version identifier is enough — `domainLayerVersion` alone conflates "which release of the
-merge logic generated this" with "which named scenario this is" — is left open, §10.
+A fixture has three identities, and the catalogue key carries all of them:
+`<fixtureId>@<contract>+<generator>` — the scenario, the wire shapes it conforms to, and the release
+that generated it (§4; `DECISIONS/ADR-017` D5). Fixtures are published gzipped (the spike's first was
+181 MB raw, 14.8 MB gzipped, and about 10 MB raw once standings stopped re-sending on every tick).
 
 ---
 
@@ -655,6 +716,11 @@ component at fault.
   c123-server#170). Tier 3 asserts behaviour on the DOM or view-model; appearance is the client's.
 - **`c123-xml-tools` and `timing-design-system`.** Out of scope here exactly as they were out of scope
   for the architecture itself (`CONSTRAINTS.md` §1.6) — context, not subjects.
+- **Capacity under load, as a tier.** The spike measured it once (`DECISIONS/ADR-017`): a live push
+  peak of 12.2 pushes/s coalesced, and a finish re-ranking every slower placed row so that
+  placement-only pushes are 78–94 % of Results-row pushes (~160 B each). Any later estimate starts
+  from those figures, not from "one or two rows per finish"; the §8.3 store's own margin is M3's to
+  measure.
 - **A migration plan for existing tests.** This document states the target shape; deciding which of
   today's tests move first, get deleted, or run alongside the new tiers during a transition is
   sequencing, explicitly out of scope for this engagement throughout (`CONSTRAINTS.md` §4).
@@ -671,10 +737,18 @@ layer-implementation.md`, and the five named tools) — not the other way round.
 - `player.js` — the full v3-format emulator with its Control API is exactly what tier 2's new
   capture tool drives, and exactly what a realistic tier-4 smoke test needs. Its CIS emulation is
   no longer needed at all (`DECISIONS/ADR-011`). Only the TCP and XML emulation matter.
-- `extract-excerpt.js` — already produces exactly the "ingest fixture" §3.2 needs, checksum included.
-  Zero rework; it was simply never used yet (`qa/excerpts/` is empty).
+- `extract-excerpt.js` — produces the "ingest fixture" §3.2 needs, with two reworks found by the
+  spike: it writes `_meta.startTime` as an epoch offset (`1970-01-01T…`), so an absolute start needs the
+  source manifest, and it writes the free-text label into the checksummed line, so one window has one
+  checksum per label (S1-9, S2-3). Both are M2 items; the layout (`manifest.json`, `excerpt.json`,
+  `data.jsonl`) is settled.
+- `recorder.js` — writes TCP connection changes only to the console (S1-9); it must write them as
+  records, because INV-2 rule 2 and INV-7's guard are decided by them (M2).
 - `recordings-cli.js` — its push/fetch/catalog mechanism is reused as-is for fixture distribution
   (§6), not replaced.
+- The tier-3 harness as a `DataProvider`/delta-handler driver per client — built once in the spike
+  (S3): 249 infrastructure + 94 test lines, every assertion without touching `src/`, one clock; the
+  mock-WS port it replaces (`c123-live-mini#105`) is retired.
 - The seven named scenarios from the unbuilt `qa/README.md` — a reasonable starting catalogue for
   tier 2's fixtures, kept for their selection rationale even though the surrounding per-project
   verification-matrix concept they were designed for does not survive.
@@ -692,8 +766,8 @@ layer-implementation.md`, and the five named tools) — not the other way round.
   reliance on `player.js`. Confirming an existing decision, not making a new one.
 
 **Needs rework, or does not yet exist:**
-- **The domain-state-output capture tool** (§3.2) — confirmed to not exist in any form; every current
-  tool operates on the inbound side only. The one genuinely new piece of tooling this design requires.
+- **The capture tool** (§3.2) — a projection of the direct-injection replay onto §4, plus the
+  admission step. The spike's 413-line pipeline (S2) is the prototype to rewrite in M2, not to keep.
 - **The direct-injection ingest-boundary replay path** (§3.2 gates 1/2, and the regression check) —
   omitted from this list in the first draft, an oversight, not a judgement that it's unneeded: gates 1
   and 2 specifically require feeding captured raw messages into `c123-server`'s ingest boundary
@@ -729,24 +803,19 @@ layer-implementation.md`, and the five named tools) — not the other way round.
   §5 — whether 25–30 actually covers that combinatorially, or was an estimate that undercounts it, is
   not resolved here and shouldn't be guessed at; the real count is whatever writing them honestly
   produces.
-- **Whether `recordings-cli.js`'s existing versioning is sufficient for what a domain-state fixture
-  needs.** Raised directly under review: a fixture has (at least) two independent identities — which
-  named scenario it is, and which `domainLayerVersion` generated it — and `recordings-cli.js` was
-  built for recordings, which only ever have the first. Whether its `push --release <tag>` mechanism
-  already composes cleanly with a second axis, or needs a schema change, is unresolved; §6 assumes
-  reuse "as-is" and that assumption itself is what's in question here.
-- **Whether re-implementing tier 3's harness driver in three client repos is actually cheaper than the
-  mock-WS porting it replaces, or relocates the same complexity under a different name.** Raised
-  directly under review, and it is a fair challenge to this document's central inversion (§3.3): three
-  repos still each write *something* to consume the shared fixture format, and "shared format, local
-  driver" could turn out to cost about what "shared pattern, locally forked" already costs today.
-  Not resolved here — it is a question about implementation effort this document cannot settle by
-  further specification, only by someone building the first driver and comparing.
+- ~~**Whether `recordings-cli.js`'s existing versioning is sufficient for what a domain-state fixture
+  needs.**~~ **Resolved (§4, §6; `DECISIONS/ADR-017` D5):** three identities, catalogue key
+  `<fixtureId>@<contract>+<generator>`; `recordings-cli.js` needs that key and gzip, an M2 item.
+- ~~**Whether re-implementing tier 3's harness driver in three client repos is actually cheaper than
+  the mock-WS porting it replaces.**~~ **Answered by building one (spike S3):** 249 + 94 lines, about
+  200 of them scoreboard-specific, against an estimated 165–190 lines plus a browser, a `src/` hook
+  and two clocks for the mock-WS port. The cost is relocated rather than removed, in a deterministic
+  form that can assert everything the port could not; the challenge was fair and the inversion holds.
 - ~~**INV-2b's fixture-format extension.**~~ Moot: INV-2b no longer triggers a query
   (`DECISIONS/ADR-011`).
-- **TCP connection events in fixtures.** INV-2's rule 2 depends on TCP continuity, so an ingest fixture
-  must record connect and disconnect events alongside messages, as the tier-1 vectors already do
-  (`CONFORMANCE-VECTORS.md` §5). Whether `extract-excerpt.js` captures them today is unverified.
+- ~~**TCP connection events in fixtures.**~~ **Verified absent (spike S1-9):** the recorder logs them
+  to the console only. Until it writes them as records (M2, §9), a replay connects before the first
+  TCP message and infers nothing; rule 2's outage path is then untested on recordings.
 - **Re-baseline events in fixtures.** The operator re-baseline (`CONTRACTS.md` §4) is an event in the
   ingest sequence. A tier-2 fixture that reproduces a recorded correction incident needs a way to
   place one; the tier-1 `rebaseline` event is the shape. No recording contains one, because the

@@ -76,6 +76,11 @@ results table, and only these two:
 - **An XML snapshot**, for every race in it. Rows are never deleted from the file; a retraction shows
   only as fields going empty.
 
+**The TCP connect burst** (observed upstream behaviour, E1, all seven recordings). On connect, upstream
+sends the current race's whole `Results` table at once, before the rotation resumes: 152–1,167 rows in
+the recordings. It is a scope snapshot like any other, and it is why a cold-started server has the
+current race within seconds (`CONTRACTS.md` §2.8 counts it for the bridge).
+
 **The XML read.** The file is written as a temporary file copied over the event file, not an atomic
 rename. Readers validate every read (well-formed, root closing tag present) and retry on failure. No
 torn read was observed in 2,236 reads by a 5 s poller, but the window is real. The read is triggered
@@ -144,7 +149,8 @@ These are never domain entities:
     `RaceId`, with `confidence: 'inferred'`.
   - **TCP `Schedule` has a `StartTime` element, but upstream always emits it empty.** It is never a
     source.
-  - Assigned once, never re-derived (INV-5).
+  - The snapshot's date is assigned once and never re-derived (INV-5). An inferred date is replaced
+    by the snapshot's exactly once; in the recordings every inferred date agreed with it.
 - **`scheduledStart`** is the same `XML.Schedule.StartTime`, whole.
 - **`programmeOrder`** is `XML.Schedule.RaceOrder`, or `Schedule.Race@Order` on TCP.
 - **`title`** is `XML.Schedule.CustomTitle`, the organiser's own race title. Where it is empty the
@@ -254,8 +260,10 @@ which may be a start-list row a day ahead.
   - The downstream highlight signal is our own derivative, not an upstream message.
 
 **`at-start` and `on-course`.**
-- `at-start`: `OnCourse.Result[C]@chStart = 1` with `dtStart` empty. The competitor is armed for the
-  start impulse, which is 8% of on-course traffic.
+- `at-start`: listed with `dtStart` empty. `chStart` is the arming flag only (1 = armed for the start
+  impulse) and does not change status; listings with `chStart = 0` and no start are 189–36,312 per
+  recording. Together they are about 8% of on-course traffic. In a Cross heat a listing is `on-course`
+  (§4.2).
 - `on-course`: `dtStart` non-empty and `dtFinish` empty.
 - `chFinish` ("armed for the finish impulse") adds nothing to this and is not modelled.
 
@@ -263,14 +271,24 @@ which may be a start-list row a day ahead.
 - Every `OnCourse` message carries one participant, its `@Position` (`courseOrder`), and `@Total`,
   the number on course.
 - A bare `<OnCourse Total="0" Position="0"/>` with no children is upstream's explicit "course empty".
-- An Attempt leaves the list when upstream stops listing it, or on "course empty". OnCourse re-sends
-  every listed athlete at least once a second, so "stopped listing" is detectable within about a
-  second.
+- An Attempt leaves the list when upstream stops listing it, or on "course empty". **Upstream has
+  stopped listing an Attempt when no on-course message names it for `onCourseLeaveAfterSeconds` (a
+  named constant, 3 s) of ingest time while other TCP messages keep arriving.** The rule is evaluated at
+  every ingested TCP message, never on a timer, so replay is deterministic; a gap that spans a TCP
+  disconnect is not a leave — after reconnection the list is re-learned, and an Attempt not re-listed
+  within the threshold has left. Evidence: OnCourse re-sends every listed athlete about once a second;
+  the longest re-send gap of a listed Attempt in seven recordings is 2.48 s, and 33 Attempts were
+  re-listed after a gap above 2.5 s, so 2.5 s is too tight and the distribution behind 3 s is still to
+  be measured (§10). A false leave is harmless: `left-without-finish → on-course` on re-listing
+  (`CONTRACTS.md` §3.2). Cycle completion over `Position`/`Total` was rejected: `Total` changes
+  mid-cycle.
 
 **`left-without-finish`, slalom only.**
-- **The rule.** An Attempt that leaves the list with `dtFinish` never observed becomes
-  `left-without-finish`, `confidence: 'authoritative'`. What is asserted is that upstream removed the
-  athlete; no reason is inferred.
+- **The rule.** An Attempt that leaves the list with a `dtStart` observed and `dtFinish` never
+  observed becomes `left-without-finish`, `confidence: 'authoritative'`. What is asserted is that
+  upstream removed the athlete; no reason is inferred. An Attempt unstaged before any start returns to
+  `not-started` (observed: bib 68 staged for 5 s into the next day's race, then removed); listed again
+  in the same generation, it returns to `at-start` or `on-course` as a newer inference.
 - **Why a separate status.** Removal before a finish with DNF or DSQ, and DNS from the start judge's
   terminal, push nothing on TCP (observed upstream behaviour). Of 145 recorded transitions:
   - 59 arrived in their own immediate push;
@@ -313,8 +331,11 @@ it carries: a DNF row can keep a time, even another athlete's finish (`CONTRACTS
 
 - No per-competitor signal exists on the on-course stream: `chStart`, `chFinish`, `dtStart`,
   `dtFinish` and `Completed` never transition per competitor in a heat.
-- `status → 'finished'` when this bib's result row gains a placement. That placement is the operator's
-  assertion, entered after conferring with the finish judge.
+- `status → 'finished'` when this bib's result row gains a placement, that is a non-empty `Rank`. In a
+  heat, `RankOrder` alone is the lane order from the first judging push and is not a placement
+  (observed: WX1_XS_26, every row `RankOrder` 1–4 with empty `Rank`, `Time` and `IRM` until the
+  operator asserted the order athlete by athlete). The placement is the operator's assertion, entered
+  after conferring with the finish judge.
 - `source` is the channel it arrived on, with `confidence: 'authoritative'`, no `eventTime` and
   `provisional: false`. It is pushed with no debounce.
 - Until then the Attempt stays `on-course`, even after the heat has left the on-course list together.
@@ -355,7 +376,10 @@ it carries: a DNF row can keep a time, even another athlete's finish (`CONTRACTS
 `dtFinish` ever seen on the on-course stream for this Attempt) presents `outcome:
 unavailable{not-applicable}`, whatever `Time` says. Recorded: junior Cross time-trial rows with
 `Time="100.00" Total="100.00" Pen="" Gates=""` and real ranks, later rank × 1000; 24 of 32 rows of
-one class kept the placeholder through the semi-finals.
+one class kept the placeholder through the semi-finals. Untimed is read from the snapshot row
+(`dtFinish` empty, time and placement present) and inherited by the TCP row of the same Attempt, which
+carries no finish time of its own; before the first snapshot a TCP row is presumed timed. Recorded: 46
+junior time-trial Attempts at cp3-cross, 0 elsewhere.
 
 **TCP, single run or the first run of a pair.** `runSeconds = Results.Result@Time`,
 `penaltySeconds = @Pen`, `totalSeconds = @Total`.
@@ -392,9 +416,13 @@ combined values.
 
 **Envelope.**
 - `source` is the channel, with `confidence: 'authoritative'`.
-- `eventTime` comes from `dtFinish` where present.
-- **`provisional`** is `true` while the Phase's course has at least one gate blank in this row's gate
-  string and the run is not closed. This is what marks a push that upstream sent before judging
+- `eventTime` comes from `dtFinish` where present: the XML row carries one, a TCP row never does (0 of
+  667,388 recorded rows). A TCP row's outcome takes the generation's on-course finish as `eventTime`
+  when the row is attributed to it (§4.11: its `Time` equals the on-course `Time` at that finish), and
+  has none otherwise. `eventTime` is for display and diagnostics; it is never a merge key.
+- **`provisional`** is `true` while a presented, merged gate cell is blank (§4.6(e): the on-course `0`
+  fills a cell the row still shows blank for about 20 s), or while completeness cannot be judged
+  because no course is bound yet, and the run is not closed. `status` is never provisional (§4.1). This is what marks a push that upstream sent before judging
   finished: with "ranking with incomplete penalties" on, the first push precedes the last gate.
 - **Run closed** means `Completed = "Y"` was seen, or the Attempt left the on-course list, or it
   carries a no-result mark.
@@ -500,11 +528,16 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   and is not modelled (§9).
 - A single-run tie shares `Rank`, with the sequence in the order field. A combined tie is broken
   upstream by the run that did not count.
-- **An empty rank means `rank: null`.** Where an order is present, it is carried.
+- **An empty `Rank` means no placement: `not-yet`.** `RankOrder` alone is upstream's grid sort key — a
+  marked row's keeps moving as other athletes finish, a Cross heat's is the lane order — and is carried
+  for no one. `placement` is `known` iff `Rank` is non-empty; `ral` rows carry one.
 - **Never read `OnCourse.Result[T]@Rank` as placement.** At the start of a second run it holds the
   first run's rank. It is blank for most first-run finishes.
 - **Upstream pushes the second-run race whenever the first run changes.** So a second-run Attempt has
   a combined placement before it is run.
+- **Category ranks are read only from rows whose `CatId` is set** (`CONTRACTS.md` §5 step 4). On a
+  second-run row with an empty `CatId`, `TotalCatRnk` repeats the class rank and `PrevCatRnk` holds
+  the category rank; up to 196,621 such row-instances per recording.
 - **Envelope.** `confidence: 'authoritative'`. `provisional` follows §4.4.
 
 **Other fields from the result row.**
@@ -583,8 +616,15 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   (`DECISIONS/ADR-013` Revision). A re-run therefore appears as a retraction, often invisible on TCP
   because the re-run wizard pushes nothing, followed by a new start.
 - On increment, the run-scoped fields become `not-yet`, and the change is pushed.
-- A later result row whose `dtFinish` precedes the new generation's start describes the replaced run.
-  It is retained as history and never presented.
+- **Attribution per source.** An XML row whose `dtFinish` precedes the new generation's start
+  describes the replaced run. A TCP row carries no finish time: within a generation that began with
+  an observed new start, it is the current generation's only once that generation's finish has been
+  seen on the on-course stream and the row's `Time` equals the on-course `Time` at that finish (the
+  two are identical, §4.4); until then a TCP row carrying a time describes the replaced run; a TCP row
+  carrying a mark and no time follows the stale-mark rule (§4.12). Either way the replaced run's row
+  is retained as history and never presented. After the new finish, upstream's one row per bib is the
+  new run's, so a later TCP row with a different `Time` is a correction and supersedes (same source,
+  INV-2c).
 
 ### 4.12 Retraction and contradiction (`DECISIONS/ADR-015`)
 
@@ -602,14 +642,17 @@ came from results-table observations:
   retract `outcome`, `gates`, `placement`, `underReview`, `qualified` and any mark in `status`.
   Recorded: three cleared DNSs vanished this way, and all three athletes then raced.
 - **Paired second run.** The row is absent: retract as above plus `pairTotal` and `countingRun`. The
-  row is present with `Time` empty and `IRM` empty: retract run 2's `outcome` and `gates`; take
-  `placement` and `pairTotal` from the row, since an athlete with only a first-run result is listed
-  that way. Recorded: five DNSs and one CAP cleared in place.
+  row is present with `Time` empty and `IRM` empty: retract run 2's `outcome`, `gates` and any mark in
+  `status`; take `placement` and `pairTotal` from the row, since an athlete with only a first-run
+  result is listed that way. Recorded: five DNSs and one CAP cleared in place; C1W_BR2_19 bib 7 went
+  `dns` → `not-started` and then raced.
 - **Never:** an Attempt whose outcome is still an on-course inference; an Attempt never present in a
   results-table observation; a row that was never present.
 
 **Retraction from an XML snapshot.** The row carries no time, no finish time and no mark, for an
-Attempt previously known from a results-table observation: retract as the TCP first-run case.
+Attempt previously known from a results-table observation: for a first-run or single-run row, retract
+as the TCP first-run case; for a second-run row, as the TCP time-empty case — before run 2 every
+second-run row already carries `TotalRnk` and `TotalTotal` with no time.
 **Guard (INV-2c, content age):** apply it against a `tcp` observation only when
 `xml.lastRewriteDetectedAt` minus the poll interval is later than that observation's `observedAt`.
 Otherwise the snapshot may predate the push, and it is ignored for that field until the next
@@ -628,15 +671,20 @@ times). Recorded: jarni-ne-odp 12:55–13:05, three athletes corrected one by on
 10:05–10:30, bibs 42 and 43 swapped and reverted. The previous edition's event-time floor would have
 refused the correction for every athlete whose true finish was the earlier one.
 
-**Contradiction by the on-course stream** (INV-2d). Track per Attempt and generation the finish time
-last presented from a results-table observation. When an on-course message lists the Attempt with
-the generation's `dtStart` and an empty `dtFinish` after that:
-- record the contradicted finish time; present `status: on-course`, `outcome: running`,
-  `placement`/`pairTotal`/`countingRun: not-yet`; raise `contradicted-finish`;
-- keep every results-table row for the Attempt whose `dtFinish` equals the contradicted time
-  retained and unpresented;
-- lift the record when a row carries a different `dtFinish`, a mark, or a retraction, or when the
-  on-course stream lists the Attempt with a `dtFinish` again.
+**Contradiction by the on-course stream** (INV-2d). Track per Attempt and generation the finish last
+presented from a results-table observation: its `eventTime` where one is known (the on-course finish,
+or the XML row's `dtFinish`), else `null`, and its run time. When an on-course message lists the
+Attempt with the generation's `dtStart` and an empty `dtFinish` after that:
+- record the contradicted finish as `{ finishTime, runSeconds }`; present `status: on-course`,
+  `outcome: running`, `placement`/`pairTotal`/`countingRun: not-yet`; raise `contradicted-finish`
+  with both;
+- keep every results-table row for the Attempt carrying that finish — `dtFinish` equal where the row
+  has one (XML), else `Time` equal (TCP) — retained and unpresented, also after the lift;
+- lift the record when a row carries a different finish by the same comparison, a mark, or a
+  retraction, or when the on-course stream lists the Attempt with a `dtFinish` again.
+
+Recorded: in both contradictions of the spike's windows (nkz-19so 07:56 bib 55, 09:37 bib 67) no
+on-course finish preceded the false row, so `finishTime` was `null` and the match was by run time.
 
 Recorded: seven finishes withdrawn on the on-course grid; in two cases later pushes still carried
 the withdrawn time for 31 s and 71 s; in every case the row changed next only when the athlete's own
@@ -653,10 +701,11 @@ presented as such, with the diagnostics above. The next snapshot or push resolve
 re-baseline (`CONTRACTS.md` §4) is the remedy for one that never does.
 
 **A stale mark after a re-run** (`CONTRACTS.md` §2.6). Remember the mark, if any, the Attempt
-carried when the generation incremented. On a row of the new generation whose `dtFinish` is later
-than the generation's start, a mark equal to that remembered one is not presented and raises
-`stale-mark`; `outcome` is derived from the row's time and cells as usual. A different mark, or a
-mark on a row with no new finish, is presented.
+carried when the generation incremented. On a row attributed to the new generation (§4.11), a mark
+equal to that remembered one is not presented and raises `stale-mark`; `outcome` is derived from the
+row's time and cells as usual. A different mark, or a mark on a row with no new finish, is presented;
+once a different mark is presented the withheld mark is no longer on the row, and the `stale-mark`
+diagnostic clears.
 
 **Standing after a retraction or contradiction:** the entry is unplaced (`CONTRACTS.md` §5 step 3).
 
@@ -767,6 +816,13 @@ changes: a late correction, a retraction, a contradiction, a re-baseline. The di
 17. **The on-course set is upstream's list** (round 8; §4.8). A finisher stays in it as `finished`
     until closure; the earlier `CONTRACTS.md` §7.1 dropped it at the finish, 20 s before the write
     rule's closure.
+18. **A TCP result row carries no finish time** (round 9, `DECISIONS/ADR-017` D1; §4.4, §4.11, §4.12).
+    Attribution to a generation and the INV-2d match work by run time on TCP, by `dtFinish` on XML.
+19. **`placement` is known only when upstream ranks the row** (D2; §4.2, §4.7). `RankOrder` alone is a
+    sort key: a marked row's moves with every finish, a Cross heat's is the lane order.
+20. **Provisional is computed on the presented gates; `status` is never provisional** (D4; §4.4).
+21. **The leave rule has a number**, `onCourseLeaveAfterSeconds` = 3 s, and `at-start` is any listing
+    without a start (S1-8, S1-16, S1-17; §4.1).
 
 ---
 
@@ -825,7 +881,7 @@ but no code path or recording ever filled it.
 ## 10. Open technical questions
 
 Items 1–7 and 13 were answered from the source on 2026-09-25 (#179; E1); item 8 was closed by INV-2c
-on 2026-10-14. Items 9, 11 and 12 remain.
+on 2026-10-14; item 15 was answered by the spike. Items 9, 11, 12, 16 and 17 remain.
 
 1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
    hardware judge terminals on their own port and raises a flag on the scoring service for about
@@ -868,7 +924,12 @@ on 2026-10-14. Items 9, 11 and 12 remain.
     confirmed from the source; the conditions are stated in §5 and `CONTRACTS.md` §2.8. TCP carries
     it regardless, and the maintainer confirms the file is always saved at the end, so the gap is a
     transient window, never lasting.
-15. Whether upstream's on-course message still carries `Position` for a finisher it keeps listed until
-    closure (E4; no recording was checked for it). If not, such an Attempt sorts last in the on-course
-    set by `startOrder` (§4.8; `CONTRACTS.md` §7.1), and nothing else depends on it. S1's parse sweep
-    can answer it.
+15. ~~Whether upstream's on-course message still carries `Position` for a finisher it keeps listed
+    until closure.~~ **Answered (spike S1 sweep, E1): yes.** 68,894 of 68,894 on-course messages for
+    listed finishers carry `Position`.
+16. The distribution of re-listing gaps behind `onCourseLeaveAfterSeconds` (§4.1): 33 re-listings
+    after a gap above 2.5 s were counted across seven recordings; the constant is 3 s until measured
+    (M1).
+17. The finish → on-course-exit interval per recording. `C123-PROTOCOL.md` says about 4 s, the
+    recordings behind `CONTRACTS.md` §7.1 about 20 s; it is upstream's auto-complete delay, a venue
+    setting. Being measured; the range lands in §7.1 when known.

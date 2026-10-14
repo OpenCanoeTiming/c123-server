@@ -27,8 +27,8 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Keep `null` distinct from an absent key and from `0`; never coerce `null` to `0` or `""` (CONTRACTS §1.2, §1.3; ARCHITECTURE §5).
 - [ ] Branch on `error.code` only; never parse `error.message` (CONTRACTS §1.4).
 - [ ] Pin a specific domain-state fixture set by id and version in a committed reference; never a floating "latest" (TEST-ARCHITECTURE §6).
-- [ ] Consume only fixtures whose `admitted` block is complete (TEST-ARCHITECTURE §4, §6).
-- [ ] Fail, loudly, on a `domainLayerVersion` mismatch between a fixture and the consumer; re-pin deliberately instead of warning (TEST-ARCHITECTURE §4).
+- [ ] Consume only fixtures whose `admitted` block is complete per `schemas/fixture-admitted.schema.json`: gate 1 and gate 2 true, no mechanical gate-3 mismatch, and a `human-checked-<date> by <name>` line (TEST-ARCHITECTURE §4, §6; ADR-017).
+- [ ] Fail, loudly, on a `domainLayerVersion.contract` mismatch between a fixture and the consumer; re-pin deliberately instead of warning; a `generator` change is re-admitted upstream, never re-pinned here (TEST-ARCHITECTURE §4, §6).
 - [ ] Keep tier-4 smoke tests few; they prove only that the wiring connects (TEST-ARCHITECTURE §3.4).
 
 ### Rendering clients — c123-scoreboard, c123-penalty-check, live-mini-client
@@ -104,7 +104,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 
 **Clock and display lifetime** — part of every client migration's definition of done
 - [ ] Read time in every display-lifetime rule through an injected `Clock` (`now`, `setTimeout`, `clearTimeout`, `requestFrame`, `cancelFrame`); never call `Date.now()`, `setTimeout`, `setInterval` or `requestAnimationFrame` directly (TEST-ARCHITECTURE §5).
-- [ ] Re-evaluate every display-lifetime rule on a clock tick, not only when data arrives, so a lapsed grace period evicts on elapsed time alone (ARCHITECTURE §2; TEST-ARCHITECTURE §5).
+- [ ] Re-evaluate every display-lifetime rule on a clock tick, not only when data arrives, so a lapsed grace period evicts on elapsed time alone; state the tick period with the policy, since a rule takes effect no later than one period after its deadline and tier 3 asserts at deadline + period (ARCHITECTURE §2; TEST-ARCHITECTURE §3.3, §5).
 - [ ] Wrap the real `requestAnimationFrame` in the production `Clock`; advance frames explicitly in the test `Clock` (TEST-ARCHITECTURE §5).
 - [ ] Use a fake `Clock` in tests, never a global fake-timer patch (TEST-ARCHITECTURE §5).
 - [ ] Keep compositor-driven animation (smooth `scrollTo` or `scrollIntoView`, CSS `@keyframes`) behind `prefers-reduced-motion`, asserted by Playwright once settled (TEST-ARCHITECTURE §5).
@@ -114,7 +114,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 **Tests**
 - [ ] Give every display-lifetime rule a tier-3 test that advances a fake `Clock` (TEST-ARCHITECTURE §5).
 - [ ] Feed tier-3 tests domain-state fixtures, from tier 2 or synthetic, never recordings or raw Canoe123 traffic (TEST-ARCHITECTURE §3.3).
-- [ ] Drive the tier-3 harness as specified: initialise from the fixture's `kind: "hydration"` step as the handshake would, clock at its `observedAt`; per step, advance the clock to the step's `observedAt` and apply the delta as the transport would; assert after steps and after advancing the clock with no new step (TEST-ARCHITECTURE §3.3, §4).
+- [ ] Drive the tier-3 harness as specified: initialise from the fixture's `kind: "hydration"` step as the handshake would, clock at a stated non-zero offset from its `observedAt`; per step, advance the clock by the gap between steps and apply the delta as the transport would; assert after steps and after advancing the clock with no new step, at deadline + the stated tick period (TEST-ARCHITECTURE §3.3, §4, §5).
 - [ ] Write threshold cases as hand-authored `source.kind: "synthetic"` fixtures with a `reason`, in the same format (TEST-ARCHITECTURE §3.3, §4).
 - [ ] Own the assertions and thresholds in the client's repository; share only the fixture format (TEST-ARCHITECTURE §3.3).
 - [ ] Retire bespoke mock-WebSocket servers and fixture loaders; do not port penalty-check's mock server into live-mini (TEST-ARCHITECTURE §9).
@@ -152,7 +152,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Show result and rank as soon as they are pushed, with the provisional mark while judging is in flight (ARCHITECTURE §2, §6.A).
 - [ ] Show `underReview` on the board (CONTRACTS §2.6; ARCHITECTURE §6.H).
 - [ ] Show "off course" at once for `left-without-finish`, and the mark when it is known (ARCHITECTURE §6.G).
-- [ ] Put grace-period and stale-competitor eviction under the `Clock` and a tier-3 test; today it recomputes only when an action is dispatched (ARCHITECTURE §2; TEST-ARCHITECTURE §3.3).
+- [ ] Put the finisher grace period under the `Clock` and a tier-3 test; today it recomputes only when an action is dispatched. Delete stale-competitor eviction with the on-course reducer: membership of the on-course set is the server's, the set arrives whole, and a client has nothing per Attempt to time out (CONTRACTS §7.1; ARCHITECTURE §2; TEST-ARCHITECTURE §3.3; ADR-017).
 - [ ] Decide how long a finisher stays in the on-course display as display policy (`FINISHED_GRACE_PERIOD` today), from `status: finished` and the injected `Clock`; never from the Attempt leaving the set, which is upstream's closure about 20 s later (CONTRACTS §7.1; ARCHITECTURE §2; TEST-ARCHITECTURE §3.3).
 - [ ] Route today's timing sites (`context/constants.ts`, `useDeparting.ts`, `useAutoScroll.ts`, `useHighlight.ts`) through the `Clock` (TEST-ARCHITECTURE §5).
 - [ ] Do not expose the re-baseline on a venue board (CONTRACTS §4).
