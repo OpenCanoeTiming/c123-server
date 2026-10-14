@@ -1,11 +1,14 @@
 // Spike S2 admission: the TEST-ARCHITECTURE §3.2 gates over a candidate fixture, written as its `admitted` block.
 //   node admit.mjs --candidate <c1.json> --candidate2 <c2.json> --run1 <dir> --run2 <dir> --checker <json>
-//                  --excerpt <dir> --recording <dir> --out <fixture.json> --report <gate3.json>
+//                  --excerpt <dir> --recording <dir> --schema <fixture-admitted.schema.json> --out <fixture.json>
+//                  --report <gate3.json>
 // Gate 1: S1's two step logs and final states, and the two candidates projected from them, byte-identical.
-// Gate 2: S1's checker found no violation. Gate 3 (mechanical): for every Attempt that finished inside the window,
-// the fixture's final presented outcome, gates, placement and pairTotal against its row in the day's final XML
-// snapshot, read here independently of S1 (DERIVATIONS §0.1, §4.4, §4.6(b), §4.7 units). The human line is never
-// written by this tool: it stays a TODO until the maintainer confirms the final XML against the published results.
+// Gate 2: S1's checker found no violation. Gate 3 (mechanical, TEST-ARCHITECTURE §3.2 round 10): for every Attempt that
+// finished inside the window, the fixture's final presented outcome, gates, placement and pairTotal against its row in
+// upstream's XML at the window end (the window's last snapshot), read here independently of S1 (DERIVATIONS §0.1,
+// §4.4, §4.6(b), §4.7 units); a field whose day-final value differs is listed as changed after the window. The human
+// line is never written by this tool: it stays a TODO until the maintainer confirms the final XML against the
+// published results. The block is validated against schemas/fixture-admitted.schema.json before it is written.
 import { createReadStream, createWriteStream, readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
@@ -17,6 +20,32 @@ const arg = (n) => {
   return process.argv[i + 1];
 };
 const fileSha = (p) => sha256(readFileSync(p));
+
+/** The JSON Schema subset fixture-admitted.schema.json uses: type, required, properties, additionalProperties,
+ *  items, minItems/maxItems, minimum, pattern. Returns the list of violations. */
+function validate(sc, v, at) {
+  const out = [];
+  const t = sc.type;
+  const ok = t === 'object' ? v && typeof v === 'object' && !Array.isArray(v) : t === 'array' ? Array.isArray(v)
+    : t === 'integer' ? Number.isInteger(v) : t === undefined ? true : typeof v === t;
+  if (!ok) return [`${at}: not ${t}`];
+  if (t === 'object') {
+    for (const k of sc.required ?? []) if (!(k in v)) out.push(`${at}.${k}: missing`);
+    for (const [k, x] of Object.entries(v)) {
+      if (sc.properties?.[k]) out.push(...validate(sc.properties[k], x, `${at}.${k}`));
+      else if (sc.additionalProperties === false) out.push(`${at}.${k}: not allowed`);
+      else if (typeof sc.additionalProperties === 'object') out.push(...validate(sc.additionalProperties, x, `${at}.${k}`));
+    }
+  }
+  if (t === 'array') {
+    if (sc.minItems !== undefined && v.length < sc.minItems) out.push(`${at}: fewer than ${sc.minItems}`);
+    if (sc.maxItems !== undefined && v.length > sc.maxItems) out.push(`${at}: more than ${sc.maxItems}`);
+    if (sc.items) v.forEach((x, i) => out.push(...validate(sc.items, x, `${at}[${i}]`)));
+  }
+  if (sc.minimum !== undefined && v < sc.minimum) out.push(`${at}: below ${sc.minimum}`);
+  if (sc.pattern && !new RegExp(sc.pattern).test(v)) out.push(`${at}: does not match ${sc.pattern}`);
+  return out;
+}
 
 async function* lines(path) {
   const rl = createInterface({ input: createReadStream(path, 'utf8'), crlfDelay: Infinity });
@@ -151,24 +180,24 @@ async function main() {
     return [...cfg].filter((c) => c === 'N' || c === 'R').length;
   };
   const rowOf = (t, raceId, bib) => t.results.find((r) => r.RaceId === raceId && (r.Bib ?? '').trim() === bib);
-  const rows = [], counts = { attempts: finished.size, fields: 0, match: 0, mismatch: 0, changedAfterWindow: 0, changedAfterWindowFixtureEqualsWindowEnd: 0, noFinalRow: 0 };
+  const rows = [], counts = { attempts: finished.size, fields: 0, match: 0, mismatch: 0, changedAfterWindow: 0, changedAfterWindowEqualsWindowEnd: 0, noFinalRow: 0 };
   for (const [id, at] of [...finished].sort(([x], [y]) => (x < y ? -1 : 1))) {
     const a = client.attempts.get(id), raceId = a.phaseId, bib = a.bib;
     const fRow = rowOf(fin, raceId, bib), eRow = rowOf(end, raceId, bib);
-    if (!fRow) { counts.noFinalRow++; rows.push({ attemptId: id, ...at, result: 'no-final-row' }); continue; }
-    const gc = gateCountOf(fin, raceId);
-    const fx = fixtureFields(a), fv = xmlFields(fRow, gc), ev = eRow ? xmlFields(eRow, gc) : null;
+    if (!fRow || !eRow) { counts.noFinalRow++; rows.push({ attemptId: id, ...at, result: fRow ? 'no-window-end-row' : 'no-final-row' }); continue; }
+    const gc = gateCountOf(end, raceId);
+    const fx = fixtureFields(a), ev = xmlFields(eRow, gc), fv = xmlFields(fRow, gateCountOf(fin, raceId));
     const fields = {};
+    // match + mismatch count the comparison with the window end; changedAfterWindow lists every field whose day-final
+    // value differs from the window end, and changedAfterWindowEqualsWindowEnd those of them the fixture matches.
     for (const f of ['outcome', 'gates', 'placement', 'pairTotal']) {
       counts.fields++;
-      const same = canonical(fx[f]) === canonical(fv[f]);
-      let verdict;
-      if (same) { verdict = 'match'; counts.match++; }
-      else if (ev && canonical(ev[f]) !== canonical(fv[f])) {
-        verdict = 'changed-after-window'; counts.changedAfterWindow++;
-        if (canonical(fx[f]) === canonical(ev[f])) counts.changedAfterWindowFixtureEqualsWindowEnd++;
-      } else { verdict = 'mismatch'; counts.mismatch++; }
-      fields[f] = verdict === 'match' ? 'match' : { verdict, fixture: fx[f], finalXml: fv[f], windowEndXml: ev ? ev[f] : null };
+      const atEnd = canonical(fx[f]) === canonical(ev[f]), changed = canonical(fv[f]) !== canonical(ev[f]);
+      if (!atEnd) counts.mismatch++;
+      else if (!changed) counts.match++;
+      if (changed) { counts.changedAfterWindow++; if (atEnd) counts.changedAfterWindowEqualsWindowEnd++; }
+      fields[f] = atEnd && !changed ? 'match'
+        : { verdict: atEnd ? 'changed-after-window' : 'mismatch', fixture: fx[f], windowEndXml: ev[f], ...(changed ? { finalXml: fv[f] } : {}) };
     }
     rows.push({ attemptId: id, ...at, gateCount: gc, fields });
   }
@@ -190,10 +219,12 @@ async function main() {
       human: `TODO(maintainer): confirm that the final XML snapshot of 2026-09-19 (recording 2026-09-19-2026-nkz-19so, ${finalXml.file} ts ${finalXml.ts}, sha256 ${report.finalXml.sha256}) equals the published results of the day (CONTRACTS §2.8), then replace this string with "human-checked-<date> by <name>"`,
     },
     evidence: {
-      gate1: { s1StepsSha256: h.steps, s1FinalStateSha256: h.finalState, candidateSha256: h.candidate },
+      gate1: { stepLogSha256: h.steps, finalStateSha256: h.finalState, candidateSha256: h.candidate },
       gate2: { checker: 'spike/S1/src/checker.ts', violations },
     },
   };
+  const problems = validate(JSON.parse(readFileSync(arg('schema'), 'utf8')), admitted, 'admitted');
+  if (problems.length) throw new Error(`admitted block does not follow the schema: ${problems.join('; ')}`);
   const out = createWriteStream(arg('out'));
   const head = JSON.stringify({ fixtureId: header.fixtureId, source: header.source, domainLayerVersion: header.domainLayerVersion, admitted, asOfSeq: header.asOfSeq });
   out.write(head.slice(0, -1) + ',"steps":[\n');

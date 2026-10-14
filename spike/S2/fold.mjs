@@ -83,13 +83,13 @@ export class ClientState {
       const ck = (m) => [...m.entries()].filter(([k]) => k.startsWith(`${id}:`)).sort(([x], [y]) => (x < y ? -1 : 1)).map(([, v]) => v);
       r[`/api/phases/${id}/checks`] = { asOfSeq, checks: ck(this.checks), flags: ck(this.flags) };
     }
-    r['/api/oncourse'] = { asOfSeq, attempts: this.oncourse.attemptIds.map((id) => this.attempts.get(id)), featuredByUpstream: this.oncourse.featuredByUpstream };
+    r['/api/oncourse'] = { asOfSeq, attempts: this.oncourse.attemptIds.map((id) => this.attempts.get(id)), featuredByUpstream: this.oncourse.featuredByUpstream, asOf: this.oncourse.asOf };
     if (this.sources) r['/api/sources'] = this.sources;
     r['/api/diagnostics'] = { asOfSeq, diagnostics: this.diagnostics };
     return r;
   }
 
-  /** The inverse of responses(): what a client holds after hydrating from them. `oncourse.asOf` is not in §7.1. */
+  /** The inverse of responses(): what a client holds after hydrating from them. */
   static fromResponses(r) {
     const s = new ClientState();
     const ev = r['/api/events/current'];
@@ -106,7 +106,7 @@ export class ClientState {
     }
     const oc = r['/api/oncourse'];
     for (const a of oc.attempts) s.attempts.set(a.attemptId, a);   // an on-course Attempt whose Phase is not served
-    s.oncourse = { attemptIds: oc.attempts.map((a) => a.attemptId), featuredByUpstream: oc.featuredByUpstream, asOf: null };
+    s.oncourse = { attemptIds: oc.attempts.map((a) => a.attemptId), featuredByUpstream: oc.featuredByUpstream, asOf: oc.asOf };
     s.sources = r['/api/sources'] ?? null;
     s.diagnostics = r['/api/diagnostics'].diagnostics;
     return s;

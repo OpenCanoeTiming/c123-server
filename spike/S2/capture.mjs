@@ -1,7 +1,9 @@
 // Spike S2 capture tool: projects S1's step log onto the TEST-ARCHITECTURE §4 fixture format (a candidate:
 // no `admitted` block; admit.mjs adds it). Usage:
-//   node capture.mjs --steps <steps.jsonl> --excerpt <dir> --fixture-id <id> --version-from <UnifiedServer.ts>
+//   node capture.mjs --steps <steps.jsonl> --excerpt <dir> --fixture-id <id> --contract <ref> --generator <ref>
 //                    --out <candidate.json> [--final-state <final-state.json>] [--summary <json>]
+// `domainLayerVersion` has two axes (TEST-ARCHITECTURE §4, ADR-017 D5): the contract the wire shapes follow, and
+// the code that generated the deltas.
 // The hydration step is the client state after the window's cold-start XML snapshot (every step up to and
 // including the last scope snapshot of the first valid XML read), as §7.1 bodies; then every later delta with
 // its seq and the recorded observedAt of the element that produced it. One step per line, so admit.mjs and a
@@ -18,12 +20,10 @@ const arg = (n, def) => {
 
 async function main() {
   const meta = excerptMeta(arg('excerpt'));
-  const version = /const VERSION = '([^']+)'/.exec(readFileSync(arg('version-from'), 'utf8'))?.[1];
-  if (!version) throw new Error('no VERSION constant found');
   const header = {
     fixtureId: arg('fixture-id'),
     source: { kind: 'recording', excerpt: `${meta.source.recording}#${meta.source.from}-${meta.source.to}`, sha256: meta.checksum.replace(/^sha256:/, '') },
-    domainLayerVersion: version,
+    domainLayerVersion: { contract: arg('contract'), generator: arg('generator') },
     asOfSeq: 0,           // the counter before the window's first element: the replay starts cold
   };
   const out = createWriteStream(arg('out'));
