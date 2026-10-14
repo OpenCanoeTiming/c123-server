@@ -101,3 +101,16 @@ whose finish precedes the current generation's start describes the replaced run,
 history and is never presented (`DERIVATIONS.md` §4.11). A replaced run's row that carries no finish —
 a mark — is covered by the stale-mark rule (`CONTRACTS.md` §2.6; `DERIVATIONS.md` §4.12). Vector
 `rerun-old-generation-row-not-presented` already tests attribution, not INV-2c.
+
+## Revision 3 — attribution per source: a TCP row has no finish time (2026-10-14)
+
+0 of 667,388 recorded TCP `Results` rows carry a finish time (`ADR-017` D1). Revision 2 rested the
+replaced-run boundary on "a row whose finish precedes the new generation's start", which only an XML
+row can satisfy. A TCP row is now attributed by run time: within a generation that began with an
+observed new start, it is the current generation's only once that generation's finish has been seen on
+the on-course stream and the row's `Time` equals the on-course `Time` at that finish; until then a TCP
+row carrying a time describes the replaced run and is never presented; a mark-only row follows the
+stale-mark rule. With the re-run wizard (the normal path) the question rarely arises; without it, the
+old row stays in every push until the new finish and would otherwise have been presented as the
+running athlete's result. `DERIVATIONS.md` §4.11 carries the rule; vector
+`rerun-tcp-row-before-new-finish-not-presented`.

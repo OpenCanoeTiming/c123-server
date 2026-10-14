@@ -17,10 +17,10 @@ is intended to become permanent documentation.
 | `inputs/CONSTRAINTS.md` | What is fixed, what is open, operating reality |
 | `ARCHITECTURE.md` | Target state — domain model, deployable boundaries, data flow, principles traced to `EVIDENCE.md`, nine scenario walkthroughs (A–I) |
 | `CONTRACTS.md` | The primary deliverable — domain entities, the observation envelope, merge invariants, ranking, the derivability ledger, the on-site and live-ingest contracts |
-| `DECISIONS/` | Sixteen ADRs, `ADR-001` through `ADR-016`. `ADR-004` and `ADR-008` are superseded by `ADR-011` and `ADR-012`; their original text is kept |
+| `DECISIONS/` | Seventeen ADRs, `ADR-001` through `ADR-017`. `ADR-004` and `ADR-008` are superseded by `ADR-011` and `ADR-012`; their original text is kept. `ADR-017` records what the M0 spike changed |
 | `TEST-ARCHITECTURE.md` | Four test tiers, the fixture format, and the clock-control requirement that makes presentation-layer timing assertable |
 | `DERIVATIONS.md` | For every value `CONTRACTS.md` asserts: the exact upstream source field, transformation, conditionality, and resulting envelope. §9 lists every upstream field deliberately *not* modelled, and why; §10 lists open technical questions |
-| `schemas/` | JSON Schema for the two wire shapes reused everywhere: the observation envelope and the error response |
+| `schemas/` | JSON Schema for the two wire shapes reused everywhere — the observation envelope and the error response — and for a fixture's admission block |
 | `CONFORMANCE-VECTORS.md` + `vectors/tier1-conformance.json` | The tier-1 hand-authored conformance vectors `TEST-ARCHITECTURE.md` §3.1 calls for — format, coverage map, and what could not be written |
 | `CLIENT-OBLIGATIONS.md` | Derived checklist of everything the design requires of each deployable other than the server, each line citing its source; the definition of done for a client's migration. `scripts/check-obligations.js` keeps it in step (see ground rules) |
 
@@ -66,6 +66,13 @@ the client-side gaps, restated the tier-2 gate-2 checker as properties over the 
 8, made INV-2c a content-age rule across sources and the on-course set upstream's own list
 (`ADR-003` Revision 5, `ADR-009` addendum 2).
 
+**Round 9** (2026-10-14, `DECISIONS/ADR-017`) applied the M0 spike: running a merge core, the checker
+and the capture pipeline against five recorded windows filed 38 gaps, all adopted. The five decisions
+that carry them: a TCP result row has no finish time, so attribution and contradiction match by run
+time; `placement` is known only when upstream ranks the row; a standing is pushed only when its
+serialised form changes; `status` is never provisional; a fixture's identity and admission block are
+pinned. 92 vectors.
+
 Cross-references, section numbers, JSON validity and internal
 counts were mechanically verified. Hunting for internal inconsistency is largely spent ground.
 
@@ -108,13 +115,23 @@ Built from decisions already taken. It is not a migration plan: the running syst
 as it is until each part is replaced.
 
 1. **Settle any open upstream question** (`DERIVATIONS.md` §10) that the part being built depends on.
+   **What M1 inherits from the spike** (`DECISIONS/ADR-017`): replay jarni-ne-do 08:55–09:10, the only
+   recorded TCP and XML outage, and a synthetic re-run fixture, both through direct injection twice and
+   the gate-2 checker — INV-2 rule 2's outage path, INV-2c during a disconnect and ADR-013's generation
+   increment were never exercised on data; measure the leave-gap distribution behind
+   `onCourseLeaveAfterSeconds` and the finish → on-course-exit interval per recording (§10 items 16,
+   17); then re-run the capture pipeline on nkz-19so 09:30–09:45, whose gate 2 must turn true.
 2. **Server first, test-first.** Tier-1 conformance vectors (`vectors/tier1-conformance.json`) are
    written as failing tests before the code that passes them. The server implements the contract
    (`CONTRACTS.md` §7 on-site, §8 live ingest).
 3. **Test tooling, as the server needs it.** Build the pieces listed under "Needs rework, or does
-   not yet exist" in `TEST-ARCHITECTURE.md` §9: the domain-state capture tool, the direct-injection
-   ingest path, write-echo emulation in `player.js`, and fixture versioning (§10). Each gets its own
-   issue when its turn comes. End-to-end checks and demos run the whole line, `player.js` feeding
+   not yet exist" in `TEST-ARCHITECTURE.md` §9: the capture and admission tooling, for which the
+   spike's 413-line pipeline is the prototype to rewrite, not to keep; the direct-injection ingest
+   path (the spike's replay driver is its prototype); the recorder writing TCP connection changes as
+   records; `extract-excerpt.js` writing an absolute start time instead of a 1970 epoch offset and
+   keeping the label out of the checksum; `recordings-cli.js` keyed `<fixtureId>@<contract>+<generator>`
+   with gzipped fixtures; write-echo emulation in `player.js`. Each gets its own issue when its turn
+   comes. End-to-end checks and demos run the whole line, `player.js` feeding
    c123-server with the client connected normally (tier 4, §3.4). The tier-3 harness (§3.3) feeds
    fixtures to a client without it.
 4. **Clients one at a time.** Each deployable other than the server migrates in its own issue. The

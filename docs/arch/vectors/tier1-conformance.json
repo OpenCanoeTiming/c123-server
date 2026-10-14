@@ -39,6 +39,9 @@
           "provisional": false
         },
         "note": "status is unaffected by the unrelated placement observation at ingestSeq 2."
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -60,6 +63,9 @@
         "placement": {
           "state": "not-yet"
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -111,6 +117,9 @@
           "confidence": "authoritative",
           "provisional": false
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -163,6 +172,9 @@
           "provisional": false
         },
         "note": "the late on-course message still carried a blank gate; the result row already had it judged."
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -170,7 +182,8 @@
       "invariant": "INV-2 rule 2",
       "description": "While TCP stays connected, a later-ingested XML row does not displace the tcp observation of the same field.",
       "context": {
-        "tcpConnectedThroughout": true
+        "tcpConnectedThroughout": true,
+        "attemptId": "K1M_BR1_6:9"
       },
       "given": [
         {
@@ -288,6 +301,9 @@
           "provisional": false
         },
         "note": "a correction (+50 at a gate) made during the outage reaches us only through the snapshot."
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -353,6 +369,9 @@
           "source": "xml"
         },
         "note": "the pre-outage tcp value (ingestSeq 1) lost its continuity; until TCP pushes this race again, the later xml value stays presented."
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -407,6 +426,9 @@
           },
           "source": "tcp"
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -444,6 +466,9 @@
           "confidence": "authoritative",
           "provisional": false
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -477,6 +502,67 @@
           "value": "DM",
           "source": "xml"
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
+      }
+    },
+    {
+      "id": "placement-not-yet-while-rank-empty",
+      "invariant": "placement",
+      "description": "A row whose Rank is empty has no placement, whatever its RankOrder: a marked row's moving sort key is never presented and never pushed (ADR-017 D2, S4-2).",
+      "context": {
+        "attemptId": "K1M_BR1_19:12",
+        "tcpConnectedThroughout": true
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR1_19",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "12",
+                "status": "dns",
+                "placement": null,
+                "rawRankOrder": 37
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:10:00.000Z"
+        },
+        {
+          "ingestSeq": 2,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR1_19",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "12",
+                "status": "dns",
+                "placement": null,
+                "rawRankOrder": 38
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:11:30.000Z"
+        }
+      ],
+      "expect": {
+        "K1M_BR1_19:12.status": {
+          "state": "known",
+          "value": "dns"
+        },
+        "K1M_BR1_19:12.placement": {
+          "state": "not-yet"
+        },
+        "notifications": {
+          "attempt.updated": 1
+        },
+        "note": "rawRankOrder is informational: the resolved placement is null in both rows, so the second snapshot changes nothing."
       }
     },
     {
@@ -575,6 +661,9 @@
           },
           "provisional": false
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -603,6 +692,9 @@
           "state": "known",
           "provisional": false
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -610,7 +702,8 @@
       "invariant": "provisional",
       "description": "Without a configured course, judging completeness cannot be read: the value stays provisional until the run is closed.",
       "context": {
-        "course": "not-configured"
+        "course": "not-configured",
+        "attemptId": "K1M_BR1_6:9"
       },
       "given": [
         {
@@ -659,6 +752,159 @@
         "outcome": {
           "state": "known",
           "provisional": false
+        }
+      }
+    },
+    {
+      "id": "provisional-pair-fields-while-run-2-on-course",
+      "invariant": "provisional",
+      "description": "A second run's placement, pairTotal and countingRun carried over from run 1 become provisional when run 2 starts, without a regression (ADR-017 D4, S1-12).",
+      "context": {
+        "attemptId": "K1M_BR2_19:9",
+        "phase": "K1M_BR2_19",
+        "tcpConnectedThroughout": true
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR2_19",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "9",
+                "placement": {
+                  "rank": 3,
+                  "order": 3
+                },
+                "pairTotal": 82.36,
+                "timeEmpty": true
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:00:00.000Z"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 0,
+          "expect": {
+            "K1M_BR2_19:9.placement": {
+              "state": "known",
+              "provisional": false
+            },
+            "K1M_BR2_19:9.pairTotal": {
+              "state": "known",
+              "provisional": false
+            }
+          }
+        }
+      ],
+      "then": [
+        {
+          "ingestSeq": 2,
+          "attemptId": "K1M_BR2_19:9",
+          "field": "onCourse",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:10:00.000Z",
+          "value": {
+            "dtStart": "2026-09-15T10:09:59.000Z",
+            "dtFinish": null
+          },
+          "confidence": "authoritative"
+        }
+      ],
+      "expect": {
+        "K1M_BR2_19:9.placement": {
+          "state": "known",
+          "value": {
+            "rank": 3,
+            "order": 3
+          },
+          "provisional": true
+        },
+        "K1M_BR2_19:9.pairTotal": {
+          "state": "known",
+          "value": 82.36,
+          "provisional": true
+        },
+        "K1M_BR2_19:9.status": {
+          "state": "known",
+          "value": "on-course"
+        }
+      }
+    },
+    {
+      "id": "status-never-provisional",
+      "invariant": "provisional",
+      "description": "status is never provisional: neither the on-course inference nor a finished status with judging still incomplete (ADR-017 D4, S1-11).",
+      "context": {
+        "attemptId": "K1M_BR1_19:9",
+        "tcpConnectedThroughout": true
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "attemptId": "K1M_BR1_19:9",
+          "field": "status",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:00:00.000Z",
+          "value": "on-course",
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 2,
+          "attemptId": "K1M_BR1_19:9",
+          "field": "status",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:01:25.400Z",
+          "value": "finished",
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:01:25.000Z",
+          "judgingComplete": false
+        },
+        {
+          "ingestSeq": 3,
+          "attemptId": "K1M_BR1_19:9",
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T10:01:25.400Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 82.36,
+            "penaltySeconds": 0,
+            "totalSeconds": 82.36
+          },
+          "confidence": "authoritative",
+          "judgingComplete": false
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 0,
+          "expect": {
+            "K1M_BR1_19:9.status": {
+              "state": "known",
+              "value": "on-course",
+              "provisional": false
+            }
+          }
+        }
+      ],
+      "expect": {
+        "K1M_BR1_19:9.status": {
+          "state": "known",
+          "value": "finished",
+          "provisional": false
+        },
+        "K1M_BR1_19:9.outcome": {
+          "state": "known",
+          "provisional": true
         }
       }
     },
@@ -737,6 +983,9 @@
           "confidence": "inferred",
           "provisional": true
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -744,7 +993,8 @@
       "invariant": "INV-2b",
       "description": "A settled disagreement between retained sources is surfaced as a diagnostic and never changes the presented value.",
       "context": {
-        "tcpConnectedThroughout": true
+        "tcpConnectedThroughout": true,
+        "attemptId": "K1M_BR1_6:9"
       },
       "given": [
         {
@@ -807,7 +1057,8 @@
       "description": "During a TCP outage a snapshot takes over (rule 2) only if its content is newer than TCP's last observation of the field: a rewrite detected within one poll interval of the push may predate it and is refused; the next rewrite supersedes.",
       "context": {
         "xmlPollIntervalSeconds": 5,
-        "note": "closes DERIVATIONS §10 item 8; TCP's last push corrected the gate penalty from 2 to 0 just before the outage, the first snapshot still carries 2."
+        "note": "closes DERIVATIONS §10 item 8; TCP's last push corrected the gate penalty from 2 to 0 just before the outage, the first snapshot still carries 2.",
+        "attemptId": "K1M_BR1_6:9"
       },
       "given": [
         {
@@ -1044,6 +1295,9 @@
           "source": "tcp",
           "confidence": "authoritative"
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -1065,6 +1319,9 @@
           "reason": "not-configured"
         },
         "note": "no course layout is configured for this Phase (CONTRACTS.md SS2.12)."
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -1099,6 +1356,9 @@
           "state": "known",
           "value": "FR51"
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -1140,6 +1400,9 @@
           "provisional": false
         },
         "note": "attemptId is unchanged: it is keyed on (phaseId, bib)."
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -1186,6 +1449,9 @@
         },
         "notifications": 1,
         "note": "the rotation re-sends the same row 30 s later; one client-visible change only."
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -1221,6 +1487,9 @@
           "value": "paused",
           "source": "tcp"
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -1270,6 +1539,9 @@
           "source": "operator-write",
           "provisional": true
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -1324,6 +1596,9 @@
         "writeRequest": {
           "status": "confirmed"
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -1384,6 +1659,9 @@
             }
           ]
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -1427,6 +1705,9 @@
           "state": "known",
           "value": 2
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -1477,6 +1758,9 @@
           },
           "source": "operator-write"
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -1527,6 +1811,9 @@
           },
           "source": "tcp"
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -1600,6 +1887,9 @@
           "state": "not-yet"
         },
         "notifications": "one push carrying run, status and the explicit not-yet values"
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -1638,6 +1928,131 @@
         "outcome": {
           "state": "not-yet"
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
+      }
+    },
+    {
+      "id": "rerun-tcp-row-before-new-finish-not-presented",
+      "invariant": "run-generation",
+      "description": "After a re-run starts, a TCP row (no finish time) carrying a time is the replaced run's until the new generation's finish is seen on the on-course stream and the row's time equals it (ADR-017 D1).",
+      "context": {
+        "attemptId": "K1M_BR1_19:9",
+        "tcpConnectedThroughout": true
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "attemptId": "K1M_BR1_19:9",
+          "field": "run",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:05:00.000Z",
+          "value": 2,
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:04:58.000Z"
+        },
+        {
+          "ingestSeq": 2,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR1_19",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "9",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 85.0,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 85.0
+                },
+                "placement": {
+                  "rank": 4,
+                  "order": 4
+                },
+                "judgingComplete": true
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:05:30.000Z"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 1,
+          "expect": {
+            "K1M_BR1_19:9.outcome": {
+              "state": "not-yet"
+            },
+            "K1M_BR1_19:9.placement": {
+              "state": "not-yet"
+            }
+          }
+        }
+      ],
+      "then": [
+        {
+          "ingestSeq": 3,
+          "attemptId": "K1M_BR1_19:9",
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:06:30.100Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 88.2,
+            "penaltySeconds": 0,
+            "totalSeconds": 88.2
+          },
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:06:30.000Z",
+          "run": 2
+        },
+        {
+          "ingestSeq": 4,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR1_19",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "9",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 88.2,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 88.2
+                },
+                "placement": {
+                  "rank": 6,
+                  "order": 6
+                },
+                "judgingComplete": true
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:06:30.400Z"
+        }
+      ],
+      "expect": {
+        "K1M_BR1_19:9.outcome": {
+          "state": "known",
+          "value": {
+            "totalSeconds": 88.2
+          },
+          "source": "tcp",
+          "eventTime": "2026-09-15T10:06:30.000Z"
+        },
+        "K1M_BR1_19:9.placement": {
+          "state": "known",
+          "value": {
+            "rank": 6,
+            "order": 6
+          }
+        },
+        "note": "the 85.0 row is the replaced run: retained, never presented; the 88.2 row matches the generation's on-course finish and is presented with that finish as eventTime."
       }
     },
     {
@@ -1673,6 +2088,9 @@
           "value": "finished"
         },
         "note": "an on-course observation without evidence of a new start (no new dtStart, no cleared row) is not a re-run."
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -1680,7 +2098,8 @@
       "invariant": "left-without-finish",
       "description": "A slalom athlete leaving the on-course list with no finish becomes left-without-finish; the reason is not inferred.",
       "context": {
-        "discipline": "slalom"
+        "discipline": "slalom",
+        "attemptId": "K1M_BR1_6:9"
       },
       "given": [
         {
@@ -1716,7 +2135,8 @@
       "context": {
         "discipline": "slalom",
         "tcpConnectedThroughout": true,
-        "xmlPollIntervalSeconds": 5
+        "xmlPollIntervalSeconds": 5,
+        "attemptId": "K1M_BR1_6:9"
       },
       "given": [
         {
@@ -1751,7 +2171,8 @@
       "invariant": "INV-2 rule 2 exception",
       "description": "The exception is narrow: an XML mark never supersedes a TCP status that is itself a finish or a mark.",
       "context": {
-        "tcpConnectedThroughout": true
+        "tcpConnectedThroughout": true,
+        "attemptId": "K1M_BR1_6:9"
       },
       "given": [
         {
@@ -1787,7 +2208,8 @@
       "invariant": "INV-2 rule 1 gates",
       "description": "While the Attempt is on the on-course list, a blank result-row cell never overwrites a cell the on-course stream has judged.",
       "context": {
-        "onCourseList": true
+        "onCourseList": true,
+        "attemptId": "K1M_BR1_6:9"
       },
       "given": [
         {
@@ -1909,6 +2331,9 @@
           "source": "tcp",
           "provisional": false
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -1917,7 +2342,8 @@
       "description": "A row previously present with a mark vanishes from a complete TCP push of its race: the mark is retracted, the athlete is not-started.",
       "context": {
         "phase": "K1W_BR1_19",
-        "tcpConnectedThroughout": true
+        "tcpConnectedThroughout": true,
+        "attemptId": "K1W_BR1_19:9"
       },
       "given": [
         {
@@ -2169,7 +2595,8 @@
       "invariant": "INV-1",
       "description": "A complete push of another race is omission for this race.",
       "context": {
-        "phase": "K1W_BR1_19"
+        "phase": "K1W_BR1_19",
+        "attemptId": "K1W_BR1_19:9"
       },
       "given": [
         {
@@ -2222,7 +2649,8 @@
       "description": "A push in start-list mode (no row placed or marked) states that nobody has a result: every results-sourced result in the race is retracted. This is what \"delete all results\" produces.",
       "context": {
         "phase": "K1W_BR1_19",
-        "tcpConnectedThroughout": true
+        "tcpConnectedThroughout": true,
+        "attemptId": "K1W_BR1_19:9"
       },
       "given": [
         {
@@ -2366,10 +2794,11 @@
     {
       "id": "retraction-second-run-time-empty-keeps-placement",
       "invariant": "INV-7",
-      "description": "In a paired second run, a row present with an empty time and no mark retracts run 2 only; the combined placement follows the row.",
+      "description": "In a paired second run, a row present with an empty time and no mark retracts run 2 — outcome, gates and any mark in status — while the combined placement follows the row (recorded: a second-run DNS cleared in place, then the athlete raced).",
       "context": {
         "phase": "K1M_BR2_19",
-        "tcpConnectedThroughout": true
+        "tcpConnectedThroughout": true,
+        "attemptId": "K1M_BR2_19:9"
       },
       "given": [
         {
@@ -2380,18 +2809,12 @@
             "mode": "results",
             "rows": [
               {
-                "outcome": {
-                  "kind": "duration",
-                  "runSeconds": 82.36,
-                  "penaltySeconds": 0,
-                  "totalSeconds": 82.36
-                },
+                "status": "dns",
                 "placement": {
-                  "rank": 3,
-                  "order": 3
+                  "rank": 30,
+                  "order": 30
                 },
-                "pairTotal": 82.36,
-                "judgingComplete": true,
+                "pairTotal": 87.1,
                 "bib": "9"
               }
             ]
@@ -2436,6 +2859,10 @@
         "K1M_BR2_19:9.pairTotal": {
           "state": "known",
           "value": 87.1
+        },
+        "K1M_BR2_19:9.status": {
+          "state": "known",
+          "value": "not-started"
         }
       }
     },
@@ -2446,7 +2873,8 @@
       "context": {
         "tcpConnectedThroughout": true,
         "xmlPollIntervalSeconds": 5,
-        "note": "the recorded wrong-race run: cleared in the XML five minutes before TCP's rotation showed it."
+        "note": "the recorded wrong-race run: cleared in the XML five minutes before TCP's rotation showed it.",
+        "attemptId": "C1M_BR1_19:9"
       },
       "given": [
         {
@@ -2510,7 +2938,8 @@
       "description": "An XML rewrite detected within one poll interval of the tcp observation may predate the push: it does not retract. A later rewrite does.",
       "context": {
         "tcpConnectedThroughout": true,
-        "xmlPollIntervalSeconds": 5
+        "xmlPollIntervalSeconds": 5,
+        "attemptId": "C1M_BR1_19:9"
       },
       "given": [
         {
@@ -2604,7 +3033,7 @@
       "description": "A finish taken away on the on-course grid: the on-course stream lists the bib running again, later pushes still carry the stale time, the real finish lifts it.",
       "context": {
         "tcpConnectedThroughout": true,
-        "note": "recorded: a false leader for 31.5 s on the wire; the contract shows none."
+        "note": "recorded: a false leader for 31.5 s on the wire; the contract shows none. TCP rows carry no finish time: the contradicted finish is matched by run time (ADR-017 D1)."
       },
       "given": [
         {
@@ -2625,7 +3054,6 @@
                   "rank": 1,
                   "order": 1
                 },
-                "finishTime": "2026-09-15T07:56:26.670Z",
                 "judgingComplete": true,
                 "bib": "55"
               }
@@ -2664,7 +3092,6 @@
                   "rank": 1,
                   "order": 1
                 },
-                "finishTime": "2026-09-15T07:56:26.670Z",
                 "judgingComplete": true,
                 "bib": "55"
               },
@@ -2679,7 +3106,6 @@
                   "rank": 4,
                   "order": 4
                 },
-                "finishTime": "2026-09-15T07:56:26.670Z",
                 "judgingComplete": true,
                 "bib": "56"
               }
@@ -2703,7 +3129,8 @@
               {
                 "kind": "contradicted-finish",
                 "attemptId": "K1M_BR1_19:55",
-                "finishTime": "2026-09-15T07:56:26.670Z"
+                "finishTime": null,
+                "runSeconds": 48.64
               }
             ]
           }
@@ -2747,7 +3174,6 @@
                   "rank": 6,
                   "order": 6
                 },
-                "finishTime": "2026-09-15T07:57:06.990Z",
                 "judgingComplete": true,
                 "bib": "55"
               },
@@ -2762,7 +3188,6 @@
                   "rank": 4,
                   "order": 4
                 },
-                "finishTime": "2026-09-15T07:56:26.670Z",
                 "judgingComplete": true,
                 "bib": "56"
               }
@@ -2790,6 +3215,145 @@
           }
         },
         "diagnostics": []
+      }
+    },
+    {
+      "id": "contradiction-lift-keeps-stale-rows-unpresented",
+      "invariant": "INV-2d",
+      "description": "After the on-course stream lifts a contradiction by showing a finish, rows still carrying the contradicted finish stay unpresented; only rows carrying the new finish present (ADR-017 D1, S1-20).",
+      "context": {
+        "attemptId": "K1M_BR1_19:55",
+        "tcpConnectedThroughout": true
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR1_19",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "55",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 48.64,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 48.64
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "judgingComplete": true
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T07:56:26.895Z"
+        },
+        {
+          "ingestSeq": 2,
+          "attemptId": "K1M_BR1_19:55",
+          "field": "onCourse",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T07:56:35.642Z",
+          "value": {
+            "dtStart": "2026-09-15T07:55:38.000Z",
+            "dtFinish": null
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 3,
+          "attemptId": "K1M_BR1_19:55",
+          "field": "onCourse",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T07:57:07.000Z",
+          "value": {
+            "dtStart": "2026-09-15T07:55:38.000Z",
+            "dtFinish": "2026-09-15T07:57:06.990Z"
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 4,
+          "attemptId": "K1M_BR1_19:55",
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T07:57:07.000Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 88.96,
+            "penaltySeconds": 0,
+            "totalSeconds": 88.96
+          },
+          "confidence": "inferred",
+          "eventTime": "2026-09-15T07:57:06.990Z"
+        },
+        {
+          "ingestSeq": 5,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR1_19",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "55",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 48.64,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 48.64
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "judgingComplete": true
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T07:57:07.050Z"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 1,
+          "expect": {
+            "K1M_BR1_19:55.status": {
+              "state": "known",
+              "value": "on-course"
+            },
+            "diagnostics": [
+              {
+                "kind": "contradicted-finish",
+                "attemptId": "K1M_BR1_19:55",
+                "finishTime": null,
+                "runSeconds": 48.64
+              }
+            ]
+          }
+        }
+      ],
+      "expect": {
+        "K1M_BR1_19:55.status": {
+          "state": "known",
+          "value": "finished"
+        },
+        "K1M_BR1_19:55.outcome": {
+          "state": "known",
+          "value": {
+            "totalSeconds": 88.96
+          },
+          "confidence": "inferred"
+        },
+        "K1M_BR1_19:55.placement": {
+          "state": "not-yet"
+        },
+        "note": "the stale 48.64 row re-pushed after the lift is still the contradicted finish by run time: retained, unpresented; the inference stands until a row carries 88.96."
       }
     },
     {
@@ -2854,6 +3418,9 @@
             "totalSeconds": 90.12
           }
         }
+      },
+      "context": {
+        "attemptId": "C1M_BR1_19:9"
       }
     },
     {
@@ -2861,7 +3428,8 @@
       "invariant": "half-correction",
       "description": "An XML snapshot written mid-correction shows one finish on two bibs: both are presented as upstream's state, a duplicate-finish diagnostic is raised, and the next TCP push resolves it.",
       "context": {
-        "note": "recorded: bogus leaders were published for about 2 min; the contract shows upstream's state with the hazard visible."
+        "note": "recorded: bogus leaders were published for about 2 min; the contract shows upstream's state with the hazard visible.",
+        "attemptId": "K1W_BR2_19:9"
       },
       "given": [
         {
@@ -2996,7 +3564,8 @@
       "description": "The operator re-baseline discards retained tcp knowledge for the race, presents the current XML snapshot, and lets the next TCP push refill.",
       "context": {
         "tcpConnectedThroughout": true,
-        "note": "the DNS on bib 53 was deleted on a silent path; TCP still carried it. After the re-baseline the tcp slot is empty, so rule 2 presents xml until the next push."
+        "note": "the DNS on bib 53 was deleted on a silent path; TCP still carried it. After the re-baseline the tcp slot is empty, so rule 2 presents xml until the next push.",
+        "attemptId": "K1W_BR1_19:9"
       },
       "given": [
         {
@@ -3202,7 +3771,8 @@
           },
           "source": "xml"
         }
-      }
+      },
+      "context": {}
     },
     {
       "id": "live-explicit-not-yet-resets-field",
@@ -3256,6 +3826,9 @@
             "order": 1
           }
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -3386,11 +3959,185 @@
       }
     },
     {
+      "id": "oncourse-unstaged-before-start-returns-to-not-started",
+      "invariant": "oncourse",
+      "description": "An Attempt staged and then removed before any start returns to not-started, never left-without-finish (ADR-017, S1-16; recorded: a bib staged 5 s into the next day's race).",
+      "context": {
+        "attemptId": "K1M_BR1_20:68",
+        "discipline": "slalom"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "attemptId": "K1M_BR1_20:68",
+          "field": "onCourse",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T09:36:49.977Z",
+          "value": {
+            "dtStart": null,
+            "dtFinish": null
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 2,
+          "attemptId": "K1M_BR1_20:68",
+          "field": "status",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T09:36:49.977Z",
+          "value": "at-start",
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 3,
+          "event": "oncourse-left",
+          "observedAt": "2026-09-15T09:36:56.688Z",
+          "attemptId": "K1M_BR1_20:68"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 1,
+          "expect": {
+            "K1M_BR1_20:68.status": {
+              "state": "known",
+              "value": "at-start"
+            },
+            "oncourse": [
+              "K1M_BR1_20:68"
+            ]
+          }
+        }
+      ],
+      "expect": {
+        "K1M_BR1_20:68.status": {
+          "state": "known",
+          "value": "not-started"
+        },
+        "oncourse": []
+      }
+    },
+    {
+      "id": "standing-not-resent-on-running-tick",
+      "invariant": "standing-push",
+      "description": "A second-run athlete holds a combined placement from run 1; its running ticks never re-send the standing, whose entry result is pending while on course (ADR-017 D3, S1-25).",
+      "context": {
+        "attemptId": "K1M_BR2_19:9",
+        "phase": "K1M_BR2_19",
+        "tcpConnectedThroughout": true
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR2_19",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "9",
+                "placement": {
+                  "rank": 3,
+                  "order": 3
+                },
+                "pairTotal": 82.36,
+                "timeEmpty": true
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:00:00.000Z"
+        },
+        {
+          "ingestSeq": 2,
+          "attemptId": "K1M_BR2_19:9",
+          "field": "onCourse",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:10:00.000Z",
+          "value": {
+            "dtStart": "2026-09-15T10:09:59.000Z",
+            "dtFinish": null
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 3,
+          "attemptId": "K1M_BR2_19:9",
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:10:09.000Z",
+          "value": {
+            "kind": "running",
+            "elapsedSeconds": 10,
+            "penaltySeconds": 0
+          },
+          "confidence": "authoritative",
+          "provisional": true
+        },
+        {
+          "ingestSeq": 4,
+          "attemptId": "K1M_BR2_19:9",
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:10:10.000Z",
+          "value": {
+            "kind": "running",
+            "elapsedSeconds": 11,
+            "penaltySeconds": 0
+          },
+          "confidence": "authoritative",
+          "provisional": true
+        },
+        {
+          "ingestSeq": 5,
+          "attemptId": "K1M_BR2_19:9",
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:10:11.000Z",
+          "value": {
+            "kind": "running",
+            "elapsedSeconds": 12,
+            "penaltySeconds": 0
+          },
+          "confidence": "authoritative",
+          "provisional": true
+        }
+      ],
+      "expect": {
+        "K1M_BR2_19:9.outcome": {
+          "state": "known",
+          "value": {
+            "kind": "running",
+            "elapsedSeconds": 12,
+            "penaltySeconds": 0
+          }
+        },
+        "K1M_BR2_19:9.placement": {
+          "state": "known",
+          "value": {
+            "rank": 3,
+            "order": 3
+          },
+          "provisional": true
+        },
+        "notifications": {
+          "standing.updated": 2
+        },
+        "note": "two standing pushes: the first snapshot, and the run-2 start that made the carried-over fields provisional; the three ticks produce attempt.updated only, and the entry's result is pending throughout."
+      }
+    },
+    {
       "id": "live-bare-value-wrapped-as-bridge",
       "invariant": "live-ingest",
       "description": "On the live tier a bare Entry body is wrapped by the store: known values carry source bridge; a null becomes not-applicable.",
       "context": {
-        "tier": "live"
+        "tier": "live",
+        "attemptId": "K1M_BR1_6:9"
       },
       "given": [
         {
@@ -3499,7 +4246,8 @@
       "invariant": "run-generation",
       "description": "A mark carried from before a re-run is not presented on a row whose finish is the new run's; a mark first seen in the new generation is.",
       "context": {
-        "note": "upstream does not clear an old DNF when a re-run finishes over it (source; no recorded instance). A later, different mark (dsq) is presented."
+        "note": "upstream does not clear an old DNF when a re-run finishes over it (source; no recorded instance). A later, different mark (dsq) is presented.",
+        "attemptId": "K1M_BR1_19:9"
       },
       "given": [
         {
@@ -3582,29 +4330,38 @@
             "K1M_BR1_19:9.status": {
               "state": "known",
               "value": "finished"
-            }
+            },
+            "K1M_BR1_19:9.outcome": {
+              "state": "known",
+              "value": {
+                "totalSeconds": 88.2
+              }
+            },
+            "diagnostics": [
+              {
+                "kind": "stale-mark",
+                "attemptId": "K1M_BR1_19:9",
+                "run": 2,
+                "mark": "dnf"
+              }
+            ]
           }
         }
       ],
       "expect": {
         "K1M_BR1_19:9.status": {
           "state": "known",
-          "value": "finished"
+          "value": "dsq"
         },
         "K1M_BR1_19:9.outcome": {
           "state": "known",
           "value": {
-            "totalSeconds": 88.2
+            "kind": "no-result",
+            "status": "dsq"
           }
         },
-        "diagnostics": [
-          {
-            "kind": "stale-mark",
-            "attemptId": "K1M_BR1_19:9",
-            "run": 2,
-            "mark": "dnf"
-          }
-        ]
+        "diagnostics": [],
+        "note": "the stale dnf is withheld with a stale-mark diagnostic; the later, different dsq is presented and the diagnostic clears (DERIVATIONS §4.12)."
       }
     },
     {
@@ -3683,7 +4440,8 @@
       "description": "On the live tier the latest bridge observation of outcome is presented: running values in order, then the finished duration; nothing is cleared when pushes stop.",
       "context": {
         "tier": "live",
-        "note": "the bridge pushes presented values in its own ingest order and coalesces to one per Attempt per second; the store presents the latest (INV-6)."
+        "note": "the bridge pushes presented values in its own ingest order and coalesces to one per Attempt per second; the store presents the latest (INV-6).",
+        "attemptId": "K1M_BR1_6:9"
       },
       "given": [
         {
@@ -3862,6 +4620,9 @@
         "writeRequest": {
           "status": "confirmed"
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -3870,7 +4631,8 @@
       "description": "A classification push replaces the Phase's rows whole; the classification Standing is assembled from them as delivered and dated by the push's asOf.",
       "context": {
         "tier": "live",
-        "note": "entry C dropped out on recalculation; no Attempt exists for a classification Phase."
+        "note": "entry C dropped out on recalculation; no Attempt exists for a classification Phase.",
+        "attemptId": "K1M_BR1_6:9"
       },
       "given": [
         {
@@ -3984,7 +4746,8 @@
       "context": {
         "phase": "MX1J_XT_26",
         "scoringKind": "duration",
-        "note": "recorded junior time-trial rows: Time 100.00 for everyone, real ranks and Q; rank x 1000 typed in later."
+        "note": "recorded junior time-trial rows: Time 100.00 for everyone, real ranks and Q; rank x 1000 typed in later.",
+        "attemptId": "MX1J_XT_26:9"
       },
       "given": [
         {
@@ -4086,6 +4849,9 @@
           "state": "known",
           "provisional": false
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -4093,7 +4859,8 @@
       "invariant": "marks",
       "description": "In a second-run race a DNS mark describes run 2 only: status dns, placement still the combined one.",
       "context": {
-        "phase": "K1M_BR2_19"
+        "phase": "K1M_BR2_19",
+        "attemptId": "K1M_BR2_19:9"
       },
       "given": [
         {
@@ -4199,7 +4966,8 @@
             "totalSeconds": 82.36
           }
         }
-      }
+      },
+      "context": {}
     },
     {
       "id": "two-run-br1-recovered-from-xml-cold",
@@ -4235,7 +5003,8 @@
           "confidence": "authoritative",
           "provisional": false
         }
-      }
+      },
+      "context": {}
     },
     {
       "id": "two-run-br1-unavailable-no-live-no-xml",
@@ -4309,7 +5078,8 @@
           "value": "on-course"
         },
         "oncourse": []
-      }
+      },
+      "context": {}
     },
     {
       "id": "cross-outcome-from-placement-not-time",
@@ -4344,7 +5114,8 @@
           "provisional": false
         },
         "note": "finish position 1 (Time \"1.00\") but two faults; upstream places the athlete third."
-      }
+      },
+      "context": {}
     },
     {
       "id": "cross-outcome-corrected-after-next-heat-started",
@@ -4447,6 +5218,9 @@
           "state": "known",
           "value": "revised"
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {
@@ -4479,6 +5253,9 @@
           "state": "known",
           "value": "dsq"
         }
+      },
+      "context": {
+        "attemptId": "K1M_BR1_6:9"
       }
     },
     {

@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opencanoetiming.org/schemas/fixture-admitted.schema.json",
+  "title": "Domain-state fixture admission block (TEST-ARCHITECTURE §4; ADR-017 D5)",
+  "description": "The `admitted` block of a tier-2 domain-state fixture. A fixture is complete, and may be published, only when gate1 and gate2 are true, gate3.mechanical.mismatch is 0 and gate3.human is a 'human-checked-<date> by <name>' line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "gate1",
+    "gate2",
+    "gate3",
+    "evidence"
+  ],
+  "properties": {
+    "gate1": {
+      "type": "boolean",
+      "description": "determinism: two direct-injection replays and two projections byte-identical"
+    },
+    "gate2": {
+      "type": "boolean",
+      "description": "the gate-2 property checker reports no violation; never relaxed to admit"
+    },
+    "gate3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mechanical",
+        "human"
+      ],
+      "properties": {
+        "mechanical": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "attempts",
+            "fields",
+            "match",
+            "mismatch",
+            "changedAfterWindow",
+            "changedAfterWindowEqualsWindowEnd",
+            "noFinalRow",
+            "report"
+          ],
+          "properties": {
+            "attempts": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "fields": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "match": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "mismatch": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "changedAfterWindow": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "changedAfterWindowEqualsWindowEnd": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "noFinalRow": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "report": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "file",
+                "sha256"
+              ],
+              "properties": {
+                "file": {
+                  "type": "string"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              }
+            }
+          }
+        },
+        "human": {
+          "type": "string",
+          "description": "'human-checked-YYYY-MM-DD by <name>' once the maintainer has confirmed the day's final XML equals the published results; any other string (e.g. a TODO) leaves the fixture a candidate"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gate1",
+        "gate2"
+      ],
+      "properties": {
+        "gate1": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "stepLogSha256",
+            "finalStateSha256",
+            "candidateSha256"
+          ],
+          "properties": {
+            "stepLogSha256": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "finalStateSha256": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "candidateSha256": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        },
+        "gate2": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "checker",
+            "violations"
+          ],
+          "properties": {
+            "checker": {
+              "type": "string"
+            },
+            "violations": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

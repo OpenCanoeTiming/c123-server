@@ -102,3 +102,16 @@ uses.
 
 Any tier computing a rank from outcomes, as distinct from assembling one. The anomaly check computes
 an ordering but publishes nothing except the anomaly.
+
+## Revision — placement known only when ranked; a standing is pushed only when its serialised form changes (2026-10-14)
+
+Two spike findings (`ADR-017` D2, D3). First, `Attempt.placement` is `known` iff upstream's `Rank` is
+non-empty. `RankOrder` alone is upstream's grid sort key: a marked row's keeps moving as others finish
+(2,261 against 920 changed rows in 30 minutes when diffed raw), and a Cross heat's is the lane order
+until the operator asserts the order. Relaying it as a placement would have published a ranking
+upstream had not made — the thing this ADR exists to prevent. An unplaced standing entry is an Attempt
+presenting an outcome other than `pending` or `running`, or a mark, and no placement. Second, a
+standing is pushed only when its serialised form changes, and a running athlete's `result` is
+`pending`: a second-run athlete's ticking run-2 time had re-sent the phase, pair and category standings
+25 times a second (37,168 pushes, 427 MB, in one 25-minute window). The relay principle is unchanged;
+what is relayed is now exactly what upstream has ranked, when it changes.
