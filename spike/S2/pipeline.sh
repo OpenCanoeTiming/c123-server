@@ -11,7 +11,7 @@ ID=${ID:-nkz-19so-0930-0945}
 WORK=${1:?work dir} FIX=${2:?fixture dir}
 S2=$(cd "$(dirname "$0")" && pwd)
 S1=$S2/../S1
-REPLAY=${REPLAY:-$S2/replay-s1.mjs}          # S1's dist/replay.js once it reads excerpt.json
+REPLAY=${REPLAY:-$S1/dist/replay.js}
 mkdir -p "$WORK" "$FIX"
 run() { local t0=$SECONDS; "$@"; local rc=$?; echo "exit=$rc $((SECONDS-t0))s :: $*" >&2; return $rc; }
 
