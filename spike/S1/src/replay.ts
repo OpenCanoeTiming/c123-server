@@ -3,7 +3,7 @@
 // Writes <out>/steps.jsonl (one canonical JSON line per element) and <out>/final-state.json (canonical
 // presented state), and prints both sha256s. No clock of the process feeds the domain: observedAt is
 // recording start + excerpt offset + the record's ts. The wall-clock duration is measured for the report only.
-import { createReadStream, createWriteStream, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 import { Domain } from './merge.js';
@@ -22,7 +22,10 @@ async function main() {
   const zone = arg('zone', '+02:00'), leaveMs = Number(arg('leave-ms', '2500'));
   mkdirSync(out, { recursive: true });
   const recManifest = JSON.parse(readFileSync(join(recording, 'manifest.json'), 'utf8'));
-  const exManifest = JSON.parse(readFileSync(join(excerpt, 'manifest.json'), 'utf8'));
+  // Excerpt metadata: excerpt.json in the layout of protocol-docs main 4ab91d2 (manifest.json is then the v3 player
+  // manifest); manifest.json in the earlier layout.
+  const exMetaPath = existsSync(join(excerpt, 'excerpt.json')) ? join(excerpt, 'excerpt.json') : join(excerpt, 'manifest.json');
+  const exManifest = JSON.parse(readFileSync(exMetaPath, 'utf8'));
   // extract-excerpt.js writes _meta.startTime as new Date(offset): unusable (1970). Absolute time comes from the
   // source recording: its start = first chunk's startTime minus its startOffset.
   const recStart = Date.parse(recManifest.chunks[0].startTime) - recManifest.chunks[0].startOffset;
