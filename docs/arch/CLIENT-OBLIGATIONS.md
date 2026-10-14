@@ -275,7 +275,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 **Tests**
 - [ ] Run, through a thin adapter into its own merge function, the tier-1 vectors CONFORMANCE-VECTORS §1 lists for the live tier: `INV-1` except the two scope-snapshot ones, `INV-3`, `INV-4`, `INV-5`, `INV-6`, `live-ingest`, the two `operator-correction-*` vectors, and `standing-assembly` except the three anomaly vectors (CONFORMANCE-VECTORS §1, §2; TEST-ARCHITECTURE §3.1).
 - [ ] Add tier-1 time-window vectors for calendar `status`: just under, exactly at and just over 5 minutes (TEST-ARCHITECTURE §3.1).
-- [ ] Replay each admitted domain-state fixture as `PUT` calls, and check that values read back over the public reads match (TEST-ARCHITECTURE §3.2, §7).
+- [ ] Replay each admitted domain-state fixture's deltas as the §8.3 pushes they correspond to, check that values read back over the public reads match, and run the deltas-only gate-2 properties (those marked **D**) on the resulting public stream (TEST-ARCHITECTURE §3.2, §7).
 - [ ] Verify tenant isolation with the store's own integration tests: no leakage between two keys with equal local ids, no cross-event access, `403` for a revoked key, `404` for an unknown `eventId` (TEST-ARCHITECTURE §3.5; CONFORMANCE-VECTORS §3).
 
 ---
