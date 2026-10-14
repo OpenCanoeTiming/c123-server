@@ -1,14 +1,15 @@
 // Spike S2 admission: the TEST-ARCHITECTURE §3.2 gates over a candidate fixture, written as its `admitted` block.
 //   node admit.mjs --candidate <c1.json> --candidate2 <c2.json> --run1 <dir> --run2 <dir> --checker <json>
 //                  --excerpt <dir> --recording <dir> --schema <fixture-admitted.schema.json> --out <fixture.json>
-//                  --report <gate3.json>
+//                  --report <gate3.json> [--human "human-checked-<date> by <name> …"]
 // Gate 1: S1's two step logs and final states, and the two candidates projected from them, byte-identical.
 // Gate 2: S1's checker found no violation. Gate 3 (mechanical, TEST-ARCHITECTURE §3.2 round 10): for every Attempt that
 // finished inside the window, the fixture's final presented outcome, gates, placement and pairTotal against its row in
 // upstream's XML at the window end (the window's last snapshot), read here independently of S1 (DERIVATIONS §0.1,
 // §4.4, §4.6(b), §4.7 units); a field whose day-final value differs is listed as changed after the window. The human
-// line is never written by this tool: it stays a TODO until the maintainer confirms the final XML against the
-// published results. The block is validated against schemas/fixture-admitted.schema.json before it is written.
+// line is a TODO unless --human passes the maintainer's confirmation, which must read 'human-checked-<date> by
+// <name>' and name the final XML's sha256. The block is validated against schemas/fixture-admitted.schema.json
+// before it is written, and its completeness (§4) is printed.
 import { createReadStream, createWriteStream, readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
@@ -168,7 +169,7 @@ async function main() {
   const violations = Object.fromEntries(ck.properties.map((p) => [`P${p.property}`, p.violations]));
   const gate2 = ck.properties.length === 15 && ck.properties.every((p) => p.violations === 0);
 
-  // ── gate 3, mechanical part
+  // ── gate 3, mechanical part (the human line, if given, must refer to the final XML compared here)
   const lastChunk = recManifest.chunks.at(-1);
   const finalXml = await lastXml(join(recording, lastChunk.file), (r) => ({
     data: r.data, at: new Date(Date.parse(lastChunk.startTime) + r.ts).toISOString(), file: lastChunk.file, ts: r.ts }));
@@ -208,6 +209,9 @@ async function main() {
     units: 'XML Time/Total/TotalTotal ms ÷ 1000, Pen s, Gates 3-char cells (first N+R of CourseConfig), Rnk/RnkOrder or TotalRnk/TotalRnkOrder on BR2; compared at 1 ms',
     counts, rows,
   };
+  const human = process.argv.includes('--human') ? arg('human') : null;
+  if (human && !(/^human-checked-\d{4}-\d{2}-\d{2} by \S/.test(human) && human.includes(report.finalXml.sha256)))
+    throw new Error('--human must read "human-checked-<date> by <name> …" and name the final XML sha256');
   const reportText = JSON.stringify(report, null, 2) + '\n';
   writeFileSync(arg('report'), reportText);
 
@@ -216,13 +220,14 @@ async function main() {
     gate2,
     gate3: {
       mechanical: { ...counts, report: { file: arg('report').split('/').pop(), sha256: sha256(reportText) } },
-      human: `TODO(maintainer): confirm that the final XML snapshot of 2026-09-19 (recording 2026-09-19-2026-nkz-19so, ${finalXml.file} ts ${finalXml.ts}, sha256 ${report.finalXml.sha256}) equals the published results of the day (CONTRACTS §2.8), then replace this string with "human-checked-<date> by <name>"`,
+      human: human ?? `TODO(maintainer): confirm that the final XML snapshot of 2026-09-19 (recording 2026-09-19-2026-nkz-19so, ${finalXml.file} ts ${finalXml.ts}, sha256 ${report.finalXml.sha256}) equals the published results of the day (CONTRACTS §2.8), then replace this string with "human-checked-<date> by <name>"`,
     },
     evidence: {
       gate1: { stepLogSha256: h.steps, finalStateSha256: h.finalState, candidateSha256: h.candidate },
       gate2: { checker: 'spike/S1/src/checker.ts', violations },
     },
   };
+  const complete = gate1 && gate2 && counts.mismatch === 0 && /^human-checked-\d{4}-\d{2}-\d{2} by \S/.test(admitted.gate3.human);
   const problems = validate(JSON.parse(readFileSync(arg('schema'), 'utf8')), admitted, 'admitted');
   if (problems.length) throw new Error(`admitted block does not follow the schema: ${problems.join('; ')}`);
   const out = createWriteStream(arg('out'));
@@ -234,7 +239,7 @@ async function main() {
   const fixtureSha = fileSha(arg('out'));
   writeFileSync(arg('out') + '.sha256', `${fixtureSha}  ${arg('out').split('/').pop()}\n`);
 
-  console.log(JSON.stringify({ gate1, gate2, violations, counts, consumerFold, seqOk, firstAboveAsOf, deltas, fixtureSha256: fixtureSha }, null, 2));
+  console.log(JSON.stringify({ gate1, gate2, complete, violations, counts, consumerFold, seqOk, firstAboveAsOf, deltas, fixtureSha256: fixtureSha }, null, 2));
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
