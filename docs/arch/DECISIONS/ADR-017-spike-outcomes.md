@@ -25,7 +25,7 @@ pushes/s coalesced; the tier-3 harness costs 249 + 94 lines.
 
 All 38 entries are adopted. Five decisions carry 27 of them and are stated here; the rest are
 one-line amendments listed in the table below. The amendments are applied in `CONTRACTS.md`,
-`DERIVATIONS.md`, `TEST-ARCHITECTURE.md`, `CONFORMANCE-VECTORS.md`, the vectors (85 → 92),
+`DERIVATIONS.md`, `TEST-ARCHITECTURE.md`, `CONFORMANCE-VECTORS.md`, the vectors (85 → 93),
 `CLIENT-OBLIGATIONS.md` and the revisions of ADR-012, ADR-013 and ADR-015 in the same round.
 
 ### D1. A TCP result row has no finish time; attribution and contradiction match by run time
@@ -141,10 +141,13 @@ Gaps S2-1, S2-4, S2-5, S2-6, S2-7.
 | S4-2 | DESIGN-GAP | adopt, D2 | CONTRACTS §8.3: the diff is against presented fields |
 | S4-3 | UPSTREAM-NEW | adopt as the figure | TEST-ARCHITECTURE §8 capacity note |
 
-Also decided from the reports: `C123-PROTOCOL.md`'s "a finisher leaves OnCourse at about +4 s"
-against `CONTRACTS.md` §7.1's "about 20 s" is an E3 between documents; the interval is upstream's
-auto-complete delay, a venue setting; §7.1 says so, and the measured range per recording lands as a
-trailing revision when the scout's measurement is in.
+**The on-course exit delay, measured** (E1, seven recordings, 1,995 closures). `C123-PROTOCOL.md`'s
+"about +4 s" against `CONTRACTS.md` §7.1's "about 20 s" was an E3 between documents. Upstream's
+auto-complete setting is about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % of closures
+in [18, 20) s) and about 47 s at one (cp3-cross, p90 57 s); the two NKZ days add a minority of manual
+closes under 5 s (12.6 % and 34.9 %), the path the protocol doc's figure describes; every recording has
+a tail to 126–781 s. §7.1 states the range, and no client may assume a fixed value. `Completed="Y"`
+coincided with the closure in only 34–70 % of cases, so it stays a trigger, not the closure.
 
 ## Risks retired, and not
 
@@ -173,25 +176,47 @@ trailing revision when the scout's measurement is in.
   connect burst 152–1,167 rows; re-baseline never observed. Today's `/results` on a Pi 5: ~1,100–2,400
   rows/s, CPU-bound; margin 90–200× — a machine floor, not the §8.3 store's. *Not retired:* the §8.3
   store's own overhead (M3); the Railway machine; fan-out.
-- **S5, pending the maintainer.** S1's figures bound it: a full nkz-19so day is 11–24 minutes of CPU on
-  a Pi 5 under 300 MB.
+- **S5, prepared; execution pending the maintainer.** A runbook, a thin WS output over S1's domain, a
+  headless latency client and a PowerShell sampler (329 lines); `player.js` confirmed at 10.00×. Linux
+  reference on the Pi 5, two WS clients at 1× and 10×: receive latency p50 15–31 ms, p95 35–52 ms, max
+  211 ms; 0 torn XML reads from `player.js`'s own writer, and the torn-read retry path proven on a
+  synthetic torn write (6 of 17 reads torn, all recovered on the next retry 50 ms later). The venue
+  laptop's CPU and memory over an hour and the real Canoe123-writer figure are the maintainer's; the
+  poll interval (5 s in the spike and the vectors) is a deployment setting whose venue value comes from
+  that run (`DERIVATIONS.md` §10 item 18). S1's figures bound the rest: a full nkz-19so day is 11–24
+  minutes of CPU on a Pi 5 under 300 MB.
 
 ## What M1 must still prove on data
 
 - Replay jarni-ne-do 08:55–09:10, the only recorded TCP and XML outage: INV-2 rule 2's outage path,
   INV-2c during a disconnect (property 8), and reconnection.
-- A synthetic re-run fixture (no recording has one): ADR-013's generation increment, D1's TCP
-  attribution, property 10, and S1-22's increment delta.
-- The leave-gap distribution behind `onCourseLeaveAfterSeconds` (S1-8), and finish → on-course exit
-  per recording (the ~4 s / ~20 s question).
+- The recorded re-run, nkz-19so C1M_BR1_19 bib 7 (run 1 10:46–10:48Z, wiped in place 10:56:58, gone
+  by 12:02, run 2 12:40–12:42Z, the result push 108 ms before the on-course finish): replay
+  10:44–12:43Z, or the two halves, for ADR-013's generation increment, D1's attribution, INV-7's
+  present-and-empty case, property 10 and S1-22's increment delta; plus a synthetic fixture for the
+  wizard path, which no recording has.
+- The leave-gap distribution behind `onCourseLeaveAfterSeconds` (S1-8).
 - Re-run S2's pipeline on the same window after these amendments: gate 2 must then be true.
 
 ## What it costs
 
-Seven more vectors, one more schema, and a merge core that keeps per-Attempt run-time bookkeeping
+Eight more vectors, one more schema, and a merge core that keeps per-Attempt run-time bookkeeping
 for attribution and contradiction. The standings fix removes about 97 % of the delta volume.
 
 ## What it forecloses
 
 Treating a TCP row's finish as known; presenting a placement upstream has not ranked; re-sending a
 standing for a running athlete's ticks; admitting a fixture over a failing gate 2.
+
+## Revision — the recorded re-run and the measured exit delay (2026-10-14, later the same day)
+
+A scout measuring the exit delay found a genuine jury re-run in nkz-19so (C1M_BR1_19 bib 7, same
+participant: run 1 10:46–10:48Z with a score, the TCP row wiped in place at 10:56:58, gone by 12:02,
+run 2 12:40–12:42Z with the result push 108 ms before the on-course finish). Checked against the
+rules, it refined two of them: INV-7's first-run case now names a row *present with no time and no
+mark* as a retraction (it covered only an absent row and start-list mode), and D1's attribution keeps a
+TCP row that arrives before the generation's on-course finish and attributes it when the finish arrives
+with the same `Time`, instead of treating every such row as the replaced run's. Vector
+`retraction-first-run-row-present-empty` is new; `rerun-tcp-row-before-new-finish-not-presented` now
+delivers the row before the finish, as recorded. The exit delay's measured range is in §7.1, and S5's
+preparation figures are above. 93 vectors.

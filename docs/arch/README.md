@@ -71,7 +71,7 @@ and the capture pipeline against five recorded windows filed 38 gaps, all adopte
 that carry them: a TCP result row has no finish time, so attribution and contradiction match by run
 time; `placement` is known only when upstream ranks the row; a standing is pushed only when its
 serialised form changes; `status` is never provisional; a fixture's identity and admission block are
-pinned. 92 vectors.
+pinned. 93 vectors.
 
 Cross-references, section numbers, JSON validity and internal
 counts were mechanically verified. Hunting for internal inconsistency is largely spent ground.

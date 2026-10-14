@@ -43,11 +43,12 @@ earlier finish superseding — and added 1: a finisher stays in the on-course se
 
 **Round 9** (2026-10-14, `DECISIONS/ADR-017`) fixed `rerun-stale-mark-not-presented` (its `then` mark is
 presented), dropped `finishTime` from TCP snapshot rows, gave every merge vector a `context.attemptId`,
-and added 7: TCP attribution by run time, the INV-2d lift, placement only when ranked, no standing
-re-send on a running tick, pair fields provisional while run 2 runs, `status` never provisional, and an
-Attempt unstaged before its start.
+and added 8: TCP attribution by run time (with the result push arriving before the on-course finish,
+as recorded), the INV-2d lift, placement only when ranked, no standing re-send on a running tick, pair
+fields provisional while run 2 runs, `status` never provisional, an Attempt unstaged before its start,
+and a first-run row wiped in place (the recorded jury re-run).
 
-**92 vectors:** 79 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
+**93 vectors:** 80 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
 needed, not a target.
 
 ---
@@ -157,7 +158,7 @@ optionally the resulting `checks` (only the fields listed are asserted).
 | INV-2 rule 1, `gates` cell-wise | `gates-blank-result-cell-keeps-judged-oncourse-cell`, `gates-result-vector-authoritative-after-leaving` | 2 |
 | INV-2 rule 2 exception (marks on silent paths) | `left-without-finish-then-mark-from-xml`, `xml-mark-does-not-override-tcp-finish` | 2 |
 | `left-without-finish` | `left-without-finish-observed-not-dnf` | 1 |
-| INV-7 (retraction) | `retraction-vanished-row-first-run`, `-dns-cleared-then-races`, `-start-list-mode-clears-all`, `-does-not-touch-inference`, `-second-run-time-empty-keeps-placement`, `-from-xml-row-cleared`; the guard: `retraction-xml-guard-rewrite-before-push` | 7 |
+| INV-7 (retraction) | `retraction-vanished-row-first-run`, `-dns-cleared-then-races`, `-start-list-mode-clears-all`, `-does-not-touch-inference`, `-second-run-time-empty-keeps-placement`, `-from-xml-row-cleared`, `-first-run-row-present-empty`; the guard: `retraction-xml-guard-rewrite-before-push` | 8 |
 | INV-1 against retraction (omission is not absence) | `retraction-not-from-fragment`, `retraction-not-in-other-race-snapshot` | 2 |
 | INV-2d (contradiction by the on-course stream; the lift) | `contradiction-oncourse-running-again`, `contradiction-lift-keeps-stale-rows-unpresented` | 2 |
 | Marks over time; half-corrections | `status-overrides-time`, `half-correction-snapshot-duplicate-finish` | 2 |

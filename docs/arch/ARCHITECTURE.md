@@ -244,7 +244,8 @@ A judge corrects a gate penalty on the tablet.
   value and the write's `pending` state, never a local guess (`CONTRACTS.md` §2.9).
 - **The command.** Penalty-check writes only finished runs, and the write goes as Canoe123's
   correction command, which carries an explicit race id, so a closed Phase is writable. Until the
-  athlete has left upstream's on-course list, about 20 s after the finish, the server refuses the
+  athlete has left upstream's on-course list, typically about 20 s after the finish (a venue setting,
+  `CONTRACTS.md` §7.1), the server refuses the
   write with a clear code and the tablet retries (`CONTRACTS.md` §7.3): a correction sent in that
   window is confirmed by echo and then silently overwritten at closure, which is what today's code
   does (`EVIDENCE.md` Exhibit 14). Team-boat penalties are never written from the tablet.

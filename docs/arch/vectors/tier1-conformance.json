@@ -1936,7 +1936,7 @@
     {
       "id": "rerun-tcp-row-before-new-finish-not-presented",
       "invariant": "run-generation",
-      "description": "After a re-run starts, a TCP row (no finish time) carrying a time is the replaced run's until the new generation's finish is seen on the on-course stream and the row's time equals it (ADR-017 D1).",
+      "description": "After a re-run starts, a TCP row (no finish time) carrying a time is the replaced run's unless the new generation's on-course finish arrives with the same time; a row arriving before that finish is retained and attributed when the finish arrives, as recorded (result push 108 ms before the on-course finish, nkz-19so C1M_BR1_19 bib 7). ADR-017 D1.",
       "context": {
         "attemptId": "K1M_BR1_19:9",
         "tcpConnectedThroughout": true
@@ -1990,28 +1990,20 @@
               "state": "not-yet"
             }
           }
+        },
+        {
+          "afterGivenIndex": 2,
+          "expect": {
+            "K1M_BR1_19:9.outcome": {
+              "state": "not-yet"
+            },
+            "note": "the 88.2 row arrived before the generation's on-course finish: retained, not yet attributed"
+          }
         }
       ],
       "then": [
         {
           "ingestSeq": 3,
-          "attemptId": "K1M_BR1_19:9",
-          "field": "outcome",
-          "source": "tcp",
-          "kind": "inference",
-          "observedAt": "2026-09-15T10:06:30.100Z",
-          "value": {
-            "kind": "duration",
-            "runSeconds": 88.2,
-            "penaltySeconds": 0,
-            "totalSeconds": 88.2
-          },
-          "confidence": "authoritative",
-          "eventTime": "2026-09-15T10:06:30.000Z",
-          "run": 2
-        },
-        {
-          "ingestSeq": 4,
           "snapshot": {
             "source": "tcp",
             "phaseId": "K1M_BR1_19",
@@ -2033,7 +2025,24 @@
               }
             ]
           },
-          "observedAt": "2026-09-15T10:06:30.400Z"
+          "observedAt": "2026-09-15T10:06:30.250Z"
+        },
+        {
+          "ingestSeq": 4,
+          "attemptId": "K1M_BR1_19:9",
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:06:30.358Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 88.2,
+            "penaltySeconds": 0,
+            "totalSeconds": 88.2
+          },
+          "confidence": "authoritative",
+          "eventTime": "2026-09-15T10:06:30.000Z",
+          "run": 2
         }
       ],
       "expect": {
@@ -2052,7 +2061,7 @@
             "order": 6
           }
         },
-        "note": "the 85.0 row is the replaced run: retained, never presented; the 88.2 row matches the generation's on-course finish and is presented with that finish as eventTime."
+        "note": "the 85.0 row is the replaced run: retained, never presented; the 88.2 row, retained for 108 ms, is attributed when the on-course finish arrives with the same time and is presented with that finish as eventTime."
       }
     },
     {
@@ -2873,7 +2882,7 @@
       "context": {
         "tcpConnectedThroughout": true,
         "xmlPollIntervalSeconds": 5,
-        "note": "the recorded wrong-race run: cleared in the XML five minutes before TCP's rotation showed it.",
+        "note": "the recorded jury-invalidated run (C1M_BR1_19 bib 7, later re-run): cleared in the XML five minutes before TCP's rotation showed it.",
         "attemptId": "C1M_BR1_19:9"
       },
       "given": [
@@ -2930,6 +2939,99 @@
           "state": "known",
           "value": "not-started"
         }
+      }
+    },
+    {
+      "id": "retraction-first-run-row-present-empty",
+      "invariant": "INV-7",
+      "description": "In a first-run race a TCP row present with no time and no mark states no result: the recorded jury invalidation wiped the row in place eight minutes after closure (nkz-19so C1M_BR1_19 bib 7, 10:56:58Z); the athlete had left the list, so status is not-started.",
+      "context": {
+        "attemptId": "C1M_BR1_19:7",
+        "phase": "C1M_BR1_19",
+        "tcpConnectedThroughout": true
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "C1M_BR1_19",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "7",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 96.69,
+                  "penaltySeconds": 6,
+                  "totalSeconds": 102.69
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "judgingComplete": true
+              }
+            ]
+          },
+          "observedAt": "2026-09-19T10:48:36.949Z"
+        },
+        {
+          "ingestSeq": 2,
+          "event": "oncourse-left",
+          "observedAt": "2026-09-19T10:48:45.249Z",
+          "attemptId": "C1M_BR1_19:7"
+        },
+        {
+          "ingestSeq": 3,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "C1M_BR1_19",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "7"
+              }
+            ]
+          },
+          "observedAt": "2026-09-19T10:56:58.507Z"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 1,
+          "expect": {
+            "C1M_BR1_19:7.outcome": {
+              "state": "known",
+              "value": {
+                "totalSeconds": 102.69
+              }
+            },
+            "C1M_BR1_19:7.status": {
+              "state": "known",
+              "value": "finished"
+            }
+          }
+        }
+      ],
+      "expect": {
+        "C1M_BR1_19:7.outcome": {
+          "state": "not-yet"
+        },
+        "C1M_BR1_19:7.gates": {
+          "state": "not-yet"
+        },
+        "C1M_BR1_19:7.placement": {
+          "state": "not-yet"
+        },
+        "C1M_BR1_19:7.status": {
+          "state": "known",
+          "value": "not-started"
+        },
+        "notifications": {
+          "attempt.updated": 3
+        },
+        "note": "the row is present but carries nothing: a retraction, not an omission (INV-1 would have kept the score). Run 2 of the same athlete, two hours later, is the generation case."
       }
     },
     {
