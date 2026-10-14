@@ -217,7 +217,10 @@ export class Ingest {
       const rank = num(r.Rank), order = num(r.RankOrder);
       if (order !== undefined) row.placement = { rank: rank ?? null, order };
       this.gatesInto(row, r.Gates, course, 'tcp');
-      const cellSum = row.gates ? row.gates.reduce((s, g) => s + (g.penalty ?? 0), 0) : undefined;
+      // The cells parse without the course (fixed width, 30 cells); only presenting them as Gate[] needs it.
+      const cellSum = row.gates ? row.gates.reduce((s, g) => s + (g.penalty ?? 0), 0)
+        : r.Gates ? parseFixedWidth(r.Gates, 30).cells.reduce<number>((s, x) => s + (x ?? 0), 0) : undefined;
+      if (time !== undefined && course.state !== 'known') row.judgingComplete = null;   // completeness unknowable without the course
       if (time !== undefined) {
         row.runSeconds = time;
         if (second) {
@@ -358,7 +361,9 @@ export class Ingest {
     }
     if (row.underReview === undefined && (row.status || timeMs !== undefined)) row.underReview = false;
     if ((x.Qualified ?? '').trim() === 'Q') row.qualified = true;
-    const cat = num(second ? x.TotalCatRnk : x.CatRnk);
+    // The snapshot's own category rank is one only where the row's CatId is set: on second-run rows before run 2,
+    // CatId is empty and TotalCatRnk equals TotalRnk (E1, nkz-19so; S1 UPSTREAM-NEW).
+    const cat = (x.CatId ?? '').trim() ? num(second ? x.TotalCatRnk : x.CatRnk) : undefined;
     row.upstreamCatRank = cat ?? null;
     return row;
   }

@@ -28,7 +28,7 @@ type Obs = {
   judgingComplete?: boolean | null; runClosed?: boolean; provisionalOverride?: boolean;
   finishTime?: string | null; runSeconds?: number | null; rowStatus?: string | null;
   detectedAt?: string | null; gen: number;
-  supersededAt?: number; displaced?: boolean; writeId?: string;
+  supersededAt?: number; displaced?: boolean; writeId?: string; field?: string;
 };
 type Slot = Partial<Record<SlotName, Obs>> & { lastValueSeq: number };
 
@@ -39,7 +39,7 @@ type AttemptS = {
   listing: { status: string | null; dtStart: string | null; dtFinish: string | null; observedAt: string; seq: number } | null;
   lastOnCourseFinish: { eventTime: string | null; runSeconds: number | null } | null;
   slots: Record<string, Slot>; presented: Record<string, Envelope>; from: Record<string, Obs | null>;
-  contradiction: { finishTime: string | null; runSeconds: number | null } | null;
+  contradiction: { finishTime: string | null; runSeconds: number | null; seq?: number } | null;
   dead: { finishTime: string | null; runSeconds: number | null; beforeSeq: number }[];
   oldRunSeconds: number[];
   cells: Map<number, { penalty: number | null; kind: Kind }>; cellsFrom: Obs | null;
@@ -100,6 +100,7 @@ export class Domain {
   diagnosticsEmitted = '[]';
   currentCourse: { layout: string; captions: string[]; nrSplits: number; fabricated: boolean } | null = null;
   runningPhases: string[] = [];
+  onCourseStreamSeen = false;      // once the on-course stream is ingested, "upstream lists it" is known for every Attempt
   stats = { elements: 0, deltas: 0, retractions: 0, contradictions: 0, generations: 0, inv2cRefusals: 0, staleMarks: 0 };
   // step-local
   private step: { seq: number; observedAt: string; deltas: Delta[]; touchedPhases: Set<string>; oncourseDirty: boolean; inv2c: any[] } | null = null;
@@ -206,6 +207,7 @@ export class Domain {
   }
 
   private put(a: AttemptS, f: string, o: Obs, name: SlotName) {
+    o.field = f;
     const s = this.slot(a, f);
     // Rule 4: a no-echo assertion is displaced by a results-table observation that CHANGES its source's value.
     if ((name === 'tcp' || name === 'xml') && s.op && !s.op.absent && o.seq > s.op.seq) {
@@ -347,6 +349,7 @@ export class Domain {
     } else if (startEt && !a.genStart) a.genStart = startEt;
     a.listed = true;
     this.listedIds.add(a.id);
+    this.onCourseStreamSeen = true;
     this.lastListingAt = el.observedAt;
     this.step!.oncourseDirty = true;
     if (el.completed) a.completedThisGen = true;
@@ -355,7 +358,7 @@ export class Domain {
     if (!ph.cross && !incremented && startEt && !finishEt && startEt === a.genStart && !a.contradiction) {
       const fin = this.presentedResultFinish(a);
       if (fin) {
-        a.contradiction = fin;
+        a.contradiction = { ...fin, seq };
         this.stats.contradictions++;
         this.diagnostics.set(`contradicted-finish|${a.id}`, { kind: 'contradicted-finish', attemptId: a.id, finishTime: fin.finishTime });
         for (const f of ['status', 'outcome', 'placement', 'pairTotal', 'countingRun']) fields.add(f);
@@ -376,7 +379,8 @@ export class Domain {
       if (st.field === 'status') { a.listing.status = st.value as string; if (finishEt) o.eventTime = finishEt; }
       if (st.field === 'outcome' && finishEt && (st.value as any)?.kind === 'duration') o.eventTime = finishEt;
       if (st.field === 'gates') this.foldCells(a, o, true);
-      this.put(a, st.field, o, 'inf');
+      // Identity fields are not results: the on-course stream's statement competes under rule 2 as a tcp observation.
+      this.put(a, st.field, o, IDENTITY_FIELDS.includes(st.field) ? 'tcp' : 'inf');
       fields.add(st.field);
     }
     if (incremented) {
@@ -402,7 +406,7 @@ export class Domain {
 
   private liftContradiction(a: AttemptS, seq: number) {
     if (!a.contradiction) return;
-    a.dead.push({ ...a.contradiction, beforeSeq: seq });
+    a.dead.push({ finishTime: a.contradiction.finishTime, runSeconds: a.contradiction.runSeconds, beforeSeq: seq });
     a.contradiction = null;
     this.diagnostics.delete(`contradicted-finish|${a.id}`);
   }
@@ -414,6 +418,8 @@ export class Domain {
       (o.finishTime != null && fin.finishTime != null) ? o.finishTime === fin.finishTime
         : (o.runSeconds != null && fin.runSeconds != null && o.runSeconds === fin.runSeconds);
     if (a.contradiction && same(a.contradiction)) return true;
+    // INV-2d: placement, pairTotal and countingRun are not-yet while contradicted, unless a later observation states them
+    if (a.contradiction && a.contradiction.seq !== undefined && o.seq < a.contradiction.seq && o.field && ['placement', 'pairTotal', 'countingRun'].includes(o.field)) return true;
     for (const d of a.dead) if (o.seq < d.beforeSeq && same(d)) return true;
     if (a.gen > 1) {
       // DERIVATIONS §4.11: a row whose finish precedes the generation's start describes the replaced run.
@@ -508,7 +514,7 @@ export class Domain {
     }
     const hasTime = row.outcome !== undefined && row.outcome !== null;
     const meta = { finishTime, runSeconds: row.runSeconds ?? null, rowStatus: mark ?? (hasTime ? 'finished' : null), detectedAt,
-      judgingComplete: row.judgingComplete ?? undefined };
+      ...(row.judgingComplete !== undefined ? { judgingComplete: row.judgingComplete } : {}) };
     const val = (f: string, v: unknown, extra: Partial<Obs> = {}) => {
       this.put(a, f, { ...base, ...meta, state: 'known', value: v, ...extra }, src);
       fields.push(f);
@@ -586,10 +592,16 @@ export class Domain {
   /** INV-2 rule 2 between the tcp and xml results-table slots (with INV-7's guard and the mark exception). */
   private rule2(a: AttemptS | EntityS, f: string, s: Slot): Obs | undefined {
     const isA = (a as AttemptS).gen !== undefined;
-    const ok = (o?: Obs) => o && (!isA || (o.gen === (a as AttemptS).gen && !this.unusable(a as AttemptS, o))) ? o : undefined;
+    const genOk = (o?: Obs) => o && (!isA || o.gen === (a as AttemptS).gen) ? o : undefined;
+    const ok = (o?: Obs) => genOk(o) && (!isA || !this.unusable(a as AttemptS, o!)) ? o : undefined;
+    const tRaw = genOk(s.tcp);
     const t = ok(s.tcp), x = ok(s.xml);
-    if (!t) return x;
     if (!x) return t;
+    if (!t) {
+      // INV-2c: a tcp row held back (INV-2d, §4.11) still outdates xml content older than it.
+      if (tRaw && !(this.contentAge(x) > Date.parse(tRaw.observedAt))) return undefined;
+      return x;
+    }
     const continuous = this.tcpConnected && t.seq > this.lastDisconnectSeq;
     // INV-2c: across sources, an xml observation supersedes a tcp one only when its content is newer.
     const newer = this.contentAge(x) > Date.parse(t.observedAt);
@@ -597,7 +609,8 @@ export class Domain {
       if (x.seq > t.seq) {
         const xMark = !x.absent && NO_RESULT_MARKS.includes(x.rowStatus ?? '');
         const tSilent = t.absent || t.rowStatus == null || ['not-started', 'at-start', 'left-without-finish'].includes(t.rowStatus);
-        if ((x.absent || (xMark && tSilent && (f === 'status' || f === 'outcome'))) && newer) return x;
+        // INV-7: an xml retraction applies to a tcp value (a tcp absence already states no result)
+        if (((x.absent && !t.absent) || (xMark && tSilent && (f === 'status' || f === 'outcome'))) && newer) return x;
       }
       return t;
     }
@@ -623,11 +636,14 @@ export class Domain {
     if (s.bridge) return { env: this.envOf(a, f, s.bridge), from: s.bridge };
     let R = this.rule2(a, f, s);
     const inf = s.inf && s.inf.gen === a.gen ? s.inf : undefined;
-    const P = a.from[f];
-    // The mark exception's guard (INV-2 rule 2 / INV-2c): the snapshot must be newer than the tcp status it displaces.
-    if (R && R.source === 'xml' && f === 'status' && P && P === inf && P.source === 'tcp'
-        && ['not-started', 'at-start', 'left-without-finish'].includes(P.value as string) && !(this.contentAge(R) > Date.parse(P.observedAt))) {
+    // The mark exception's guard (INV-2 rule 2 / INV-2c): an xml mark row must be newer than the tcp status it
+    // displaces, here an on-course inference; a refused row leaves the inference presented, for status and outcome.
+    const P = a.from.status;
+    if (R && R.source === 'xml' && (f === 'status' || f === 'outcome') && NO_RESULT_MARKS.includes(R.rowStatus ?? '') && P && P.kind === 'inference'
+        && P.source === 'tcp' && ['not-started', 'at-start', 'left-without-finish'].includes(P.value as string) && !(this.contentAge(R) > Date.parse(P.observedAt))) {
+      if (inf) return { env: this.envOf(a, f, inf), from: inf };
       R = undefined;
+      return { env: a.presented[f] ?? NOT_YET, from: a.from[f] ?? null };
     }
     if (R && !R.absent) return { env: this.envOf(a, f, R), from: R };
     if (f === 'status' && R?.absent) {
@@ -655,9 +671,19 @@ export class Domain {
     if (o.source === 'operator-write') return o.provisionalOverride !== false && o.supersededAt === undefined;
     if (o.source === 'bridge') return false;
     if (o.kind === 'inference') return true;
+    // Where gates are presented, property 11's reading: a result value is provisional exactly while the presented
+    // gates have a blank cell and upstream still lists the Attempt (run not closed). Where no gate vector is
+    // presented (no course; vectors), the observation's own judging flag decides, until the run closes (§1.2, §4.4).
+    const gv = f === 'gates' ? (o.state === 'known' ? o.value : undefined) : (a.presented.gates?.state === 'known' ? (a.presented.gates as Known).value : undefined);
+    if (Array.isArray(gv) && this.gateCount(a.phaseId)) {
+      return (gv as Gate[]).some((c) => c.penalty === null) && a.listed && !a.leftThisGen;
+    }
+    // Closure is upstream no longer listing the Attempt (CONTRACTS §1.2, round 8). With the on-course stream ingested
+    // that is known for every Attempt; the vectors, which carry no listing, state it as runClosed.
+    if (this.onCourseStreamSeen && !a.listed) return false;
     if (o.runClosed || this.closed(a)) return false;
     const complete = o.judgingComplete === undefined ? true : o.judgingComplete === true;
-    return !(complete || this.gatesComplete(a));
+    return !complete;
   }
 
   private closed(a: AttemptS): boolean {
@@ -688,8 +714,8 @@ export class Domain {
     for (const g of gates) {
       const cur = a.cells.get(g.number);
       if (g.penalty !== null) {
-        if (!cur || cur.penalty !== g.penalty || cur.kind !== o.kind) changed = true;
-        a.cells.set(g.number, { penalty: g.penalty, kind: o.kind });
+        // a newer judged value overwrites; restating the same value changes nothing (DERIVATIONS §4.6(e))
+        if (!cur || cur.penalty !== g.penalty) { a.cells.set(g.number, { penalty: g.penalty, kind: o.kind }); changed = true; }
       } else if (!cur) {
         a.cells.set(g.number, { penalty: null, kind: o.kind }); changed = true;
       } else if (!fromInference && cur.kind !== 'inference' && cur.penalty !== null) {
@@ -697,7 +723,9 @@ export class Domain {
         a.cells.set(g.number, { penalty: null, kind: o.kind }); changed = true;
       }
     }
-    if (changed || !a.cellsFrom) a.cellsFrom = o;
+    // A result row that states exactly the merged vector now backs it (provenance for provisional, property 11).
+    const restated = !fromInference && gates.every((g) => a.cells.get(g.number)?.penalty === g.penalty) && a.cells.size === gates.length;
+    if (changed || !a.cellsFrom || restated) a.cellsFrom = o;
   }
 
   private chooseGates(a: AttemptS): { env: Envelope; from: Obs | null } {
@@ -1416,7 +1444,7 @@ export class Domain {
     this.dirty.clear();
     const globals = canonical({ seq: this.seq, tcp: this.tcpConnected, disc: this.lastDisconnectSeq, rw: this.lastRewriteDetectedAt, xml: this.xmlState,
       inst: this.upstreamInstance, off: this.clockOffset, event: this.event, oncourse: this.oncourse, tvs: this.tvs, writes: this.writes,
-      diag: this.diagnosticsEmitted, cc: this.currentCourse, run: this.runningPhases, last: this.lastListingAt, rb: this.rebaseline,
+      diag: this.diagnosticsEmitted, cc: this.currentCourse, run: this.runningPhases, last: this.lastListingAt, rb: this.rebaseline, ocs: this.onCourseStreamSeen,
       se: [...this.standingsEmitted.entries()].length, cls: [...this.classification.entries()] });
     return createHash('sha256').update(this.hashAcc).update(globals).digest('hex');
   }
