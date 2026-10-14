@@ -1,0 +1,19 @@
+{
+  "name": "c123-spike-s5",
+  "private": true,
+  "type": "module",
+  "description": "Spike S5 (throwaway): on-site hardware prep — thin WS output, headless client, XML-watch instrumentation. Never merged.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "server": "node dist/S5/src/server.js",
+    "client": "node dist/S5/src/client.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.0",
+    "typescript": "~5.9.0"
+  }
+}

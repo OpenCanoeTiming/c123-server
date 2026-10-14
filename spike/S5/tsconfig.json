@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "outDir": "./dist",
+    "rootDir": "..",
+    "strict": true,
+    "skipLibCheck": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "resolveJsonModule": true,
+    "sourceMap": false,
+    "types": ["node"]
+  },
+  // rootDir is the worktree's spike/ so S1's sources (imported, never copied) compile into
+  // dist/S1/src alongside our own dist/S5/src — S1/src itself is untouched (read-only import).
+  "include": ["src/**/*.ts", "../S1/src/**/*.ts"]
+}
