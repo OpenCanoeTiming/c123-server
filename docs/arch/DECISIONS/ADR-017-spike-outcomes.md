@@ -220,3 +220,18 @@ with the same `Time`, instead of treating every such row as the replaced run's. 
 `retraction-first-run-row-present-empty` is new; `rerun-tcp-row-before-new-finish-not-presented` now
 delivers the row before the finish, as recorded. The exit delay's measured range is in §7.1, and S5's
 preparation figures are above. 93 vectors.
+
+## Revision 2 — the round-9 re-run (2026-10-14)
+
+S1 re-ran the five windows on round 9: determinism 10/10, the four CHECKER-FAILs closed (0 violations
+on P6, P15 and P11-status), D3 measured — the 10:05–10:30 step log fell from 422 MB to 43 MB and
+`standing.updated` from 37,168 to 426, all serialised changes. Six more gaps, all adopted: two vectors
+miscounted notifications (S1-26: a second-run Phase has a `phase` and a `pair` standing, so two
+messages per change; S1-27: a leave for an Attempt never listed changes nothing) and were fixed, not
+the merge; `left-without-finish` requires an observed start, which the stream's `on-course` or
+`finished` implies (S1-28); a second run's carried-over `placement`, `pairTotal` and `countingRun` are
+provisional from run 2's start until run 2's own row replaces them (S1-29, reading 3: the row usually
+arrives before the finish); property 11's transition clause gains the cold-start case, an Attempt
+listed while no course is bound (S1-30, CHECKER-FAIL, two steps); and D1's retain-and-attribute is the
+normal path in every generation — the result push preceded the on-course finish message in 86 of 120
+recorded finishes, by 0.055–0.709 s (S1-31, E1). 93 vectors.

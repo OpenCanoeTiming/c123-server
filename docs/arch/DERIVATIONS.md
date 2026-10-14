@@ -286,7 +286,8 @@ which may be a start-list row a day ahead.
   mid-cycle.
 
 **`left-without-finish`, slalom only.**
-- **The rule.** An Attempt that leaves the list with a `dtStart` observed and `dtFinish` never
+- **The rule.** An Attempt that leaves the list with a start observed — a `dtStart`, or the stream
+  having stated `on-course` or `finished`, which this section derives from one — and `dtFinish` never
   observed becomes `left-without-finish`, `confidence: 'authoritative'`. What is asserted is that
   upstream removed the athlete; no reason is inferred. An Attempt unstaged before any start returns to
   `not-started` (observed: bib 68 staged for 5 s into the next day's race, then removed); listed again
@@ -421,9 +422,14 @@ combined values.
 **Envelope.**
 - `source` is the channel, with `confidence: 'authoritative'`.
 - `eventTime` comes from `dtFinish` where present: the XML row carries one, a TCP row never does (0 of
-  667,388 recorded rows). A TCP row's outcome takes the generation's on-course finish as `eventTime`
-  when the row is attributed to it (§4.11: its `Time` equals the on-course `Time` at that finish), and
-  has none otherwise. `eventTime` is for display and diagnostics; it is never a merge key.
+  667,388 recorded rows). **In every generation, a TCP row's finish is the on-course finish with the
+  same `Time`, whichever arrives first:** the row's outcome takes it as `eventTime`, and INV-2d matches
+  on it, once the finish is seen; the row's `observedAt` stays its own. The result push usually
+  arrives first — 86 of 120 recorded finishes (72 %), by 0.055–0.709 s, median 0.224 s — because the
+  push follows the finish impulse within about 0.3 s while the on-course stream shows the finish on its
+  next cycle; in none of the 86 did an on-course message without a finish fall in between, so no false
+  contradiction arises. A row has no `eventTime` until then, or ever for a cold-start row before the
+  first snapshot. `eventTime` is for display and diagnostics; it is never a merge key.
 - **`provisional`** is `true` while a presented, merged gate cell is blank (§4.6(e): the on-course `0`
   fills a cell the row still shows blank for about 20 s), or while completeness cannot be judged
   because no course is bound yet, and the run is not closed. `status` is never provisional (§4.1). This is what marks a push that upstream sent before judging
@@ -634,8 +640,9 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   an observed new start, it is the current generation's only once that generation's finish has been
   seen on the on-course stream and the row's `Time` equals the on-course `Time` at that finish (the
   two are identical, §4.4); a TCP row carrying a time that arrives before that finish is retained and
-  attributed when the finish arrives with the same `Time` — recorded: the run-2 result push 108 ms
-  before the on-course `dtFinish` message — else it describes the replaced run; a TCP row carrying a
+  attributed when the finish arrives with the same `Time` — the usual order, §4.4: 72 % of recorded
+  finishes, the run-2 push 108 ms before the finish among them — else it describes the replaced run;
+  a TCP row carrying a
   mark and no time follows the stale-mark rule (§4.12). Either way the replaced run's row
   is retained as history and never presented. After the new finish, upstream's one row per bib is the
   new run's, so a later TCP row with a different `Time` is a correction and supersedes (same source,

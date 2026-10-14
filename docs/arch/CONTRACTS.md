@@ -116,8 +116,9 @@ The fields, precisely:
     merges the cells) — or whose completeness cannot be judged yet because no course is bound, and
     whose run is not yet closed; closure is upstream removing the Attempt from its on-course list
     after its auto-complete delay, which is when it leaves the on-course set (§7.1);
-  - it is a second run's `placement`, `pairTotal` or `countingRun`, carried over from run 1, while
-    run 2 is on course: they move when it finishes;
+  - it is a second run's `placement`, `pairTotal` or `countingRun` carried over from run 1, from the
+    listing that starts run 2 until run 2's own result row replaces them (that row usually arrives
+    before the on-course finish message, §2.6);
   - it is an optimistic write still awaiting its echo (§2.9).
 
   Otherwise it is `false`. **`status` is never provisional:** that the run started or finished is a
@@ -643,9 +644,12 @@ and the run is raced again. Meanwhile, it looks as if the athlete never did that
   (`DERIVATIONS.md` §4.11): an XML row by `dtFinish`; a TCP row, which carries no finish time, is the
   current generation's only once that generation's finish has been seen on the on-course stream and
   the row's `Time` equals it. A TCP row with a time that arrives before that finish is retained: it is
-  attributed to the current generation if the on-course finish then arrives with the same `Time`
-  (recorded: the result push 108 ms before the on-course finish message), else it describes the
-  replaced run and is never presented.
+  attributed to the current generation if the on-course finish then arrives with the same `Time`,
+  else it describes the replaced run and is never presented. This is the usual order, in every
+  generation: in 72 % of recorded finishes the result push precedes the on-course message that shows
+  the finish, by 0.06–0.71 s, because the push follows the finish impulse within about 0.3 s while the
+  on-course stream shows the finish on its next cycle (`DERIVATIONS.md` §4.4). A row attributed later
+  gains the finish as `eventTime`; its `observedAt` stays its own.
 
 **Outcome, by phase of the run.**
 - **`pending`:** nothing yet.
@@ -743,8 +747,9 @@ never a duplicate. The operator resolves it upstream.
   - `dsq-r` and `dqb` are distinct disqualifications that the earlier draft lost into `other`.
 - **In a second run of a pair, a mark describes run 2 only.** The athlete keeps a combined placement
   from run 1. For example, one athlete was marked `dns` for run 2 and ranked 110th. `placement` and
-  `pairTotal` carry that, independently of `status`. While run 2 is on course, `placement`,
-  `pairTotal` and `countingRun` carried over from run 1 are `provisional: true` (§1.2).
+  `pairTotal` carry that, independently of `status`. From the listing that starts run 2 until run 2's
+  own result row replaces them, `placement`, `pairTotal` and `countingRun` carried over from run 1 are
+  `provisional: true` (§1.2).
 - **A mark left over from before a re-run is stale.** Upstream does not clear an old mark when a
   re-run finishes over it (observed upstream behaviour; no recorded instance). So on a row of the
   current generation whose finish time is the new run's, a mark identical to the one the Attempt

@@ -291,10 +291,12 @@ the step index, the Attempt, the field and the property number.
     `outcome.kind: 'running'`); or upstream still lists the Attempt (no `oncourse-left` yet;
     equivalently, it is in the latest `oncourse.updated`) and either a presented `gates` cell is `null`
     or `gates` is not `known` because no course is bound; or it is a second run's `placement`,
-    `pairTotal` or `countingRun` while that run is on course; or its `source` is `operator-write` with
-    a pending `WriteRequest`. It goes `false → true` only through a regression first (property 4), at
-    the on-course listing that starts a run of the Attempt, or when a course binds and shows a blank
-    cell. A `standing.updated` entry's `provisional` is the disjunction over its Attempt's `outcome`,
+    `pairTotal` or `countingRun` carried over from run 1, from the listing that starts run 2 until run
+    2's own result row replaces them; or its `source` is `operator-write` with a pending
+    `WriteRequest`. It goes `false → true` only through a regression first (property 4), at an
+    on-course listing of the Attempt that starts a run or that lists it while no course is bound (a
+    cold start: the results push precedes the first snapshot), or when a course binds and shows a
+    blank cell. A `standing.updated` entry's `provisional` is the disjunction over its Attempt's `outcome`,
     `placement` and `pairTotal` (§5 step 5).
 12. **Marks (§2.6) D.** When `status` is a no-result mark, `outcome` is `{ kind: 'no-result' }` with
     the same status, whatever time the row carried. Two Attempts of one Phase presenting the same

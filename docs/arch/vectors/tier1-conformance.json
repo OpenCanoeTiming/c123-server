@@ -2944,7 +2944,7 @@
     {
       "id": "retraction-first-run-row-present-empty",
       "invariant": "INV-7",
-      "description": "In a first-run race a TCP row present with no time and no mark states no result: the recorded jury invalidation wiped the row in place eight minutes after closure (nkz-19so C1M_BR1_19 bib 7, 10:56:58Z); the athlete had left the list, so status is not-started.",
+      "description": "In a first-run race a TCP row present with no time and no mark states no result: the recorded jury invalidation wiped the row in place eight minutes after closure (nkz-19so C1M_BR1_19 bib 7, 10:56:58Z). The vector never lists the Attempt on course, so status falls to not-started.",
       "context": {
         "attemptId": "C1M_BR1_19:7",
         "phase": "C1M_BR1_19",
@@ -2978,12 +2978,6 @@
         },
         {
           "ingestSeq": 2,
-          "event": "oncourse-left",
-          "observedAt": "2026-09-19T10:48:45.249Z",
-          "attemptId": "C1M_BR1_19:7"
-        },
-        {
-          "ingestSeq": 3,
           "snapshot": {
             "source": "tcp",
             "phaseId": "C1M_BR1_19",
@@ -2999,7 +2993,7 @@
       ],
       "expectSequence": [
         {
-          "afterGivenIndex": 1,
+          "afterGivenIndex": 0,
           "expect": {
             "C1M_BR1_19:7.outcome": {
               "state": "known",
@@ -3029,9 +3023,9 @@
           "value": "not-started"
         },
         "notifications": {
-          "attempt.updated": 3
+          "attempt.updated": 2
         },
-        "note": "the row is present but carries nothing: a retraction, not an omission (INV-1 would have kept the score). Run 2 of the same athlete, two hours later, is the generation case."
+        "note": "the row is present but carries nothing: a retraction, not an omission (INV-1 would have kept the score). Two messages: the creation carrying the result, then the retraction. Run 2 of the same athlete, two hours later, is the generation case."
       }
     },
     {
@@ -4228,9 +4222,9 @@
           "provisional": true
         },
         "notifications": {
-          "standing.updated": 2
+          "standing.updated": 4
         },
-        "note": "two standing pushes: the first snapshot, and the run-2 start that made the carried-over fields provisional; the three ticks produce attempt.updated only, and the entry's result is pending throughout."
+        "note": "K1M_BR2_19 has a phase and a pair standing (§5): two serialised changes — the first snapshot, and the run-2 start that made the carried-over fields provisional — give four standing.updated; the three running ticks produce attempt.updated only, and both entries' result is pending throughout."
       }
     },
     {
