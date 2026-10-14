@@ -86,7 +86,8 @@ export type Element =
       id: string; fields: FieldStatement[] }
   | { type: 'event'; event: 'tcp-connected' | 'tcp-disconnected' | 'xml-rewrite-detected' | 'oncourse-empty' | 'oncourse-left' | 'rebaseline' | 'delete';
       observedAt: string; attemptId?: string; scope?: { kind: 'phase'; phaseId: string } | { kind: 'event' } }
-  | { type: 'snapshot'; observedAt: string; source: 'tcp' | 'xml'; phaseId: string; mode: 'results' | 'start-list'; rows: SnapshotRow[] }
+  | { type: 'snapshot'; observedAt: string; source: 'tcp' | 'xml'; phaseId: string; mode: 'results' | 'start-list'; rows: SnapshotRow[];
+      classId?: string; mainTitle?: string }
   | { type: 'listing'; observedAt: string; attemptId: string; dtStart: string | null; dtFinish: string | null; completed?: boolean;
       fields: FieldStatement[]; finishRunSeconds?: number | null; chStart?: boolean }
   | { type: 'structure'; observedAt: string; source: 'tcp' | 'xml'; what: string; payload: unknown };
@@ -95,7 +96,7 @@ export type Delta = { seq: number; type: string; [k: string]: unknown };
 
 export type Diagnostic =
   | { kind: 'source-disagreement'; attemptId: string; field: string; sources: Source[] }
-  | { kind: 'contradicted-finish'; attemptId: string; finishTime: string }
+  | { kind: 'contradicted-finish'; attemptId: string; finishTime: string | null }   // null: TCP rows carry no finish time (S1 gap)
   | { kind: 'duplicate-finish'; phaseId: string; finishTime: string; bibs: string[] }
   | { kind: 'stale-mark'; attemptId: string; run: number; mark: string }
   | { kind: 'member-sum-mismatch'; attemptId: string; gate: number; crew: number; members: (number | null)[] }

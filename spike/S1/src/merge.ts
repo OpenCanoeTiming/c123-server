@@ -7,7 +7,8 @@ import {
 } from './types.js';
 import { formatFromRaceId, formatInfo, siblingRaceIdByToken, type FormatInfo } from './format.js';
 import { assembleStanding, standingKey, type StandingInput, type StandingScope } from './standing.js';
-import { canonical, compareBib, eventTimeOf, localDate, r3, sha256 } from './util.js';
+import { createHash } from 'node:crypto';
+import { canonical, compareBib, eventTimeOf, localDate, r3 } from './util.js';
 
 export type DomainConfig = {
   zone: string | null;            // venue zone offset (DERIVATIONS §0.2), e.g. "+02:00"
@@ -48,6 +49,7 @@ type AttemptS = {
   xmlUntimed: boolean | null;
   emitted: boolean; lastEmitted: Record<string, string>; deleted: boolean;
   forceEmit: Set<string>;
+  standingSig: string | null;
 };
 
 type EntityS = {
@@ -101,6 +103,12 @@ export class Domain {
   stats = { elements: 0, deltas: 0, retractions: 0, contradictions: 0, generations: 0, inv2cRefusals: 0, staleMarks: 0 };
   // step-local
   private step: { seq: number; observedAt: string; deltas: Delta[]; touchedPhases: Set<string>; oncourseDirty: boolean; inv2c: any[] } | null = null;
+  private dirty = new Set<string>();
+  private stepTouched = new Set<string>();
+  private standingDirty = new Set<string>();
+  private listedIds = new Set<string>();
+  private hashAcc = Buffer.alloc(32);
+  private entityHash = new Map<string, Buffer>();
   private deletedEmitted = new Set<string>();
 
   constructor(cfg: DomainConfig) {
@@ -115,6 +123,7 @@ export class Domain {
     const seq = ++this.seq;
     this.stats.elements++;
     this.step = { seq, observedAt: el.observedAt, deltas: [], touchedPhases: new Set(), oncourseDirty: false, inv2c: [] };
+    this.stepTouched.clear();
     switch (el.type) {
       case 'event': this.applyEvent(el, seq); break;
       case 'observation': this.applyObservation(el, seq); break;
@@ -138,7 +147,7 @@ export class Domain {
       case 'xml-rewrite-detected': this.lastRewriteDetectedAt = el.observedAt; this.xmlState = 'connected'; break;
       case 'oncourse-left': if (el.attemptId) this.leave(this.attempts.get(el.attemptId), seq, el.observedAt); break;
       case 'oncourse-empty':
-        for (const a of this.attempts.values()) if (a.listed) this.leave(a, seq, el.observedAt);
+        for (const id of [...this.listedIds].sort()) this.leave(this.attempts.get(id), seq, el.observedAt);
         this.lastListingAt = el.observedAt;
         this.step!.oncourseDirty = true;
         break;
@@ -149,7 +158,9 @@ export class Domain {
 
   private leave(a: AttemptS | undefined, seq: number, observedAt: string) {
     if (!a || !a.listed) return;
+    this.touch(a.id);
     a.listed = false;
+    this.listedIds.delete(a.id);
     a.leftThisGen = true;
     this.step!.oncourseDirty = true;
     this.lastListingAt = observedAt;
@@ -164,7 +175,10 @@ export class Domain {
 
   // ───────────────────────────── attempts ─────────────────────────────
 
+  private touch(id: string) { this.dirty.add(`attempt:${id}`); this.stepTouched.add(id); }
+
   private getAttempt(id: string, observedAt: string, source: Source | null): AttemptS {
+    this.touch(id);
     let a = this.attempts.get(id);
     if (a && !a.deleted) return a;
     const i = id.lastIndexOf(':');
@@ -174,7 +188,7 @@ export class Domain {
       listed: false, leftThisGen: false, completedThisGen: false, finishSeenThisGen: false, listing: null,
       lastOnCourseFinish: null, slots: {}, presented: {}, from: {}, contradiction: null, dead: [], oldRunSeconds: [],
       cells: new Map(), cellsFrom: null, staleMark: null, unparseable: {}, upstreamCatRank: null, xmlUntimed: null,
-      emitted: false, lastEmitted: {}, deleted: false, forceEmit: new Set(),
+      emitted: false, lastEmitted: {}, deleted: false, forceEmit: new Set(), standingSig: null,
     };
     for (const f of ATTEMPT_FIELDS) a.presented[f] = NOT_YET;
     // Every Attempt starts in generation 1 (ADR-013): structural, asserted at creation.
@@ -239,7 +253,7 @@ export class Domain {
     const fields: string[] = [];
     for (const st of el.fields) {
       if (st.field === 'run') { this.applyRunObservation(a, st, el, seq); continue; }
-      if (name === 'inf' && el.kind === 'inference') a.listed = true;   // the on-course stream lists it
+      if (name === 'inf' && el.kind === 'inference') { a.listed = true; this.listedIds.add(a.id); }   // the on-course stream lists it
       const o = this.toObs(st, el.source, el.kind, el.observedAt, seq, a.gen, el.finishTime, el.runSeconds);
       if (el.kind === 'operator') {
         o.writeId = `w-${seq}`;
@@ -332,6 +346,7 @@ export class Domain {
       incremented = true;
     } else if (startEt && !a.genStart) a.genStart = startEt;
     a.listed = true;
+    this.listedIds.add(a.id);
     this.lastListingAt = el.observedAt;
     this.step!.oncourseDirty = true;
     if (el.completed) a.completedThisGen = true;
@@ -342,7 +357,7 @@ export class Domain {
       if (fin) {
         a.contradiction = fin;
         this.stats.contradictions++;
-        this.diagnostics.set(`contradicted-finish|${a.id}`, { kind: 'contradicted-finish', attemptId: a.id, finishTime: fin.finishTime ?? '' });
+        this.diagnostics.set(`contradicted-finish|${a.id}`, { kind: 'contradicted-finish', attemptId: a.id, finishTime: fin.finishTime });
         for (const f of ['status', 'outcome', 'placement', 'pairTotal', 'countingRun']) fields.add(f);
       }
     } else if (a.contradiction && finishEt) {
@@ -413,7 +428,16 @@ export class Domain {
 
   private applySnapshot(el: Extract<Element, { type: 'snapshot' }>, seq: number) {
     const info = this.phaseInfo(el.phaseId);
-    this.ensurePhase(el.phaseId, el.observedAt);
+    const phase = this.ensurePhase(el.phaseId, el.observedAt);
+    if (el.classId) {
+      // DERIVATIONS §1: classId is Results@ClassId verbatim, never the RaceId prefix; MainTitle is the TCP fallback name.
+      if (!phase.plain.classId) { phase.plain.classId = el.classId; this.linkPair(phase); }
+      const c = this.entity('class', el.classId);
+      Object.assign(c.plain, { classId: el.classId, eventId: this.cfg.eventId, code: el.classId });
+      if (el.mainTitle) this.setEntityField(c, 'name', el.mainTitle, el.source, el.observedAt);
+      this.emitEntity(c);
+      this.emitEntity(phase);
+    }
     this.step!.touchedPhases.add(el.phaseId);
     if (info.kind === 'classification') {
       this.classification.set(el.phaseId, { rows: el.rows.filter((r) => r.placement), asOf: el.observedAt });
@@ -457,6 +481,7 @@ export class Domain {
     if (row.scheduledStart) plain('scheduledStart', row.scheduledStart);
     if (src === 'xml') {
       if (row.upstreamCatRank !== undefined) a.upstreamCatRank = row.upstreamCatRank;
+      if (row.outcome !== undefined || row.untimed) a.xmlUntimed = row.untimed === true;
       if (row.startTime && !a.genStart) a.genStart = row.startTime;
     }
     if (row.unparseable) this.setUnparseable(a, src, row.unparseable);
@@ -494,9 +519,12 @@ export class Domain {
       fields.push('status', 'outcome', 'placement', 'pairTotal', 'countingRun');
     }
     if (mark || hasTime || (row.placement && !second && !row.timeEmpty && row.untimed)) {
-      if (mark) {
+      if (mark && NO_RESULT_MARKS.includes(mark)) {
         val('status', mark);
         val('outcome', { kind: 'no-result', status: mark });
+      } else if (mark === 'non-ranked' && hasTime) {
+        val('status', 'non-ranked', finishTime ? { eventTime: finishTime } : {});
+        val('outcome', row.outcome, finishTime ? { eventTime: finishTime } : {});
       } else {
         val('status', row.underReview ? 'finished' : 'finished', finishTime ? { eventTime: finishTime } : {});
         const untimed = row.untimed === true || (row.untimed === undefined && a.xmlUntimed === true && !a.finishSeenThisGen);
@@ -741,6 +769,7 @@ export class Domain {
   }
 
   private setPresented(a: AttemptS, f: string, env: Envelope, from: Obs | null) {
+    this.touch(a.id);
     a.presented[f] = env;
     a.from[f] = from;
     this.step?.touchedPhases.add(a.phaseId);
@@ -791,6 +820,7 @@ export class Domain {
     for (const a of this.attempts.values()) {
       if (a.deleted || (scope.kind === 'phase' && a.phaseId !== scope.phaseId)) continue;
       this.rebaselineAttempts.add(a.id);
+      this.touch(a.id);
       for (const f of ['status', 'outcome', 'gates', 'splits', 'faults', 'placement', 'pairTotal', 'countingRun', 'underReview', 'qualified']) {
         const s = this.slot(a, f);
         delete s.tcp; delete s.xml; delete s.inf; delete s.op; s.lastValueSeq = 0;
@@ -850,6 +880,7 @@ export class Domain {
       this.ensurePhase(id, observedAt);
       this.classification.set(id, { rows: body.rows, asOf: body.asOf ?? observedAt });
       this.step.touchedPhases.add(id);
+      this.standingDirty.add(id);
     }
     this.flush();
     const out = { ingestSeq: seq, deltas: this.step.deltas };
@@ -861,7 +892,10 @@ export class Domain {
     const a = this.attempts.get(id);
     if (!a || a.deleted) return;
     a.deleted = true;
+    this.listedIds.delete(id);
+    this.standingDirty.add(a.phaseId);
     this.attempts.delete(id);
+    this.dirty.add(`attempt:${id}`);
     this.phaseAttempts.get(a.phaseId)?.delete(id);
     this.step!.touchedPhases.add(a.phaseId);
     if (!this.deletedEmitted.has(id)) { this.deletedEmitted.add(id); this.pushDelta({ type: 'attempt.deleted', attemptId: id }); }
@@ -871,6 +905,7 @@ export class Domain {
 
   entity(kind: EntityS['kind'], id: string): EntityS {
     const k = `${kind}:${id}`;
+    this.dirty.add(k);
     let e = this.entities.get(k);
     if (!e) { e = { id, kind, plain: {}, slots: {}, presented: {}, emitted: false, lastEmitted: {} }; this.entities.set(k, e); }
     return e;
@@ -1085,6 +1120,7 @@ export class Domain {
       e.plain.discipline = cross ? 'cross' : 'slalom';
       this.emitEntity(e);
     }
+    for (const ph of this.entities.values()) if (ph.kind === 'phase' && this.phaseAttempts.has(ph.id)) this.standingDirty.add(ph.id);
     for (const en of p.entries as any[]) {
       const e = this.entity('entry', en.entryId);
       Object.assign(e.plain, { entryId: en.entryId, classId: en.classId });
@@ -1171,15 +1207,18 @@ export class Domain {
   private flush() {
     const st = this.step!;
     if (this.event && !this.eventEmitted) { this.eventEmitted = true; this.pushDelta({ type: 'event.changed', event: this.event }); }
-    // attempts, in id order for determinism
-    const changed = [...this.attempts.values()].filter((a) => {
-      if (!a.emitted || a.forceEmit.size) return true;
-      for (const f of ATTEMPT_FIELDS) if (a.lastEmitted[f] !== canonical(a.presented[f])) return true;
-      return false;
-    }).sort((x, y) => (x.id < y.id ? -1 : 1));
-    if (!this.rebaseline) for (const a of changed) this.emitAttempt(a);
-    this.duplicateFinishes(st.touchedPhases);
-    this.refreshStandings(st.touchedPhases, false);
+    // attempts touched in this step, in id order for determinism
+    const touched = [...this.stepTouched].sort().map((id) => this.attempts.get(id)).filter((a): a is AttemptS => !!a && !a.deleted);
+    if (!this.rebaseline) for (const a of touched) this.emitAttempt(a);
+    for (const a of touched) {
+      const sig = this.standingSig(a);
+      if (sig !== a.standingSig) { a.standingSig = sig; this.standingDirty.add(a.phaseId); }
+    }
+    for (const pid of st.touchedPhases) if (this.classification.has(pid)) this.standingDirty.add(pid);
+    const phases = new Set(this.standingDirty);
+    this.standingDirty.clear();
+    this.duplicateFinishes(phases);
+    this.refreshStandings(phases, false);
     if (st.oncourseDirty || this.liveOncourse) this.refreshOncourse();
     const diag = canonical([...this.diagnostics.values()].sort((x, y) => (canonical(x) < canonical(y) ? -1 : 1)));
     if (diag !== this.diagnosticsEmitted) { this.diagnosticsEmitted = diag; this.pushDelta({ type: 'diagnostics.updated', diagnostics: JSON.parse(diag) }); }
@@ -1218,7 +1257,7 @@ export class Domain {
   oncourseSet(): string[] {
     if (this.liveOncourse) return this.liveOncourse.attemptIds;
     // The set is upstream's list: a finish changes status, not membership (round 8).
-    const members = [...this.attempts.values()].filter((a) => a.listed);
+    const members = [...this.listedIds].map((id) => this.attempts.get(id)!).filter((a) => a && a.listed);
     const co = (a: AttemptS) => (a.presented.courseOrder.state === 'known' ? (a.presented.courseOrder.value as number) : Infinity);
     const so = (a: AttemptS) => (a.presented.startOrder.state === 'known' ? (a.presented.startOrder.value as number) : Infinity);
     members.sort((x, y) => co(x) - co(y) || so(x) - so(y) || (x.id < y.id ? -1 : 1));
@@ -1239,20 +1278,34 @@ export class Domain {
 
   // ───────────────────────────── standings (§5) ─────────────────────────────
 
+  /** The Attempt's contribution to its Phase's standings, with the observedAt values behind asOf. */
+  private standingSig(a: AttemptS): string | null {
+    const i = this.standingInput(a);
+    if (!i) return null;
+    return canonical([i, a.upstreamCatRank, ['placement', 'outcome', 'pairTotal'].map((f) => (a.presented[f].state === 'known' ? (a.presented[f] as Known).observedAt : null))]);
+  }
+
   standingInputs(phaseId: string): StandingInput[] {
     const out: StandingInput[] = [];
     for (const id of this.phaseAttempts.get(phaseId) ?? []) {
-      const a = this.attempts.get(id)!;
+      const i = this.standingInput(this.attempts.get(id)!);
+      if (i) out.push(i);
+    }
+    return out;
+  }
+
+  private standingInput(a: AttemptS): StandingInput | null {
+    {
       const pl = a.presented.placement, oc = a.presented.outcome, st = a.presented.status, pt = a.presented.pairTotal;
       const placed = pl.state === 'known' && pl.value && typeof (pl.value as any).order === 'number';
       // Unplaced entries: Attempts with a result or a no-result mark but no placement yet (S1 reading, DESIGN-GAPS).
       const hasResult = oc.state === 'known' && ['duration', 'no-result', 'ordinal'].includes((oc.value as any).kind);
-      if (!placed && !hasResult) continue;
+      if (!placed && !hasResult) return null;
       const entryId = a.presented.entry.state === 'known' ? (a.presented.entry.value as any).entryId : a.id;
       const entry = this.entities.get(`entry:${entryId}`);
       const cat = entry?.presented.ageCategoryId;
       const ur = a.presented.underReview;
-      out.push({
+      return {
         entryId, bib: a.bib, status: st.state === 'known' ? (st.value as string) : null,
         placement: placed ? (pl.value as any) : null,
         result: oc.state === 'known' ? oc.value : { kind: 'pending' },
@@ -1261,9 +1314,8 @@ export class Domain {
         provisional: [oc, pl, pt].some((e) => e.state === 'known' && e.provisional),
         underReview: ur.state === 'known' && ur.value === true,
         heat: a.presented.heat.state === 'known' ? (a.presented.heat.value as number) : null,
-      });
+      };
     }
-    return out;
   }
 
   private standingAsOf(phaseId: string, entries: StandingInput[]): string | null {
@@ -1331,6 +1383,7 @@ export class Domain {
           if (prevC === c) continue;
           if (prevC === undefined && entries.length === 0) continue;   // an empty standing is not published until it has entries
           this.standings.set(key, standing);
+          this.dirty.add(`standing:${key}`);
           if (!silent) { this.standingsEmitted.set(key, c); this.pushDelta({ type: 'standing.updated', standing }); }
         }
       }
@@ -1339,25 +1392,33 @@ export class Domain {
 
   // ───────────────────────────── canonical state ─────────────────────────────
 
-  /** Per-entity digests of presented and retained state; the state hash is sha256 over the sorted digest list. */
-  private digestCache = new Map<string, { c: string; h: string }>();
-
+  /**
+   * State hash after a step: sha256(globals ‖ XOR over entities of sha256(key ‖ canonical(entity incl. retained
+   * observations))). Per-entity digests are recomputed only for entities touched in the step, so the hash
+   * covers the whole state without re-serialising it per step (a literal per-step sha256 of the multi-MB
+   * canonical state is not affordable over ~15k steps). The end-of-replay state file is hashed literally.
+   */
   stateHash(): string {
-    const lines: string[] = [];
-    const add = (key: string, obj: unknown) => {
-      const c = canonical(obj);
-      const prev = this.digestCache.get(key);
-      const h = prev && prev.c.length === c.length && prev.c === c ? prev.h : sha256(c);
-      this.digestCache.set(key, { c, h });
-      lines.push(`${key} ${h}`);
-    };
-    for (const a of [...this.attempts.values()].sort((x, y) => (x.id < y.id ? -1 : 1))) add(`attempt:${a.id}`, this.attemptInternal(a));
-    for (const e of [...this.entities.values()].sort((x, y) => (`${x.kind}:${x.id}` < `${y.kind}:${y.id}` ? -1 : 1))) add(`${e.kind}:${e.id}`, { r: this.entityResource(e), s: e.slots });
-    for (const [k, v] of [...this.standings.entries()].sort()) add(`standing:${k}`, v);
-    add('globals', { seq: this.seq, tcp: this.tcpConnected, disc: this.lastDisconnectSeq, rw: this.lastRewriteDetectedAt, xml: this.xmlState,
+    for (const key of this.dirty) {
+      const i = key.indexOf(':');
+      const kind = key.slice(0, i), id = key.slice(i + 1);
+      let obj: unknown = undefined;
+      if (kind === 'attempt') { const a = this.attempts.get(id); if (a) obj = this.attemptInternal(a); }
+      else if (kind === 'standing') obj = this.standings.get(id);
+      else { const e = this.entities.get(key); if (e) obj = { r: this.entityResource(e), s: e.slots }; }
+      const old = this.entityHash.get(key);
+      if (old) xorInto(this.hashAcc, old);
+      if (obj === undefined) { this.entityHash.delete(key); continue; }
+      const h = createHash('sha256').update(key).update('\n').update(canonical(obj)).digest();
+      this.entityHash.set(key, h);
+      xorInto(this.hashAcc, h);
+    }
+    this.dirty.clear();
+    const globals = canonical({ seq: this.seq, tcp: this.tcpConnected, disc: this.lastDisconnectSeq, rw: this.lastRewriteDetectedAt, xml: this.xmlState,
       inst: this.upstreamInstance, off: this.clockOffset, event: this.event, oncourse: this.oncourse, tvs: this.tvs, writes: this.writes,
-      diag: this.diagnosticsEmitted, cc: this.currentCourse, run: this.runningPhases, last: this.lastListingAt });
-    return sha256(lines.join('\n'));
+      diag: this.diagnosticsEmitted, cc: this.currentCourse, run: this.runningPhases, last: this.lastListingAt, rb: this.rebaseline,
+      se: [...this.standingsEmitted.entries()].length, cls: [...this.classification.entries()] });
+    return createHash('sha256').update(this.hashAcc).update(globals).digest('hex');
   }
 
   private attemptInternal(a: AttemptS) {
@@ -1392,4 +1453,8 @@ function slotOf(source: Source, kind: Kind): SlotName {
   if (kind === 'inference') return 'inf';
   if (source === 'xml') return 'xml';
   return 'tcp';
+}
+
+function xorInto(acc: Buffer, h: Buffer) {
+  for (let i = 0; i < 32; i++) acc[i] = acc[i]! ^ h[i]!;
 }
