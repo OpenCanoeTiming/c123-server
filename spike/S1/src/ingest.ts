@@ -47,6 +47,7 @@ export class Ingest {
   private stepNo = 0;
   stats: IngestStats = {};
   private layoutCache = new Map<string, Layout>();
+  private captionsByLayout = new Map<string, string[]>();   // RaceConfig: captions are TCP only (DERIVATIONS §2.3)
 
   constructor(d: Domain, cfg: IngestConfig, private onStep: (r: StepRecord) => void) {
     this.d = d;
@@ -80,6 +81,25 @@ export class Ingest {
     return { state: 'known', layout: l };
   }
 
+  /** DERIVATIONS §4.6(d): Cross faults from the judging cells plus the captions (TCP only); never from Pen. */
+  private faultsOf(cells: (number | null)[], layout: Layout, layoutString: string): { count: number; gates: string[]; lastCleanSlot: number } | undefined {
+    const caps = this.captionsByLayout.get(layoutString.replace(/[SI]/g, ''));
+    if (!caps) return undefined;
+    const faulted = cells.map((c, i) => (c === 2 ? i : -1)).filter((i) => i >= 0);
+    const first = faulted.length ? faulted[0]! : cells.length;
+    let lastClean = 0;
+    for (let i = 0; i < first; i++) if (cells[i] === 0) lastClean = i + 1;
+    void layout;
+    return { count: faulted.length, gates: faulted.map((i) => caps[i] ?? String(i + 1)), lastCleanSlot: lastClean };
+  }
+
+  private layoutString(phaseId: string): string {
+    const ph = this.d.entities.get(`phase:${phaseId}`);
+    const cid = ph?.presented.courseId;
+    const c = cid?.state === 'known' ? this.d.entities.get(`course:${cid.value}`) : undefined;
+    return c?.presented.layout?.state === 'known' ? (c.presented.layout as any).value as string : '';
+  }
+
   // ───────────────────────────── TCP ─────────────────────────────
 
   tcp(text: string, observedAt: string) {
@@ -108,6 +128,7 @@ export class Ingest {
         const layout = a.GateConfig ?? '', captions = a.GateCaptions ?? '', nrGates = int(a.NrGates) ?? 0;
         const fabricated = fabricatedCourse(layout, captions, nrGates);
         if (fabricated) this.count('tcp.raceconfig.fabricated');
+        else if (captions !== '') this.captionsByLayout.set(layout, captions.split(','));
         return this.emit({ type: 'structure', observedAt, source: 'tcp', what: 'raceconfig',
           payload: { layout, captions: captions === '' ? [] : captions.split(','), nrSplits: int(a.NrSplits) ?? 0, fabricated } },
           { class: 'observation', scope: 'course', what: 'raceconfig', source: 'tcp', kind: 'structure', fields: ['captions'], fabricated, observedAt });
@@ -153,12 +174,22 @@ export class Ingest {
     if (c.dtStart?.trim() && !dtStart) this.count('tcp.oncourse.badStart');
     const fields: FieldStatement[] = [];
     const conf = { confidence: 'authoritative' as const };
+    const info = this.d.phaseInfo(raceId);
     // DERIVATIONS §4.1. A listing with no dtStart is at-start (chStart is the arming flag; S1-reading, DESIGN-GAPS).
-    fields.push({ field: 'status', value: dtFinish ? 'finished' : dtStart ? 'on-course' : 'at-start', ...conf });
+    // §4.2: in a Cross heat nothing transitions per competitor; a listed heat competitor is on course.
+    fields.push({ field: 'status', value: info.cross && info.heats ? 'on-course' : dtFinish ? 'finished' : dtStart ? 'on-course' : 'at-start', ...conf });
     if (!dtStart && c.chStart !== '1') this.count('tcp.oncourse.listedNotArmedNoStart');
     const course = this.course(raceId);
     let cells: (number | null)[] | null = null;
-    if (c.Gates !== undefined) {
+    if (c.Gates !== undefined && info.cross) {
+      if (course.state === 'known') {
+        const p = parseComma(c.Gates, course.layout.slots.length);
+        cells = p.cells;
+        fields.push({ field: 'gates', state: 'unavailable', reason: 'not-applicable' });
+        const f = this.faultsOf(p.cells, course.layout, this.layoutString(raceId));
+        if (f) fields.push({ field: 'faults', value: f, ...conf });
+      }
+    } else if (c.Gates !== undefined) {
       if (course.state === 'known') {
         const p = parseComma(c.Gates, course.layout.slots.length);
         cells = p.cells;
@@ -166,11 +197,11 @@ export class Ingest {
         if (p.unparseable.length) this.count('tcp.oncourse.unparseableCell', p.unparseable.length);
       } else if (course.state === 'not-configured') fields.push({ field: 'gates', state: 'unavailable', reason: 'not-configured' });
     }
-    const time = num(t.Time);
+    const time = info.cross && info.heats ? undefined : num(t.Time);
     let finishRunSeconds: number | null = null;
     if (dtFinish && time !== undefined) {
       // §4.3 duration inference: run = T@Time (2 dp at the finish), penalty = Σ judged cells of C@Gates.
-      const pen = cells ? cells.reduce<number>((s, x) => s + (x ?? 0), 0) : (num(t.Pen) ?? 0);
+      const pen = info.cross ? 0 : cells ? cells.reduce<number>((s, x) => s + (x ?? 0), 0) : (num(t.Pen) ?? 0);   // Cross: Pen ignored (§4.6(d))
       finishRunSeconds = time;
       fields.push({ field: 'outcome', value: { kind: 'duration', runSeconds: time, penaltySeconds: pen, totalSeconds: r3(time + pen) }, confidence: 'inferred' });
     } else if (dtStart && !dtFinish && time !== undefined) {
@@ -215,6 +246,11 @@ export class Ingest {
       if (irm && irm !== '*') row.status = markOf(irm);
       const time = num(r.Time), pen = num(r.Pen), total = num(r.Total);
       const rank = num(r.Rank), order = num(r.RankOrder);
+      if (info.cross) {
+        this.crossRow(row, info, rank, order, time, r.Gates, course, m.raceId, num(r.HeatNr), p.StartTime);
+        rows.push(row);
+        continue;
+      }
       if (order !== undefined) row.placement = { rank: rank ?? null, order };
       this.gatesInto(row, r.Gates, course, 'tcp');
       // The cells parse without the course (fixed width, 30 cells); only presenting them as Gate[] needs it.
@@ -241,6 +277,35 @@ export class Ingest {
     this.count(`tcp.results.mode.${mode}`);
     const el: Element = { type: 'snapshot', observedAt, source: 'tcp', phaseId: m.raceId, mode, rows, classId: m.classId, mainTitle: m.mainTitle };
     this.emit(el, { class: 'scope-snapshot', source: 'tcp', phaseId: m.raceId, mode, current: m.current, observedAt, rows });
+  }
+
+  /**
+   * Kayak Cross rows (DERIVATIONS §4.2, §4.6(d), §4.7). Heats: the order is upstream's placement, asserted per athlete;
+   * RankOrder alone is the lane order of an undecided heat (E1, cp3-cross), so a placement needs Rank or Time.
+   * Time trial: duration from Time, Pen ignored. Cells are fault marks: gates not applicable, faults derived.
+   */
+  private crossRow(row: SnapshotRow, info: ReturnType<Domain['phaseInfo']>, rank: number | undefined, order: number | undefined, time: number | undefined,
+                   gates: string | undefined, course: ReturnType<Ingest['course']>, raceId: string, heatNr: number | undefined, startTime: string | undefined) {
+    if (info.heats) {
+      row.heat = heatNr && heatNr > 0 ? heatNr : null;
+      const lane = num(startTime);
+      if (lane !== undefined) row.startLane = lane;
+      if (order !== undefined && (rank !== undefined || time !== undefined)) {
+        row.placement = { rank: rank ?? null, order };
+        row.outcome = { kind: 'ordinal', order };
+      }
+    } else {
+      if (order !== undefined && (rank !== undefined || time !== undefined)) row.placement = { rank: rank ?? null, order };
+      if (time !== undefined) { row.runSeconds = time; row.outcome = { kind: 'duration', runSeconds: time, penaltySeconds: 0, totalSeconds: time }; }
+    }
+    if (gates && gates.trim() && course.state === 'known') {
+      const p = parseFixedWidth(gates, course.layout.slots.length);
+      const f = this.faultsOf(p.cells, course.layout, this.layoutString(raceId));
+      if (f && (row.outcome || row.status)) row.faults = f;
+    }
+    row.gatesUnavailable = 'not-applicable';
+    row.judgingComplete = true;
+    if (row.outcome || row.status) row.underReview = false;
   }
 
   /** §4.6(b) fixed-width gate cells into a row, per the Phase's course. */
@@ -342,6 +407,18 @@ export class Ingest {
     if (dtStart) row.startTime = dtStart;
     if (dtFinish) row.finishTime = dtFinish;
     const timeMs = num(x.Time), pen = num(x.Pen), totalMs = num(x.Total);
+    if (info.kind === 'classification') {
+      const o = num(x.RnkOrder);
+      if (o !== undefined) row.placement = { rank: num(x.Rnk) ?? null, order: o };
+      if ((x.RecordType ?? '').trim()) row.decidedIn = x.RecordType!.trim();
+      return row;
+    }
+    if (info.cross) {
+      this.crossRow(row, info, num(x.Rnk), num(x.RnkOrder), timeMs !== undefined ? r3(timeMs / 1000) : undefined, x.Gates, course, raceId, num(x.HeatNr), x.StartTime);
+      if (!info.heats && row.placement && timeMs !== undefined && !dtFinish) row.untimed = true;   // §4.4 untimed (junior time trial)
+      if ((x.Qualified ?? '').trim() === 'Q') row.qualified = true;
+      return row;
+    }
     const rank = num(second ? x.TotalRnk : x.Rnk), order = num(second ? x.TotalRnkOrder : x.RnkOrder);
     if (order !== undefined) row.placement = { rank: rank ?? null, order };
     this.gatesInto(row, x.Gates, course, 'xml');
