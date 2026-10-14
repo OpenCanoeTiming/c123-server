@@ -77,7 +77,8 @@ Each vector has:
     `context.attemptId` (default `K1M_BR1_6:9`), so no vector has an implicit Attempt.
 
   Observations are *resolved*: `DERIVATIONS.md` has already turned wire fields into these values.
-  These vectors test the merge, not the derivation.
+  These vectors test the merge, not the derivation. A `status` inference of `on-course` or `finished`
+  implies an observed start (`DERIVATIONS.md` §4.1).
 - **Connection and operator events.** Each has `ingestSeq`, `event` and `observedAt`. The events are
   `tcp-disconnected`, `tcp-connected`, `xml-rewrite-detected`, `oncourse-empty`, `oncourse-left`
   (this Attempt stopped being listed) and `rebaseline` (with `scope`). They exist because INV-2's
@@ -122,7 +123,9 @@ wire carries (a generation change reaches live as explicit `not-yet`). `ARCHITEC
 - `diagnostics` asserts the current diagnostics; a `stale-mark` is current only while the withheld
   mark is on the presented row.
 - `writeRequest` asserts the write status.
-- `notifications` asserts the number of client-visible changes.
+- `notifications` asserts the number of client-visible messages, one per changed resource: a
+  second-run Phase has a `phase` and a `pair` standing (`CONTRACTS.md` §5), so one serialised change
+  there is two `standing.updated`; a creation message counts once however many snapshots preceded it.
 
 **`expectSequence` + `then`** assert an intermediate state. `afterGivenIndex` is 0-based, and `-1`
 means before any given. The observations in `then` are applied after it.
@@ -232,3 +235,6 @@ presented-state fact, covered by `inv2b-disagreement-surfaced-not-adopted`.
 9. **TCP rows carry no `finishTime`; every vector names its Attempt** (round 9, spike S1-1/2/4). A
    vector that gave a TCP row a finish time was testing a rule the wire cannot satisfy; the match is by
    run time. An implicit Attempt per vector made one vector ambiguous.
+10. **Notification counts are per resource** (round 10, S1-26/27). Two vectors miscounted: one forgot
+    that a second-run Phase has two standings, one counted a leave for an Attempt it had never listed.
+    The rule is stated above; the vectors were fixed, not the merge.
