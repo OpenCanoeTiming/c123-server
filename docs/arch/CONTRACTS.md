@@ -753,10 +753,13 @@ never a duplicate. The operator resolves it upstream.
   run 2 restates them — `placement` and `pairTotal` at the TCP row, `countingRun` at the XML row —
   the values carried over from run 1 are `provisional: true` (§1.2).
 - **A mark left over from before a re-run is stale.** Upstream does not clear an old mark when a
-  re-run finishes over it (observed upstream behaviour; no recorded instance). So on a row of the
-  current generation whose finish time is the new run's, a mark identical to the one the Attempt
-  carried before the generation started is not presented, and is surfaced as a `stale-mark`
-  diagnostic (§7.1). A mark first seen in the current generation is presented normally.
+  re-run finishes over it (observed upstream behaviour; no recorded instance). So on any row of the
+  current generation — attributed by its finish, or carrying no time and so not attributable — a mark
+  identical to the one the Attempt carried before the generation started is not presented, and is
+  surfaced as a `stale-mark` diagnostic (§7.1). A mark first seen in the current generation is
+  presented normally, whether the athlete is still on course (a DSQ entered mid-run) or not. The rule
+  applies before attribution, not only after it: in the usual arrival order a stale mark-only row
+  reaches the server while the athlete is still running (`DERIVATIONS.md` §4.12).
 - **`underReview`** is upstream's "under review" mark, shown as an asterisk on upstream's own output.
   It is first-class (maintainer answer Q7): clients show it on the scoreboard and in live results.
   It is independent of `provisional`:
@@ -1276,8 +1279,9 @@ implementation must satisfy, not an algorithm.
   to their owners one by one (`ARCHITECTURE.md` Scenario I), produces rows whose finish times are
   earlier than the presented ones, and each is upstream's current table. The earlier edition of this
   invariant compared `eventTime` instead and would have refused those corrections; the recorded
-  jarni-ne-odp shift and the nkz-19so swap-and-revert are the evidence (`DECISIONS/ADR-003`
-  Revision 5). A stale row of a *replaced* run is kept out by generation attribution, not by this
+  jarni-ne-odp shift (12:55–13:05, not yet replayed) is the evidence (`DECISIONS/ADR-003` Revision 5;
+  the nkz-19so 42/43 event once cited beside it was a gate-penalty move with unchanged event times,
+  which the old floor would not have refused). A stale row of a *replaced* run is kept out by generation attribution, not by this
   rule: a row whose finish precedes the current generation's start describes the replaced run and is
   never presented (`DERIVATIONS.md` §4.11, `DECISIONS/ADR-013` Revision 2). Like INV-7's guard, which
   is this rule applied to retraction, it is a content-age comparison on our own clock, not an
@@ -1538,6 +1542,13 @@ Every message carries `seq` (§1.6).
 - `standing.updated`, `course.updated`, `write.updated` and `sources.updated` carry the whole resource.
   `standing.updated` is sent only when the standing's serialised form changed (§5 step 1), never for a
   running athlete's ticks.
+- **Liveness.** `sources.updated` is re-sent at least every `heartbeatSeconds` (a named server
+  constant, 10 s) even when `SourceStatus` is unchanged: it is the stream's heartbeat, and the one
+  message exempt from INV-5's no-op rule, because what it carries is that the connection and the server
+  are alive. A client that receives nothing for two heartbeat intervals treats the connection as dead:
+  it marks everything it shows as stale — it never clears it, stale over flicker — and repeats §1.6's
+  handshake. Without this an `at-start` or `finished` ghost on a half-open connection, or on a stalled
+  upstream, would stand indefinitely with no cue (`DECISIONS/ADR-017` Revision 4).
 - **`check.updated`** carries `{ attemptId, run, gate, check: GateCheck | null }`, whole; `null` means
   the check was removed. It is sent on every check write and **whenever a check's derived `status`
   changes** because the presented gate penalty changed (§2.10). **`flag.updated`** carries the whole
@@ -1856,9 +1867,12 @@ apply the same setting.
 `Accept: text/event-stream`. It carries `attempt.updated`, `attempt.deleted` (`{ seq, attemptId }`,
 after a `DELETE`; the client removes the Attempt and its standing entries), `phase.updated`,
 `entry.updated`, `class.updated`, `course.updated`, `standing.updated` (without `anomalies`),
-`oncourse.updated` (the whole set, as §7.2) and `scope.replaced`, in §7.2's shapes. A
-`scope.replaced` is applied as a replace, exactly as on-site. The stream never carries
-`write.updated`, `sources.updated`, `check.updated`, `flag.updated` or `event.changed`. §1.6's subscribe-before-snapshot and reconnection rules apply.
+`oncourse.updated` (the whole set, as §7.2) and `scope.replaced`, in §7.2's shapes, and a
+**`heartbeat`** event `{ asOfSeq, serverTime }` at least every 15 s, since the live tier has no
+`SourceStatus`: a client receiving nothing for two intervals treats the stream as dead, marks its
+display stale and re-hydrates (§1.6). A `scope.replaced` is applied as a replace, exactly as on-site.
+The stream never carries `write.updated`, `sources.updated`, `check.updated`, `flag.updated` or
+`event.changed`. §1.6's subscribe-before-snapshot and reconnection rules apply.
 
 ### 8.5 Corrections after the on-site session has ended
 

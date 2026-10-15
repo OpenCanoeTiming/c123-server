@@ -55,7 +55,9 @@ attribute as absent, never as zero.
 ### 0.2 `eventTime` construction
 
 Every upstream event time is a bare time of day on Canoe123's timing clock. The construction is:
-`eventTime = Phase.date + time of day + the venue's configured zone offset`.
+`eventTime = Phase.date + time of day + the venue's configured zone`, the zone being an **IANA zone
+name** (`Europe/Prague`), never a fixed offset: a fixed offset is wrong across a DST switch, and the
+spring races sit next to one (the spike's replay used `+02:00`, a shortcut the design does not allow).
 - The result is expressed on Canoe123's own clock. It is never shifted to the server clock:
   Canoe123's clock is the official time, and the contract never compares `eventTime` with
   `observedAt`.
@@ -274,16 +276,24 @@ which may be a start-list row a day ahead.
   the number on course.
 - A bare `<OnCourse Total="0" Position="0"/>` with no children is upstream's explicit "course empty".
 - An Attempt leaves the list when upstream stops listing it, or on "course empty". **Upstream has
-  stopped listing an Attempt when no on-course message names it for `onCourseLeaveAfterSeconds` (a
-  named constant, 3 s) of ingest time while other TCP messages keep arriving.** The rule is evaluated at
-  every ingested TCP message, never on a timer, so replay is deterministic; a gap that spans a TCP
-  disconnect is not a leave — after reconnection the list is re-learned, and an Attempt not re-listed
-  within the threshold has left. Evidence: OnCourse re-sends every listed athlete about once a second;
-  the longest re-send gap of a listed Attempt in seven recordings is 2.48 s, and 33 Attempts were
-  re-listed after a gap above 2.5 s, so 2.5 s is too tight and the distribution behind 3 s is still to
-  be measured (§10). A false leave is harmless: `left-without-finish → on-course` on re-listing
-  (`CONTRACTS.md` §3.2). Cycle completion over `Position`/`Total` was rejected: `Total` changes
-  mid-cycle.
+  stopped listing an Attempt when no on-course message names it for `onCourseLeaveAfterSeconds` of
+  ingest time while other TCP messages keep arriving.** The constant is **provisionally 5 s**; M1 sets
+  it from the whole distribution of unchanged-listing gaps, measured over all recordings with no
+  cut-off (§10 item 16). The spike's figure, "a maximum re-send gap of 2.48 s", was circular: its sweep
+  evicted entries older than 2.5 s before measuring the gap (E2, opponent review). Measured without the
+  cut-off: seven gaps of 2.57–2.59 s, and unchanged-listing gaps with the stream alive of 3.04, 3.68,
+  3.86 and 4.29 s, the next being 9.67 s; at 3 s four of seven recordings produce false leaves. **The
+  stall exemption is a rule, not an option:** the gap is counted only while other TCP messages keep
+  arriving, so a gap that spans a TCP stall or disconnect is not a leave; after the stream resumes the
+  list is re-learned, and an Attempt not re-listed within the threshold has left. The spike did not
+  implement it: a 10.7 s TCP stall (cp3-cross 09:18:38Z) emptied a Kayak Cross heat's on-course set,
+  with 0 checker violations, inside one of its own windows (opponent review R13). The rule is evaluated
+  at every ingested TCP message, never on a timer, so replay is deterministic. **A false leave is not
+  harmless:** it leaves `provisional: false` on values whose Attempt upstream still lists with blank
+  cells (D4; nine P11 violations in one replay). So the leave flag clears on re-listing within the
+  generation, `status` returns per `CONTRACTS.md` §3.2 (`left-without-finish → at-start | on-course`,
+  `not-started → at-start`), and `provisional` is recomputed. Cycle completion over `Position`/`Total`
+  was rejected: `Total` changes mid-cycle.
 
 **`left-without-finish`, slalom only.**
 - **The rule.** An Attempt that leaves the list with a start observed — a `dtStart`, or the stream
@@ -642,8 +652,9 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   two are identical, §4.4); a TCP row carrying a time that arrives before that finish is retained and
   attributed when the finish arrives with the same `Time` — the usual order, §4.4: 72 % of recorded
   finishes, the run-2 push 108 ms before the finish among them — else it describes the replaced run;
-  a TCP row carrying a
-  mark and no time follows the stale-mark rule (§4.12). Either way the replaced run's row
+  a TCP row carrying a mark and no time cannot be attributed and is judged by the stale-mark rule
+  (§4.12) whether or not the generation's finish has been seen: equal to the remembered mark, it is
+  withheld with `stale-mark`; different, it is presented. Either way the replaced run's row
   is retained as history and never presented. After the new finish, upstream's one row per bib is the
   new run's, so a later TCP row with a different `Time` is a correction and supersedes (same source,
   INV-2c).
@@ -690,9 +701,10 @@ jury-invalidated row (C1M_BR1_19 bib 7, later re-run, §4.11), and 7 s behind TC
 presented — two athletes' finishes swapped, three results shifted back to their owners one by one —
 arrives as an ordinary push of the race. The later-ingested row of the same source supersedes,
 whatever its `dtFinish` (`CONTRACTS.md` §4 INV-2c compares content age across sources, never event
-times). Recorded: jarni-ne-odp 12:55–13:05, three athletes corrected one by one; nkz-19so
-10:05–10:30, bibs 42 and 43 swapped and reverted. The previous edition's event-time floor would have
-refused the correction for every athlete whose true finish was the earlier one.
+times). Recorded: jarni-ne-odp 12:55–13:05, three athletes corrected one by one (not yet replayed; M1).
+The nkz-19so 10:05–10:30 event once cited here was a gate-penalty move with unchanged event times, not
+evidence either way. The previous edition's event-time floor would have refused the correction for
+every athlete whose true finish was the earlier one.
 
 **Contradiction by the on-course stream** (INV-2d). Track per Attempt and generation the finish last
 presented from a results-table observation: its `eventTime` where one is known (the on-course finish,
@@ -724,11 +736,14 @@ presented as such, with the diagnostics above. The next snapshot or push resolve
 re-baseline (`CONTRACTS.md` §4) is the remedy for one that never does.
 
 **A stale mark after a re-run** (`CONTRACTS.md` §2.6). Remember the mark, if any, the Attempt
-carried when the generation incremented. On a row attributed to the new generation (§4.11), a mark
-equal to that remembered one is not presented and raises `stale-mark`; `outcome` is derived from the
-row's time and cells as usual. A different mark, or a mark on a row with no new finish, is presented;
-once a different mark is presented the withheld mark is no longer on the row, and the `stale-mark`
-diagnostic clears.
+carried when the generation incremented. On **any** row of generation ≥ 2 — attributed by its finish,
+or carrying no time and so not attributable — a mark equal to that remembered one is not presented
+and raises `stale-mark`; the row's time and cells, where it has them, are attributed and presented as
+usual. A different mark is presented, whether the athlete is still on course (a DSQ entered mid-run)
+or not; once it is, the withheld mark is no longer on the row and the diagnostic clears. The earlier
+wording, "a mark on a row with no new finish is presented", contradicted §4.11 and would present a
+stale DNF over a running athlete in the usual arrival order, where the row precedes the finish (opponent
+review R16, E2: the spike applied the stale-mark check only to rows it had attributed).
 
 **Standing after a retraction or contradiction:** the entry is unplaced (`CONTRACTS.md` §5 step 3).
 
@@ -905,7 +920,7 @@ but no code path or recording ever filled it.
 
 Items 1–7 and 13 were answered from the source on 2026-09-25 (#179; E1); item 8 was closed by INV-2c
 on 2026-10-14; items 15 and 17 were answered by the spike and the exit-delay measurement. Items 9, 11,
-12, 16 and 18 remain.
+12, 16, 18, 19 and 20 remain.
 
 1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
    hardware judge terminals on their own port and raises a flag on the scoring service for about
@@ -951,9 +966,19 @@ on 2026-10-14; items 15 and 17 were answered by the spike and the exit-delay mea
 15. ~~Whether upstream's on-course message still carries `Position` for a finisher it keeps listed
     until closure.~~ **Answered (spike S1 sweep, E1): yes.** 68,894 of 68,894 on-course messages for
     listed finishers carry `Position`.
-16. The distribution of re-listing gaps behind `onCourseLeaveAfterSeconds` (§4.1): 33 re-listings
-    after a gap above 2.5 s were counted across seven recordings; the constant is 3 s until measured
-    (M1).
+16. The distribution of unchanged-listing gaps behind `onCourseLeaveAfterSeconds` (§4.1), measured over
+    all recordings **with no cut-off** (the spike's measurement evicted entries older than 2.5 s first and
+    was circular). Known so far: 3.04, 3.68, 3.86, 4.29 s with the stream alive, then 9.67 s. The
+    constant is 5 s until M1 sets it; whether the four gaps are rotation hiccups or real unstage/restage
+    decides whether it can be smaller.
+19. **Two runs of one athlete with the same `Time` to 0.01 s.** A stale row from before a non-wizard
+    re-run, re-sent by rotation during run 2 and carrying exactly run 2's finishing time, is attributed
+    to run 2 and presents run 1's penalty and placement until upstream's next push (opponent review R17,
+    E2; needs the finish-first order, 28 %, a rotation inside run 2 and an equal time; lasts under a
+    second). Accepted as residual unless M1's data shows it; a remedy would compare the row's cells with
+    the on-course stream's before attributing.
+20. **`duplicate-finish` on TCP after D1.** The six recorded TCP instances were never replayed, and no
+    replayed window raised one; M1 replays them.
 17. ~~The finish → on-course-exit interval per recording.~~ **Measured (E1, seven recordings, 1,995
     closures):** about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % in [18, 20) s), about
     47 s at cp3-cross (p90 57 s), manual closes under 5 s on the two NKZ days (12.6 %, 34.9 %) — the
