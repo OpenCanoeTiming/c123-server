@@ -321,7 +321,17 @@ the step index, the Attempt, the field and the property number.
     step that changed the standing as serialised (§5 step 1): an Attempt's `placement`, a result
     outcome, `pairTotal`, `provisional` or `underReview`; an Entry's `ageCategoryId` becoming known (a
     category standing's first publication); a snapshot's category ranks raising or clearing an
-    anomaly; or `scope.replaced`. A running athlete's tick never produces one.
+    anomaly; or `scope.replaced`. A running athlete's tick never produces one. **A `classification`
+    standing has no Attempts:** its entries come from the classification Phase's rows (§5 step 2), each
+    entry's `rank`, `order` and `decidedIn` equal its row's, its first publication is its first row
+    observation, and it changes only at a row observation or `scope.replaced`. The spike's checker
+    applied the Attempt clause to it and reported 673 violations on the Cross event result (XER), which
+    was never part of a spike window (`DECISIONS/ADR-017` Revision 4). **A `classification`
+    standing has no Attempts:** its entries come from the classification Phase's rows (§5 step 2), each
+    entry's `rank`, `order` and `decidedIn` equal its row's, its first publication is its first row
+    observation, and it changes only at a row observation or `scope.replaced`. The spike's checker
+    applied the Attempt clause to it and reported 673 violations on the Cross event result (XER), which
+    was never part of a spike window (`DECISIONS/ADR-017` Revision 4).
 
 *What this gate is, and is not.* It is a mechanical, oracle-free check: it needs no ground truth,
 only the shape the invariants already commit to, and it catches the whole class of "deterministic
@@ -333,19 +343,37 @@ and whether such a disagreement *should* have been raised is a tier-1 question. 
 correct replay cannot satisfy is a finding against the contract, not against the replay: it is
 reported to the design authority, never relaxed in the checker.
 
-**Gate 3 — cross-checked against tier 1 where they overlap, mechanically against upstream's own XML,
-and once by a person.** Where a candidate exercises a shape tier 1 already has a synthetic vector for
+**Who writes the checker, and what it reads** (opponent review of the spike, `DECISIONS/ADR-017`
+Revision 4). The gate-2 checker is written by a different author than the merge core, from this
+section's text alone, and **mutation-tested per property**: each property must fail on a replay
+deliberately broken for it, and a property that no window exercises is not evidence until one does (in
+the spike, P10 and P13 ran zero times and P4, P7 and P8 two to four). Properties that judge membership,
+element classification or attribution — 3, 6, 10, 11, 13 and 14 — **read upstream's raw stream**, not
+the ingest's own elements: a checker that trusts the `oncourse-left` the code under test emitted cannot
+see a wrong leave, and the spike's did not see a 10.7 s TCP stall empty a Kayak Cross heat's on-course
+set. A checker failure has three possible verdicts — contract conflict, implementation bug, checker
+bug — and the design authority assigns it; "the reading that makes the vectors pass" is not a verdict,
+and a spike brief must not make it one.
+
+**Gate 3 — cross-checked against tier 1 where they overlap, against published results over whole
+races, and once by a person.** Where a candidate exercises a shape tier 1 already has a synthetic vector for
 (a two-run BR2 case, a Cross ordinal outcome), the candidate's result for that shape must agree with the
 vector's `expect` — contract-derived ground truth checking real data, not real data self-authorising.
-**Mechanical part:** for every Attempt that finished inside the window, `outcome`, `gates`, `pairTotal`
-and `placement` are compared with the same Attempt's row in **upstream's XML at the window end** (the
-window's last snapshot), in `DERIVATIONS.md`'s units; every field whose day-final value differs is
-listed as "changed after the window" with its final value, never counted as a mismatch — a window that
-ends mid-race cannot have its placements checked against the final results at all (spike S2-7: 21 of
-21 placements moved as later finishers pushed ranks down, and 0 real mismatches). **Human part:** the
-maintainer confirms once, per day, that the day's final XML equals the published results
-(`CONTRACTS.md` §2.8: the file is always saved at the end). Not repeated per CI run, and not a
-substitute for gates 1–2, which are what makes the check repeatable afterward.
+**Mechanical part, for admission:** the window **spans whole races** — every race whose Attempts the
+fixture asserts has its full on-course span inside the window — and for every finisher of those races
+`outcome`, `gates`, `pairTotal` and `placement` are compared with the **published results** (the day's
+final XML stands in for them once the human line certifies it), in `DERIVATIONS.md`'s units; a
+difference is a mismatch unless a listed, dated protest correction explains it. **The weaker candidate
+check**, for a window that cuts a race: each in-window finisher against upstream's XML at the window's
+last snapshot, every day-final difference listed as "changed after the window". It can never admit:
+placements of a cut race are then checked only against what the replay itself ingested. The spike's
+first fixture (nkz-19so 09:30–09:45) was such a window — 21 of 21 placements moved after it — while
+whole-race windows were available in the same recording (C1W_BR1_19 08:34–09:03Z, C1W_BR2_19
+10:24–10:53Z); gate 3 was redefined to fit it, and the opponent review undid that (`DECISIONS/ADR-017`
+Revision 4). **Human part:** a person certifies **the fixture**, not only the final XML: that the
+published results of the races in the window equal the fixture's final values, by signing the
+comparison report, once, at admission — `human-checked-<date> by <name>`. Not repeated per CI run, and
+not a substitute for gates 1–2, which are what makes the check repeatable afterward.
 
 **Only a candidate that passes all three is published and pinned (§6).** From that point, this tier's
 job changes from admission to **regression**: a future ingest of the *same* ingest fixture is diffed
@@ -501,9 +529,10 @@ nothing; a public read of an unknown `eventId` is `404`, never another organiser
 { "fixtureId": "slalom-br2-finale",
   "source": { "kind": "recording", "excerpt": "2026-04-19-jarni-ne-odp#003", "sha256": "…" },
   "domainLayerVersion": { "contract": "3.0.0", "generator": "c123-server 1.0.0 (a1b2c3d)" },
-  "admitted": { "gate1": true, "gate2": true,
-                "gate3": { "mechanical": { "attempts": 21, "fields": 84, "match": 59, "mismatch": 0,
-                                           "changedAfterWindow": 25, "changedAfterWindowEqualsWindowEnd": 25,
+  "admitted": { "status": "admitted", "gate1": true, "gate2": true,
+                "gate3": { "mechanical": { "against": "published-results", "windowSpansWholeRaces": true,
+                                           "attempts": 41, "fields": 164, "match": 164, "mismatch": 0,
+                                           "changedAfterWindow": 0, "changedAfterWindowEqualsWindowEnd": 0,
                                            "noFinalRow": 0, "report": { "file": "…gate3.json", "sha256": "…" } },
                            "human": "human-checked-2026-09-16 by <name>" },
                 "evidence": { "gate1": { "stepLogSha256": ["…", "…"], "finalStateSha256": ["…", "…"],
@@ -541,13 +570,16 @@ element those bodies reflect. The file-level `asOfSeq` is the counter when captu
 replay. A delta step's `observedAt` is the recorded `observedAt` of the element that produced it
 (spike S2-1).
 
-**`admitted` is what distinguishes a candidate from a golden baseline** (§3.2), and it has a schema:
-`schemas/fixture-admitted.schema.json`. **Complete** means `gate1` and `gate2` true,
-`gate3.mechanical.mismatch` 0, and `gate3.human` matching `human-checked-<date> by <name>`; the
-`evidence` block carries the two step-log, final-state and candidate hashes of gate 1 and the checker's
-violation counts. Absent or incomplete, a fixture is a candidate still being checked, never something
-a consumer should pin to; only a complete fixture is published to the catalogue at all (§6). Gate 2 is
-never relaxed to admit: a candidate waits for the contract amendment and the pipeline is re-run.
+**`admitted` is what distinguishes a candidate from a golden baseline** (§3.2), and it has a schema
+that enforces it: `schemas/fixture-admitted.schema.json`. The block carries `status`, `candidate` or
+`admitted`, and the schema's `if/then` allows `admitted` **only** with `gate1` and `gate2` true,
+`gate3.mechanical.against: "published-results"`, `windowSpansWholeRaces: true`, `mismatch` 0 and
+`gate3.human` matching `human-checked-<date> by <name>`; the `evidence` block carries the two step-log,
+final-state and candidate hashes of gate 1 and the checker's violation counts. The first schema stated
+completeness only in prose, so a block with `gate2: false` and a TODO validated (opponent review R10).
+A candidate is never something a consumer pins to; only an admitted fixture is published to the
+catalogue at all (§6). Gate 2 is never relaxed to admit: a candidate waits for the contract amendment
+and the pipeline is re-run.
 
 **A fixture is a captured, file-based instance of exactly what a real client already has to consume
 live.** No second data model, no translation step between "what a test feeds a client" and "what

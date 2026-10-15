@@ -140,6 +140,30 @@ Gaps S2-1, S2-4, S2-5, S2-6, S2-7.
 | S4-1 | UPSTREAM-NEW | adopt as fact | DERIVATIONS §0.3, CONTRACTS §2.8: the TCP connect burst |
 | S4-2 | DESIGN-GAP | adopt, D2 | CONTRACTS §8.3: the diff is against presented fields |
 | S4-3 | UPSTREAM-NEW | adopt as the figure | TEST-ARCHITECTURE §8 capacity note |
+| S1-26 | DESIGN-GAP | adopt: fix the vector | `standing-not-resent-on-running-tick` counts a `phase` and a `pair` standing: 4 messages |
+| S1-27 | DESIGN-GAP | adopt: fix the vector | `retraction-first-run-row-present-empty` dropped the leave of an Attempt it never listed |
+| S1-28 | DESIGN-GAP | adopt | DERIVATIONS §4.1: a start is a `dtStart` or the stream stating `on-course`/`finished` |
+| S1-29 | DESIGN-GAP | adopt, reading 3 | §1.2/§2.6, property 11: carried pair fields provisional until run 2's own row restates them |
+| S1-30 | CHECKER-FAIL | adopt | property 11's transition clause: an Attempt listed while no course is bound |
+| S1-31 | UPSTREAM-NEW | adopt | D1's retain-and-attribute is the normal path (86/120, 0.055–0.709 s): §2.6, DERIVATIONS §4.4, §4.11 |
+| S1-32 | DESIGN-GAP | adopt | carried fields settle field by field: `placement`/`pairTotal` at the TCP row, `countingRun` at the XML row |
+| R13 | opponent review, E1+E2 | adopt | the stall exemption is a rule the spike never implemented: a 10.7 s TCP stall emptied a Cross heat's set; DERIVATIONS §4.1 |
+| R14 | opponent review, E1 | adopt | real unchanged-listing gaps of 3.04–4.29 s refute the 3 s constant; 5 s provisional, M1 measures; a false leave is not harmless |
+| R15 | opponent review, E3 | adopt | property 15 had no classification case: 673 violations on XER; restated |
+| R16 | opponent review, E2+E3 | adopt | §4.11/§4.12 reconciled: the stale-mark rule applies before attribution; the vector reshaped to the usual order |
+| R17 | opponent review, E2 | record (§10 item 19) | equal `Time` across two runs can mis-attribute for under a second; residual unless M1's data shows it |
+| S1-26 | DESIGN-GAP | adopt: fix the vector | `standing-not-resent-on-running-tick` counts a `phase` and a `pair` standing: 4 messages |
+| S1-27 | DESIGN-GAP | adopt: fix the vector | `retraction-first-run-row-present-empty` dropped the leave of an Attempt it never listed |
+| S1-28 | DESIGN-GAP | adopt | DERIVATIONS §4.1: a start is a `dtStart` or the stream stating `on-course`/`finished` |
+| S1-29 | DESIGN-GAP | adopt, reading 3 | §1.2/§2.6, property 11: carried pair fields provisional until run 2's own row restates them |
+| S1-30 | CHECKER-FAIL | adopt | property 11's transition clause: an Attempt listed while no course is bound |
+| S1-31 | UPSTREAM-NEW | adopt | D1's retain-and-attribute is the normal path (86/120, 0.055–0.709 s): §2.6, DERIVATIONS §4.4, §4.11 |
+| S1-32 | DESIGN-GAP | adopt | carried fields settle field by field: `placement`/`pairTotal` at the TCP row, `countingRun` at the XML row |
+| R13 | opponent review, E1+E2 | adopt | the stall exemption is a rule the spike never implemented: a 10.7 s TCP stall emptied a Cross heat's set; DERIVATIONS §4.1 |
+| R14 | opponent review, E1 | adopt | real unchanged-listing gaps of 3.04–4.29 s refute the 3 s constant; 5 s provisional, M1 measures; a false leave is not harmless |
+| R15 | opponent review, E3 | adopt | property 15 had no classification case: 673 violations on XER; restated |
+| R16 | opponent review, E2+E3 | adopt | §4.11/§4.12 reconciled: the stale-mark rule applies before attribution; the vector reshaped to the usual order |
+| R17 | opponent review, E2 | record (§10 item 19) | equal `Time` across two runs can mis-attribute for under a second; residual unless M1's data shows it |
 
 **The on-course exit delay, measured** (E1, seven recordings, 1,995 closures). `C123-PROTOCOL.md`'s
 "about +4 s" against `CONTRACTS.md` §7.1's "about 20 s" was an E3 between documents. Upstream's
@@ -188,15 +212,35 @@ coincided with the closure in only 34–70 % of cases, so it stays a trigger, no
 
 ## What M1 must still prove on data
 
-- Replay jarni-ne-do 08:55–09:10, the only recorded TCP and XML outage: INV-2 rule 2's outage path,
-  INV-2c during a disconnect (property 8), and reconnection.
-- The recorded re-run, nkz-19so C1M_BR1_19 bib 7 (run 1 10:46–10:48Z, wiped in place 10:56:58, gone
-  by 12:02, run 2 12:40–12:42Z, the result push 108 ms before the on-course finish): replay
-  10:44–12:43Z, or the two halves, for ADR-013's generation increment, D1's attribution, INV-7's
-  present-and-empty case, property 10 and S1-22's increment delta; plus a synthetic fixture for the
-  wizard path, which no recording has.
-- The leave-gap distribution behind `onCourseLeaveAfterSeconds` (S1-8).
-- Re-run S2's pipeline on the same window after these amendments: gate 2 must then be true.
+In the order of risk to next season (opponent review, list D; Revision 4). S1 is not retired until
+items 1–4 pass; every item runs through direct injection twice and a gate-2 checker written by a
+different author than the core (TEST-ARCHITECTURE §3.2), and M1's presented state is diffed against
+the spike core on the same excerpts.
+
+1. **Kayak Cross finals and the event result:** cp3-cross 09:30–10:40Z (four overlapping XF phases,
+   XER). It fails today on property 15's classification case.
+2. **The leave rule under stalls and the real gap tail:** cp3-cross 09:18:38Z (a 10.7 s stall, a Cross
+   heat), nkz-20ne 11:53:51Z (21.5 s), and the four unchanged-listing gaps above 3 s; set
+   `onCourseLeaveAfterSeconds` from the whole distribution measured with no cut-off.
+3. **Re-runs, both paths, both arrival orders:** the recorded nkz-19so C1M_BR1_19 bib 7 (run 1
+   10:46–10:48Z, wiped in place 10:56:58, gone by 12:02, run 2 12:40–12:42Z, the push 108 ms before
+   the finish) — replay 10:44–12:43Z; and a synthetic non-wizard re-run with a DNF, row-first and
+   finish-first. This covers R16, the §4.11/§4.12 reconciliation, property 10 and S1-22, none of which
+   has run.
+4. **Outage and reconnect:** jarni-ne-do 08:55–09:10, after recording one deliberate disconnect on the
+   bench, since the recorder writes no connection events.
+5. **A real process:** sockets, the XML poll timer and the leave rule, fed by `player.js` at 1× and 10×;
+   its presented state equals the direct-injection replay's.
+6. **Gate-2 strength:** the second checker, mutation-tested per property, on windows that exercise
+   properties 4, 7, 8, 10 and 13.
+7. **The XML writer's real timing** (S5, the maintainer's run): INV-2c and INV-7's guard depend on the
+   poll interval matching it.
+8. **`duplicate-finish` on TCP after D1:** the six recorded instances.
+9. **Live bytes and fan-out from the real core** on Railway (the spike core's on-course deltas ran
+   6.4 kB/s, 35 % above S4's maximum).
+10. **Event times across a DST switch** with an IANA zone (DERIVATIONS §0.2).
+11. Re-run S2's pipeline on a whole-race window (C1W_BR1_19 08:34–09:03Z or C1W_BR2_19 10:24–10:53Z):
+    gate 2 true, gate 3 against published results, the human line certifying the fixture.
 
 ## What it costs
 
@@ -246,3 +290,61 @@ sole carrier of `BetterRunNr` (recorded: K1M_BR2_19:78, TCP row 09:31:51.169Z, X
 `CONTRACTS.md` §1.2/§2.6 and property 11 now say "until a row of run 2, with its time or mark, restates
 that field". No code re-run is needed. What remains is execution, not design: S5's run on the venue
 laptop, and M1's data gates listed above.
+
+## Revision 4 — the opponent review (2026-10-15)
+
+An independent reviewer (Opus, fresh context, read-only) re-ran the spike's code. The headline numbers
+reproduce — 93/93 on byte-identical vectors, identical hashes, 0 violations, the fixture valid — and
+the design decisions D1–D3 stand (D1 forced by data and free of athlete confusion; D2 and D3 sound).
+What they prove is narrower than this ADR said, and five things beyond the five windows were wrong.
+
+**Retired, honestly.** *S1 is retired for the named windows only* — 63 min of one slalom day and 45 min
+of Cross, two of seven recordings, no finals, XER, team, C2, re-run, outage or re-baseline — and not
+retired until items 1–4 of the M1 list above pass. Determinism held by construction: a single-threaded
+file loop with no clock, socket or timer. Gate 2 was self-referential (the checker trusted the
+ingest's own elements) and narrowed or vacuous in places (P10 and P13 ran zero times, P4/P7/P8 two to
+four), with the same author as the core. *S2* is a mild overclaim: gate 3 was redefined to fit a
+mid-race window while whole-race windows were available, the admission schema did not enforce
+"complete", the human line certified the final XML rather than the fixture, and the tier-1 cross-check
+was never done. *S3* is a mild overclaim: human hours are E4 and the mock-WS side an estimate. *S4* is
+close to fair: the real core's rate agrees (≤ 7.4/s), its bytes run 35 % above S4's maximum
+(6,434 B/s), and the margin swamps both.
+
+**Five findings from running the code beyond the windows** (R13–R17, adopted; the table above): a
+real merge bug — a stale pre-re-run DNF presented as run 2's status in the usual arrival order, because
+the stale-mark check ran only on attributed rows, and the one vector meant to catch it fed TCP a finish
+time D1 says TCP never carries (R16); a silent deviation inside a tested window — a 10.7 s TCP stall
+emptied a Cross heat's on-course set with 0 violations, the stall exemption never implemented (R13);
+circular evidence behind the 3 s leave constant, whose sweep evicted entries older than 2.5 s before
+measuring, with real gaps of 3.04–4.29 s in four recordings (R14); property 15 with no classification
+case, 673 violations on XER (R15); and a residual mis-attribution when two runs share a `Time` to
+0.01 s (R17, DERIVATIONS §10 item 19).
+
+**What changed in round 12.** §4.11/§4.12 reconciled: the stale-mark rule applies to any row of
+generation ≥ 2 before attribution. The leave constant is 5 s provisionally and an M1 measurement over
+the whole gap distribution; the stall exemption is stated as a rule the spike did not implement; a false
+leave clears on re-listing and recomputes `provisional`. Gate 3's admission needs a window spanning
+whole races checked against published results, the window-end comparison is a candidate check, the
+human line certifies the fixture, and the schema enforces `status: admitted` with `if/then`. Property
+15 gained the classification case. INV-2c's evidence now cites jarni-ne-odp only; the nkz 42/43 event
+was a penalty move. CONTRACTS §7.2/§8.4 gained a heartbeat and the clients a liveness obligation, so a
+ghost on a half-open connection cannot stand indefinitely (S3-3 follow-up). DERIVATIONS §0.2 names an
+IANA zone. TEST-ARCHITECTURE §3.2 requires a checker by a different author, mutation-tested per
+property, reading upstream's stream for the membership properties, and admits "implementation bug" as a
+verdict — the spike's brief had excluded it, so every core-versus-checker disagreement moved the
+contract to the core; R13 and R16 are what that framing could not surface. Fourteen vectors lost input
+finish times on TCP rows; two were fixed outright (the stale-mark vector in the usual order; an
+out-of-range `afterGivenIndex` that was never evaluated); `inv2-rule3-single-source-field` gained a
+second field after a mutation probe showed its only assertion was skipped by the adapter. 93 vectors.
+
+**The spike code** is kept as a **differential oracle**, not as M1's base: M1 runs its core and the
+spike core on the same excerpts and diffs presented states, which is the second interpreter
+TEST-ARCHITECTURE §3.2 says single-interpreter production loses. It is not M1's base because it was not
+test-first (eight vectors written after the code, three corrected after it disagreed), has R16 and R13
+in it, and is not production-shaped (one 1,574-line merge file, 96 `any`, no I/O layer, no polling, no
+persistence, a fixed `+02:00`). The checker, the step-log format, the excerpt time-base fix and S2's
+projection are worth porting as tooling, each re-reviewed against §3.2 by someone other than its author.
+
+**Not adopted:** a rule comparing a row's cells with the on-course stream's before attributing (R17's
+remedy). The case needs an equal `Time` to 0.01 s, the finish-first order and a rotation inside run 2,
+and lasts under a second; recorded as residual (DERIVATIONS §10 item 19) until M1's data shows it.

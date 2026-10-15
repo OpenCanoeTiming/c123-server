@@ -41,6 +41,14 @@ classification pushed to the live tier.
 **Round 8** (2026-10-14) rewrote the two INV-2c vectors — content age across sources, and a same-source
 earlier finish superseding — and added 1: a finisher stays in the on-course set until closure.
 
+**Round 12** (2026-10-15, `DECISIONS/ADR-017` Revision 4) removed every input finish time from TCP rows
+(14 vectors), reshaped `rerun-stale-mark-not-presented` to the usual arrival order, fixed an
+out-of-range `afterGivenIndex`, and gave `inv2-rule3-single-source-field` a second field.
+
+**Round 12** (2026-10-15, `DECISIONS/ADR-017` Revision 4) removed every input finish time from TCP rows
+(14 vectors), reshaped `rerun-stale-mark-not-presented` to the usual arrival order, fixed an
+out-of-range `afterGivenIndex`, and gave `inv2-rule3-single-source-field` a second field.
+
 **Round 9** (2026-10-14, `DECISIONS/ADR-017`) fixed `rerun-stale-mark-not-presented` (its `then` mark is
 presented), dropped `finishTime` from TCP snapshot rows, gave every merge vector a `context.attemptId`,
 and added 8: TCP attribution by run time (with the result push arriving before the on-course finish,
@@ -78,7 +86,15 @@ Each vector has:
 
   Observations are *resolved*: `DERIVATIONS.md` has already turned wire fields into these values.
   These vectors test the merge, not the derivation. A `status` inference of `on-course` or `finished`
-  implies an observed start (`DERIVATIONS.md` §4.1).
+  implies an observed start (`DERIVATIONS.md` §4.1). **A `tcp` `result-row` observation, and a `tcp`
+  snapshot row, never carries `eventTime` or `finishTime` on input** (`ADR-017` D1): the finish reaches
+  the merge only as an on-course `inference` — `status: finished` or an `outcome` with `eventTime` —
+  and a row is attributed to it by `outcome.runSeconds`; an attributed row's presented `outcome` then
+  carries the finish as `eventTime`. Live-tier pushes are resolved values and may carry it. **A `tcp` `result-row` observation, and a `tcp`
+  snapshot row, never carries `eventTime` or `finishTime` on input** (`ADR-017` D1): the finish reaches
+  the merge only as an on-course `inference` — `status: finished` or an `outcome` with `eventTime` —
+  and a row is attributed to it by `outcome.runSeconds`; an attributed row's presented `outcome` then
+  carries the finish as `eventTime`. Live-tier pushes are resolved values and may carry it.
 - **Connection and operator events.** Each has `ingestSeq`, `event` and `observedAt`. The events are
   `tcp-disconnected`, `tcp-connected`, `xml-rewrite-detected`, `oncourse-empty`, `oncourse-left`
   (this Attempt stopped being listed) and `rebaseline` (with `scope`). They exist because INV-2's
@@ -238,3 +254,19 @@ presented-state fact, covered by `inv2b-disagreement-surfaced-not-adopted`.
 10. **Notification counts are per resource** (round 10, S1-26/27). Two vectors miscounted: one forgot
     that a second-run Phase has two standings, one counted a leave for an Attempt it had never listed.
     The rule is stated above; the vectors were fixed, not the merge.
+11. **No TCP row carries a finish on input** (round 12, opponent review). Fourteen vectors gave a TCP
+    result-row observation or snapshot row an `eventTime`/`finishTime`, and the one meant to catch a
+    stale mark in a re-run could only pass with it. They now supply the finish as an on-course inference
+    where they need it, and `rerun-stale-mark-not-presented` delivers the stale row before the finish,
+    the usual order, which is where the spike's core presented the stale DNF.
+12. **`afterGivenIndex` indexes `given` only.** A `then` step cannot be asserted mid-way; a vector that
+    needs an intermediate assertion after a `then` element moves that element into `given`. One vector
+    had an out-of-range index and was silently never evaluated (R4b).
+11. **No TCP row carries a finish on input** (round 12, opponent review). Fourteen vectors gave a TCP
+    result-row observation or snapshot row an `eventTime`/`finishTime`, and the one meant to catch a
+    stale mark in a re-run could only pass with it. They now supply the finish as an on-course inference
+    where they need it, and `rerun-stale-mark-not-presented` delivers the stale row before the finish,
+    the usual order, which is where the spike's core presented the stale DNF.
+12. **`afterGivenIndex` indexes `given` only.** A `then` step cannot be asserted mid-way; a vector that
+    needs an intermediate assertion after a `then` element moves that element into `given`. One vector
+    had an out-of-range index and was silently never evaluated (R4b).
