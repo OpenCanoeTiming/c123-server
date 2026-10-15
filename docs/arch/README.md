@@ -115,12 +115,15 @@ Built from decisions already taken. It is not a migration plan: the running syst
 as it is until each part is replaced.
 
 1. **Settle any open upstream question** (`DERIVATIONS.md` §10) that the part being built depends on.
-   **What M1 inherits from the spike** (`DECISIONS/ADR-017`): replay jarni-ne-do 08:55–09:10, the only
-   recorded TCP and XML outage, and a synthetic re-run fixture, both through direct injection twice and
-   the gate-2 checker — INV-2 rule 2's outage path, INV-2c during a disconnect and ADR-013's generation
-   increment were never exercised on data; measure the leave-gap distribution behind
-   `onCourseLeaveAfterSeconds` and the finish → on-course-exit interval per recording (§10 items 16,
-   17); then re-run the capture pipeline on nkz-19so 09:30–09:45, whose gate 2 must turn true.
+   **What M1 inherits from the spike** (`DECISIONS/ADR-017`, "What M1 must still prove on data",
+   eleven items in risk order after the opponent review): the Kayak Cross finals and XER hour first;
+   the leave rule under stalls and the real gap tail, with `onCourseLeaveAfterSeconds` set from the
+   whole distribution; both re-run paths in both arrival orders, including the recorded nkz-19so
+   episode; the jarni-ne-do outage after one recorded disconnect; a real process with sockets and the
+   poll timer fed by `player.js`; a gate-2 checker by a different author, mutation-tested; S5's run;
+   `duplicate-finish` on TCP; live bytes from the real core; a DST switch; and a whole-race fixture
+   admitted against published results. M1 diffs its presented state against the spike core on the same
+   excerpts (a differential oracle), and does not build on it. S1 is retired only when items 1–4 pass.
 2. **Server first, test-first.** Tier-1 conformance vectors (`vectors/tier1-conformance.json`) are
    written as failing tests before the code that passes them. The server implements the contract
    (`CONTRACTS.md` §7 on-site, §8 live ingest).

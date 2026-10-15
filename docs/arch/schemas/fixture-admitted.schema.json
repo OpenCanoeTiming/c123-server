@@ -2,10 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://opencanoetiming.org/schemas/fixture-admitted.schema.json",
   "title": "Domain-state fixture admission block (TEST-ARCHITECTURE §4; ADR-017 D5)",
-  "description": "The `admitted` block of a tier-2 domain-state fixture. A fixture is complete, and may be published, only when gate1 and gate2 are true, gate3.mechanical.mismatch is 0 and gate3.human is a 'human-checked-<date> by <name>' line.",
+  "description": "The `admitted` block of a tier-2 domain-state fixture. `status: 'admitted'` is allowed only when gate1 and gate2 are true, the gate-3 mechanical check ran against published results over a window spanning whole races with mismatch 0, and gate3.human is a 'human-checked-<date> by <name>' line certifying the fixture. Anything else is a candidate.",
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "status",
     "gate1",
     "gate2",
     "gate3",
@@ -39,7 +40,9 @@
             "changedAfterWindow",
             "changedAfterWindowEqualsWindowEnd",
             "noFinalRow",
-            "report"
+            "report",
+            "against",
+            "windowSpansWholeRaces"
           ],
           "properties": {
             "attempts": {
@@ -86,12 +89,22 @@
                   "pattern": "^[0-9a-f]{64}$"
                 }
               }
+            },
+            "against": {
+              "enum": [
+                "published-results",
+                "window-end-xml"
+              ],
+              "description": "published-results: every race in the window spans the window whole and its finishers are checked against the published results (the day's final XML once the human line certifies it); window-end-xml: the weaker candidate check for a window that cuts a race"
+            },
+            "windowSpansWholeRaces": {
+              "type": "boolean"
             }
           }
         },
         "human": {
           "type": "string",
-          "description": "'human-checked-YYYY-MM-DD by <name>' once the maintainer has confirmed the day's final XML equals the published results; any other string (e.g. a TODO) leaves the fixture a candidate"
+          "description": "'human-checked-YYYY-MM-DD by <name>' once a person has compared the fixture's final values with the published results of the races in the window; any other string (e.g. a TODO) keeps the fixture a candidate"
         }
       }
     },
@@ -159,6 +172,49 @@
                 "minimum": 0
               }
             }
+          }
+        }
+      }
+    },
+    "status": {
+      "enum": [
+        "candidate",
+        "admitted"
+      ]
+    }
+  },
+  "if": {
+    "properties": {
+      "status": {
+        "const": "admitted"
+      }
+    }
+  },
+  "then": {
+    "properties": {
+      "gate1": {
+        "const": true
+      },
+      "gate2": {
+        "const": true
+      },
+      "gate3": {
+        "properties": {
+          "mechanical": {
+            "properties": {
+              "mismatch": {
+                "const": 0
+              },
+              "against": {
+                "const": "published-results"
+              },
+              "windowSpansWholeRaces": {
+                "const": true
+              }
+            }
+          },
+          "human": {
+            "pattern": "^human-checked-\\d{4}-\\d{2}-\\d{2} by .+$"
           }
         }
       }

@@ -185,8 +185,9 @@ checker as properties exposed its other edge. `ARCHITECTURE.md` Scenario I's "se
 back" — three athletes credited with each other's finishes and corrected one by one — hands at least
 one athlete a finish *earlier* than the one presented for them, and the correcting push carries that
 earlier event time; a permutation of three finishes with no fixed point always moves someone earlier.
-The floor refused exactly that row. The recorded jarni-ne-odp shift (12:55–13:05) and the nkz-19so
-swap-and-revert of bibs 42/43 (10:05–10:30) are the evidence.
+The floor refused exactly that row. The recorded jarni-ne-odp shift (12:55–13:05) is the evidence; the
+nkz-19so 42/43 event cited here at first turned out to be a gate-penalty move with unchanged event
+times, which the old floor would not have refused (spike S1 report; corrected in round 12).
 
 **Why event time was the wrong discriminator.** An event time says when the fact happened. It says
 nothing about when upstream last *stated* the fact, and upstream's table can legitimately move a
@@ -208,9 +209,10 @@ attribution alone (`DERIVATIONS.md` §4.11; `ADR-013` Revision 2).
   `tcp` while TCP is connected (rule 2); a snapshot written mid-correction and read during an outage
   would present upstream's intermediate table with a `duplicate-finish` diagnostic, exactly as
   Scenario I says.
-- *Swap and revert, nkz-19so 42/43.* Push P1 swaps the two finishes, P2 reverts them. Under the old
-  rule the athlete moved earlier by P1 was stuck, and the one moved earlier by P2 was stuck in turn.
-  Under the new rule both follow upstream at each push.
+- *A swap of two finishes* (no recording has one; the nkz-19so 42/43 event was a penalty move). Push
+  P1 swaps the two finishes, P2 reverts them. Under the old rule the athlete moved earlier by P1 was
+  stuck, and the one moved earlier by P2 was stuck in turn. Under the new rule both follow upstream at
+  each push.
 - *Re-run (`ADR-013`).* Generation 2 starts at T2. A row with a finish before T2 describes the
   replaced run and is never presented, by attribution; a row with a finish after T2 is generation 2's.
   INV-2c is not involved.
