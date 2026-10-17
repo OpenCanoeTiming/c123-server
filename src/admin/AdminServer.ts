@@ -13,9 +13,9 @@ import type {
 } from './types.js';
 import { Logger } from '../utils/logger.js';
 import { getAppSettings, WindowsConfigDetector } from '../config/index.js';
+import { APP_VERSION } from '../utils/appVersion.js';
 
 const DEFAULT_PORT = 8084;
-const VERSION = '0.9.0';
 
 interface RegisteredSource {
   name: string;
@@ -484,7 +484,7 @@ export class AdminServer {
     const sessions = this.wsServer?.getSessions() ?? [];
 
     const response: ServerStatusResponse = {
-      version: VERSION,
+      version: APP_VERSION,
       uptime: Math.floor((Date.now() - this.startTime) / 1000),
       sources: this.getSourcesStatus(),
       scoreboards: {
