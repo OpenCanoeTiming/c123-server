@@ -86,7 +86,7 @@
 Zápis penalizací do C123 nefungoval. Server logoval "Sending penalty" ale v C123 se nic nedělo.
 
 ### Investigation
-1. Původní Canoe123Term v `resources-private/orig_src/` používá dva různé XML formáty:
+1. Původní terminálová aplikace (její zdroj je privátní) používá dva různé XML formáty:
    - `<Scoring>` - pro závodníky **na trati** (gridOnCourse)
    - `<PenaltyCorrection>` - pro **dojeté** závodníky (gridControl)
 
