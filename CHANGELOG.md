@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.2](https://github.com/OpenCanoeTiming/c123-server/compare/v0.12.1...v0.12.2) (2026-10-17)
+
+
+### Bug Fixes
+
+* **admin:** report the package version instead of a stale constant ([#196](https://github.com/OpenCanoeTiming/c123-server/issues/196)) ([f545eb5](https://github.com/OpenCanoeTiming/c123-server/commit/f545eb586b5b1ed137e5e8a9c96cbde9ed612225)), closes [#78](https://github.com/OpenCanoeTiming/c123-server/issues/78)
+
 ## [0.12.1](https://github.com/OpenCanoeTiming/c123-server/compare/v0.12.0...v0.12.1) (2026-09-17)
 
 
