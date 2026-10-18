@@ -4,25 +4,40 @@
 
 C123 Server — smart middleware layer between Canoe123 and web clients for canoe slalom races. Provides WebSocket bridge, REST API, and Admin UI on a single port.
 
-**GitHub:** OpenCanoeTiming/c123-server | **License:** MIT | **Status:** Active development
+**GitHub:** OpenCanoeTiming/c123-server | **License:** MIT | **Status:** Rebuild 2026/27 on `main` (0.x, M1 first); venues run `legacy-2026`
+
+---
+
+## Rebuild 2026/27 — read first
+
+- **Design (normative):** c123-server `main`, `docs/arch/` — start at `README.md` (reading order, implementation sequence); then `CONTRACTS.md`, `DECISIONS/ADR-*`, `TEST-ARCHITECTURE.md`. Point to it, never restate it. Defaults taken without the maintainer go to `DECISIONS/LOG.md`.
+- **Legacy line:** venues run tag `legacy-2026`; branch `legacy/2026` takes `fix:` commits only. `main` is the rebuild, in place: replaced code is deleted, never kept beside the new.
+- **Releases:** rebuild releases are 0.x and reach no venue; `Release-As: 1.0.0` only when M6 Release 1.0 closes.
+- **Order:** server → scoreboard → penalty-check → live-mini is the implementation order only. Everything, the new live included, is ready for the Jarní slalom (M6), its first real use: no shadow run, the legacy line is the fallback.
+- **Work items:** one issue each in project "Rebuild 2026/27" (https://github.com/orgs/OpenCanoeTiming/projects/3), milestones M0 Spike, freeze, merge · M1 Server core · M2 Tooling · M3 Scoreboard · M4 Penalty-check · M5 Live · M6 Release 1.0 (Jarní slalom). Implementation is on hold until the maintainer releases M1.
+- **Test-first:** failing tests from the vectors or obligations land before the code that passes them. Tiers and the `Clock` rule: `TEST-ARCHITECTURE.md` §3, §5.
+- **Upstream provenance** stays in the private c123-protocol-docs repo; public repos state behaviour only, never how it was established.
+- **Git:** conventional commits; Release Please owns versions and CHANGELOG; squash merges; `git add <file>`, never commit `.claude/` or `.superpowers/`. Czech with the maintainer, English in code, commits and docs.
 
 ---
 
 ## Architecture
 
 ```
-c123-server/
-├── src/
-│   ├── index.ts              # Entry point
-│   ├── server.ts             # Main orchestration
-│   ├── sources/              # Data sources (UDP, TCP, XML)
-│   ├── parsers/              # XML parsing
-│   ├── state/                # Aggregated state
-│   ├── output/               # WebSocket server
-│   ├── checks/               # Penalty verification persistence
-│   └── admin/                # Admin dashboard (SPA)
-└── shared/types/             # Shared types
+src/
+├── cli.ts, index.ts, server.ts  # Entry points, orchestration
+├── sources/    # TCP, UDP discovery, XML file watch
+├── protocol/   # TCP message parsing
+├── xml/        # XML snapshot change/mismatch detection
+├── state/      # EventState (legacy aggregation)
+├── service/    # Scoring (writes), XML data
+├── ws/ unified/ # WebSocket + single-port HTTP server
+├── checks/     # Penalty-check persistence (legacy fingerprint store)
+├── live/       # Push to c123-live-mini
+├── admin/ admin-ui/ tray/ config/ utils/
 ```
+
+The target structure is `docs/arch/ARCHITECTURE.md` §3; the contract package `@opencanoetiming/c123-contract` will be published from this repo (not yet created).
 
 ### Ports
 
@@ -47,13 +62,14 @@ Port 27123 is mnemonic (C-1-2-3) and IANA unassigned.
 
 | Purpose | Path |
 |---------|------|
+| **Architecture design (normative)** | `./docs/arch/README.md` → CONTRACTS, ADRs, TEST-ARCHITECTURE |
 | **Protocol documentation** | `../c123-protocol-docs/c123-protocol.md` |
 | **XML format reference** | `../c123-protocol-docs/c123-xml-format.md` |
 | **Recordings for testing** | `../c123-protocol-docs/recordings/` |
 | **Replay tools** | `../c123-protocol-docs/tools/` |
 | **Design system** | `../timing-design-system/` |
-| **REST API docs** | `./docs/REST-API.md` |
-| **WebSocket protocol** | `./docs/C123-PROTOCOL.md` |
+| **REST API docs (legacy wire, until CONTRACTS §7)** | `./docs/REST-API.md` |
+| **WebSocket protocol (legacy wire, until CONTRACTS §7)** | `./docs/C123-PROTOCOL.md` |
 
 ---
 
@@ -62,7 +78,8 @@ Port 27123 is mnemonic (C-1-2-3) and IANA unassigned.
 1. **Single port** — all services (Admin, WS, API) on one port 27123
 2. **Design system mandatory** — use `@opencanoetiming/timing-design-system` for all UI, no inline styles for things the design system covers
 3. **Cross-platform** — Windows primary, but must run on Linux/macOS
-4. **XML as live database** — C123 XML file changes continuously, polling for updates
+4. **Ingest per the design** — TCP push and the XML snapshot (a complete statement of a race; absence retracts), UDP for discovery only, CIS not consumed (ARCHITECTURE §3, ADR-011, ADR-015). c123-server's domain layer is the only interpreter of upstream data (ADR-002).
+5. **docs/arch changes** — `CLIENT-OBLIGATIONS.md` changes in the same PR as the sections it cites; `scripts/check-obligations.js` fails the PR otherwise. Label `obligations-unchanged` when no obligation is affected. Decisions taken without the maintainer go to `docs/arch/DECISIONS/LOG.md`.
 
 ---
 
@@ -81,6 +98,8 @@ npm test
 # Build
 npm run build
 ```
+
+Rebuild work is test-first: tier-1 vectors (`docs/arch/vectors/tier1-conformance.json`) land as failing tests before the code; any time-windowed rule reads an injected `Clock` (TEST-ARCHITECTURE §3.1, §5). The recorded-data recipe below is tier 4 (whole line) and manual checks.
 
 ### Testing with recorded data
 
@@ -106,10 +125,7 @@ Control API (programmatic seek/speed from tests) and other recipes see
 
 ## Key Qualities
 
-1. **Race flow tracking** — display results for the currently running category
-2. **XML validation** — identify correct XML file, detect incompatibility
-3. **Penalty check persistence** — checks and flags stored per-gate with WebSocket broadcast
-4. **Cross-platform** — Windows primary, but runs on Linux/macOS too
+What the server owns is `docs/arch/ARCHITECTURE.md` §3 (row c123-server): the domain layer, the merge invariants (CONTRACTS §4), Standing assembly, write routing and confirmation, durable checks and flags (CONTRACTS §2.10, ADR-016), and both serialisations (§7 on-site, §8 live ingest). It serves no "current race"; clients choose what to show. Cross-platform: Windows primary, also Linux/macOS.
 
 ---
 
@@ -144,7 +160,7 @@ src/admin-ui/timing.css                   # Auto-synced copy
 
 ## Workflow
 
-Issue-driven development. Every change starts with a GitHub issue.
+Rebuild rules: see "Rebuild 2026/27 — read first" above. Every change starts with a GitHub issue.
 
 ### 1. Rozbor (Analysis)
 - Comment on issue: restate problem, challenge the idea, define scope, identify risks
@@ -162,7 +178,7 @@ Issue-driven development. Every change starts with a GitHub issue.
 
 ### 4. PR & Review
 - Every issue → PR with `Closes #N`
-- Include test plan in PR description
+- Include the verification: commands run, exit codes and the CI run link; for docs/arch changes, the obligations check result
 - Summarize what changed and why
 
 ---
@@ -213,7 +229,7 @@ This project uses **Release Please** (commit-based) for automatic versioning. **
    - A git tag `vX.Y.Z`
    - A GitHub Release with generated CHANGELOG
    - Triggers `release.yml` (the Windows installer build) → attaches `c123-server-setup-X.Y.Z.exe` to the stable release
-4. `release.yml` continues to produce rolling preview builds on every push to `main` (attached to the `preview` pre-release).
+4. `release.yml` produces a rolling `preview` pre-release on every push to `main`. During the rebuild `preview` and all 0.x releases are the rebuild line: no venue installs them; venues use the latest `legacy-2026` release.
 
 ### Commit types and bump rules
 
@@ -222,13 +238,14 @@ This project uses **Release Please** (commit-based) for automatic versioning. **
 | `feat:` | **minor** (see 0.x note) | ✓ Features |
 | `fix:` / `perf:` | **patch** | ✓ Bug Fixes / Performance |
 | `feat!:` or `BREAKING CHANGE:` | **minor** (see 0.x note) | ✓ Features |
-| `revert:` / `docs:` | none | ✓ Reverts / Documentation |
+| `revert:` | none | ✓ Reverts |
+| `docs:` | none | hidden |
 | `chore:` / `ci:` / `test:` / `style:` / `refactor:` / `build:` | **none** | hidden |
 | `chore(deps):` / `chore(deps-dev):` (dependabot) | **none** | hidden |
 
 **0.x series note:** Project is configured with `bump-minor-pre-major: true`. While in 0.x, `feat!:` bumps **minor** instead of major so breaking changes don't accidentally promote to 1.0.0. See "Graduating to 1.0.0" below.
 
-**Note on `VERSION = '2.0.0'` in `UnifiedServer.ts`:** that constant is the **wire-protocol version** advertised via `/api/status` and `/api/info`. It is independent of the npm package version (`APP_VERSION` from `src/utils/appVersion.ts`, which reads `package.json`). Bump the wire-protocol constant only when clients need to renegotiate.
+**Note on `VERSION = '2.0.0'` in `UnifiedServer.ts`:** that constant is the **wire-protocol version** advertised via `/api/status` and `/api/info`. It is independent of the npm package version (`APP_VERSION` from `src/utils/appVersion.ts`, which reads `package.json`). Bump the wire-protocol constant only when clients need to renegotiate. The future `@opencanoetiming/c123-contract` package is versioned with this wire-protocol version (ARCHITECTURE §3).
 
 ### Rules for agents preparing PRs
 
@@ -241,7 +258,7 @@ This project uses **Release Please** (commit-based) for automatic versioning. **
 
 ### Graduating to 1.0.0
 
-To force a release to a specific version (e.g., graduating from 0.x to 1.0.0), add this footer to a commit in the next release cycle:
+1.0.0 is minted only on the commit that closes milestone M6 Release 1.0 (maintainer decision), with this footer:
 
 ```
 Release-As: 1.0.0
