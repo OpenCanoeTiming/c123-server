@@ -109,7 +109,6 @@ Indicates currently running category in Results - key for race flow tracking.
 | Source | Description |
 |--------|-------------|
 | `../c123-protocol-docs/` | C123 protocol documentation |
-| `../c123-scoring/resources-private/orig_src/` | Original Canoe123Term source |
 | Tag `v1.0.0-cli` | Archived CLI-compatible version |
 
 ---
