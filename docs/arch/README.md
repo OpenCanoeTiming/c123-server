@@ -99,9 +99,10 @@ reader can see the whole set at once.
 
 ## Ground rules for this phase
 
-- **Nothing is fixed during the current season.** Defects catalogued in `EVIDENCE.md` are left
-  standing deliberately: several are questions the design must answer, and repairing them
-  piecemeal would destroy the evidence.
+- **Legacy defects are not repaired piecemeal on `main`.** Venues run tag `legacy-2026`; branch
+  `legacy/2026` takes `fix:` commits only. On `main`, defects catalogued in `EVIDENCE.md` are left
+  standing until the part that answers them is rebuilt: several are questions the design must
+  answer, and repairing them piecemeal would destroy the evidence.
 - **Provenance of upstream behaviour stays in the private `c123-protocol-docs` repository.** This
   folder documents behaviour, not how it was established.
 - **`CLIENT-OBLIGATIONS.md` changes in the same PR as the sections it cites.** It is derived, so the
@@ -144,8 +145,8 @@ as it is until each part is replaced.
 
 ## Deferred to implementation
 
-Recorded here rather than done now, because this branch is an architecture revision and
-nothing in it is merged or implemented yet.
+Recorded here rather than done now, because the design is merged on `main` but not yet
+implemented.
 
 - **Retire `docs/SCOREBOARD-REQUIREMENTS.md` and `docs/INTEGRATION.md`.** These are the documents
   in which the server tells clients how to interpret its data — Exhibit 6 of `inputs/EVIDENCE.md`,
