@@ -145,9 +145,10 @@ always mean one particular registry (`CONTRACTS.md` §2.5, `DECISIONS/ADR-006` R
 **The shared types package, named.** The row in §5 that requires "a shared types/schema package
 underlying every DTO and the ingest schema" is `@opencanoetiming/c123-contract`: the TypeScript types
 of `CONTRACTS.md` §2 and the two JSON schemas of `docs/arch/schemas/`, and nothing else. No runtime
-logic ever (`DECISIONS/ADR-002`, `ADR-003`). It is published from `c123-server`'s repository, which
-already holds `shared/types/`, versioned with the wire-protocol version, and consumed by the four
-other deployables as a pinned dependency, exactly as every repository consumes
+logic ever (`DECISIONS/ADR-002`, `ADR-003`). It is to be created in, and published from,
+`c123-server`'s repository (it does not exist yet; the repository has no shared types directory
+today), versioned with the wire-protocol version, and consumed by the four other deployables as a
+pinned dependency, exactly as every repository consumes
 `timing-design-system` today. Bumping it is the one place a shape change becomes visible to all
 five at once, which is the point.
 
