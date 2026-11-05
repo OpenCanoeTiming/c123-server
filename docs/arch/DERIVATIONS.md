@@ -564,21 +564,27 @@ slalom course every slot is a gate, so cell `i` is gate `i+1`.
 stand — `cells`, 30 from a fixed-width string, every token from an on-course string — and no `gates`
 or `faults`, and raises no `unparseable-cell`, since a cell may belong to no slot. The core retains
 the latest cells per source and decides among three states:
-- **`not-yet`** while nothing is known either way: the Phase's `courseId` is not yet read and no
-  `RaceConfig` for the Phase has been seen (`CONTRACTS.md` §1.2).
-- **`known`**, built from the retained cells when the course binds: `Gate[]` from the first
-  `slotCount` cells, or in Kayak Cross `faults` from the cells and the captions (d); the parser's
-  cell→`Gate[]`/`faults` function is reused.
+- **`not-yet`** until one of the other two holds (`CONTRACTS.md` §1.2): a real `RaceConfig` seen
+  while the snapshot is still pending decides nothing.
+- **`known`** once a snapshot binds a course to the Phase — `courseId` known and that Course's `gates`
+  known; only the snapshot carries course numbers (`CONTRACTS.md` §2.12), so a `RaceConfig` never
+  binds — built from the retained cells: `Gate[]` from the first `slotCount` cells, or in Kayak Cross
+  `faults` from the cells and the captions (d); the parser's cell→`Gate[]`/`faults` function is
+  reused.
 - **`unavailable{not-configured}`** when nothing configured can supply a course: the XML source is
-  not configured (`SourceStatus.xml`, §5), so no `courseId` can ever bind; the snapshot shows the Phase
-  with no `CourseNr`, or a course whose layout is empty (the snapshot's determination); or the
-  `RaceConfig` for the current Phase is fabricated by §2.3's tests (the parser's determination, from
-  the gate string, the transmitted count and the captions, applied by the core to the current Phase).
-  A later snapshot or `RaceConfig` that binds a real course replaces it.
+  not configured (`SourceStatus.xml`, §5), so nothing can ever bind; the snapshot shows the Phase with
+  no `CourseNr`, or a course whose layout is empty (the snapshot's determination); or the `RaceConfig`
+  of the current Phase is fabricated by §2.3's tests (the parser's determination, from the gate
+  string, the transmitted count and the captions; the core holds it per Phase until a non-fabricated
+  `RaceConfig` clears it or a snapshot binds). A snapshot that later binds a real course replaces it
+  with `known`.
 
-Recorded: none in the replayed windows (`DECISIONS/ADR-017` S1-12, S1-30), where the snapshot preceded
-the first push; whole recordings were not recounted, and gate 2 reaches this path at every cold start
-without a snapshot.
+The core presents whichever state holds at a step that carries gate cells for the Attempt — a result
+row or an on-course listing — or at a scope snapshot of its race, never at the `RaceConfig` or
+`SourceStatus` step itself (`TEST-ARCHITECTURE.md` §3.2 properties 3 and 4). The spike's replay
+windows reached this path: S1-12 (cold-start finishers whose completeness is unknown until the course
+binds) and S1-30 (an Attempt listed while no course is bound), the case property 11 names as "the
+results push precedes the first snapshot" (`DECISIONS/ADR-017` D4); whole recordings were not counted.
 
 **(c) Team rows** (`TR1/TR2`, `TSR`, `TS1/TS2/TSF`, `TFI`; source and static sample only, no recording).
 - `Gates` holds the per-gate **sum** over the members (4, 52, 100, 150…). Upstream computes it from

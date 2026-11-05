@@ -1214,8 +1214,10 @@ reliable signal that a Phase's results changed is ordinary field-level change: a
   - `at-start`: staged in the start gate, armed for the start impulse and not yet started. It is 8% of
     on-course traffic in recordings, and #166 had no status for it.
   - `not-started → on-course` directly is legal too, when staging is not observed.
-  - `not-started → finished`, when a result row places an Attempt never listed on course: an untimed
-    row (§2.6), or a Kayak Cross result whose heat's listing was missed (`DERIVATIONS.md` §4.2).
+  - `not-started → finished`, when a result row states a finish for an Attempt never listed on course:
+    a timed row after an outage or a cold start (`DERIVATIONS.md` §0.3, §4.1: empty mark with a time
+    means `finished`), an untimed row (§2.6), or a Kayak Cross result whose heat's listing was missed
+    (`DERIVATIONS.md` §4.2).
   - `at-start → not-started`, when the Attempt is unstaged before any start (observed: a bib staged
     for 5 s in the next day's race, then removed).
   - `left-without-finish → at-start | on-course`, when upstream lists it again in the same

@@ -235,7 +235,10 @@ the step index, the Attempt, the field and the property number.
 4. **No regression by omission (INV-1, INV-3).** A regression occurs only at: a scope snapshot of
    the Attempt's race (property 5); a listing of the Attempt that increments `run` in the same delta
    (property 10) or contradicts a finish (property 7); a `rebaseline` of its scope (property 13).
-   `unavailable` appears only with a closed reason and never at any other kind of step (INV-3).
+   `unavailable` appears only with a closed reason, and only at a step that carries the field for the
+   Attempt (property 3) or at a scope snapshot of its race, never at a connection event, a `fragment`
+   or by itself (INV-3): a `not-configured` decided from `SourceStatus` or a fabricated `RaceConfig`
+   (`DERIVATIONS.md` §4.6) is presented at the Attempt's next such step.
 5. **Retraction is scoped and guarded (INV-7).** At a scope-snapshot step for race R, a regression
    of an Attempt of R touches only the fields INV-7 names for the case — first or single run:
    `outcome`, `gates`, `placement`, `underReview`, `qualified` and a mark in `status`; paired second
@@ -333,8 +336,9 @@ the step index, the Attempt, the field and the property number.
     is `pending` while its Attempt is `pending` or `running`. A `standing.updated` appears only at a
     step that changed the standing as serialised (§5 step 1): an Attempt's `placement`, a result
     outcome, `pairTotal`, `provisional` or `underReview`; an Entry's `ageCategoryId` becoming known (a
-    category standing's first publication); a snapshot's category ranks raising or clearing an
-    anomaly; or `scope.replaced`. A running athlete's tick never produces one. **A `classification`
+    category standing's first publication); a second Phase's `pair.siblingPhaseId` becoming known
+    (the `pair` standing's first publication, §5 step 1); a snapshot's category ranks raising or
+    clearing an anomaly; or `scope.replaced`. A running athlete's tick never produces one. **A `classification`
     standing has no Attempts:** its entries come from the classification Phase's rows (§5 step 2), each
     entry's `rank`, `order` and `decidedIn` equal its row's, its first publication is its first row
     observation, and it changes only at a row observation or `scope.replaced`. The spike's checker
