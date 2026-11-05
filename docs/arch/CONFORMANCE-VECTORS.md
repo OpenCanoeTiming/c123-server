@@ -100,11 +100,15 @@ changed.
 **Round 18** (2026-11-05, the server#202 and #201 reviews) redefined content age (`CONTRACTS.md` §4
 INV-2c): an `xml-rewrite-detected` event may carry `changedAfter`, the last moment the reader saw
 the file in its previous state (`null` = unknown), and that is the snapshot's content age; an event
-without it keeps meaning `observedAt` minus `context.xmlPollIntervalSeconds`, so no vector changed.
-§1 also states that an empty table is a start-list scope snapshot and that a classification
-snapshot replaces the Phase's rows whole. One vector is owed (the first read after `setPath` during
-an outage, `changedAfter: null`, refused; the next rewrite presented); it lands with the harness
-change that reads the key, since the suite counts are pinned in code.
+without it keeps meaning `observedAt` minus `context.xmlPollIntervalSeconds`, resolved by the
+harness before the core sees the unit, so no vector changed. §1 also states that an empty table is
+a start-list scope snapshot and that a classification snapshot replaces the Phase's rows whole
+under INV-2c's guard. One vector is owed, `inv2c-first-read-unknown-age-refused` (second pass):
+`tcp` rows present results for Attempts A and C; `tcp-disconnected`; a rewrite with
+`changedAfter: null` whose snapshot carries a different value for A, an empty row for C and a
+result for B, which no `tcp` observation presents — A and C unchanged, B presented from `xml`;
+`then` a rewrite whose `changedAfter` follows the disconnect, A's new value presented. It lands with
+the harness change that reads the key, since the suite counts are pinned in code (93/87 → 94/88).
 
 ---
 
@@ -150,7 +154,13 @@ Each vector has:
   key (a `Timestamp`, or `null`: unknown, earlier than every observation; `DERIVATIONS.md` §0.3);
   where it does not, that event's `observedAt` minus `context.xmlPollIntervalSeconds`, which defaults
   to 5 where absent; with no preceding rewrite event, its own `observedAt` minus the interval. A
-  reader always stamps `changedAfter`; the subtraction exists for vectors written without it. A `tcp`
+  reader always stamps `changedAfter`; the subtraction exists for vectors written without it, and
+  **the harness does it before `applyUnit`**: it stamps `changedAfter` on a keyless event and, for
+  an `xml` element with no preceding event, prepends to that element's unit a synthesised
+  `xml-rewrite-detected` carrying the computed value (outside the vector's element indices, so
+  `afterGivenIndex` and `ingestSeq` are unchanged). The core reads content age from the event's
+  `changedAfter` alone — absence as a key is a programming error, never `null` and never the
+  interval — and `context.xmlPollIntervalSeconds` is the harness's. A `tcp`
   observation's content age is its `observedAt`.
 - **Scope snapshots** (INV-7). `{ ingestSeq, snapshot: { source, phaseId, mode, rows }, observedAt }`.
   `mode` is `results` or `start-list`; each row carries `bib` and the resolved fields the row states
@@ -160,13 +170,16 @@ Each vector has:
   `DERIVATIONS.md` §4.4 — and `finishTime` **on XML rows only**: a TCP row carries no finish
   time, and INV-2d and generation attribution match it by `outcome.runSeconds`). A row's `placement` is
   given resolved: `null` where upstream's `Rank` is empty, whatever its `RankOrder`
-  (`DERIVATIONS.md` §4.7). A row that carries nothing states no result. A table with no rows is a
-  scope snapshot with `mode: 'start-list'` and `rows: []` (`DERIVATIONS.md` §0.3). **A scope snapshot of a
+  (`DERIVATIONS.md` §4.7). A row that carries nothing states no result. A parser emits a table
+  with no rows as `mode: 'start-list'`, `rows: []` (`DERIVATIONS.md` §0.3); in a vector, `rows: []`
+  with `mode: 'results'` is a table whose other rows are elided — the named row is absent — and
+  asserts the same (`retraction-dns-cleared-then-races`). **A scope snapshot of a
   classification Phase** (`CONTRACTS.md` §2.4) carries `CONTRACTS.md` §8.3 `ClassificationRow`s
   instead — `entryId`, `bib`, `rank`, `order`, `decidedIn`, the last `null` where only TCP has stated
-  the row — creates no Attempt, and replaces the Phase's rows whole; on site it is the only element
-  that carries classification rows, the `push: 'classification'` element being the live tier's
-  (`DERIVATIONS.md` §4.10).
+  the row — creates no Attempt, and replaces the Phase's rows whole under INV-2c's guard alone
+  (`DERIVATIONS.md` §4.10, which also keeps `decidedIn` across a TCP row's `null`); on site it is
+  the only element that carries classification rows, the `push: 'classification'` element being
+  the live tier's.
 - **On-course listing.** An observation with `field: 'onCourse'` and
   `value: { dtStart, dtFinish }` states what the on-course stream lists for the Attempt (INV-2d).
 - A `kind: 'fragment'` observation stands for any single-row, non-snapshot message.

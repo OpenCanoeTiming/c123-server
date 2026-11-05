@@ -254,7 +254,9 @@ the step index, the Attempt, the field and the property number.
    qualifying; without the key, its time minus the poll interval) is later than that field's
    `observedAt`; otherwise the field is unchanged at that step. Where the replay log carries the snapshot's rows, as the vector format does, the
    checker also asserts completeness: every Attempt of R presenting results-table values whose row
-   states no result is retracted in that step.
+   states no result is retracted in that step — for a `tcp` snapshot an absent row and a start-list
+   table included; for an `xml` snapshot a present row only, since an absent XML row and an empty
+   XML table state nothing (INV-7).
 6. **Precedence (INV-2 rules 1–3).** (a) Once a result field presents a `result-row` observation, it
    never afterwards presents an `inference` for the same generation, except through a contradiction
    (property 7) or after a retraction (property 5). (b) `gates` is merged cell by cell: while
@@ -288,7 +290,8 @@ the step index, the Attempt, the field and the property number.
 8. **Content age across sources (INV-2c).** A presented results-table field flips from `tcp` to `xml`
    only if the snapshot's content age, as property 5 reads it, is later than the presented
    `tcp` observation's `observedAt` (property 5's guard is this rule applied to retraction); a
-   `changedAfter: null` snapshot, the first read after start or `setPath`, therefore never flips one. A flip
+   `changedAfter: null` snapshot (`DERIVATIONS.md` §0.3: no stat since start or `setPath` showed
+   another signature) therefore never flips one. A flip
    from `xml` to `tcp` needs no such check: a `tcp` observation's content age is its `observedAt`.
    From the same source, a later-ingested observation may present any `eventTime`, an earlier one
    included; the checker never compares event times for precedence.
@@ -342,9 +345,12 @@ the step index, the Attempt, the field and the property number.
     (the `pair` standing's first publication, §5 step 1); a snapshot's category ranks raising or
     clearing an anomaly; or `scope.replaced`. A running athlete's tick never produces one. **A `classification`
     standing has no Attempts:** its entries come from the classification Phase's rows (§5 step 2), each
-    entry's `rank`, `order` and `decidedIn` equal its row's, its first publication is its first row
-    observation (a scope snapshot of the Phase with no rows before that publishes nothing), each
-    scope snapshot of the Phase replaces its rows whole, and it changes only at such a snapshot or
+    entry's `rank` and `order` equal its row's and its `decidedIn` its row's or, where a `tcp` row
+    states `null`, the last `xml` row's for that `entryId`; its first publication is its first row
+    observation (a scope snapshot of the Phase with no rows before that publishes nothing); each
+    scope snapshot of the Phase that passes INV-2c's guard across sources (`DERIVATIONS.md` §4.10:
+    an `xml` snapshot against `tcp`-built rows needs a later `changedAfter`, `null` never; a `tcp`
+    snapshot always) replaces its rows whole, and it changes only at such a snapshot or
     `scope.replaced`. The spike's checker
     applied the Attempt clause to it and reported 673 violations on the Cross event result (XER), which
     was never part of a spike window (`DECISIONS/ADR-017` Revision 4). A classification row is

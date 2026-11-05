@@ -152,3 +152,12 @@ the new finish present (S1-20). The second-run retraction cases are completed: a
 retracts the mark in `status` too (recorded: a cleared second-run DNS, then the athlete raced), and an
 XML second-run row with no time is the time-empty case, not a first-run retraction, since before run 2
 every such row already carries the combined placement with no time (S1-6, S1-7).
+
+## Revision 3 — the guard reads `changedAfter` (2026-11-05, second pass 2026-11-06)
+
+Decision 4 and the first revision state the guard as "detected more than one poll interval after"
+and "`lastRewriteDetectedAt` minus the poll interval". Since round 18 the content age is the
+reader's `changedAfter` (`ADR-003` Revision 6; `CONTRACTS.md` §4 INV-2c), `null` on a first read,
+which never qualifies. The re-baseline's own read (decision 8, step 2) carries the same stamp.
+An absent XML row and an XML table with no rows are not retractions (INV-7, XML bullet); TCP's
+absent row and start-list table remain so.
