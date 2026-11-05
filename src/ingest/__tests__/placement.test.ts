@@ -74,8 +74,8 @@ describe('§4.7 placement, pairTotal, countingRun, qualified, heats', () => {
     expect(rowOf(parseTcp(TCP.resultsJuniorXt, ctx()), 'MX1J_XT_26_JUN', '12').qualified).toBe(true);
     expect(rowOf(parseXmlSnapshot(xmlFixture('cross.xml'), ctx()), 'WX1J_XS_26_JUN', '1').qualified).toBe(true);
   });
-  it('§4.7 qualified is unavailable{not-applicable} where the format has no progression (slalom BR1)', () => {
-    expect(rowOf(parseTcp(TCP.resultsBr1, ctx()), 'K1M_BR1_19', '83').qualified).toEqual({ state: 'unavailable', reason: 'not-applicable' });
+  it('§4.7 round 17 ruling 14: qualified is known false on a run Phase without a cut (slalom BR1), not unavailable', () => {
+    expect(rowOf(parseTcp(TCP.resultsBr1, ctx()), 'K1M_BR1_19', '83').qualified).toBe(false);
   });
   it('§4.7 Behind is not placement data and Category ranks are not read from rows without CatId (XML bib 1 has <CatId />)', () => {
     expect(JSON.stringify(rowOf(slalomXml(), 'K1M_BR2_19', '1'))).not.toMatch(/atRnk|categoryRank/);
