@@ -61,9 +61,13 @@ describe('§3 Entry', () => {
     const m = en(parseXmlSnapshot(x, ctx()), 'members', 'T.K1MT')?.value as El[];
     expect(m.map((p) => p.familyName)).toEqual(['RIGHT']);
   });
-  it('§3 externalId is null (unavailable not-applicable) when the element is absent (synthetic participant without ICFId)', () => {
+  it('§3 round 17 ruling 27: no per-member envelope: an absent ICFId is externalId null inside the known members value, and no members[0].externalId element exists', () => {
     const x = mini(person('5.K1M', { cls: 'K1M' }));
-    expect(obsOf(parseXmlSnapshot(x, ctx()), 'members[0].externalId', { entryId: '5.K1M' })).toMatchObject({ state: 'unavailable', reason: 'not-applicable' });
+    const els = parseXmlSnapshot(x, ctx());
+    const o = en(els, 'members', '5.K1M');
+    expect(o).not.toHaveProperty('state');
+    expect((o?.value as El[])[0]).toHaveProperty('externalId', null);
+    expect(JSON.stringify(els)).not.toContain('members[0]');
   });
   it('§3 TCP carries no registry number: no externalId in any element of a Results message', () => {
     expect(JSON.stringify(parseTcp(TCP.resultsBr1, ctx()))).not.toMatch(/externalId|ICFId|icf/i);

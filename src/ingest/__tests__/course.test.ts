@@ -58,9 +58,15 @@ describe('§2.3 Course', () => {
     expect(s.every((x) => x.caption === undefined)).toBe(true);
     expect(course(crossXml(), 'captions', '1')).toBeUndefined();
   });
-  it('§2.3 TCP RaceConfig refreshes the bound course: layout "DNNRNNNER" (S markers stripped by TCP), captions ST,1,2,3,4,5,6,RZ,7 at the same slot index', () => {
+  it('§2.3 review O2 / round 17 ruling 12: RaceConfig states no sectorEndsAfterGate and no layout (TCP strips the S markers; they are the snapshot\'s alone), for slalom and Cross', () => {
+    for (const msg of [TCP.raceConfigCross, TCP.raceConfigSlalom]) {
+      const els = parseTcp(msg, ctx());
+      expect(els.filter((e: El) => e.field === 'sectorEndsAfterGate' || e.field === 'layout')).toEqual([]);
+      expect(JSON.stringify(els)).not.toContain('sectorEndsAfterGate');
+    }
+  });
+  it('§2.3 TCP RaceConfig refreshes gates, slots, splitsAfterGate and captions of the bound course: captions ST,1,2,3,4,5,6,RZ,7 at the same slot index', () => {
     const els = parseTcp(TCP.raceConfigCross, ctx());
-    expect(course(els, 'layout', '1')).toMatchObject({ value: 'DNNRNNNER', source: 'tcp' });
     expect(course(els, 'captions', '1')?.value).toEqual(['ST', '1', '2', '3', '4', '5', '6', 'RZ', '7']);
     expect(course(els, 'slots', '1')?.value).toEqual(CROSS_SLOTS);
   });
@@ -83,7 +89,7 @@ describe('§2.3 Course', () => {
   it('§2.3 fabricated course (a): empty gate string while the count is non-zero (NrGates="25", GateConfig="")', () => {
     const els = parseTcp(rc({ NrGates: '25', GateConfig: '', GateCaptions: '' }), ctx());
     expect(course(els, 'gates', '1')).toMatchObject({ state: 'unavailable', reason: 'not-configured' });
-    expect(course(els, 'layout', '1')).toMatchObject({ state: 'unavailable', reason: 'not-configured' });
+    expect(course(els, 'layout', '1')).toBeUndefined(); // ruling 12: never emitted from RaceConfig
   });
   it('§2.3 fabricated course (b): captions empty while the gate string is not (NrGates="23" matching, GateCaptions="")', () => {
     const els = parseTcp(rc({ GateCaptions: '' }), ctx());

@@ -27,16 +27,17 @@ describe('§4.2 Kayak Cross status and order', () => {
   it('§4.2 the finished status carries no eventTime, is authoritative, from the channel it arrived on', () => {
     const els = parseTcp(TCP.resultsHeatPlaced, ctx());
     const o = obsOf(els, 'status', { attemptId: 'WX1J_XS_26_JUN:7' });
-    if (o) {
-      expect(o).toMatchObject({ source: 'tcp', confidence: 'authoritative' });
-      expect(o).not.toHaveProperty('eventTime');
-    }
+    expect(o).toBeDefined();
+    expect(o).toMatchObject({ source: 'tcp', confidence: 'authoritative' });
+    expect(o).not.toHaveProperty('eventTime');
     expect(JSON.stringify(els)).not.toContain('eventTime');
   });
   it('§4.2 XML: Rnk non-empty gives finished for a heat row, source xml (WX1J_XS_26_JUN bib 1 Rnk 1)', () => {
     const els = parseXmlSnapshot(xmlFixture('cross.xml'), ctx());
     expect(statusOf(els, 'WX1J_XS_26_JUN', '1')).toBe('finished');
-    expect(obsOf(els, 'status', { attemptId: 'WX1J_XS_26_JUN:1' }) ?? { source: 'xml' }).toMatchObject({ source: 'xml' });
+    const o = obsOf(els, 'status', { attemptId: 'WX1J_XS_26_JUN:1' });
+    expect(o).toBeDefined();
+    expect(o).toMatchObject({ source: 'xml' });
   });
   it('§4.2 in a Cross heat a listing is on-course although chStart=0 and dtStart is empty (WX1J_XS bib 2)', () => {
     expect(obsOf(parseTcp(TCP.onCourseHeat, ctx()), 'status')).toMatchObject({ attemptId: 'WX1J_XS_26_JUN:2', value: 'on-course' });

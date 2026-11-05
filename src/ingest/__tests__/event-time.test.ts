@@ -31,10 +31,11 @@ describe('§0.2 eventTime', () => {
   it('§0.2 autumn switch 2026-10-25: 3:30:00, after the repeated hour, is +01:00 (02:30Z)', () => {
     expect(instant(finish('3:30:00.000', phaseDate('2026-10-25'))?.eventTime)).toBe(Date.UTC(2026, 9, 25, 2, 30, 0));
   });
-  it('§0.2 the repeated hour: 2:30:00 on 2026-10-25 yields a valid eventTime, one of the two instants (00:30Z or 01:30Z)', () => {
-    // DERIVATIONS does not say which of the two; both are accepted here and the gap is recorded in the result file.
-    const t = instant(finish('2:30:00.000', phaseDate('2026-10-25'))?.eventTime);
-    expect([Date.UTC(2026, 9, 25, 0, 30, 0), Date.UTC(2026, 9, 25, 1, 30, 0)]).toContain(t);
+  it('§0.2 review correction: the repeated hour pins the later instant, standard time: 2:30:00 on 2026-10-25 is 01:30Z', () => {
+    expect(instant(finish('2:30:00.000', phaseDate('2026-10-25'))?.eventTime)).toBe(Date.UTC(2026, 9, 25, 1, 30, 0));
+  });
+  it('§0.2 the skipped spring hour is shifted forward by the gap: 2:30:00 on 2026-03-29 is 03:30 CEST = 01:30Z', () => {
+    expect(instant(finish('2:30:00.000', phaseDate('2026-03-29'))?.eventTime)).toBe(Date.UTC(2026, 2, 29, 1, 30, 0));
   });
   it('§0.2 the day after the autumn switch is +01:00', () => {
     expect(instant(finish('9:00:00.000', phaseDate('2026-10-26'))?.eventTime)).toBe(Date.UTC(2026, 9, 26, 8, 0, 0));

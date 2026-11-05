@@ -46,6 +46,16 @@ describe('§1 Class', () => {
       '<Schedule><RaceId>ZZ1_BR1_19</RaceId><ClassId>ZZ1</ClassId><DisId>BR1</DisId></Schedule><Schedule><RaceId>ZZ1_XS_19</RaceId><ClassId>ZZ1</ClassId><DisId>XS</DisId></Schedule>');
     expect(obsOf(parseXmlSnapshot(x, ctx()), 'discipline', { classId: 'ZZ1' })?.value).toBe('cross');
   });
+  it.each(['SLER', 'WWER'])('§1 review O1: a slalom class with a %s Phase is not cross (BR1 + classification token; only XER is a Cross classification)', (tok) => {
+    const x = miniXml('<Classes><ClassId>ZZ1</ClassId><Class>ZZ</Class></Classes>',
+      `<Schedule><RaceId>ZZ1_BR1_19</RaceId><ClassId>ZZ1</ClassId><DisId>BR1</DisId></Schedule><Schedule><RaceId>ZZ1_${tok}_19</RaceId><ClassId>ZZ1</ClassId><DisId>${tok}</DisId></Schedule>`);
+    expect(obsOf(parseXmlSnapshot(x, ctx()), 'discipline', { classId: 'ZZ1' })).toMatchObject({ value: 'slalom', confidence: 'inferred' });
+  });
+  it('§1 review O1: XER is on the Cross list of §1, so BR1 + XER is cross (the boundary is SLER/WWER, not the whole classification family)', () => {
+    const x = miniXml('<Classes><ClassId>ZZ1</ClassId><Class>ZZ</Class></Classes>',
+      '<Schedule><RaceId>ZZ1_BR1_19</RaceId><ClassId>ZZ1</ClassId><DisId>BR1</DisId></Schedule><Schedule><RaceId>ZZ1_XER_19</RaceId><ClassId>ZZ1</ClassId><DisId>XER</DisId></Schedule>');
+    expect(obsOf(parseXmlSnapshot(x, ctx()), 'discipline', { classId: 'ZZ1' })?.value).toBe('cross');
+  });
   it('§1 ageCategories from XML.Classes/Categories: id and name only (K1M: 8 rows, ZM "Žáci mladší" first, SV "Super veteráni" last)', () => {
     const v = obsOf(slalom(), 'ageCategories', { classId: 'K1M' })?.value as El[];
     expect(v).toHaveLength(8);
