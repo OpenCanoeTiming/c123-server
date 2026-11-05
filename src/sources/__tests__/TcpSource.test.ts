@@ -182,23 +182,16 @@ describe('TcpSource', () => {
     }
     expect(connectionCount).toBeGreaterThanOrEqual(1);
 
+    // Observe the client side: connect() emits 'connecting' synchronously, so no accept
+    // latency is involved (a connect already in flight at stop() may still be accepted by
+    // the server later, which is why the server-side count is not asserted).
+    const afterStop: SourceStatus[] = [];
+    source.on('status', (status) => afterStop.push(status));
     source.stop();
 
-    // A connect() already in flight when stop() ran may still be accepted by
-    // the server afterwards (loopback accept latency, worse under CPU load).
-    // That is not a reconnect: let the count settle before taking the
-    // baseline, so only connections initiated after stop() can fail the test.
-    let countAfterStop = -1;
-    let stableChecks = 0;
-    while (stableChecks < 3 && Date.now() < deadline + 5000) {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      stableChecks = connectionCount === countAfterStop ? stableChecks + 1 : 0;
-      countAfterStop = connectionCount;
-    }
-
-    // Wait well past several reconnect delays (initial 50ms) and verify no more connections
+    // Wait well past several reconnect delays (initial 50ms): no reconnect attempt may start
     await new Promise((resolve) => setTimeout(resolve, 300));
-    expect(connectionCount).toBe(countAfterStop);
+    expect(afterStop).not.toContain('connecting');
     expect(source.status).toBe('disconnected');
   });
 
