@@ -22,8 +22,13 @@ describe('real TCP excerpts', () => {
   it('TVS nkz-19so: Odd_Bib 55 / Even_Bib 54 of K1M_BR1_19 parse', () => {
     noFailure(parseTcp(TCP.tvs, ctx()));
   });
-  it('RaceConfig nkz-19so: 23 gates, layout RNNNNRNNRNNRNNNNRNNRNNN', () => {
-    expect(obsOf(parseTcp(TCP.raceConfigSlalom, ctx()), 'layout', { courseId: '1' })?.value).toBe('RNNNNRNNRNNRNNNNRNNRNNN');
+  it('RaceConfig nkz-19so per §2.3: supplies 23 gates, slots and splitsAfterGate; layout and sectorEndsAfterGate are absent (snapshot-only)', () => {
+    const els = parseTcp(TCP.raceConfigSlalom, ctx());
+    expect((obsOf(els, 'gates', { courseId: '1' })?.value as any[])).toHaveLength(23);
+    expect((obsOf(els, 'slots', { courseId: '1' })?.value as any[])).toHaveLength(23);
+    expect(obsOf(els, 'splitsAfterGate', { courseId: '1' })).toBeDefined();
+    expect(obsOf(els, 'layout')).toBeUndefined();
+    expect(obsOf(els, 'sectorEndsAfterGate')).toBeUndefined();
   });
   it('RaceConfig cp3-cross: DNNRNNNER with captions ST,1,2,3,4,5,6,RZ,7', () => {
     expect(obsOf(parseTcp(TCP.raceConfigCross, ctx()), 'captions', { courseId: '1' })?.value).toEqual(['ST', '1', '2', '3', '4', '5', '6', 'RZ', '7']);
