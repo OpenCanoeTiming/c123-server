@@ -3,14 +3,16 @@
  * CONFORMANCE-VECTORS §1 (content age, ingest units).
  */
 import { describe, it, expect } from 'vitest';
-import { createXmlReader } from '../xml-reader.js';
+import { createXmlReader, XML_UNREACHABLE_AFTER_FAILED_POLLS } from '../xml-reader.js';
 import { parseXmlSnapshot } from '../index.js';
 import { ctx } from './helpers.js';
 import { fakeClock, fakeFs, file, whole, truncated, malformed, phaseIds, iso, T0, type FakeFile } from './xml-reader-harness.js';
 
 const P = '/data/event.xml';
 
-function setup(opts: { files?: Record<string, FakeFile>; path?: string | undefined; pollIntervalSeconds?: number } = {}) {
+function setup(opts: { files?: Record<string, FakeFile>; path?: string | undefined; pollIntervalSeconds?: number;
+  /** Runs inside onUnit / onStatus before the test's own recording; may throw. */
+  deliver?: (els: Array<Record<string, any>>) => void; statusHook?: (s: Record<string, any>) => void } = {}) {
   const clock = fakeClock();
   const f = fakeFs(clock, opts.files ?? { [P]: file('slalom.xml', 1000) });
   const units: Array<Array<Record<string, any>>> = [];
@@ -19,8 +21,8 @@ function setup(opts: { files?: Record<string, FakeFile>; path?: string | undefin
     path: 'path' in opts ? opts.path : P,
     pollIntervalSeconds: opts.pollIntervalSeconds ?? 5,
     clock, fs: f.fs, ctx: ctx(),
-    onUnit: (els: Array<Record<string, any>>) => { units.push(els); },
-    onStatus: (s: Record<string, any>) => { statuses.push(s); },
+    onUnit: (els: Array<Record<string, any>>) => { opts.deliver?.(els); units.push(els); },
+    onStatus: (s: Record<string, any>) => { statuses.push(s); opts.statusHook?.(s); },
   });
   const last = () => statuses[statuses.length - 1];
   /** Advance in small steps until `n` stats have happened. */
@@ -355,12 +357,27 @@ describe('XML reader: review objections (PR #250)', () => {
     const s = setup();
     s.f.ctl.readMs = 1500;
     s.reader.start();
-    await s.clock.advance(2000);
-    s.f.files[P] = file('cross.xml', 2000); // changes after the first read, so a later poll reads again
+    await s.clock.advance(7000);
+    s.f.files[P] = file('cross.xml', 2000); // changes after the first read (baseline exists), so a later poll reads again
     await s.clock.advance(40000);
-    const at = s.f.statLog.map((x) => x.at);
-    expect(at.length).toBeGreaterThanOrEqual(5);
-    for (let i = 1; i < at.length; i++) expect(at[i]! - at[i - 1]!).toBe(5000);
+    expect(s.f.readLog.length).toBeGreaterThanOrEqual(2);
+    // polls only: extra stats between polls (a read's post-read check) are allowed, a poll missing from the grid is not
+    const first = s.f.statLog[0]!.at;
+    const at = new Set(s.f.statLog.map((x) => x.at));
+    for (let k = 0; first + k * 5000 <= first + 35000; k++) expect(at.has(first + k * 5000), `poll at first + ${k} * 5000`).toBe(true);
+    s.reader.stop();
+  });
+
+  it('O2 §0.3 the first read gets the moved-during-read check too: a file that moves during the first read gives one unit, the final content (INV-2c, INV-7 guard)', async () => {
+    const s = setup();
+    s.f.duringNextRead(() => { s.f.files[P] = file('cross-untimed.xml', 3000); });
+    s.reader.start();
+    await s.clock.advance(5100);
+    await s.clock.advance(60000);
+    expect(s.units.length).toBe(1);
+    expect(phaseIds(s.units[0]!).sort()).toEqual(phaseIds(parseXmlSnapshot(whole('cross-untimed.xml'), ctx()) as Array<Record<string, any>>).sort());
+    expect(s.units[0]![0]!.observedAt).toBe(iso(s.f.statLog[0]!.at));
+    expect(s.f.readLog.length).toBeLessThanOrEqual(2);
     s.reader.stop();
   });
 
@@ -423,6 +440,84 @@ describe('XML reader: review objections (PR #250)', () => {
     await s.clock.advance(6000);
     expect(s.last()?.state).toBe('connected');
     expect(s.units.length).toBe(1);
+    s.reader.stop();
+  });
+});
+
+/** Listen for unhandled rejections on the process for the duration of fn; the listener is removed afterwards. */
+async function withRejectionWatch(fn: () => Promise<void>): Promise<unknown[]> {
+  const seen: unknown[] = [];
+  const h = (reason: unknown) => { seen.push(reason); };
+  process.on('unhandledRejection', h);
+  try {
+    await fn();
+    await new Promise<void>((r) => { setImmediate(r); }); // real macrotask: let the process raise pending rejections
+    await new Promise<void>((r) => { setImmediate(r); });
+  } finally {
+    process.off('unhandledRejection', h);
+  }
+  return seen;
+}
+
+describe('XML reader: a throw inside a poll (review N1, DERIVATIONS §5: a source failure is a state, not an exit)', () => {
+  it('N1 §5 onUnit throws once: no unhandled rejection, the poll is failed (reconnecting), timers keep firing, the next poll redelivers the same content with the first detection stamp (INV-2c)', async () => {
+    let calls = 0;
+    const s = setup({ deliver: () => { calls++; if (calls === 1) throw new Error('boom'); } });
+    const seen = await withRejectionWatch(async () => {
+      s.reader.start();
+      await s.toPoll(1);
+      await s.clock.advance(1000);
+      expect(calls).toBe(1);
+      expect(s.units.length).toBe(0); // the throwing delivery was not a delivery
+      expect(s.last()?.state).toBe('reconnecting');
+      const stats = s.f.statLog.length;
+      await s.clock.advance(5100);
+      expect(s.f.statLog.length).toBeGreaterThan(stats); // the next poll ran
+      await s.clock.advance(5000);
+    });
+    expect(seen).toEqual([]);
+    expect(calls).toBeGreaterThanOrEqual(2);
+    expect(s.units.length).toBe(1);
+    const det = iso(s.f.statLog[0]!.at);
+    expect(phaseIds(s.units[0]!).sort()).toEqual(phaseIds(parseXmlSnapshot(whole('slalom.xml'), ctx()) as Array<Record<string, any>>).sort());
+    expect(s.units[0]![0]!.event).toBe('xml-rewrite-detected');
+    expect(s.units[0]![0]!.observedAt).toBe(det); // first detection, not the retry time
+    expect(s.last()?.lastRewriteDetectedAt).toBe(det);
+    expect(s.last()?.state).toBe('connected');
+    s.reader.stop();
+  });
+
+  it('N1 §5 onUnit always throws: unreachable after XML_UNREACHABLE_AFTER_FAILED_POLLS polls, reconnecting before, no crash', async () => {
+    const s = setup({ deliver: () => { throw new Error('boom'); } });
+    const N = XML_UNREACHABLE_AFTER_FAILED_POLLS;
+    const seen = await withRejectionWatch(async () => {
+      s.reader.start();
+      await s.toPoll(1);
+      const first = s.f.statLog[0]!.at;
+      await s.clock.advance(first + (N - 2) * 5000 + 1000 - s.clock.now()); // N - 1 polls done
+      expect(s.last()?.state).toBe('reconnecting');
+      await s.clock.advance(5000); // the N-th poll
+      expect(s.last()?.state).toBe('unreachable');
+      await s.clock.advance(20000);
+      expect(s.last()?.state).toBe('unreachable');
+    });
+    expect(seen).toEqual([]);
+    expect(s.units.length).toBe(0);
+    s.reader.stop();
+  });
+
+  it('N1 §5 onStatus throws: no unhandled rejection, polling continues', async () => {
+    let armed = false;
+    const s = setup({ files: {}, statusHook: () => { if (armed) throw new Error('boom'); } });
+    const seen = await withRejectionWatch(async () => {
+      s.reader.start();
+      armed = true;
+      await s.toPoll(1);
+      const n = s.f.statLog.length;
+      await s.clock.advance(15500);
+      expect(s.f.statLog.length - n).toBeGreaterThanOrEqual(3);
+    });
+    expect(seen).toEqual([]);
     s.reader.stop();
   });
 });
