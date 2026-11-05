@@ -1454,7 +1454,9 @@
           "observedAt": "2026-09-15T10:14:02.400Z",
           "source": "tcp"
         },
-        "notifications": 1,
+        "notifications": {
+          "attempt.updated": 1
+        },
         "note": "the rotation re-sends the same row 30 s later; one client-visible change only."
       },
       "context": {

@@ -63,7 +63,12 @@ component runs"); 17 run in both suites.
 **Round 14** (2026-11-05, server#200) stated that split, made the two live lists total over every tag,
 gave `live-explicit-not-yet-resets-field` the `context.tier: 'live'` the other five `live-ingest`
 vectors already carried, and turned the last three prose `notifications` into data (the object form in
-§1); no vector asserts anything different. `note` is commentary and is never asserted.
+§1); no vector asserts anything different. `note` is commentary and is never asserted. It also stated
+the **ingest unit** (`CONTRACTS.md` §1.6, a behavioural rule: messages are emitted per upstream
+message, in a vector consecutive observations with the same `source` and `observedAt`), and retired
+the number form of `notifications`: `inv5-identical-redelivery-is-a-noop` now asserts
+`{ "attempt.updated": 1 }`, which is what INV-5 means there (a correct core also sends the
+`standing.updated` §5 step 3 requires for the new unplaced entry, which the map does not assert).
 
 ---
 
@@ -130,7 +135,9 @@ Each vector has:
   `CONTRACTS.md` §1.2); every event, scope snapshot and live-tier element is a unit of its own. A
   harness applying element by element finds the boundary by looking at the next element: it flushes
   notifications when the next element is not an observation with the same `source` and `observedAt`,
-  and after the last element. Each observation keeps its own `ingestSeq`, which still orders the merge
+  and after the last element. A merge port may take a unit whole (`applyUnit(elements)`) or one element
+  at a time with a flush at the boundary; either satisfies this. Each observation keeps its own
+  `ingestSeq`, which still orders the merge
   within the unit. No `afterGivenIndex` in the file falls inside a unit, and none may.
 
 **Which vectors each component runs.** Each component feeds its own merge function through a thin
@@ -191,7 +198,7 @@ invariants" means exactly this subset.
 - `notifications` asserts the number of client-visible messages, one per changed resource: a
   second-run Phase has a `phase` and a `pair` standing (`CONTRACTS.md` §5), so one serialised change
   there is two `standing.updated`; a creation message counts once however many snapshots preceded it.
-  It is a number (every message of the vector), or a map from message type (`CONTRACTS.md` §7.2 on
+  It is a map from message type (`CONTRACTS.md` §7.2 on
   site, §8.4 on live) to a count or to an object `{ count, afterGivenIndex?, attemptId?, scope?,
   fields? }`: `count` (required) is the number of messages of that type that match the filters;
   `afterGivenIndex` counts only messages of ingest units whose elements all follow that 0-based index

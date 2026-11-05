@@ -27,6 +27,12 @@ response types, `WsMessage` (§7.2), the §7.3/§7.4 request bodies, the §8.3 p
 `LivePhase`, and the §8.4 public response, stream and heartbeat types. `error.schema.json` now
 enforces the per-code `details`; `fixture-admitted.schema.json` compiles under a strict validator.
 
+**Revision, 2026-11-05 (contract round 14, server#200).** One behavioural rule, stated where it was
+implied: **the unit of ingest is one upstream message** (§1.6). Every observation one TCP message,
+XML snapshot, operator write, connection event or re-baseline yields (on live, one §8.3 request) is
+merged before anything is emitted, and then at most one message per changed resource is sent; a core
+may apply observations one at a time but notifies per unit. No wire shape changed.
+
 ---
 
 ## 0. How to read this document
