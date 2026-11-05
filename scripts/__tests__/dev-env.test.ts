@@ -1,4 +1,4 @@
-import { execFile, execFileSync } from 'node:child_process'
+import { execFile, execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import net from 'node:net'
 import { tmpdir } from 'node:os'
@@ -30,6 +30,7 @@ function run(args: string[], opts: { env?: NodeJS.ProcessEnv; cwd?: string; scri
 }
 
 const tmpDirs: string[] = []
+const spawned: ChildProcess[] = []
 const stateDirs: string[] = []
 
 function tmp(prefix = 'devenv-'): string {
@@ -75,6 +76,48 @@ function processesFor(stateDir: string): boolean {
     return true
   } catch { return false }
 }
+function countProcesses(stateDir: string): number {
+  try {
+    const out = execFileSync('pgrep', ['-f', stateDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')]).toString()
+    return out.trim().split('\n').filter(Boolean).length
+  } catch { return 0 }
+}
+async function waitFor(cond: () => boolean, ms = 30_000): Promise<boolean> {
+  const end = Date.now() + ms
+  while (Date.now() < end) {
+    if (cond()) return true
+    await new Promise((x) => setTimeout(x, 50))
+  }
+  return cond()
+}
+function tryReadState(stateDir: string): any {
+  try { return readState(stateDir) } catch { return undefined }
+}
+/** Starts `up` and keeps the handle (for signals). */
+function startUp(docs: string, stateDir: string, env: NodeJS.ProcessEnv = {}) {
+  const child = spawn(process.execPath, [SCRIPT, '--recording', 'rec-1', '--protocol-docs', docs, '--state-dir', stateDir],
+    { cwd: ROOT, env: baseEnv(env), stdio: ['ignore', 'pipe', 'pipe'] })
+  spawned.push(child)
+  let stderr = ''
+  child.stderr!.on('data', (d) => { stderr += d })
+  child.stdout!.on('data', () => {})
+  const exit = new Promise<{ code: number | null; stderr: string }>((resolve) => {
+    child.on('close', (code) => resolve({ code, stderr }))
+  })
+  return { child, exit }
+}
+function stranger(): number {
+  const c = spawn('sleep', ['300'], { stdio: 'ignore', detached: true })
+  spawned.push(c)
+  return c.pid!
+}
+function writeStrangerState(stateDir: string, pid: number) {
+  mkdirSync(stateDir, { recursive: true })
+  writeFileSync(path.join(stateDir, 'state.json'), JSON.stringify({
+    recording: 'rec-1', speed: 1, xmlPath: path.join(stateDir, 'replay.xml'), startedAt: new Date().toISOString(),
+    player: { pid, tcpPort: 1, controlPort: 2 }, server: { pid: 999999, port: 3 },
+  }))
+}
 const baseEnv = (extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => {
   const env = { ...process.env, ...extra }
   delete env.C123_PROTOCOL_DOCS
@@ -92,7 +135,11 @@ afterEach(async () => {
       pids = [st.player?.pid, st.server?.pid].filter((p) => typeof p === 'number')
     } catch { /* no state */ }
     await run(['--down', '--state-dir', s], { env: baseEnv() })
+    try { execFileSync('pkill', ['-9', '-f', s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')]) } catch { /* none left */ }
     for (const p of pids) { try { process.kill(p, 'SIGKILL') } catch { /* gone */ } }
+  }
+  for (const c of spawned.splice(0)) {
+    try { if (c.pid) process.kill(c.pid, 'SIGKILL') } catch { /* gone */ }
   }
   for (const d of tmpDirs.splice(0)) rmSync(d, { recursive: true, force: true })
 })
@@ -285,6 +332,91 @@ describe('dev-env', () => {
       expect(r.stderr).toContain('--protocol-docs')
       expect(r.stderr).toContain('C123_PROTOCOL_DOCS')
       expect(r.stderr).toContain(path.join(parent, 'c123-protocol-docs'))
+    }, T)
+  })
+
+  describe('failure paths (review of #219)', () => {
+    it('down: leaves a process that is not this env\'s alone', async () => {
+      const state = makeState()
+      const pid = stranger()
+      writeStrangerState(state, pid)
+      const d = await run(['--down', '--state-dir', state], { env: baseEnv() })
+      expect(d.code, d.stderr).toBe(0)
+      expect(isAlive(pid)).toBe(true)
+      expect(existsSync(path.join(state, 'state.json'))).toBe(false)
+    }, T)
+
+    it('up: reused pid in stale state does not refuse', async () => {
+      const docs = makeDocs(), state = makeState()
+      const pid = stranger()
+      writeStrangerState(state, pid)
+      const r = await up(docs, state)
+      expect(r.code, r.stderr).toBe(0)
+      const st = readState(state)
+      expect(await status(`http://127.0.0.1:${st.player.controlPort}/status`)).toBe(200)
+      expect(await status(`http://127.0.0.1:${st.server.port}/api/status`)).toBe(200)
+      expect(isAlive(pid)).toBe(true)
+    }, T)
+
+    for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+      it(`up: ${sig} leaves nothing`, async () => {
+        const docs = makeDocs(), state = makeState()
+        const { child, exit } = startUp(docs, state, { STUB_PLAYER_MODE: 'silent' })
+        expect(await waitFor(() => typeof tryReadState(state)?.player?.pid === 'number')).toBe(true)
+        child.kill(sig)
+        const r = await exit
+        expect(typeof r.code === 'number' && r.code !== 0, `exit ${r.code}`).toBe(true)
+        expect(await waitFor(() => !processesFor(state), 5_000)).toBe(true)
+        expect(existsSync(path.join(state, 'state.json'))).toBe(false)
+        expect(existsSync(path.join(state, 'up.lock'))).toBe(false)
+      }, T)
+    }
+
+    it('down: reaches an up killed with SIGKILL', async () => {
+      const docs = makeDocs(), state = makeState()
+      const { child, exit } = startUp(docs, state, { STUB_PLAYER_MODE: 'silent' })
+      expect(await waitFor(() => typeof tryReadState(state)?.player?.pid === 'number')).toBe(true)
+      child.kill('SIGKILL')
+      await exit
+      expect(processesFor(state)).toBe(true) // orphans exist, so --down has something to reach
+      const d = await run(['--down', '--state-dir', state], { env: baseEnv() })
+      expect(d.code, d.stderr).toBe(0)
+      expect(await waitFor(() => !processesFor(state), 5_000)).toBe(true)
+    }, T)
+
+    it('up: concurrent up on one state dir has one winner', async () => {
+      const docs = makeDocs(), state = makeState()
+      const [a, b] = await Promise.all([up(docs, state), up(docs, state)])
+      const codes = [a.code, b.code]
+      expect(codes.filter((c) => c === 0)).toHaveLength(1)
+      const loser = a.code === 0 ? b : a
+      expect(loser.code).not.toBe(0)
+      expect(loser.stderr.toLowerCase()).toContain('already running')
+      const st = readState(state)
+      expect(isAlive(st.player.pid)).toBe(true)
+      expect(isAlive(st.server.pid)).toBe(true)
+      expect(countProcesses(state)).toBe(2)
+      const d = await run(['--down', '--state-dir', state], { env: baseEnv() })
+      expect(d.code, d.stderr).toBe(0)
+      expect(await waitFor(() => !processesFor(state), 5_000)).toBe(true)
+    }, T)
+
+    it('up: player dying after answering fails', async () => {
+      const docs = makeDocs(), state = makeState()
+      const r = await up(docs, state, [], { STUB_PLAYER_MODE: 'die-after' })
+      expect(r.code).not.toBe(0)
+      expect(r.stderr).toContain('player.log')
+      expect(await waitFor(() => !processesFor(state), 5_000)).toBe(true)
+      expect(existsSync(path.join(state, 'state.json'))).toBe(false)
+    }, T)
+
+    it('down: unreadable state.json fails loudly', async () => {
+      const state = makeState()
+      mkdirSync(state, { recursive: true })
+      writeFileSync(path.join(state, 'state.json'), '{"recording": "rec-1", "play')
+      const d = await run(['--down', '--state-dir', state], { env: baseEnv() })
+      expect(d.code).not.toBe(0)
+      expect(d.stderr).toContain('state.json')
     }, T)
   })
 

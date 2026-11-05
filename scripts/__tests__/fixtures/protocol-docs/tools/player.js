@@ -15,10 +15,15 @@ fs.writeFileSync(path.join(path.dirname(xmlOut), 'player-argv.json'), JSON.strin
 fs.writeFileSync(xmlOut, '<?xml version="1.0"?><Canoe123Data></Canoe123Data>\n')
 const tcp = net.createServer((s) => s.on('error', () => {}))
 tcp.listen(Number(opt('--port')), '127.0.0.1')
+// STUB_PLAYER_MODE=silent: binds but never answers health.
+// STUB_PLAYER_MODE=die-after: answers /status, exits 500 ms after the first answer.
+const mode = process.env.STUB_PLAYER_MODE
 const ctl = http.createServer((req, res) => {
+  if (mode === 'silent') return
   if (req.url === '/status') {
     res.setHeader('content-type', 'application/json')
     res.end(JSON.stringify({ state: 'playing' }))
+    if (mode === 'die-after') setTimeout(() => process.exit(4), 500)
   } else {
     res.statusCode = 404
     res.end()
