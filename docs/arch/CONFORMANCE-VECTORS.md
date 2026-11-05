@@ -45,10 +45,6 @@ earlier finish superseding — and added 1: a finisher stays in the on-course se
 (14 vectors), reshaped `rerun-stale-mark-not-presented` to the usual arrival order, fixed an
 out-of-range `afterGivenIndex`, and gave `inv2-rule3-single-source-field` a second field.
 
-**Round 12** (2026-10-15, `DECISIONS/ADR-017` Revision 4) removed every input finish time from TCP rows
-(14 vectors), reshaped `rerun-stale-mark-not-presented` to the usual arrival order, fixed an
-out-of-range `afterGivenIndex`, and gave `inv2-rule3-single-source-field` a second field.
-
 **Round 9** (2026-10-14, `DECISIONS/ADR-017`) fixed `rerun-stale-mark-not-presented` (its `then` mark is
 presented), dropped `finishTime` from TCP snapshot rows, gave every merge vector a `context.attemptId`,
 and added 8: TCP attribution by run time (with the result push arriving before the on-course finish,
@@ -90,6 +86,17 @@ every presented gate, an unlisted presented gate being `plain`; a source-less ob
 its own, and the `given`/`then` seam is always a unit boundary. Checked against the spike core on all
 87 server vectors: 84 pass, the same three as before (values, not matching).
 
+**Round 17** (2026-11-05, server#240, #243, #247, the #201 review) ruled the parsers' and the
+checker's open cases before the merge core (#203). Two vectors stop asserting an envelope at
+`members[0].externalId`, a path no deployable serves: `inv3-not-applicable-external-id` and
+`live-bare-value-wrapped-as-bridge` now assert `externalId: null` inside `members`' `known` value
+(`CONTRACTS.md` §2.5), which is what they meant, a person with no registry identity fully
+renderable; no vector uses a path any more. `live-classification-rows-replaced-whole` writes
+`decidedIn` as upstream's round token (`F`, `SF`), not a format token. §1 states the shape of a
+classification Phase's scope snapshot (`ClassificationRow`s), the `untimed` row flag, and that `run`
+on an observation is stamped by the core (`DERIVATIONS.md` §0.5, §4.11). Nothing any vector asserts
+changed.
+
 ---
 
 ## 1. Format
@@ -109,7 +116,8 @@ Each vector has:
   - `ingestSeq`, `field`, `source` (`tcp`, `xml` or `operator-write`) and `kind` (`inference`,
     `result-row` or `operator`);
   - `observedAt`, `value` and `confidence`;
-  - optionally `eventTime` and `run`, the run generation;
+  - optionally `eventTime` and `run`, the run generation (stamped by the core at attribution,
+    `DERIVATIONS.md` §4.11; the parser emits none);
   - optionally `judgingComplete` (whether every course gate is judged in this observation; `null`
     where no course is configured) and `runClosed`;
   - optionally `attemptId`; a vector whose observations carry none names its Attempt in
@@ -118,10 +126,6 @@ Each vector has:
   Observations are *resolved*: `DERIVATIONS.md` has already turned wire fields into these values.
   These vectors test the merge, not the derivation. A `status` inference of `on-course` or `finished`
   implies an observed start (`DERIVATIONS.md` §4.1). **A `tcp` `result-row` observation, and a `tcp`
-  snapshot row, never carries `eventTime` or `finishTime` on input** (`ADR-017` D1): the finish reaches
-  the merge only as an on-course `inference` — `status: finished` or an `outcome` with `eventTime` —
-  and a row is attributed to it by `outcome.runSeconds`; an attributed row's presented `outcome` then
-  carries the finish as `eventTime`. Live-tier pushes are resolved values and may carry it. **A `tcp` `result-row` observation, and a `tcp`
   snapshot row, never carries `eventTime` or `finishTime` on input** (`ADR-017` D1): the finish reaches
   the merge only as an on-course `inference` — `status: finished` or an `outcome` with `eventTime` —
   and a row is attributed to it by `outcome.runSeconds`; an attributed row's presented `outcome` then
@@ -138,10 +142,15 @@ Each vector has:
 - **Scope snapshots** (INV-7). `{ ingestSeq, snapshot: { source, phaseId, mode, rows }, observedAt }`.
   `mode` is `results` or `start-list`; each row carries `bib` and the resolved fields the row states
   (`outcome`, `placement`, `pairTotal`, `status` for a mark, `judgingComplete`, `timeEmpty` for a
-  second-run row with no run-2 time, and `finishTime` **on XML rows only**: a TCP row carries no finish
+  second-run row with no run-2 time, `untimed` for a placed row with no finish time — resolved on
+  the XML row by the parser and already inherited onto a TCP row of the same Attempt by the core,
+  `DERIVATIONS.md` §4.4 — and `finishTime` **on XML rows only**: a TCP row carries no finish
   time, and INV-2d and generation attribution match it by `outcome.runSeconds`). A row's `placement` is
   given resolved: `null` where upstream's `Rank` is empty, whatever its `RankOrder`
-  (`DERIVATIONS.md` §4.7). A row that carries nothing states no result.
+  (`DERIVATIONS.md` §4.7). A row that carries nothing states no result. **A scope snapshot of a
+  classification Phase** (`CONTRACTS.md` §2.4) carries `CONTRACTS.md` §8.3 `ClassificationRow`s
+  instead — `entryId`, `bib`, `rank`, `order`, `decidedIn`, the last `null` where only TCP has stated
+  the row — and creates no Attempt (`DERIVATIONS.md` §4.10).
 - **On-course listing.** An observation with `field: 'onCourse'` and
   `value: { dtStart, dtFinish }` states what the on-course stream lists for the Attempt (INV-2d).
 - A `kind: 'fragment'` observation stands for any single-row, non-snapshot message.
@@ -151,8 +160,8 @@ Each vector has:
 - **Scope of a field.** A `field` in an observation and an unprefixed key in `expect`,
   `expectSequence` or `then` name a field of the Attempt, unless the name exists only on its Entry
   (`CONTRACTS.md` §2.5: `displayName`, `members`, `club`, `nation`, `ageCategoryId`, `eventBib`,
-  `isTeam`) or only on its Phase (§2.4), in which case they name that resource's field; a path
-  (`members[0].externalId`) resolves by its first segment. `status` and `scheduledStart` exist on
+  `isTeam`) or only on its Phase (§2.4), in which case they name that resource's field. No key is a
+  path: a member's field is asserted inside `members`' `known` `value` under the subset rule below. `status` and `scheduledStart` exist on
   both the Attempt and the Phase, and `scope` decides: a vector's `scope: 'phase'` makes them the
   Phase's; an observation's own `scope` says the same for that element and overrides the vector's;
   `'entry'`, `'attempt'` or absent, they are the Attempt's. `scope: 'entry'` says the vector is
@@ -190,7 +199,7 @@ Each vector has:
   at a time with a flush at the boundary; either satisfies this. Each observation keeps its own
   `ingestSeq`, which still orders the merge
   within the unit. No `afterGivenIndex` in the file falls inside a unit, and none may. **Two edges:**
-  a source-less observation (the `unavailable` ones) states no upstream message, so it is a unit of
+  a source-less observation (the `unavailable` one) states no upstream message, so it is a unit of
   its own and never groups with a neighbour; and the seam between `given` and `then` is always a
   unit boundary, since `then` follows an asserted intermediate state, which can only exist at one.
 
@@ -198,8 +207,8 @@ Each vector has:
 adapter (`TEST-ARCHITECTURE.md` §3.1); the sets overlap, and each suite asserts its own count.
 
 **c123-server runs 87: every vector not tagged `live-ingest`.** The tag is the rule; apart from it,
-every merge vector is on-site material (`tcp`, `xml` and `operator-write` observations, the two
-source-less `unavailable` observations, connection and operator events, scope snapshots and
+every merge vector is on-site material (`tcp`, `xml` and `operator-write` observations, the
+source-less `unavailable` observation, connection and operator events, scope snapshots and
 on-course listings), and all 8 `standing-assembly` and all 5 `workflow-state` vectors are the
 server's (`ARCHITECTURE.md` §3: c123-server owns the on-site domain layer whole, `CONTRACTS.md` §4
 and §5 with the anomaly checks, and the checks store). It runs **none of the six `live-ingest`
@@ -399,11 +408,11 @@ presented-state fact, covered by `inv2b-disagreement-surfaced-not-adopted`.
 12. **`afterGivenIndex` indexes `given` only.** A `then` step cannot be asserted mid-way; a vector that
     needs an intermediate assertion after a `then` element moves that element into `given`. One vector
     had an out-of-range index and was silently never evaluated (R4b).
-11. **No TCP row carries a finish on input** (round 12, opponent review). Fourteen vectors gave a TCP
-    result-row observation or snapshot row an `eventTime`/`finishTime`, and the one meant to catch a
-    stale mark in a re-run could only pass with it. They now supply the finish as an on-course inference
-    where they need it, and `rerun-stale-mark-not-presented` delivers the stale row before the finish,
-    the usual order, which is where the spike's core presented the stale DNF.
-12. **`afterGivenIndex` indexes `given` only.** A `then` step cannot be asserted mid-way; a vector that
-    needs an intermediate assertion after a `then` element moves that element into `given`. One vector
-    had an out-of-range index and was silently never evaluated (R4b).
+13. **No per-member envelope** (round 17, server#240). Two vectors asserted `unavailable{not-applicable}`
+    at `members[0].externalId`; `members` is the wrapped unit and a member's `externalId` is `null`
+    (`CONTRACTS.md` §2.5), so no deployable serves that path. They now assert the `null` inside
+    `members`' value; what they assert is unchanged, and no vector uses a path.
+14. **A classification snapshot carries `ClassificationRow`s** (round 17, server#243). The checker could
+    not tell which row shape property 15 reads; it is `CONTRACTS.md` §8.3's flat row, `decidedIn` being
+    upstream's round token or `null`. `live-classification-rows-replaced-whole` wrote `XF`/`XS` for it and
+    now writes `F`/`SF`; whole replacement and relay, which it asserts, are unchanged.

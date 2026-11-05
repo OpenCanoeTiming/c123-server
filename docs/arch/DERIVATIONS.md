@@ -62,6 +62,12 @@ spring races sit next to one (the spike's replay used `+02:00`, a shortcut the d
   Canoe123's clock is the official time, and the contract never compares `eventTime` with
   `observedAt`.
 - A race crossing midnight is not handled, and is not a real case.
+- **At a DST switch** (stated for determinism; no race runs at night): a time of day in the repeated
+  autumn hour resolves to the later instant, standard time (`2:30:00` on 2026-10-25 in
+  `Europe/Prague` is `01:30Z`); one in the skipped spring hour is shifted forward by the gap.
+- **Who builds it** (§0.5). The parser builds `eventTime` when `ctx` carries the Phase's date;
+  otherwise it emits the bare time of day (`H:MM:SS.fff`) in the value and no `eventTime`, and the
+  core builds it from the inferred date (§2.1) at the ingest seam. The vectors see only the result.
 - **Failure mode:** no configured zone means `eventTime` is omitted, never guessed.
 
 ### 0.3 Scope snapshots and the XML read
@@ -97,8 +103,36 @@ These are never domain entities:
 - **The staged-without-race sentinel.** On-course rows or result rows with `RaceId="<unassigned>"`
   (with empty `Id` and `Name` on TCP) never become a Phase or an Attempt. The snapshot also has a
   pseudo-schedule row of the same name.
-- **The pseudo-class `NA`**, "not entered or assigned".
+- **The pseudo-class `NA`**, "not entered or assigned", with every Schedule row, Phase and result row
+  of it (a sample carried a Schedule row `NA_Unknown_28`): the filter is by class, so what belongs to
+  the class goes with it.
 - **Row-number, print, finance and UI columns** (§9).
+
+### 0.5 The parser and the core
+
+The parser is a pure function of one upstream message and a context the core supplies (`ctx`: the
+course bound to each Phase, the Phase dates the snapshot has stated, the participants index, the
+Phase table). It emits that message's resolved values and per-message diagnostics, nothing else.
+**It never emits `run`, never attributes to a generation, never inherits across messages and never
+retracts.** The core owns everything that needs state:
+- the run generation and attribution, which stamp `run` on each observation (§4.11);
+- `eventTime` where `ctx` had no Phase date (§0.2);
+- course binding, `gates` and Cross `faults` from retained cells, and the `unavailable{not-configured}`
+  determination (§4.6);
+- the untimed flag's inheritance by a TCP row (§4.4);
+- the on-course set, the leave rule and `featuredByUpstream` (§4.1, §4.8);
+- the splits-armed state (§2.3, §4.8), the cell merge (§4.6(e)), retraction and contradiction (§4.12),
+  echo matching (§6), `provisional`, and the diagnostics that compare observations
+  (`source-disagreement`, `contradicted-finish`, `duplicate-finish`, `stale-mark`).
+
+The parser raises `unparseable-cell` and `member-sum-mismatch` (`CONTRACTS.md` §4) and four
+ingest-only kinds that reach the admin log and never `GET /api/diagnostics`: `unknown-format-token`
+(a format token outside `CONTRACTS.md` §2.4's table; the Phase is still built by the table's last
+row), `unresolved-member` (a team member reference matching no participant, §3), `unparseable-field`
+(an attribute whose text is not of its type, such as a `Rank` with an empty `RankOrder`, §4.7, or a
+time that does not parse) and `gates-absent` (a finished slalom on-course listing without `Gates`,
+§4.6(a): no duration inference is possible). A parser diagnostic reports, never guesses: a value it
+cannot read is absent, not invented.
 
 ---
 
@@ -146,6 +180,9 @@ These are never domain entities:
     `confidence: 'authoritative'`.
   - `pair.siblingPhaseId` is the Phase with the same `classId` and the first-run token. When several
     exist, take the one with the same schedule date. This mirrors upstream's own pairing behaviour.
+    Until the schedule names it, `siblingPhaseId` is `null`; `role` and `combination` are the token's
+    regardless, so §4.4's second-run reading applies from the first row. An `NHT2` has `pair: null`
+    until its first-run token is known (§10 item 21); its rows read as a single run meanwhile.
 - **`date`.**
   - Source: the date part of `XML.Schedule.StartTime`, a full date-time with offset. Envelope:
     `source: 'xml'`, `confidence: 'authoritative'`.
@@ -188,11 +225,15 @@ These are never domain entities:
   - `D` is the Kayak Cross start ramp (caption `ST`) and `E` the roll zone (`RZ`). Each is a judging
     slot that does not advance the gate number. Build `Course.slots` from the layout: one slot per
     `N`/`R`/`D`/`E`, in order, with `gateNumber` for `N`/`R` only and the caption from
-    `RaceConfig.GateCaptions` at the same index. `S` and `I` produce no slot.
+    `RaceConfig.GateCaptions` at the same index. `S` and `I` produce no slot. An `S` or `I` before
+    the first gate (`DS…`, after the Cross ramp) records nothing.
 - **Refresh from TCP.**
   - `RaceConfig.GateConfig` is the currently selected course's layout. TCP strips the `S` markers.
   - `RaceConfig` gives no course number. Use it only to refresh the course of the currently running
-    Phase.
+    Phase, and only its `gates`, `slots`, `splitsAfterGate` and `captions` (`source: tcp`); `layout`
+    and `sectorEndsAfterGate` are the snapshot's alone and are never emitted from `RaceConfig`
+    (`CONTRACTS.md` §2.12). The parser emits `splitsArmed` from `NrSplits`; what `splits` presents is
+    the core's (§4.8).
   - `RaceConfig.GateCaptions` gives `captions`. Captions are TCP only.
   - `RaceConfig.NrSplits` says whether splits are armed. Zero means no split times will come.
 - **Ignore upstream's transmitted gate count** (`RaceConfig.NrGates`). The stream substitutes 30 when
@@ -219,14 +260,17 @@ These are never domain entities:
     `ICFId`, then `GivenName2`/`FamilyName2`/`Birthdate2`/`ICFId2` when present.
   - A team (`IsTeam`) comes from `Member1..3`. These are participant `Id`s in the XML. Resolve each
     against the participants index **by whole-string match**, never by parsing.
-  - On TCP, `Results.Member1..3` are already resolved to display names, and are emitted only when set.
-    Use them only as a pre-snapshot fallback for display. They never give identity.
+  - A member reference that matches no participant leaves `members` `not-yet` for the Entry and
+    raises `unresolved-member` (§0.5); no partial crew is emitted.
+  - On TCP, `Results.Member1..3` are display names only and are not carried: `displayName` already
+    shows the team's name, and identity comes from the snapshot.
   - A team's own `ICFId` is synthetic and not carried.
 - **`externalId`.**
   - `value` is `ICFId`, or `ICFId2` for the second member, from the snapshot only: **TCP carries no
     registry number.**
   - `scheme` is supplied by bridge configuration, never derived (`CONTRACTS.md` §6, [N]).
-  - When the element is absent, `externalId` is `null`, which maps to `unavailable{not-applicable}`.
+  - When the element is absent, `externalId` is `null`, served as `null` inside the `known` `members`
+    value (`CONTRACTS.md` §2.5); it is never wrapped.
 - **`birthDate`.**
   - Source: `Birthdate`, as entered. Many organisers enter only the year, as `YYYY-01-01`.
   - The on-site serialisation derives `birthYear` from it, falling back to `XML.Participants.Year`.
@@ -322,7 +366,10 @@ it carries: a DNF row can keep a time, even another athlete's finish (`CONTRACTS
   - `DNS`, `DNF`, `CAP`, `RAL`, `DSQ`, `DSQ-R` and `DQB` map to `dns`, `dnf`, `cap`, `ral`, `dsq`,
     `dsq-r` and `dqb`.
   - `NON-RK` maps to `non-ranked`, a finished run excluded from ranking.
-  - `*` means `underReview: true`, with the run otherwise `finished`.
+  - `*` means `underReview: true`, with the run otherwise `finished`. Every result row that carries a
+    time, a mark or a placement states `underReview`, `false` without the mark, so a withdrawn `*`
+    clears; a row that stated it only when true could never clear it (INV-1). A row carrying none of
+    the three states nothing (INV-7's blank row, `CONFORMANCE-VECTORS.md` §1).
   - Empty with a time means `finished`.
   - Any other value maps to `other`.
 - **No-results arrive only here, and not always promptly.**
@@ -348,7 +395,8 @@ it carries: a DNF row can keep a time, even another athlete's finish (`CONTRACTS
   heat, `RankOrder` alone is the lane order from the first judging push and is not a placement
   (observed: WX1_XS_26, every row `RankOrder` 1–4 with empty `Rank`, `Time` and `IRM` until the
   operator asserted the order athlete by athlete). The placement is the operator's assertion, entered
-  after conferring with the finish judge.
+  after conferring with the finish judge. The same rule gives an untimed row (§4.4) its status: a
+  placed row never seen on course is `finished` (47 junior time-trial Attempts at cp3-cross, E1).
 - `source` is the channel it arrived on, with `confidence: 'authoritative'`, no `eventTime` and
   `provisional: false`. It is pushed with no debounce.
 - Until then the Attempt stays `on-course`, even after the heat has left the on-course list together.
@@ -357,7 +405,7 @@ it carries: a DNF row can keep a time, even another athlete's finish (`CONTRACTS
 
 **`running`.**
 - `elapsedSeconds` is `OnCourse.Result[T]@Time`, whole seconds while running. `penaltySeconds` is
-  `@Pen`.
+  `@Pen`; in a Kayak Cross time trial it is `0` by rule (§4.4), `@Pen` being ignored in Cross (§4.6(d)).
 - The value is upstream's own display. It includes a configurable offset, and during a split hold it
   shows the split time. It is relayed as displayed: `confidence: 'authoritative'`,
   `provisional: true`.
@@ -393,8 +441,17 @@ unavailable{not-applicable}`, whatever `Time` says. Recorded: junior Cross time-
 `Time="100.00" Total="100.00" Pen="" Gates=""` and real ranks, later rank × 1000; 24 of 32 rows of
 one class kept the placeholder through the semi-finals. Untimed is read from the snapshot row
 (`dtFinish` empty, time and placement present) and inherited by the TCP row of the same Attempt, which
-carries no finish time of its own; before the first snapshot a TCP row is presumed timed. Recorded: 46
-junior time-trial Attempts at cp3-cross, 0 elsewhere.
+carries no finish time of its own; before the first snapshot a TCP row is presumed timed. Recorded: 47
+junior time-trial Attempts at cp3-cross by the raw rule over all 98 snapshots (43 in the final one;
+`WX1J_XT_26_JUN:25` appears in 30), 0 in every slalom snapshot checked (jarni-ne-do, E1). The flag
+is the parser's on an XML row (`dtFinish` empty, time and placement present); its inheritance by the
+Attempt's TCP rows is the core's (§0.5). The vectors carry it resolved on either row (`untimed: true`).
+
+**Kayak Cross time trial** (`XT`, `XT1`, `XT2`; duration-scored). `runSeconds = Time`,
+`penaltySeconds = 0` and `totalSeconds = runSeconds` by rule (`CONTRACTS.md` §2.6): Cross has no time
+penalties, `Pen` is ignored (§4.6(d)), and upstream's own rows agree (`Pen 0`, `Total = Time`, 293 of
+293). The on-course finish of an `XT` run gives the same shape as §4.3's inference with
+`penaltySeconds: 0`; `faults` carries the judging.
 
 **TCP, single run or the first run of a pair.** `runSeconds = Results.Result@Time`,
 `penaltySeconds = @Pen`, `totalSeconds = @Total`.
@@ -412,8 +469,7 @@ combined values.
 - `pairTotal = @Total`.
 - **Never use `@Pen` or `@Total` for run 2.** They describe the *counting* run: when run 1 is better,
   they are run 1's figures. Run 1 was better in 41% of recorded second-run finishes. They are not a
-  reliable run-1 source either. Run 1 comes from its own first-run row, or from the XML's `Prev*`
-  fields.
+  reliable run-1 source either. Run 1 is the first-run Attempt's own (§4.5).
 - **Evidence.** The final TCP row matched the XML's run-2 time and gate cells in 982 of 982
   second-run finishes, across six recordings: 407 of them with run 1 better. Every penalty change
   pushes the row immediately, even when run 1 stays the better run, because the push is triggered by
@@ -462,7 +518,11 @@ itself changes. Run 1's own detail is therefore available:
   - The first run's own `XML.Results` row is frozen from its finish onward: across 610 snapshots of
     one day it had exactly two byte states.
   - The second run's row also carries `PrevTime`, `PrevPen`, `PrevTotal`, `PrevStatus`, `PrevRnk` and
-    `PrevRnkOrder`.
+    `PrevRnkOrder`. **They are not read** (round 17, server#201 O3). They restate the first-run row of
+    the same snapshot, on the second-run Attempt, which has no field for run 1's figures
+    (`CONTRACTS.md` §2.6: a second run's `outcome` is run 2's own); they carry no `dtFinish`, so
+    nothing could attribute them to a generation (§4.11); and the first-run row is complete and
+    frozen. Run 1 is the first-run Attempt, `siblingPhaseId:bib`, with its own generation.
   - A cold read of one day's final snapshot recovered 397 first runs and 384 second runs complete.
   - Envelope: `source: 'xml'`, `confidence: 'authoritative'`.
 - **(b) From this server's own retained observation**, if it was running during run 1 (INV-1).
@@ -492,11 +552,39 @@ slalom course every slot is a gate, so cell `i` is gate `i+1`.
 - Chunk from the left by 3. A missing cell is blank. Trim each chunk; blank means `null`, otherwise
   parse as an integer. **A cell that is not an integer parses as `null` and raises
   `unparseable-cell`:** the field is free text in the operator's grid, and a recorded row carried a
-  note in it (`"pozor !!!!!"`, `Pen="1"`). Keep the first `slotCount` cells.
+  note in it (`"pozor !!!!!"`, `Pen="1"`). Keep the first `slotCount` cells; cells beyond it belong
+  to no slot and raise nothing (a recorded 127-character `Gates` carried the remains of a note in
+  cells 22–23 of an 18-slot course).
 - **Never split on whitespace.** That collapses blanks and shifts every later gate: `EVIDENCE.md`
   Exhibit 2.
 - The previous rule, `width = length / gateCount`, was wrong on every row of a 23-gate course. On a
   9-gate Cross course it divided evenly as width 10, which is silently wrong.
+
+**No course bound yet** (§0.5). With no course in `ctx` the parser emits the parsed cells as they
+stand — `cells`, 30 from a fixed-width string, every token from an on-course string — and no `gates`
+or `faults`, and raises no `unparseable-cell`, since a cell may belong to no slot. The core retains
+the latest cells per source and decides among three states:
+- **`not-yet`** until one of the other two holds (`CONTRACTS.md` §1.2): a real `RaceConfig` seen
+  while the snapshot is still pending decides nothing.
+- **`known`** once a snapshot binds a course to the Phase — `courseId` known and that Course's `gates`
+  known; only the snapshot carries course numbers (`CONTRACTS.md` §2.12), so a `RaceConfig` never
+  binds — built from the retained cells: `Gate[]` from the first `slotCount` cells, or in Kayak Cross
+  `faults` from the cells and the captions (d); the parser's cell→`Gate[]`/`faults` function is
+  reused.
+- **`unavailable{not-configured}`** when nothing configured can supply a course: the XML source is
+  not configured (`SourceStatus.xml`, §5), so nothing can ever bind; the snapshot shows the Phase with
+  no `CourseNr`, or a course whose layout is empty (the snapshot's determination); or the `RaceConfig`
+  of the current Phase is fabricated by §2.3's tests (the parser's determination, from the gate
+  string, the transmitted count and the captions; the core holds it per Phase until a non-fabricated
+  `RaceConfig` clears it or a snapshot binds). A snapshot that later binds a real course replaces it
+  with `known`.
+
+The core presents whichever state holds at a step that carries gate cells for the Attempt — a result
+row or an on-course listing — or at a scope snapshot of its race, never at the `RaceConfig` or
+`SourceStatus` step itself (`TEST-ARCHITECTURE.md` §3.2 properties 3 and 4). The spike's replay
+windows reached this path: S1-12 (cold-start finishers whose completeness is unknown until the course
+binds) and S1-30 (an Attempt listed while no course is bound), the case property 11 names as "the
+results push precedes the first snapshot" (`DECISIONS/ADR-017` D4); whole recordings were not counted.
 
 **(c) Team rows** (`TR1/TR2`, `TSR`, `TS1/TS2/TSF`, `TFI`; source and static sample only, no recording).
 - `Gates` holds the per-gate **sum** over the members (4, 52, 100, 150…). Upstream computes it from
@@ -508,8 +596,11 @@ slalom course every slot is a gate, so cell `i` is gate `i+1`.
   crew-level edit made upstream; present the crew cell, raise `member-sum-mismatch`.
 
 **(d) Kayak Cross.** Settled against the source and the recorded Cross event (E1):
-- The cells are **fault marks**, not penalty seconds: only `""`, `0` and `2` occur. `gates` is
-  `unavailable{not-applicable}` for Cross Attempts.
+- The cells are **fault marks**, not penalty seconds: only `""`, `0` and `2` occur; any other text is
+  `unparseable-cell` and `null`. `gates` is `unavailable{not-applicable}` for Cross Attempts.
+- `faults` is `not-yet` while no cell is judged: a `{ count: 0, gates: [], lastCleanSlot: 0 }` would
+  assert a judging that has not happened. Once any cell is judged it is emitted whole, `provisional`
+  under §4.4's rule read over the slot cells.
 - **`faults` is derived from the cells plus the captions, on TCP and in the XML alike:** `count` is
   the number of cells marked `2`; `gates` lists those slots' captions (`ST`, `1`…`6`, `RZ`, `7`);
   `lastCleanSlot` is upstream's 1-based **slot position** (not the gate number: `ST` and `RZ` count) of
@@ -550,7 +641,9 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   upstream by the run that did not count.
 - **An empty `Rank` means no placement: `not-yet`.** `RankOrder` alone is upstream's grid sort key — a
   marked row's keeps moving as other athletes finish, a Cross heat's is the lane order — and is carried
-  for no one. `placement` is `known` iff `Rank` is non-empty; `ral` rows carry one.
+  for no one. `placement` is `known` iff `Rank` is non-empty; `ral` rows carry one. A `Rank` with an
+  empty `RankOrder` (never recorded) gives no `placement` and raises `unparseable-field`; nothing is
+  invented.
 - **Never read `OnCourse.Result[T]@Rank` as placement.** At the start of a second run it holds the
   first run's rank. It is blank for most first-run finishes.
 - **Upstream pushes the second-run race whenever the first run changes.** So a second-run Attempt has
@@ -570,8 +663,13 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   time.
 - **`scheduledStart`.** In slalom, `StartTime` (`H:MM:SS`) is the scheduled start, built per §0.2.
 - **`startOrder`** is `@StartOrder`.
-- **`qualified`** is `Results.Result@Q` or `XML.Results.Qualified`, equal to `"Q"`. Where the Phase's
-  format has no progression, it is `unavailable{not-applicable}`.
+- **`qualified`** is `Results.Result@Q` or `XML.Results.Qualified`, equal to `"Q"`, stated `known` on
+  every result row that carries a time, a mark or a placement (a blank row states nothing, INV-7) in a
+  Phase whose `stage` is not `final`, `super-final` or `classification`; on a `run` Phase without a
+  cut this is `known: false` throughout. On
+  those three it is `unavailable{not-applicable}`, except that a row there carrying `Q` is still
+  presented `true`: a stated fact is never dropped. The boundary is by `stage` (round 17, E4;
+  recorded: `Q` throughout the junior time trial, E1).
 - **`underReview`** is §4.1's `*` mark.
 
 ### 4.8 On-course extras
@@ -591,12 +689,15 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
 - **`timeToBeat`** comes from `OnCourse.Result[T]@TTBDiff`.
   - An unsigned value (`88.38`) is `mode: 'target'`.
   - A signed value (`+1.23`, `-0.40`) is `mode: 'delta'`.
-  - An empty value is `not-yet`.
+  - An empty value emits nothing: the field is `not-yet` before the first value, and the last value
+    stands until the run's end (INV-1; run-scoped).
   - `holder` is `@TTBName`.
   - It is never a rank.
 - **`splits`.**
   - Source: `OnCourse.Result[C]@dtSplit1/2`, or `XML.Results.dtSplit1..3`, minus `dtStart`.
   - Only when splits are armed (`RaceConfig.NrSplits > 0`); `unavailable{not-applicable}` otherwise.
+    The armed state is the core's, from the parser's `splitsArmed` (§2.3); the parser emits `splits`
+    whenever a split time is present.
   - No recorded event armed splits, so this derivation is source-verified only.
 
 ### 4.9 `entry` (the mutable pointer)
@@ -614,7 +715,12 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   reach the classification until it is pressed again. The Standing is relayed as last built, with its
   own `observedAt`; nothing is recomputed. `RXER` is a title only and never carries rows.
 - `rank` and `order` come from `Rnk`/`RnkOrder`. `decidedIn` comes from `RecordType` (`F`, `SF`,
-  `1/2`, `1/4`, `T`).
+  `1/2`, `1/4`, `T`), verbatim: an open token, not a format (`CONTRACTS.md` §2.7). TCP's
+  classification rows carry no `RecordType`: a row's `decidedIn` is `null` until the snapshot states
+  it for that `entryId`, and the core keeps the snapshot's across later TCP rows.
+- On site the rows reach the core as a scope snapshot of the classification Phase whose rows are
+  `CONTRACTS.md` §8.3 `ClassificationRow`s (`CONFORMANCE-VECTORS.md` §1); the gate-2 checker reads
+  that shape (`TEST-ARCHITECTURE.md` §3.2 property 15).
 - Upstream generates these rows from the rounds. They are relayed, never recomputed.
 
 ### 4.11 `run` (run generation)
@@ -645,6 +751,10 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   sequence is present-with-score → present-empty → gone → present-with-new-score, never a straight
   wipe. M1 replays it (`DECISIONS/ADR-017`).
 - On increment, the run-scoped fields become `not-yet`, and the change is pushed.
+- **`run` is the core's** (§0.5). The parser emits no `run`; the core stamps the generation on each
+  observation when it attributes it (below), and that stamped element is what the replay log and the
+  vectors carry (`CONFORMANCE-VECTORS.md` §1). An observation the parser marked `run: 1` would claim
+  a generation it cannot know.
 - **Attribution per source.** An XML row whose `dtFinish` precedes the new generation's start
   describes the replaced run. A TCP row carries no finish time: within a generation that began with
   an observed new start, it is the current generation's only once that generation's finish has been
@@ -861,6 +971,13 @@ changes: a late correction, a retraction, a contradiction, a re-baseline. The di
 20. **Provisional is computed on the presented gates; `status` is never provisional** (D4; §4.4).
 21. **The leave rule has a number**, `onCourseLeaveAfterSeconds` = 3 s, and `at-start` is any listing
     without a start (S1-8, S1-16, S1-17; §4.1).
+22. **The parser/core line is stated** (round 17, 2026-11-05, server#201 review and #247; §0.5).
+    the six `Prev*` run-1 columns are not read (§4.5); `run` is stamped by the core (§4.11); cells are retained before a
+    course binds (§4.6); the untimed flag is the parser's and its inheritance the core's, 47 Attempts
+    (§4.4); an untimed row is `finished` (§4.2); an `XT` `duration` carries `penaltySeconds: 0`
+    (§4.4); `faults` is `not-yet` until a cell is judged (§4.6(d)); `qualified` is bounded by `stage`
+    (§4.7); every row states `underReview` (§4.1); `decidedIn` is `null` from TCP (§4.10); DST
+    arithmetic and the `NA` schedule rows are stated (§0.2, §0.4); `Member1..3` are not carried (§3).
 
 ---
 
@@ -903,6 +1020,7 @@ but no code path or recording ever filled it.
 | `Results.TieBreaker` | Upstream's internal tie key. Its effect reaches us already applied, in the order fields |
 | `Results.GateTimes` | **Not gate passages.** Each stamp is the official time at which a judge first entered a penalty for the gate, minus 2 s. Gaps are back-filled in 2 s steps, and the order along the course is only approximately monotonic. If ever needed: `Gate.judgedAt`, `confidence: 'inferred'`, never an `eventTime` |
 | `Results.PrevRnk` (Cross meaning), `RoundNr`, `HasWildcard`, `Tag` | Cross ladder bookkeeping. Progression is relayed through `qualified` and the classification |
+| `Results.PrevTime`, `PrevPen`, `PrevTotal`, `PrevStatus`, `PrevRnk` (slalom meaning), `PrevRnkOrder` | Run 1's figures restated on the second-run row. Run 1 is its own Attempt, whose row is frozen and complete (§4.5); `PrevCatRnk*` stays the §5 step 4 check |
 | `Results.CheckList*`, `_*Order`, `Print*`, `Sector*`, `PrevGates`, `PrevSplit1`, `ForceTVSChannel`, `TVSStream*` | Internal: print copies, paper check-list workflow, TV routing |
 | `Events.Description`, `Country`, `NOC`, `TimeMode`, `TimingProvider`, `StartListsLocked`, report and logo fields, `ReportLanguage*`, `RankingOrderMode`, `AssignBibsReverse`, ODF codes, `CatHandling` | Free text, print layout, or never filled. Logos could brand a live page later. **Caution: `CanoeDiscipline` reads `Slalom` for a Cross event** |
 | `GateStatistics` (all) | Derivable from `gates`. Always zero for two-run formats in recordings |
@@ -920,7 +1038,7 @@ but no code path or recording ever filled it.
 
 Items 1–7 and 13 were answered from the source on 2026-09-25 (#179; E1); item 8 was closed by INV-2c
 on 2026-10-14; items 15 and 17 were answered by the spike and the exit-delay measurement. Items 9, 11,
-12, 16, 18, 19 and 20 remain.
+12, 16, 18, 19, 20 and 21 remain.
 
 1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
    hardware judge terminals on their own port and raises a flag on the scoring service for about
@@ -979,6 +1097,9 @@ on 2026-10-14; items 15 and 17 were answered by the spike and the exit-delay mea
     the on-course stream's before attributing.
 20. **`duplicate-finish` on TCP after D1.** The six recorded TCP instances were never replayed, and no
     replayed window raised one; M1 replays them.
+21. **`NHT2`'s first-run token.** `CONTRACTS.md` §2.4 pairs it "where upstream defines one"; which
+    schedule token it pairs with is unstated, so until the source answers an `NHT2` has `pair: null`
+    (§2.1). In no recording. (Round 17.)
 17. ~~The finish → on-course-exit interval per recording.~~ **Measured (E1, seven recordings, 1,995
     closures):** about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % in [18, 20) s), about
     47 s at cp3-cross (p90 57 s), manual closes under 5 s on the two NKZ days (12.6 %, 34.9 %) — the

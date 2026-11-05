@@ -65,7 +65,8 @@ export type Phase = {
   title: Observed<string>             // organiser-authored race title, where set — [D] xml
   status: Observed<PhaseStatus>       // [D] — §3.1
 }
-export type PairRole = { role: 'first' | 'second'; siblingPhaseId: string; combination: 'best' | 'sum' }
+export type PairRole = { role: 'first' | 'second'; siblingPhaseId: string | null; combination: 'best' | 'sum' }
+                                    // siblingPhaseId null until the schedule names the other run — DERIVATIONS §2.1
 
 export type Stage = 'run' | 'time-trial' | 'heats' | 'quarter-final' | 'semi-final' | 'final'
            | 'super-final' | 'classification'
@@ -76,7 +77,7 @@ export type Person = {
   givenName: string
   familyName: string
   birthDate?: string                  // YYYY-MM-DD as entered upstream; see "Birth date" below
-  externalId: ExternalId | null       // null = no registry identity at all (not-applicable)
+  externalId: ExternalId | null       // null = no registry identity at all; served as null on both tiers, never wrapped (§1.2)
 }
 
 export type Entry = {
@@ -112,7 +113,7 @@ export type Attempt = {
   pairTotal: Observed<number | null>   // second run of a pair only: the combined result, seconds
   countingRun: Observed<1 | 2>         // second run of a 'best' pair only: which run counts
   underReview: Observed<boolean>       // upstream's "under review" mark
-  qualified: Observed<boolean>         // progression mark (Q); not-applicable where unused
+  qualified: Observed<boolean>         // progression mark (Q): known on every placed or marked row, false without Q; not-applicable in a final, super-final or classification — DERIVATIONS §4.7
 }
 
 export type AttemptStatus =
@@ -158,12 +159,12 @@ export type StandingEntry = {
   bib: string
   rank: number | null          // relayed; age-category rank assembled — §5
   order: number | null         // null until placed
-  result: Outcome              // the Attempt's outcome when it is a result; { kind: 'pending' } while pending or running — §5
+  result: Outcome | null       // the Attempt's outcome when it is a result; { kind: 'pending' } while pending or running; null for an untimed row (outcome unavailable{not-applicable}, §2.6) — §5
   pairTotalSeconds?: number | null // pair scope only: the combined result the placement is based on
   behindSeconds: number | null // this entry's ranked value minus the leader's; duration scopes only
   provisional: boolean
   underReview: boolean
-  decidedIn?: string           // classification scope only: the format of the round that placed the athlete
+  decidedIn?: string | null    // classification scope only: upstream's own round token (F, SF, 1/2, 1/4, T), verbatim, not a format; null until the snapshot states it — DERIVATIONS §4.10
 }
 
 export type Anomaly =
@@ -284,7 +285,7 @@ export type EntryPutMember = { givenName: string; familyName: string; birthDate?
 export type EntryPut = { classId: string; displayName: string; isTeam: boolean; club: string | null; nation: string | null;
                   ageCategoryId: string | null; eventBib: string | null; members: EntryPutMember[] }
 export type AttemptPut = Partial<Omit<Attempt, 'attemptId' | 'phaseId' | 'bib'>>   // non-empty at runtime; identity is the path
-export type ClassificationRow = { entryId: string; bib: string; rank: number | null; order: number; decidedIn: string }
+export type ClassificationRow = { entryId: string; bib: string; rank: number | null; order: number; decidedIn: string | null }
 export type ClassificationPut = { rows: ClassificationRow[]; asOf: Timestamp }
 export type OnCoursePut = { attemptIds: string[]; featuredByUpstream: string | null }
 export type PhaseAttemptsPut = { attempts: ({ bib: string } & AttemptPut)[] }

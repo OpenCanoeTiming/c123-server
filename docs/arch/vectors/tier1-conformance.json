@@ -1335,14 +1335,22 @@
     {
       "id": "inv3-not-applicable-external-id",
       "invariant": "INV-3",
-      "description": "A person with no registry identity at all carries not-applicable, and the entry stays fully renderable.",
+      "description": "A person with no registry identity carries externalId null inside a known members value, never an unavailable envelope, and the entry stays fully renderable.",
       "given": [
         {
           "ingestSeq": 1,
-          "field": "members[0].externalId",
-          "state": "unavailable",
-          "reason": "not-applicable",
-          "observedAt": "2026-09-15T09:00:00.000Z"
+          "field": "members",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T09:00:00.000Z",
+          "value": [
+            {
+              "givenName": "",
+              "familyName": "FR51",
+              "externalId": null
+            }
+          ],
+          "confidence": "authoritative"
         },
         {
           "ingestSeq": 2,
@@ -1356,14 +1364,19 @@
       ],
       "scope": "entry",
       "expect": {
-        "members[0].externalId": {
-          "state": "unavailable",
-          "reason": "not-applicable"
+        "members": {
+          "state": "known",
+          "value": [
+            {
+              "externalId": null
+            }
+          ]
         },
         "displayName": {
           "state": "known",
           "value": "FR51"
-        }
+        },
+        "note": "members is the wrapped unit (CONTRACTS.md SS1.2, SS2.5); a null inside its value is the trichotomy's not-applicable stated as the type says, not as an envelope."
       },
       "context": {
         "attemptId": "K1M_BR1_6:9"
@@ -4278,7 +4291,7 @@
     {
       "id": "live-bare-value-wrapped-as-bridge",
       "invariant": "live-ingest",
-      "description": "On the live tier a bare Entry body is wrapped by the store: known values carry source bridge; a null becomes not-applicable.",
+      "description": "On the live tier a bare Entry body is wrapped by the store: known values carry source bridge; a null Entry field becomes not-applicable; a member's null externalId stays null inside members.",
       "context": {
         "tier": "live",
         "attemptId": "K1M_BR1_6:9"
@@ -4319,9 +4332,16 @@
           "state": "unavailable",
           "reason": "not-applicable"
         },
-        "members[0].externalId": {
-          "state": "unavailable",
-          "reason": "not-applicable"
+        "members": {
+          "state": "known",
+          "source": "bridge",
+          "value": [
+            {
+              "givenName": "Jan",
+              "familyName": "Novak",
+              "externalId": null
+            }
+          ]
         }
       }
     },
@@ -4826,21 +4846,21 @@
                 "bib": "4",
                 "rank": 1,
                 "order": 1,
-                "decidedIn": "XF"
+                "decidedIn": "F"
               },
               {
                 "entryId": "B",
                 "bib": "7",
                 "rank": 2,
                 "order": 2,
-                "decidedIn": "XF"
+                "decidedIn": "F"
               },
               {
                 "entryId": "C",
                 "bib": "9",
                 "rank": 5,
                 "order": 5,
-                "decidedIn": "XS"
+                "decidedIn": "SF"
               }
             ],
             "asOf": "2026-09-15T11:58:00.000Z"
@@ -4858,14 +4878,14 @@
                 "bib": "7",
                 "rank": 1,
                 "order": 1,
-                "decidedIn": "XF"
+                "decidedIn": "F"
               },
               {
                 "entryId": "A",
                 "bib": "4",
                 "rank": 2,
                 "order": 2,
-                "decidedIn": "XF"
+                "decidedIn": "F"
               }
             ],
             "asOf": "2026-09-15T12:29:00.000Z"
@@ -4902,13 +4922,13 @@
               "entryId": "B",
               "rank": 1,
               "order": 1,
-              "decidedIn": "XF"
+              "decidedIn": "F"
             },
             {
               "entryId": "A",
               "rank": 2,
               "order": 2,
-              "decidedIn": "XF"
+              "decidedIn": "F"
             }
           ]
         },
