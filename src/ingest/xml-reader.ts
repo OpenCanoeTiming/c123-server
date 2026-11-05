@@ -116,9 +116,8 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
     const stamp = iso(at);
     const unit: IngestElement[] = [{ event: 'xml-rewrite-detected', ingestSeq: 0, observedAt: stamp }];
     els.forEach((e, i) => unit.push({ ...e, ingestSeq: i + 1, observedAt: stamp }));
-    lastRewriteDetectedAt = stamp;
     opts.onUnit(unit);
-    report();
+    lastRewriteDetectedAt = stamp;
   }
 
   async function poll(my: number, p: string, polledAt: number): Promise<void> {
@@ -143,19 +142,18 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
       if (my !== epoch) return;
       last = r.kind;
       if (r.kind === 'ok') {
-        // With a baseline to protect, a stat that moved across the read makes it a failed attempt.
-        if (lastGood) {
-          let after: Sig | undefined;
-          try { after = await fs.stat(p); } catch { after = undefined; }
-          if (my !== epoch) return;
-          if (!after || !same(after, ref)) { last = 'moved'; if (after) { ref = after; pending = { sig: after, at: now() }; } report(); continue; }
-        }
-        const at0 = pending!.at;
+        // A stat that moved across the read makes it a failed attempt.
+        let after: Sig | undefined;
+        try { after = await fs.stat(p); } catch { after = undefined; }
+        if (my !== epoch) return;
+        if (!after || !same(after, ref)) { last = 'moved'; if (after) { ref = after; pending = { sig: after, at: now() }; } report(); continue; }
+        // Delivery first: a throwing onUnit leaves lastGood and pending as they were, so the next poll reads again.
+        emit(r.els, pending!.at);
         lastGood = ref;
         pending = undefined;
         failedPolls = 0;
         setState('connected');
-        emit(r.els, at0);
+        report();
         return;
       }
       report();
@@ -177,7 +175,14 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
     arm(intervalMs(), fire);
     if (busy) return;
     busy = true;
-    void poll(my, p, now()).finally(() => { if (my === epoch) busy = false; });
+    void poll(my, p, now())
+      .catch(() => {
+        // A throw inside a poll is a failed poll; the handler itself must not throw (onStatus may be the thrower).
+        if (my !== epoch) return;
+        failedPolls++;
+        try { setState(failedPolls >= XML_UNREACHABLE_AFTER_FAILED_POLLS ? 'unreachable' : 'reconnecting'); } catch { /* ignored */ }
+      })
+      .finally(() => { if (my === epoch) busy = false; });
   }
 
   function begin(): void {
