@@ -1,11 +1,11 @@
-import type { Outcome } from '@opencanoetiming/c123-contract';
+import type { Faults, Gate, Outcome, Placement, Split } from '@opencanoetiming/c123-contract';
 import {
   type CellProblem, type Fmt, type Unit, faultsFromCells, fixedCells, gatesFromCells, int, judgingComplete, markOf, r3, sumJudged, usable, zonedInstant,
 } from './common.js';
 import type { CourseSlot } from './types.js';
 
-const NA = { state: 'unavailable', reason: 'not-applicable' } as const;
 const NOT_CONFIGURED = { state: 'unavailable', reason: 'not-configured' } as const;
+const NA = { state: 'unavailable', reason: 'not-applicable' } as const;
 
 /** A results row of either interface, with units already normalised to seconds (§0.1). */
 export interface RowIn {
@@ -36,7 +36,6 @@ export interface RowIn {
     betterRun: string;
     memberGates: string[];
     splits: string[];
-    prev: { mark: string; time: number | undefined; pen: number | undefined; total: number | undefined; rank: string; rankOrder: string } | undefined;
   } | undefined;
 }
 
@@ -55,9 +54,9 @@ const todSeconds = (s: string): number | undefined => {
   return m === null ? undefined : Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) + Number((m[4] ?? '').padEnd(3, '0') || 0) / 1000;
 };
 /** `Result[C]@dtSplitN` / `XML.Results.dtSplitN` minus `dtStart` (§4.8). undefined when nothing is stated. */
-export function splitsOf(dtStart: string, splits: string[]): { number: number; elapsedSeconds: number }[] | undefined {
+export function splitsOf(dtStart: string, splits: string[]): Split[] | undefined {
   const start = todSeconds(dtStart);
-  const out: { number: number; elapsedSeconds: number }[] = [];
+  const out: Split[] = [];
   splits.forEach((s, i) => {
     const t = todSeconds(s);
     if (start !== undefined && t !== undefined) out.push({ number: i + 1, elapsedSeconds: r3(t - start) });
@@ -85,62 +84,57 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
   if (rank !== undefined && order === undefined) {
     u.diagnostic({ kind: 'unparseable-field', where: attemptId, name: 'RankOrder', text: second && x ? x.totalRankOrder : r.rankOrder });
     row['placement'] = null;
-  } else row['placement'] = rank === undefined || order === undefined ? null : { rank, order };
+  } else row['placement'] = rank === undefined || order === undefined ? null : ({ rank, order } satisfies Placement);
 
   // §4.6 gate cells
   const bad: CellProblem[] = [];
-  const cells = fixedCells(r.gates, usable(slots) ? slots.length : 30, bad);
+  // no course bound (§0.5): the cells as they stand, no gates or faults, and no unparseable-cell (a cell may belong to no slot)
+  const cells = fixedCells(r.gates, usable(slots) ? slots.length : 0, bad);
   for (const b of bad) u.diagnostic({ kind: 'unparseable-cell', attemptId, source, slot: b.slot, text: b.text });
   const hasTime = r.time !== undefined;
-  if (fmt.cross) {
+  if (slots === undefined) row['cells'] = cells;
+  else if (!usable(slots)) row[fmt.cross ? 'faults' : 'gates'] = NOT_CONFIGURED; // a bound course with an empty layout: the snapshot's determination
+  else if (fmt.cross) {
     row['gates'] = NA;
-    if (!usable(slots)) row['faults'] = NOT_CONFIGURED;
-    else {
-      const f = faultsFromCells(cells, slots);
-      if (f !== undefined) row['faults'] = f;
-    }
+    const f = faultsFromCells(cells, slots);
+    if (f !== undefined) row['faults'] = f satisfies Faults;
   } else {
-    if (!usable(slots)) row['gates'] = NOT_CONFIGURED;
-    else {
-      const gates: Record<string, unknown>[] = gatesFromCells(cells, slots);
-      if (x !== undefined && x.memberGates.length > 0) {
-        const members = x.memberGates.map((g) => fixedCells(g, slots.length, []));
-        gates.forEach((g, i) => {
-          const slot = slots.filter((s) => s.kind === 'gate')[i];
-          const mp = members.map((mc) => mc[(slot?.slot ?? i + 1) - 1] ?? null);
-          g['memberPenalties'] = mp;
-          const crew = g['penalty'] as number | null;
-          if (crew !== null && mp.every((v) => v !== null) && (mp as number[]).reduce((a, v) => a + v, 0) !== crew) {
-            u.diagnostic({ kind: 'member-sum-mismatch', attemptId, gate: g['number'], crew, members: mp });
-          }
-        });
+    const gates: Gate[] = gatesFromCells(cells, slots);
+    if (x !== undefined && x.memberGates.length > 0) {
+      const memberBad: CellProblem[] = [];
+      const members = x.memberGates.map((g) => fixedCells(g, slots.length, memberBad));
+      for (const b of memberBad) u.diagnostic({ kind: 'unparseable-cell', attemptId, source, slot: b.slot, text: b.text });
+      const gateSlots = slots.filter((s) => s.kind === 'gate');
+      for (const [i, g] of gates.entries()) {
+        const mp = members.map((mc) => mc[(gateSlots[i]?.slot ?? i + 1) - 1] ?? null);
+        g.memberPenalties = mp;
+        if (g.penalty !== null && mp.every((v) => v !== null) && mp.reduce<number>((a, v) => a + (v ?? 0), 0) !== g.penalty) {
+          u.diagnostic({ kind: 'member-sum-mismatch', attemptId, gate: g.number, crew: g.penalty, members: mp });
+        }
       }
-      row['gates'] = gates;
     }
-    if (hasTime) row['judgingComplete'] = judgingComplete(cells, slots);
+    row['gates'] = gates;
   }
+  if (!fmt.cross && hasTime) row['judgingComplete'] = judgingComplete(cells, slots);
 
   // §4.3-4.4 outcome
   const untimed = x !== undefined && fmt.scoringKind === 'duration' && hasTime && rank !== undefined && x.dtFinish.trim() === '';
   let outcome: Outcome | typeof NA | undefined;
-  if (status !== undefined && status !== 'non-ranked') outcome = { kind: 'no-result', status: status as 'dns' };
+  if (status !== undefined && status !== 'non-ranked') outcome = { kind: 'no-result', status };
   else if (fmt.heats) outcome = rank !== undefined && order !== undefined ? { kind: 'ordinal', order } : undefined;
-  else if (!hasTime) outcome = undefined;
+  else if (r.time === undefined) outcome = undefined;
   else if (untimed) outcome = NA;
-  else {
-    const run = r.time as number;
-    const o: Record<string, number | string> = { kind: 'duration', runSeconds: run };
-    if (second && x === undefined) {
-      const pen = sumJudged(cells, slots);
-      o['penaltySeconds'] = pen;
-      o['totalSeconds'] = r3(run + pen);
-    } else {
-      if (r.pen !== undefined) o['penaltySeconds'] = r.pen;
-      if (r.total !== undefined) o['totalSeconds'] = r.total;
-    }
-    outcome = o as unknown as Outcome;
-  }
+  else if (fmt.cross) outcome = { kind: 'duration', runSeconds: r.time, penaltySeconds: 0, totalSeconds: r.time }; // §4.4: no time penalties in Cross
+  else if (second && x === undefined) {
+    const pen = sumJudged(cells, slots);
+    outcome = { kind: 'duration', runSeconds: r.time, penaltySeconds: pen, totalSeconds: r3(r.time + pen) };
+  } else if (r.pen !== undefined && r.total !== undefined) outcome = { kind: 'duration', runSeconds: r.time, penaltySeconds: r.pen, totalSeconds: r.total };
+  else outcome = undefined; // an empty Pen or Total is absent, never zero (§0.1): no complete duration to state
   if (outcome !== undefined) row['outcome'] = outcome;
+  if (untimed) {
+    row['untimed'] = true;
+    if (status === undefined) row['status'] = 'finished'; // §4.2: a placed row never seen on course is finished
+  }
   if (second && !hasTime && m === undefined) row['timeEmpty'] = true;
   if (second && r.pairTotal !== undefined) row['pairTotal'] = r.pairTotal;
   if (second && fmt.pair?.combination === 'best' && x !== undefined) {
@@ -175,22 +169,6 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
   // §4.2 Kayak Cross heat: a placement is the finish
   if (fmt.heats && rank !== undefined) u.obs('result-row', 'status', { attemptId }, 'finished');
 
-  // §4.5 run 1's detail from the second run's Prev* columns
-  if (second && x?.prev !== undefined) {
-    const p = x.prev;
-    const pm = markOf(p.mark);
-    const key = { attemptId };
-    if (pm !== undefined && pm !== '*') u.obs('result-row', 'outcome', key, { kind: 'no-result', status: pm }, 'authoritative', { run: 1 });
-    else if (p.time !== undefined) {
-      const o: Record<string, unknown> = { kind: 'duration', runSeconds: p.time };
-      if (p.pen !== undefined) o['penaltySeconds'] = p.pen;
-      if (p.total !== undefined) o['totalSeconds'] = p.total;
-      u.obs('result-row', 'outcome', key, o, 'authoritative', { run: 1 });
-    }
-    const pr = int(p.rank);
-    const po = int(p.rankOrder);
-    if (pr !== undefined && po !== undefined) u.obs('result-row', 'placement', key, { rank: pr, order: po }, 'authoritative', { run: 1 });
-  }
   return row;
 }
 

@@ -14,7 +14,11 @@
  */
 export type IngestElement = { ingestSeq: number; observedAt: string; [key: string]: unknown };
 
-export type CourseSlot = { slot: number; kind: 'gate' | 'start-ramp' | 'roll-zone'; gateNumber?: number; caption?: string };
+import type { Course } from '@opencanoetiming/c123-contract';
+
+/** The value type inside an `Observed<T>` (the known arm). */
+export type Known<O> = Extract<O, { state: 'known' }> extends { value: infer V } ? V : never;
+export type CourseSlot = Known<Course['slots']>[number];
 
 /** What a derivation needs from outside the message. No clock, no I/O (#201 Shape). */
 export interface IngestContext {

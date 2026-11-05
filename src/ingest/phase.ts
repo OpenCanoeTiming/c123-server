@@ -1,14 +1,15 @@
+import type { PairRole, PhaseStatus } from '@opencanoetiming/c123-contract';
 import { type Fmt, type Unit, fmtOf, int, parseLayout, splitRaceId } from './common.js';
 
 const NA = 'not-applicable' as const;
 const NC = 'not-configured' as const;
 
 // CONTRACTS §3.1: Canoe123's 14-value race status, collapsed once.
-const STATUS: Record<number, string> = {
+const STATUS: Record<number, PhaseStatus> = {
   0: 'scheduled', 1: 'scheduled', 8: 'scheduled', 12: 'scheduled', 3: 'running', 2: 'paused', 11: 'paused', 4: 'unofficial', 9: 'unofficial',
   5: 'official', 6: 'revised', 10: 'protested', 13: 'postponed', 7: 'cancelled',
 };
-export const phaseStatus = (raw: string): string | undefined => {
+export const phaseStatus = (raw: string): PhaseStatus | undefined => {
   if (raw.trim() === '') return undefined;
   const n = int(raw);
   return n === undefined ? 'other' : (STATUS[n] ?? 'other');
@@ -59,8 +60,8 @@ export function emitPhase(u: Unit, kind: 'fragment' | 'result-row', p: PhaseIn, 
   u.obs(kind, 'heats', key, fmt.heats);
   if (fmt.pair === null) u.obs(kind, 'pair', key, null);
   else {
-    const sibling = siblingOf(p.phaseId, fmt, candidates);
-    u.obs(kind, 'pair', key, { role: fmt.pair.role, ...(sibling !== undefined ? { siblingPhaseId: sibling } : {}), combination: fmt.pair.combination });
+    const pair: PairRole = { role: fmt.pair.role, siblingPhaseId: siblingOf(p.phaseId, fmt, candidates) ?? null, combination: fmt.pair.combination };
+    u.obs(kind, 'pair', key, pair);
   }
   if (p.order !== undefined) u.obs(kind, 'programmeOrder', key, p.order);
   const status = phaseStatus(p.statusRaw);
@@ -79,20 +80,26 @@ export function emitPhase(u: Unit, kind: 'fragment' | 'result-row', p: PhaseIn, 
   else u.notYet(kind, 'courseId', key);
 }
 
-/** §2.3: a course's layout and everything derived from it; unavailable{not-configured} when empty or fabricated. */
-export function emitCourse(u: Unit, kind: 'fragment' | 'result-row', courseId: string, layout: string, captions: string[] | undefined, fabricated: boolean): void {
+/**
+ * §2.3: a course's gates, slots, splits and captions; unavailable{not-configured} when empty or fabricated. `layout` and
+ * `sectorEndsAfterGate` come from the snapshot alone: TCP strips the `S` markers (CONTRACTS §2.12).
+ */
+export function emitCourse(
+  u: Unit, kind: 'fragment' | 'result-row', source: 'tcp' | 'xml', courseId: string, layout: string, captions: string[] | undefined, fabricated: boolean,
+): void {
   const key = { courseId };
+  const xml = source === 'xml';
   if (fabricated || layout.trim() === '') {
-    for (const f of ['layout', 'gates', 'slots', 'sectorEndsAfterGate', 'splitsAfterGate']) u.unavailable(kind, f, key, NC);
+    for (const f of xml ? ['layout', 'gates', 'slots', 'sectorEndsAfterGate', 'splitsAfterGate'] : ['gates', 'slots', 'splitsAfterGate']) u.unavailable(kind, f, key, NC);
     if (captions !== undefined) u.unavailable(kind, 'captions', key, NC);
     return;
   }
   const l = parseLayout(layout, captions);
   if (l.unknownChars.length > 0) u.diagnostic({ kind: 'unknown-layout-char', courseId, chars: [...new Set(l.unknownChars)].sort() });
-  u.obs(kind, 'layout', key, layout);
+  if (xml) u.obs(kind, 'layout', key, layout);
   u.obs(kind, 'gates', key, l.gates);
   u.obs(kind, 'slots', key, l.slots);
-  u.obs(kind, 'sectorEndsAfterGate', key, l.sectorEndsAfterGate);
+  if (xml) u.obs(kind, 'sectorEndsAfterGate', key, l.sectorEndsAfterGate);
   u.obs(kind, 'splitsAfterGate', key, l.splitsAfterGate);
   if (captions !== undefined) u.obs(kind, 'captions', key, captions);
 }

@@ -1,5 +1,6 @@
+import type { Outcome, TimeToBeat } from '@opencanoetiming/c123-contract';
 import {
-  type CellProblem, type Node, UNASSIGNED, Unit, asArray, at, commaCells, faultsFromCells, fmtOf, gatesFromCells, int, judgingComplete, num, r3, readDoc,
+  type CellProblem, type Node, UNASSIGNED, Unit, asArray, at, classificationRow, commaCells, faultsFromCells, fmtOf, gatesFromCells, int, judgingComplete, num, r3, readDoc,
   splitRaceId, sumJudged, unparseableUnit, usable, zonedInstant,
 } from './common.js';
 import { type Candidates, emitCourse, emitPhase } from './phase.js';
@@ -47,10 +48,10 @@ function results(u: Unit, ctx: IngestContext, res: Node): void {
     u.add({
       push: 'classification', phaseId,
       body: {
-        rows: rows.map((row) => {
+        rows: rows.flatMap((row) => {
           const p = row['Participant'] as Node | undefined;
           const r = asArray(row['Result'])[0];
-          return { entryId: at(p, 'Id'), bib: at(p, 'Bib').trim(), rank: int(at(r, 'Rank')) ?? null, order: int(at(r, 'RankOrder')) ?? null };
+          return classificationRow(u, `${phaseId}:${at(p, 'Bib').trim()}`, { entryId: at(p, 'Id'), bib: at(p, 'Bib'), rank: at(r, 'Rank'), order: at(r, 'RankOrder'), decidedIn: '' }) ?? [];
         }),
         asOf: ctx.observedAt,
       },
@@ -117,17 +118,19 @@ function onCourse(u: Unit, ctx: IngestContext, oc: Node): void {
 
   // §4.6(a) gate cells
   const hasGates = c['@Gates'] !== undefined;
+  // no course bound (§0.5): the cells as they stand, no gates or faults, and no unparseable-cell
   const bad: CellProblem[] = [];
-  const cells = hasGates ? commaCells(at(c, 'Gates'), usable(slots) ? slots.length : Infinity, bad) : [];
+  const cells = hasGates ? commaCells(at(c, 'Gates'), usable(slots) ? slots.length : 0, bad) : [];
   for (const b of bad) u.diagnostic({ kind: 'unparseable-cell', attemptId, source: 'tcp', slot: b.slot, text: b.text });
   const complete = hasGates ? judgingComplete(cells, slots) : null;
-  if (fmt.cross) {
-    if (hasGates && usable(slots)) {
+  if (hasGates) {
+    if (slots === undefined) u.obs('inference', 'cells', key, cells);
+    else if (!usable(slots)) u.unavailable('inference', fmt.cross ? 'faults' : 'gates', key, 'not-configured');
+    else if (fmt.cross) {
       const f = faultsFromCells(cells, slots);
       if (f !== undefined) u.obs('inference', 'faults', key, f);
-    }
-  } else if (hasGates && usable(slots)) u.obs('inference', 'gates', key, gatesFromCells(cells, slots), 'authoritative', { judgingComplete: complete });
-  else u.unavailable('inference', 'gates', key, 'not-configured');
+    } else u.obs('inference', 'gates', key, gatesFromCells(cells, slots), 'authoritative', { judgingComplete: complete });
+  }
 
   // §4.3 outcome
   const closed = at(c, 'Completed') === 'Y' ? { runClosed: true } : {};
@@ -135,17 +138,24 @@ function onCourse(u: Unit, ctx: IngestContext, oc: Node): void {
   if (dtFinish !== '') {
     if (time === undefined) {
       // an empty Time is absent (recorded: a Cross time-trial listing with a finish impulse and no time): nothing to infer
-    } else if (fmt.cross) u.obs('inference', 'outcome', key, { kind: 'duration', runSeconds: time }, 'inferred', { ...closed, ...(finishAt !== undefined ? { eventTime: finishAt } : {}) });
+    } else if (fmt.cross) {
+      const o: Outcome = { kind: 'duration', runSeconds: time, penaltySeconds: 0, totalSeconds: time };
+      u.obs('inference', 'outcome', key, o, 'inferred', { ...closed, ...(finishAt !== undefined ? { eventTime: finishAt } : {}) });
+    }
     else if (!hasGates) u.diagnostic({ kind: 'gates-absent', attemptId });
     else {
       const pen = sumJudged(cells, slots);
-      u.obs('inference', 'outcome', key, { kind: 'duration', runSeconds: time, penaltySeconds: pen, totalSeconds: r3(time + pen) }, 'inferred',
+      const o: Outcome = { kind: 'duration', runSeconds: time, penaltySeconds: pen, totalSeconds: r3(time + pen) };
+      u.obs('inference', 'outcome', key, o, 'inferred',
         { judgingComplete: complete, ...closed, ...(finishAt !== undefined ? { eventTime: finishAt } : {}) });
     }
   } else if (time !== undefined) {
-    const pen = numAttr(u, attemptId, t, 'Pen', int);
-    u.obs('inference', 'outcome', key, { kind: 'running', elapsedSeconds: time, ...(pen !== undefined ? { penaltySeconds: pen } : {}) }, 'authoritative',
-      { ...(fmt.cross ? {} : { judgingComplete: complete }), ...closed });
+    const pen = fmt.cross ? 0 : numAttr(u, attemptId, t, 'Pen', int); // Pen is ignored in Cross (§4.6(d))
+    // an empty Pen is absent, never zero (§0.1): no complete running outcome to state
+    if (pen !== undefined) {
+      const o: Outcome = { kind: 'running', elapsedSeconds: time, penaltySeconds: pen };
+      u.obs('inference', 'outcome', key, o, 'authoritative', { ...(fmt.cross ? {} : { judgingComplete: complete }), ...closed });
+    }
   }
 
   // §4.8
@@ -156,7 +166,8 @@ function onCourse(u: Unit, ctx: IngestContext, oc: Node): void {
   if (ttb !== '' && ttbSeconds === undefined) u.diagnostic({ kind: 'unparseable-field', where: attemptId, name: 'TTBDiff', text: ttb });
   else if (ttbSeconds !== undefined) {
     const holder = at(t, 'TTBName').trim();
-    u.obs('inference', 'timeToBeat', key, { mode: /^[+-]/.test(ttb) ? 'delta' : 'target', seconds: ttbSeconds, ...(holder !== '' ? { holder } : {}) });
+    const v: TimeToBeat = { mode: /^[+-]/.test(ttb) ? 'delta' : 'target', seconds: ttbSeconds, ...(holder !== '' ? { holder } : {}) };
+    u.obs('inference', 'timeToBeat', key, v);
   }
   const sp = splitsOf(dtStart, [at(c, 'dtSplit1'), at(c, 'dtSplit2')].filter((s) => s.trim() !== ''));
   if (sp !== undefined) u.obs('inference', 'splits', key, sp);
@@ -190,7 +201,7 @@ function raceConfig(u: Unit, ctx: IngestContext, rc: Node): void {
   if (signatures.length > 0) u.diagnostic({ kind: 'fabricated-course', signatures });
   const courseId = ctx.boundCourseId;
   if (courseId === undefined) return;
-  emitCourse(u, 'fragment', courseId, layout, captionsRaw === '' ? [] : captionsRaw.split(','), signatures.length > 0);
+  emitCourse(u, 'fragment', 'tcp', courseId, layout, captionsRaw === '' ? [] : captionsRaw.split(','), signatures.length > 0);
   if (nrSplits === 0) u.unavailable('fragment', 'splits', { courseId }, NA);
   if (nrSplits !== undefined) u.obs('fragment', 'splitsArmed', { courseId }, nrSplits > 0);
 }

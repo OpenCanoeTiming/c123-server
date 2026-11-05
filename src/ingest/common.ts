@@ -1,5 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
-import type { Stage } from '@opencanoetiming/c123-contract';
+import type { ClassificationRow, Faults, Gate, ResultMark, Stage } from '@opencanoetiming/c123-contract';
 import type { CourseSlot, IngestContext, IngestElement } from './types.js';
 
 // ---------------------------------------------------------------- reading the document
@@ -91,7 +91,8 @@ const TOD = /^(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/;
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 /**
  * Phase.date + time of day + the venue's IANA zone (§0.2). undefined when the date, the zone or the time is missing or
- * unreadable. In the repeated autumn hour the first (summer-time) reading is returned; the design names neither.
+ * unreadable. In the repeated autumn hour the later instant (standard time) is returned; a time in the skipped spring hour is
+ * shifted forward by the gap (DERIVATIONS §0.2).
  */
 export function zonedInstant(date: string | undefined, tod: string, zone: string | undefined): string | undefined {
   if (date === undefined || zone === undefined || zone === '') return undefined;
@@ -134,8 +135,8 @@ for (const [a, combination] of [['BR', 'best'], ['HT', 'best'], ['EL', 'best'], 
   def([`${a}1`], 'run', { pair: pair('first', combination, `${a}2`) });
   def([`${a}2`], 'run', { pair: pair('second', combination, `${a}1`) });
 }
-def(['NHT2'], 'run', { pair: pair('second', 'best') });
-def(['TS1', 'TS2', 'TSR'], 'run');
+def(['NHT2'], 'run'); // pair null until its first-run token is known (DERIVATIONS §10 item 21)
+def(['TS1', 'TS2', 'TSR', 'SP1', 'SP2'], 'run');
 def(['QF'], 'quarter-final', { progression: true });
 def(['SF', 'SFB'], 'semi-final', { progression: true });
 def(['FI', 'FIB', 'SPF', 'TSF', 'TFI'], 'final');
@@ -145,7 +146,8 @@ def(['X8'], 'heats', { scoringKind: 'ordinal', heats: true, cross: true, progres
 def(['X4'], 'quarter-final', { scoringKind: 'ordinal', heats: true, cross: true, progression: true });
 def(['XS'], 'semi-final', { scoringKind: 'ordinal', heats: true, cross: true, progression: true });
 def(['XF'], 'final', { scoringKind: 'ordinal', heats: true, cross: true });
-def(['XER', 'SLER', 'WWER', 'RXER'], 'classification', { kind: 'classification', scoringKind: 'ordinal', cross: true });
+def(['XER', 'RXER'], 'classification', { kind: 'classification', scoringKind: 'ordinal', cross: true });
+def(['SLER', 'WWER'], 'classification', { kind: 'classification', scoringKind: 'ordinal' });
 
 export const fmtOf = (token: string): Fmt =>
   TABLE.get(token) ?? { token, known: false, stage: 'run', kind: 'race', scoringKind: 'duration', heats: false, pair: null, cross: false, progression: false };
@@ -164,11 +166,21 @@ export function splitRaceId(raceId: string): { classKey: string; token: string; 
 
 export const UNASSIGNED = '<unassigned>';
 
+/** §4.10: one classification row. `decidedIn` is the XML `RecordType` verbatim, null where the source carries none (TCP). A row without a `RankOrder` is reported, not guessed. */
+export function classificationRow(u: Unit, where: string, f: { entryId: string; bib: string; rank: string; order: string; decidedIn: string }): ClassificationRow | undefined {
+  const order = int(f.order);
+  if (order === undefined) {
+    u.diagnostic({ kind: 'unparseable-field', where, name: 'RankOrder', text: f.order });
+    return undefined;
+  }
+  return { entryId: f.entryId, bib: f.bib.trim(), rank: int(f.rank) ?? null, order, decidedIn: f.decidedIn.trim() === '' ? null : f.decidedIn.trim() };
+}
+
 // ---------------------------------------------------------------- §4.1 marks
 
-const MARKS: Record<string, string> = { DNS: 'dns', DNF: 'dnf', CAP: 'cap', RAL: 'ral', DSQ: 'dsq', 'DSQ-R': 'dsq-r', DQB: 'dqb', 'NON-RK': 'non-ranked' };
+const MARKS: Record<string, ResultMark> = { DNS: 'dns', DNF: 'dnf', CAP: 'cap', RAL: 'ral', DSQ: 'dsq', 'DSQ-R': 'dsq-r', DQB: 'dqb', 'NON-RK': 'non-ranked' };
 /** undefined: no mark. '*' is under review, not a status. Anything unknown is `other`. */
-export function markOf(raw: string): string | undefined {
+export function markOf(raw: string): ResultMark | '*' | undefined {
   const s = raw.trim();
   if (s === '') return undefined;
   if (s === '*') return '*';
@@ -191,11 +203,11 @@ const cell = (raw: string, slot: number, limit: number, bad: CellProblem[]): num
   return n;
 };
 
-/** (a) `OnCourse.Result[C]@Gates`: comma separated, one token per slot. `limit` is the slot count of the known course. */
+/** (a) `OnCourse.Result[C]@Gates`: comma separated, one token per slot. `limit` is the slot count of the known course, 0 when none is bound. */
 export function commaCells(s: string, limit: number, bad: CellProblem[]): Cells {
   return s.split(',').map((tok, i) => cell(tok, i + 1, limit, bad));
 }
-/** (b) `Results.Result@Gates` / `XML.Results.Gates`: 3 characters per cell, 30 cells, whatever the course. */
+/** (b) `Results.Result@Gates` / `XML.Results.Gates`: 3 characters per cell, 30 cells, whatever the course. `limit` as in (a). */
 export function fixedCells(s: string, limit: number, bad: CellProblem[]): Cells {
   const out: Cells = [];
   for (let i = 0; i < 30; i++) out.push(i * 3 < s.length ? cell(s.slice(i * 3, i * 3 + 3), i + 1, limit, bad) : null);
@@ -213,13 +225,13 @@ export const sumJudged = (cells: Cells, slots: CourseSlot[] | undefined): number
 export const judgingComplete = (cells: Cells, slots: CourseSlot[] | undefined): boolean | null =>
   usable(slots) ? gateSlots(slots).every((s) => (cells[s.slot - 1] ?? null) !== null) : null;
 
-export function gatesFromCells(cells: Cells, slots: CourseSlot[]): { number: number; penalty: number | null }[] {
+export function gatesFromCells(cells: Cells, slots: CourseSlot[]): Gate[] {
   return gateSlots(slots).map((s) => ({ number: s.gateNumber ?? s.slot, penalty: cells[s.slot - 1] ?? null }));
 }
 
 const caption = (s: CourseSlot): string => s.caption ?? (s.gateNumber !== undefined ? String(s.gateNumber) : s.kind === 'start-ramp' ? 'ST' : 'RZ');
 /** (d) Kayak Cross: cells are fault marks (0 / 2). undefined when nothing has been judged. */
-export function faultsFromCells(cells: Cells, slots: CourseSlot[]): { count: number; gates: string[]; lastCleanSlot: number } | undefined {
+export function faultsFromCells(cells: Cells, slots: CourseSlot[]): Faults | undefined {
   if (!slots.some((s) => (cells[s.slot - 1] ?? null) !== null)) return undefined;
   const gates: string[] = [];
   let lastCleanSlot = 0;

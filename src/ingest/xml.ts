@@ -1,4 +1,4 @@
-import { type Node, UNASSIGNED, Unit, asArray, fmtOf, has, int, ms, parseLayout, readDoc, splitRaceId, tx, unparseableUnit } from './common.js';
+import { type Node, UNASSIGNED, Unit, asArray, classificationRow, fmtOf, has, int, ms, parseLayout, readDoc, splitRaceId, tx, unparseableUnit } from './common.js';
 import { type Candidates, emitCourse, emitPhase } from './phase.js';
 import { type RowIn, buildRow, rowIsResult } from './rows.js';
 import type { CourseSlot, IngestContext, IngestElement } from './types.js';
@@ -44,9 +44,6 @@ function entry(u: Unit, p: Node, index: Map<string, Node>, bibHandling: string, 
     if (crew) members.push(member(p, '2', ctx.externalIdScheme));
   }
   u.obs('result-row', 'members', key, members);
-  members.forEach((m, i) => {
-    if (m['externalId'] === null) u.unavailable('result-row', `members[${i}].externalId`, key, NA);
-  });
   const club = tx(p, 'Club').trim();
   if (club !== '') u.obs('result-row', 'club', key, club);
   const noc = tx(p, 'NOC').trim();
@@ -75,8 +72,6 @@ function rowIn(u: Unit, phaseId: string, r: Node): RowIn | undefined {
     if (v === undefined && raw.trim() !== '') u.diagnostic({ kind: 'unparseable-field', where, name, text: raw });
     return v;
   };
-  const prevMark = tx(r, 'PrevStatus');
-  const prevTime = numeric('PrevTime', ms);
   return {
     bib, entryId: tx(r, 'Id'), startOrder: tx(r, 'StartOrder'), startTime: tx(r, 'StartTime'), mark: tx(r, 'Status'), pp: '',
     time: numeric('Time', ms), pen: numeric('Pen', int), total: numeric('Total', ms), pairTotal: numeric('TotalTotal', ms),
@@ -85,9 +80,6 @@ function rowIn(u: Unit, phaseId: string, r: Node): RowIn | undefined {
       dtStart: tx(r, 'dtStart'), dtFinish: tx(r, 'dtFinish'), totalRank: tx(r, 'TotalRnk'), totalRankOrder: tx(r, 'TotalRnkOrder'), betterRun: tx(r, 'BetterRunNr'),
       memberGates: ['Gates1', 'Gates2', 'Gates3'].filter((k) => has(r, k)).map((k) => tx(r, k)),
       splits: ['dtSplit1', 'dtSplit2', 'dtSplit3'].map((k) => tx(r, k)).filter((s) => s.trim() !== ''),
-      prev: prevMark.trim() !== '' || prevTime !== undefined
-        ? { mark: prevMark, time: prevTime, pen: numeric('PrevPen', int), total: numeric('PrevTotal', ms), rank: tx(r, 'PrevRnk'), rankOrder: tx(r, 'PrevRnkOrder') }
-        : undefined,
     },
   };
 }
@@ -129,7 +121,7 @@ export function parseXmlSnapshot(xml: string, ctx: IngestContext): IngestElement
   }
 
   // §2.3 Course
-  for (const [courseId, layout] of layouts) emitCourse(u, 'result-row', courseId, layout, undefined, false);
+  for (const [courseId, layout] of layouts) emitCourse(u, 'result-row', 'xml', courseId, layout, undefined, false);
 
   // §2.1 Phase
   for (const s of schedule) {
@@ -165,11 +157,9 @@ export function parseXmlSnapshot(xml: string, ctx: IngestContext): IngestElement
       u.add({
         push: 'classification', phaseId,
         body: {
-          rows: rows.map((r) => {
-            const o: Record<string, unknown> = { entryId: tx(r, 'Id'), bib: tx(r, 'Bib').trim(), rank: int(tx(r, 'Rnk')) ?? null, order: int(tx(r, 'RnkOrder')) ?? null };
-            if (tx(r, 'RecordType').trim() !== '') o['decidedIn'] = tx(r, 'RecordType').trim();
-            return o;
-          }),
+          rows: rows.flatMap((r) => classificationRow(u, `${phaseId}:${tx(r, 'Bib').trim()}`, {
+            entryId: tx(r, 'Id'), bib: tx(r, 'Bib'), rank: tx(r, 'Rnk'), order: tx(r, 'RnkOrder'), decidedIn: tx(r, 'RecordType'),
+          }) ?? []),
           asOf: ctx.observedAt,
         },
       });
