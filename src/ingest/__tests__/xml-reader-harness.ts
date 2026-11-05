@@ -54,7 +54,9 @@ export interface FakeFile { mtimeMs: number; size: number; content: string }
 export function fakeFs(clock: FakeClock, files: Record<string, FakeFile> = {}) {
   const statLog: { at: number; path: string; mtimeMs?: number; size?: number }[] = [];
   const readLog: { at: number; path: string }[] = [];
-  const queued: string[] = [];
+  const queued: Array<string | Error> = [];
+  const hooks: Array<() => void> = [];
+  const ctl = { readMs: 0, alwaysReject: undefined as Error | undefined };
   const fs = {
     async stat(path: string) {
       const f = files[path];
@@ -66,13 +68,25 @@ export function fakeFs(clock: FakeClock, files: Record<string, FakeFile> = {}) {
       readLog.push({ at: clock.now(), path });
       const f = files[path];
       if (!f) throw Object.assign(new Error(`ENOENT ${path}`), { code: 'ENOENT' });
-      return queued.length > 0 ? (queued.shift() as string) : f.content;
+      const next = queued.length > 0 ? queued.shift()! : undefined;
+      const content = typeof next === 'string' ? next : f.content;
+      const hook = hooks.shift();
+      // a read takes ctl.readMs of fake time; the file may move while it is in flight (hook)
+      if (ctl.readMs > 0) await new Promise<void>((r) => { clock.setTimeout(r, ctl.readMs); });
+      hook?.();
+      if (next instanceof Error) throw next;
+      if (ctl.alwaysReject) throw ctl.alwaysReject;
+      return content;
     },
   };
   return {
-    fs, files, statLog, readLog,
+    fs, files, statLog, readLog, ctl,
     /** The next reads return these, in order, whatever the file holds (a tearing writer); then the file's own content. */
     queueReads: (...c: string[]) => { queued.push(...c); },
+    /** The next n reads reject (a sharing violation on a file being copied over), in order with queueReads. */
+    rejectReads: (n: number, code = 'EBUSY') => { for (let i = 0; i < n; i++) queued.push(Object.assign(new Error(`${code} read`), { code })); },
+    /** Run fn while the next read is in flight, after it captured its content (the file moves under the read). */
+    duringNextRead: (fn: () => void) => { hooks.push(fn); },
     put: (path: string, f: FakeFile) => { files[path] = f; },
     remove: (path: string) => { delete files[path]; },
   };

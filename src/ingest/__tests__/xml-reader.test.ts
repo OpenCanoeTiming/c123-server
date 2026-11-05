@@ -1,6 +1,5 @@
 /**
- * #202 XML reader. The module `../xml-reader.js` does not exist yet: a missing import is the right red.
- * Interfaces assumed: see xml-reader-harness.ts. Rules: DERIVATIONS §0.3, §5; CONTRACTS §1.6, INV-2c, INV-7;
+ * #202 XML reader. Interfaces assumed: see xml-reader-harness.ts. Rules: DERIVATIONS §0.3, §5; CONTRACTS §1.6, INV-2c, INV-7;
  * CONFORMANCE-VECTORS §1 (content age, ingest units).
  */
 import { describe, it, expect } from 'vitest';
@@ -30,6 +29,13 @@ function setup(opts: { files?: Record<string, FakeFile>; path?: string | undefin
     await clock.advance(0);
   };
   return { clock, f, units, statuses, reader, last, toPoll };
+}
+
+/** Advance 1 ms at a time until a poll's stat has just happened; returns with the clock at most 1 ms after it. */
+async function justAfterPoll(s: ReturnType<typeof setup>) {
+  const n = s.f.statLog.length;
+  for (let i = 0; i < 20000 && s.f.statLog.length === n; i++) await s.clock.advance(1);
+  await s.clock.advance(1);
 }
 
 /** Start and let the first poll's read happen (whether the first poll is immediate or one interval in). */
@@ -147,8 +153,8 @@ describe('XML reader: validation and retry (DERIVATIONS §0.3)', () => {
     s.units.length = 0;
 
     // (a) change detected, one torn read, retry succeeds 200 ms later
-    const wroteA = s.clock.now() + 1;
-    await s.clock.advance(1);
+    await justAfterPoll(s); // the write lands right after a poll, so detection is a full interval later
+    const wroteA = s.clock.now();
     s.f.files[P] = file('cross.xml', 2000);
     s.f.queueReads(truncated(whole('cross.xml')));
     const nStat = s.f.statLog.length;
@@ -160,7 +166,9 @@ describe('XML reader: validation and retry (DERIVATIONS §0.3)', () => {
     expect(evA.observedAt).toBe(iso(detA)); // not the time the retry succeeded (detA + 200)
     expect(s.last()?.lastRewriteDetectedAt).toBe(iso(detA));
     expect(detA).toBeGreaterThanOrEqual(wroteA);
-    expect(Date.parse(evA.observedAt) - 5000).toBeLessThanOrEqual(detA); // content age never later than the write
+    // INV-2c: content age (event time minus the interval) is never later than the write. Stamped with the retry's
+    // success time (detA + 200) it would be later, so this can fail.
+    expect(Date.parse(evA.observedAt) - 5000).toBeLessThanOrEqual(wroteA);
 
     // (b) change detected, four torn reads (abandoned), the next poll succeeds
     await s.clock.advance(2000);
@@ -321,5 +329,100 @@ describe('XML reader: stop (DERIVATIONS §0.3)', () => {
     expect(s.units.length).toBe(nUnits);
     expect(s.statuses.length).toBe(nStatus);
     expect(T0).toBeLessThan(s.clock.now());
+  });
+});
+
+describe('XML reader: review objections (PR #250)', () => {
+  it('O1 §0.3 baseline stat is taken after the successful read: a file that moved across the read gives no surplus unit of the same content (INV-2c, INV-7 guard)', async () => {
+    const s = setup();
+    await started(s);
+    s.units.length = 0;
+    const base = s.f.readLog.length;
+    // the poll sees stat 2000; during the read the writer finishes: stat 3000 and the final content
+    s.f.files[P] = file('cross.xml', 2000);
+    s.f.duringNextRead(() => { s.f.files[P] = file('cross-untimed.xml', 3000); });
+    await s.clock.advance(5100);
+    await s.clock.advance(60000); // many polls with the stat now at rest
+    expect(s.units.length).toBe(1);
+    expect(phaseIds(s.units[0]!).sort()).toEqual(phaseIds(parseXmlSnapshot(whole('cross-untimed.xml'), ctx()) as Array<Record<string, any>>).sort());
+    const det = s.f.statLog.find((x) => x.mtimeMs === 2000)!.at;
+    expect(s.units[0]![0]!.observedAt).toBe(iso(det));
+    expect(s.f.readLog.length - base).toBeLessThanOrEqual(2);
+    s.reader.stop();
+  });
+
+  it('O2 §0.3 polls are anchored to polledAt + interval: a 1.5 s read does not stretch the gap between stats (INV-2c interval bound)', async () => {
+    const s = setup();
+    s.f.ctl.readMs = 1500;
+    s.reader.start();
+    await s.clock.advance(2000);
+    s.f.files[P] = file('cross.xml', 2000); // changes after the first read, so a later poll reads again
+    await s.clock.advance(40000);
+    const at = s.f.statLog.map((x) => x.at);
+    expect(at.length).toBeGreaterThanOrEqual(5);
+    for (let i = 1; i < at.length; i++) expect(at[i]! - at[i - 1]!).toBe(5000);
+    s.reader.stop();
+  });
+
+  it('O3 §5 a different stat seen by a later poll restarts detection: an abandoned bad write does not stamp a later, different version', async () => {
+    const s = setup();
+    await started(s);
+    s.units.length = 0;
+    const bad = truncated(whole('cross.xml'));
+    s.f.files[P] = { mtimeMs: 2000, size: bad.length, content: bad }; // a bad write that stays bad
+    await s.clock.advance(60000);
+    expect(s.units.length).toBe(0);
+    const wrote = s.clock.now();
+    s.f.files[P] = file('cross-untimed.xml', 3000); // a whole new version, much later
+    await s.clock.advance(10000);
+    expect(s.units.length).toBe(1);
+    const det = s.f.statLog.find((x) => x.mtimeMs === 3000)!.at;
+    const ev = s.units[0]![0]!;
+    expect(ev.event).toBe('xml-rewrite-detected');
+    expect(ev.observedAt).toBe(iso(det));
+    expect(s.last()?.lastRewriteDetectedAt).toBe(iso(det));
+    expect(Date.parse(ev.observedAt) - 5000).toBeLessThanOrEqual(wrote);
+    for (const e of s.units[0]!) expect(e.observedAt).toBe(iso(det));
+    s.reader.stop();
+  });
+
+  it('O4 §0.3 a rejected read takes the same bounded retry as a torn one: one transient EBUSY, retried 200 ms later, no reconnecting', async () => {
+    const s = setup();
+    s.f.rejectReads(1);
+    s.reader.start();
+    for (let i = 0; i < 2000 && s.f.readLog.length < 1; i++) await s.clock.advance(100);
+    const first = s.f.readLog[0]!.at;
+    await s.clock.advance(1000);
+    expect(s.f.readLog.map((r) => r.at)).toEqual([first, first + 200]);
+    expect(s.units.length).toBe(1);
+    expect(s.statuses.every((x) => x.state !== 'reconnecting' && x.state !== 'unreachable')).toBe(true);
+    s.reader.stop();
+  });
+
+  it('O4 §5 an abandoned rejected read is a failed poll that a successful stat does not clear: reconnecting, then unreachable at the 5th', async () => {
+    const s = setup();
+    s.f.ctl.alwaysReject = Object.assign(new Error('EBUSY read'), { code: 'EBUSY' });
+    s.reader.start();
+    const toRead = async (n: number) => {
+      for (let i = 0; i < 4000 && s.f.readLog.length < n; i++) await s.clock.advance(100);
+      await s.clock.advance(0);
+    };
+    for (let poll = 1; poll <= 4; poll++) {
+      await toRead(4 * poll); // bounded: 1 read + 3 retries per poll
+      expect(s.f.readLog.length).toBe(4 * poll);
+      expect(s.last()?.state).toBe('reconnecting');
+      expect(s.units.length).toBe(0);
+    }
+    await toRead(20);
+    expect(s.f.readLog.length).toBe(20);
+    expect(s.last()?.state).toBe('unreachable');
+    await s.clock.advance(5000 * 4);
+    expect(s.last()?.state).toBe('unreachable');
+    // recovery
+    s.f.ctl.alwaysReject = undefined;
+    await s.clock.advance(6000);
+    expect(s.last()?.state).toBe('connected');
+    expect(s.units.length).toBe(1);
+    s.reader.stop();
   });
 });
