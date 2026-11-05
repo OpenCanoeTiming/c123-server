@@ -61,7 +61,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Display `running.elapsedSeconds` and `penaltySeconds` as delivered: upstream's own display, including its split hold (CONTRACTS §2.6; DERIVATIONS §4.3).
 - [ ] Tick the running time locally, if at all, only through the injected `Clock`, snapping to every new `running` value and stopping the instant `status` leaves `on-course` (CONTRACTS §2.6; TEST-ARCHITECTURE §5).
 - [ ] Stop the tick `runningStaleAfterSeconds`, a named constant of 3 s, past the client's own receipt of the last `running` value, measured on its own injected clock; freeze the display at that value and show it as stale, with its age from receipt; never subtract `observedAt` from the client clock (CONTRACTS §2.6).
-- [ ] Tie the whole on-course display to connection liveness: on site expect `sources.updated` at least every 10 s, on live a `heartbeat` event at least every 15 s; after two missed intervals mark everything shown as stale — never clear it — and repeat the §1.6 handshake, so that an `at-start` or `finished` ghost on a half-open connection or a stalled upstream cannot stand indefinitely (CONTRACTS §1.6, §7.2, §8.4; ADR-017).
+- [ ] Tie the whole on-course display to connection liveness: on site expect `sources.updated` at least every 10 s, on live a `heartbeat` message at least every 15 s; after two missed intervals mark everything shown as stale — never clear it — and repeat the §1.6 handshake, so that an `at-start` or `finished` ghost on a half-open connection or a stalled upstream cannot stand indefinitely (CONTRACTS §1.6, §7.2, §8.4; ADR-017).
 - [ ] Render `left-without-finish` as an observed removal with no reason; show a mark only once `status` carries one; never infer DNF (CONTRACTS §2.6, §3.2, §7.1; ARCHITECTURE §6.G).
 - [ ] Render `outcome.kind: 'no-result'` as its mark, whatever time the row carried; never let a time suppress a mark (CONTRACTS §2.6).
 - [ ] Show `non-ranked` as raced and timed but unranked, and `ral` where its `placement` puts it (CONTRACTS §2.6).
@@ -266,10 +266,10 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Serve `GET /public/events` with `status=live|upcoming|past|all`, `cursor`, `limit` (default 50, maximum 200), `nextCursor` (always present, `null` on the last page) and `asOfSeq` (CONTRACTS §8.4).
 - [ ] Derive calendar `status` only from ingest recency, `live` meaning a push within 5 minutes as a named constant; never from `Phase.status` (CONTRACTS §8.4).
 - [ ] Read "now" for the calendar through an injected `Clock`, never `Date.now()` (TEST-ARCHITECTURE §3.1, §5).
-- [ ] Compute `dateRange` from the event's Phase dates; order an unfiltered list live, then upcoming by soonest start, then past by latest end; answer "no match" with an empty list, never `404` (CONTRACTS §8.4).
+- [ ] Compute `dateRange` from the event's Phase dates, `null` while it has none; order an unfiltered list live, then upcoming by soonest start with those lacking a `dateRange` last, then past by latest end; answer "no match" with an empty list, never `404` (CONTRACTS §8.4).
 - [ ] Provision `organiserName` out of band (CONTRACTS §8.4).
 - [ ] Serve the event, entries, standings and attempts reads with `asOfSeq` and their `404` codes, without authentication and without requiring the reader to know the owning organiser (CONTRACTS §2.1, §8.4).
-- [ ] Serve `GET /public/events/{eventId}/oncourse`, and push `oncourse.updated`, each with the set as last pushed, in course order, `featuredByUpstream`, and `asOf` the push's ingest time (CONTRACTS §7.2, §8.4).
+- [ ] Serve `GET /public/events/{eventId}/oncourse`, and push `oncourse.updated`, each with the set as last pushed, in course order, `featuredByUpstream`, and `asOf` the push's ingest time, `null` on the read before the event's first on-course push (CONTRACTS §7.2, §8.4).
 - [ ] Serve every public `Standing`, in reads and on the stream, without `anomalies` (CONTRACTS §2.7, §8.4).
 - [ ] Apply the per-event `birthDatePublication` setting, provisioned out of band with the key: `'year'` by default, serving `birthYear` only, `null` where no `birthDate` was pushed; `'full'` serving `birthDate` as pushed, absent where none was; `'none'` serving neither key; the same in reads and on the stream (CONTRACTS §8.4).
 - [ ] Serve `GET /public/events/{eventId}/stream` as `text/event-stream`, carrying `attempt.updated`, `attempt.deleted`, `phase.updated`, `entry.updated`, `class.updated`, `course.updated`, `standing.updated`, `oncourse.updated` and `scope.replaced`, each with its `seq`, and a `heartbeat` `{ type: 'heartbeat', asOfSeq, serverTime }` at least every 15 s; every frame a default `message` event whose `data` is one JSON object carrying `type` (CONTRACTS §1.6, §8.4).
@@ -293,7 +293,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Render the calendar from the delivered `status`; page with `cursor` and `nextCursor`, stopping at `null`; treat an empty list as "no events match" (CONTRACTS §8.4).
 - [ ] Show a multi-day event as one calendar entry, with results grouped by Phase `date` (ARCHITECTURE §6.E; CONTRACTS §2.2).
 - [ ] Order the on-course view by the pushed set; treat an Attempt's `courseOrder` as informational, since it may lag (CONTRACTS §8.3, §8.4).
-- [ ] Take the on-course set's age from `asOf` on the on-course read and on `oncourse.updated` (CONTRACTS §2.6, §7.2, §8.4).
+- [ ] Take the on-course set's age from `asOf` on the on-course read (`null` before any push) and on `oncourse.updated` (CONTRACTS §2.6, §7.2, §8.4).
 - [ ] Feature by default the first Attempt of the on-course set; offer `featuredByUpstream` only as the optional alternative (CONTRACTS §8.4; ARCHITECTURE §2).
 - [ ] Take each on-course athlete's `status`, `running` outcome, judged `gates` and `timeToBeat` from `attempt.updated` (CONTRACTS §8.3).
 - [ ] Show a listed Attempt whose `status` is `finished` or a mark as a finisher still on upstream's list; how long it stays visible is the client's own policy (CONTRACTS §8.3, §8.4; ARCHITECTURE §2).

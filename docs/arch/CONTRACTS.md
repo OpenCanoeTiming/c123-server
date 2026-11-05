@@ -285,7 +285,10 @@ own just-submitted correction is a second legitimate `WriteRequest`, not a retry
 **`seq` is one counter per server.** Every push-capable stream (§7's WebSocket, §8.4's public feed)
 stamps each outbound message with `seq`. Each outbound message takes the next value of the counter;
 an element's ingest sequence (INV-6, §4) is the value the counter had when it was ingested, so one
-element may produce many messages, each with its own `seq`. It is the same number on every connection and in every `asOfSeq` a REST response
+element may produce many messages, each with its own `seq`. **The one message without `seq` is
+§8.4's `heartbeat`:** it carries `asOfSeq` instead, since it carries no state; a client neither buffers
+nor applies it, and steps 2 and 4 below concern only messages that carry `seq`. On site the heartbeat is
+`sources.updated`, which does carry `seq` (§7.2). It is the same number on every connection and in every `asOfSeq` a REST response
 carries, because all of them read one counter. It is strictly increasing, and it **never regresses
 across a server restart**: the counter's high-water mark is persisted with the same discipline as
 §2.10. `seq` only lets a client tell whether it has already incorporated a given change, the way a
@@ -1295,7 +1298,7 @@ implementation must satisfy, not an algorithm.
   `GET /api/diagnostics` (§7.1), the same audience as `SourceStatus`. Five further diagnostic kinds
   live there: `contradicted-finish` (INV-2d), `duplicate-finish` (§2.6), `stale-mark` (§2.6, a mark
   carried over a re-run), `member-sum-mismatch` (§2.6) and `unparseable-cell` (§1.3). Their shapes
-  are the `Diagnostic` block at the end of this section. All six are
+  are the `Diagnostic` block below, after INV-6. All six are
   admin-facing, served by `GET /api/diagnostics` and pushed as `diagnostics.updated` (§7.2), never on
   the live tier, and never rendered by a scoreboard. It never changes the presented
   value by itself. There is no
@@ -1543,7 +1546,7 @@ authentication:** the venue LAN is trusted (`CONSTRAINTS.md` §1.2).
 Every other shape is exactly §2's.
 
 ```ts
-type OnsitePerson = Omit<Person, 'birthDate'> & { birthYear: number | null }   // null: no birth date entered upstream
+type OnsitePerson = Omit<Person, 'birthDate'> & { birthYear: number | null }   // null: neither a birth date nor a year entered upstream (DERIVATIONS `birthDate`)
 type OnsiteEntry = Omit<Entry, 'members'> & { members: Observed<OnsitePerson[]> }
 type OnsiteEvent = Omit<Event, 'organiserId'>
 ```
@@ -1563,7 +1566,7 @@ Every response except `/api/sources` carries `asOfSeq: number` (§1.6) at the to
 | `GET /api/phases/{phaseId}/checks` | `{ asOfSeq, checks: GateCheck[], flags: GateFlag[] }`: every check and flag of the Phase, all run generations, `status` derived at serialisation (§2.10) | `404 phase-not-found` |
 | `GET /api/sources` | `SourceStatus`, unwrapped | — |
 | `GET /api/diagnostics` | `{ asOfSeq, diagnostics: Diagnostic[] }`: every current diagnostic of the six kinds in §4 (source disagreement, contradicted finish, duplicate finish, stale mark, member-sum mismatch, unparseable cell). Admin audience only | — |
-| `POST /api/rebaseline` | body `{ "scope": { "kind": "phase", "phaseId": string } \| { "kind": "event" } }`. `200 { asOfSeq, scope, snapshotWrittenAt, snapshotDetectedAt, attempts: number }`: the operator re-baseline (§4). `snapshotWrittenAt` is the snapshot file's modification time as the filesystem reports it, `snapshotDetectedAt` the moment the file watch detected that write (`SourceStatus.xml.lastRewriteDetectedAt`, `DERIVATIONS.md` §0.3); both are present on `200`, since the action fails without a readable snapshot. `attempts` counts the Attempts of the scope after the re-baseline. Admin audience only; safe to repeat | `404 phase-not-found`; `409 source-unavailable` with `details.reason` (§1.4) |
+| `POST /api/rebaseline` | body `{ "scope": { "kind": "phase", "phaseId": string } \| { "kind": "event" } }`. `200 { asOfSeq, scope, snapshotWrittenAt, snapshotDetectedAt, attempts: number }`: the operator re-baseline (§4). `snapshotWrittenAt` is the snapshot file's modification time as the filesystem reports it, `snapshotDetectedAt` the ingest time of the re-baseline's own read of the file (§4 step 2: a read with its own ingest sequence, so not `xml.lastRewriteDetectedAt`, which may predate it when the file changed since the last poll, `DERIVATIONS.md` §0.3); both are present on `200`, since the action fails without a readable snapshot. `attempts` counts the Attempts of the scope after the re-baseline. Admin audience only; safe to repeat | `404 phase-not-found`; `409 source-unavailable` with `details.reason` (§1.4) |
 
 The `200` bodies, normatively (the table is the reading version):
 
@@ -1718,7 +1721,7 @@ and the earlier status endpoint is withdrawn. Today's code carries a latent haza
 
 | Method & path | Body | First response | Retry (same key) | Error |
 |---|---|---|---|---|
-| `POST /api/attempts/{phaseId}/{bib}/penalty` | `{ "gate": number, "value": 0\|2\|50 }` | `202`, `Location: /api/writes/{writeId}`, body = `WriteRequest{status:'pending'}` | `200`, current `WriteRequest` | `404 attempt-not-found`; `400 validation-failed` (`value` not in `{0,2,50}`; `gate` outside the Phase's course gates; or the course not configured); `409 write-not-possible` with `reason: 'run-not-closed'` or `'team-boat'` (below) |
+| `POST /api/attempts/{phaseId}/{bib}/penalty` | `{ "gate": number, "value": 0\|2\|50 }` | `202`, `Location: /api/writes/{writeId}`, body = `WriteRequest{status:'pending'}` | `200`, current `WriteRequest` | `404 attempt-not-found`; `400 validation-failed` (`value` not in `{0,2,50}`; `gate` outside the Phase's course gates; or the course not configured); `409 write-not-possible` with `reason: 'run-not-closed'`, `'team-boat'` or `'cross'` (below) |
 | `GET /api/writes/{writeId}` | — | `200 WriteRequest` | — | `404 write-not-found` |
 
 ```ts
@@ -1852,8 +1855,9 @@ future central registry could issue them. The shape of every endpoint below is t
 
 Every push is an idempotent `PUT` upsert by identity (§1.5, INV-5). A successful push returns
 `200 { <resource> }`, the current resolved resource under its singular noun (`class`, `course`,
-`phase`, `entry`, `attempt`; the `*PutResponse` block below), exactly as §8.4 then serves it. A
-malformed body gets `400 validation-failed`, with `error.details` naming the field.
+`phase`, `entry`, `attempt`; the `*PutResponse` block below), as stored: §8.4's `birthDatePublication`
+setting applies to public reads and the stream, not to this response, so `EntryPutResponse` carries
+`birthDate` as pushed. A malformed body gets `400 validation-failed`, with `error.details` naming the field.
 
 | Method & path | Body |
 |---|---|
@@ -1982,11 +1986,13 @@ organisers' events, running in parallel, each visibly carrying live results.
 - `past`: at least one push ever, but none in the last 5 minutes;
 - `upcoming`: none ever.
 
-`dateRange` spans the dates of the event's Phases. `limit` defaults to 50, with a maximum of 200.
+`dateRange` spans the dates of the event's Phases, and is `null` while the event has none, which is
+every `upcoming` event (no push ever). `limit` defaults to 50, with a maximum of 200.
 `nextCursor` is always present: an opaque string while more events follow, `null` on the last page.
 Omitting `status` returns every event:
 - live events first;
-- then upcoming ones, soonest start first;
+- then upcoming ones, soonest start first, those without a `dateRange` after them (their relative
+  order is unspecified until the provisioning gap recorded in `CLIENT-OBLIGATIONS.md` is settled);
 - then past ones, most recent end first.
 
 An empty list is the answer to "no events match", never a `404`. `organiserName` is provisioned
@@ -1998,7 +2004,7 @@ out-of-band.
 | `GET /public/events/{eventId}/classes/{classId}/entries` | `{ asOfSeq, entries: Entry[] }`, birth data per the publication setting below | `404 event-not-found`, else `404 class-not-found` |
 | `GET /public/events/{eventId}/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`, each `Standing` **without `anomalies`** (§2.7) | as above |
 | `GET /public/events/{eventId}/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }` | `404 event-not-found`, else `404 phase-not-found` |
-| `GET /public/events/{eventId}/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null, asOf: Timestamp }`: the on-course set as last pushed, Attempts in course order, `asOf` the push's ingest time. Same shape as §7.1's. The featured competitor defaults to the first Attempt; `featuredByUpstream` is the optional alternative | `404 event-not-found` |
+| `GET /public/events/{eventId}/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null, asOf: Timestamp \| null }`: the on-course set as last pushed, Attempts in course order, `asOf` the push's ingest time, `null` before the event's first on-course push, when the set is empty. Same shape as §7.1's. The featured competitor defaults to the first Attempt; `featuredByUpstream` is the optional alternative | `404 event-not-found` |
 
 **Birth-date publication is a live-mini-server setting, per event.** The store keeps whatever the
 bridge pushed, so the setting can change later without a re-push. The setting,
@@ -2031,7 +2037,7 @@ and on the stream alike):
 ```ts
 type PublicEventsQuery = { status?: 'live' | 'upcoming' | 'past' | 'all'; cursor?: string; limit?: number }
 type PublicEventSummary = { eventId: string; organiserName: string; name: string;
-                            dateRange: { start: string; end: string }; status: 'live' | 'upcoming' | 'past' }
+                            dateRange: { start: string; end: string } | null; status: 'live' | 'upcoming' | 'past' }
 type PublicEventsResponse = { asOfSeq: number; events: PublicEventSummary[]; nextCursor: string | null }
 type PublicEventResponse = { asOfSeq: number; event: Event; classes: Class[]; phases: LivePhase[]; courses: Course[] }
 type PublicPerson = Omit<Person, 'birthDate'> & { birthYear?: number | null; birthDate?: string }   // per birthDatePublication
@@ -2040,7 +2046,7 @@ type PublicEntriesResponse = { asOfSeq: number; entries: PublicEntry[] }
 type PublicStanding = Omit<Standing, 'anomalies'>
 type PublicStandingsResponse = { asOfSeq: number; standings: PublicStanding[] }
 type PublicAttemptsResponse = { asOfSeq: number; attempts: Attempt[] }
-type PublicOnCourseResponse = { asOfSeq: number; attempts: Attempt[]; featuredByUpstream: string | null; asOf: Timestamp }
+type PublicOnCourseResponse = { asOfSeq: number; attempts: Attempt[]; featuredByUpstream: string | null; asOf: Timestamp | null }
 type PublicHeartbeat = { type: 'heartbeat'; asOfSeq: number; serverTime: Timestamp }
 type PublicStreamMessage =
   | { seq: number; type: 'attempt.updated'; attemptId: string; fields: Partial<Omit<Attempt, 'attemptId'>> }
