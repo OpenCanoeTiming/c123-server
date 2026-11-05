@@ -116,7 +116,7 @@ function onCourse(u: Unit, ctx: IngestContext, oc: Node): void {
   const hasGates = c['@Gates'] !== undefined;
   // no course bound (§0.5): the cells as they stand, no gates or faults, and no unparseable-cell
   const bad: CellProblem[] = [];
-  const cells = hasGates ? commaCells(at(c, 'Gates'), usable(slots) ? slots.length : 0, bad) : [];
+  const cells = hasGates ? commaCells(at(c, 'Gates'), usable(slots) ? slots.length : 0, bad, fmt.cross) : [];
   for (const b of bad) u.diagnostic({ kind: 'unparseable-cell', attemptId, source: 'tcp', slot: b.slot, text: b.text });
   const complete = hasGates ? judgingComplete(cells, slots) : null;
   if (hasGates) {

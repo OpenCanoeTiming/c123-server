@@ -92,7 +92,7 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
   // §4.6 gate cells
   const bad: CellProblem[] = [];
   // no course bound (§0.5): the cells as they stand, no gates or faults, and no unparseable-cell (a cell may belong to no slot)
-  const cells = fixedCells(r.gates, usable(slots) ? slots.length : 0, bad);
+  const cells = fixedCells(r.gates, usable(slots) ? slots.length : 0, bad, fmt.cross);
   for (const b of bad) u.diagnostic({ kind: 'unparseable-cell', attemptId, source, slot: b.slot, text: b.text });
   const hasTime = r.time !== undefined;
   if (slots === undefined) row['cells'] = cells;

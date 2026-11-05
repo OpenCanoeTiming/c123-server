@@ -194,11 +194,12 @@ export function markOf(raw: string): ResultMark | '*' | undefined {
 export type Cells = (number | null)[];
 export type CellProblem = { slot: number; text: string };
 
-const cell = (raw: string, slot: number, limit: number, bad: CellProblem[]): number | null => {
+/** `cross`: the cells are fault marks, only empty, 0 and 2 are valid (§4.6(d)). */
+const cell = (raw: string, slot: number, limit: number, bad: CellProblem[], cross: boolean): number | null => {
   const t = raw.trim();
   if (t === '') return null;
   const n = int(t);
-  if (n === undefined) {
+  if (n === undefined || (cross && n !== 0 && n !== 2)) {
     if (slot <= limit) bad.push({ slot, text: raw });
     return null;
   }
@@ -206,13 +207,13 @@ const cell = (raw: string, slot: number, limit: number, bad: CellProblem[]): num
 };
 
 /** (a) `OnCourse.Result[C]@Gates`: comma separated, one token per slot. `limit` is the slot count of the known course, 0 when none is bound. */
-export function commaCells(s: string, limit: number, bad: CellProblem[]): Cells {
-  return s.split(',').map((tok, i) => cell(tok, i + 1, limit, bad));
+export function commaCells(s: string, limit: number, bad: CellProblem[], cross = false): Cells {
+  return s.split(',').map((tok, i) => cell(tok, i + 1, limit, bad, cross));
 }
 /** (b) `Results.Result@Gates` / `XML.Results.Gates`: 3 characters per cell, 30 cells, whatever the course. `limit` as in (a). */
-export function fixedCells(s: string, limit: number, bad: CellProblem[]): Cells {
+export function fixedCells(s: string, limit: number, bad: CellProblem[], cross = false): Cells {
   const out: Cells = [];
-  for (let i = 0; i < 30; i++) out.push(i * 3 < s.length ? cell(s.slice(i * 3, i * 3 + 3), i + 1, limit, bad) : null);
+  for (let i = 0; i < 30; i++) out.push(i * 3 < s.length ? cell(s.slice(i * 3, i * 3 + 3), i + 1, limit, bad, cross) : null);
   return out;
 }
 
