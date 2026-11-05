@@ -37,7 +37,7 @@ src/
 ├── admin/ admin-ui/ tray/ config/ utils/
 ```
 
-The target structure is `docs/arch/ARCHITECTURE.md` §3; the contract package `@opencanoetiming/c123-contract` will be published from this repo (not yet created).
+The target structure is `docs/arch/ARCHITECTURE.md` §3; the contract package `@opencanoetiming/c123-contract` lives in `packages/c123-contract/` (npm workspace; hand-written `index.d.ts`, schemas copied from `docs/arch/schemas/` on `prepack`; types only, devDependency of the server).
 
 ### Ports
 

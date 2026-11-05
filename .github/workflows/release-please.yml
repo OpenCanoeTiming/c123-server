@@ -15,12 +15,42 @@ jobs:
       release_created: ${{ steps.rp.outputs.release_created }}
       tag_name: ${{ steps.rp.outputs.tag_name }}
       sha: ${{ steps.rp.outputs.sha }}
+      # Outputs of the root package (path ".") are unprefixed; other packages
+      # are prefixed with their path.
+      contract_release_created: ${{ steps.rp.outputs['packages/c123-contract--release_created'] }}
     steps:
       - uses: googleapis/release-please-action@v5
         id: rp
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # Publish the contract package (types and schemas only) to GitHub Packages.
+  # A release made with GITHUB_TOKEN does not trigger other workflows, so the
+  # publish lives here, gated on that package's own release output.
+  publish-contract:
+    name: Publish c123-contract
+    needs: release-please
+    if: needs.release-please.outputs.contract_release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@opencanoetiming'
+
+      - name: Publish
+        working-directory: packages/c123-contract
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # When Release Please creates a release, build the Windows installer and
   # attach it.  This replaces the tag-triggered publish-stable job that
