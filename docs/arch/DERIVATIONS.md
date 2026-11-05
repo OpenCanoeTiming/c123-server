@@ -772,11 +772,14 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   snapshot replaces the Phase's rows whole, whatever its `mode` (an empty table is start-list mode,
   §0.3) and whichever source, under INV-2c's guard alone: an `xml` snapshot replaces rows a `tcp`
   snapshot built only when its `changedAfter` is later than that snapshot's `observedAt` (`null`
-  never), and a `tcp` snapshot always replaces. Recorded (cp3-cross, E2, review of round 18): the
-  XML carried upstream's newer build 21–89 s before TCP's rotation did (WX1J_XER_26_JUN, 10:29:03
-  against 10:29:24; MX1_XER_26, 10:29:03 against 10:28:42's reversal), which rule 2 would have held
-  back; the guard admits it and still refuses a save-cycle-stale file. `decidedIn` is kept per
-  `entryId` from the last XML row where the TCP row states `null` (above). The core dates the
+  never), and a `tcp` snapshot always replaces. Recorded (cp3-cross, E2, `scan-cls.ts`, third pass
+  of round 18): at 10:26:13 the XML carried upstream's newer build ahead of TCP's rotation, by 89 s
+  (MX1_XER_26, TCP at 10:27:42) and 119 s (WX1J_XER_26_JUN, TCP at 10:28:12), which rule 2 would
+  have held back; on the reversal TCP led, by 21 s (MX1_XER_26, 10:28:42, XML 10:29:03) and 44 s
+  (WX1J_XER_26_JUN, 10:29:24, XML 10:30:08). The guard admits both and still refuses a
+  save-cycle-stale file. `decidedIn` is kept per `entryId` from the last **admitted** XML row where
+  the TCP row states `null` (above); a refused snapshot moves nothing, `decidedIn` included (INV-2c
+  "retained and not presented"; E4, the recording holds no refusal). The core dates the
   Standing's `asOf` by the `observedAt` of the latest snapshot that changed it (`CONTRACTS.md` §5;
   TCP re-sends the same rows on rotation, 10:27:12, 10:35:14, 10:43:16, which move nothing), and
   publishes the Standing first at its first row: an empty table before any row publishes nothing;

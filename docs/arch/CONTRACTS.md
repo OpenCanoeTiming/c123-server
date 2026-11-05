@@ -1459,9 +1459,12 @@ implementation must satisfy, not an algorithm.
   field. A correction to who raced under a bib is an ordinary `known → known` change.
 - **INV-5 (idempotent supersession).** Re-delivering an identical observation, with the same `value`
   from the same source for the same run generation, is a no-op and triggers no client-visible
-  notification: nothing retained changes, the observation's content age included (a first read
-  after `setPath` re-delivering a value the XML already stated keeps that value's `changedAfter`,
-  so a standing `source-disagreement` neither clears nor re-raises). `Phase.date` is assigned
+  notification: nothing retained changes. The retained observation's content age (INV-2c) is kept
+  where the re-delivery's is `null` or not later (a first read after `setPath` re-delivering a
+  value the XML already stated keeps that value's `changedAfter`, so a standing
+  `source-disagreement` neither clears nor re-raises), and advances to the re-delivery's where that
+  is later: the age only rises, which clears no standing disagreement, and a retained candidate
+  restated by a later rewrite is settled by INV-2c, not by this rule. `Phase.date` is assigned
   once and is never re-derived.
 - **INV-6 (ordering is a monotonic ingest sequence, never the wall clock).** Every "later" or "newer"
   above is defined over an internal, strictly increasing sequence, assigned at the ingest boundary

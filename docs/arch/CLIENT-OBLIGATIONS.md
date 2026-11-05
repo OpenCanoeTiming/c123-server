@@ -21,7 +21,9 @@ increasing narrows, never widens, what a client receives (CONTRACTS §2.12). Its
 (2026-11-06) changed none either: `null` content age, INV-7 on an empty XML table, classification
 precedence and INV-5's no-op are the core's (CONTRACTS §4; DERIVATIONS §0.3, §4.10, §4.12), and a
 classification `Standing.asOf` is now worded as the latest snapshot that changed its rows
-(CONTRACTS §2.4, §5), which is what a client already compared.
+(CONTRACTS §2.4, §5), which is what a client already compared. Its third pass (2026-11-06) changed
+none: INV-5's content age on a later re-delivery and `decidedIn` from an admitted XML row are the
+core's (CONTRACTS §4; DERIVATIONS §4.10; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §1).
 
 ---
 

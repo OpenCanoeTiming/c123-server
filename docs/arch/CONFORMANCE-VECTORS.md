@@ -107,7 +107,9 @@ under INV-2c's guard. One vector is owed, `inv2c-first-read-unknown-age-refused`
 `tcp` rows present results for Attempts A and C; `tcp-disconnected`; a rewrite with
 `changedAfter: null` whose snapshot carries a different value for A, an empty row for C and a
 result for B, which no `tcp` observation presents — A and C unchanged, B presented from `xml`;
-`then` a rewrite whose `changedAfter` follows the disconnect, A's new value presented. It lands with
+`then` a rewrite whose `changedAfter` follows the disconnect and repeats A's refused value (the same
+value, source and generation: INV-5 advances the retained candidate's content age, INV-2c settles
+it), A's new value presented. It lands with
 the harness change that reads the key, since the suite counts are pinned in code (93/87 → 94/88).
 
 ---
@@ -151,7 +153,7 @@ Each vector has:
   event in the ingest sequence.
 - **Content age** (INV-2c and INV-7's guard). An `xml` observation's or snapshot's content age is
   the latest preceding `xml-rewrite-detected` event's `changedAfter` where the event carries that
-  key (a `Timestamp`, or `null`: unknown, earlier than every observation; `DERIVATIONS.md` §0.3);
+  key (a `Timestamp`, or `null`: unknown, INV-2c; `DERIVATIONS.md` §0.3);
   where it does not, that event's `observedAt` minus `context.xmlPollIntervalSeconds`, which defaults
   to 5 where absent; with no preceding rewrite event, its own `observedAt` minus the interval. A
   reader always stamps `changedAfter`; the subtraction exists for vectors written without it, and
