@@ -52,6 +52,10 @@ function readState(stateDir: string) {
   return JSON.parse(readFileSync(path.join(stateDir, 'state.json'), 'utf8'))
 }
 function isAlive(pid: number): boolean {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+    if (stat.slice(stat.lastIndexOf(')') + 1).trim().startsWith('Z')) return false
+  } catch { /* no /proc entry readable: fall through */ }
   try { process.kill(pid, 0); return true } catch { return false }
 }
 function portOpen(port: number): Promise<boolean> {
