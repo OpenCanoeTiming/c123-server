@@ -37,6 +37,7 @@
     "@types/ws": "^8.5.13",
     "@typescript-eslint/eslint-plugin": "^8.68.0",
     "@typescript-eslint/parser": "^8.68.0",
+    "ajv": "^8.20.0",
     "eslint": "^10.11.0",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
