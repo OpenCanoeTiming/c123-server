@@ -95,7 +95,7 @@ describe('row 16 consumer', () => {
     expect(inst.status, inst.out).toBe(0)
 
     const variants: Record<string, object> = {
-      node16: { module: 'node16', moduleResolution: 'node16' },
+      nodenext: { module: 'nodenext', moduleResolution: 'nodenext', resolveJsonModule: true },
       bundler: { module: 'esnext', moduleResolution: 'bundler', resolveJsonModule: true },
     }
     for (const [name, opts] of Object.entries(variants)) {

@@ -53,18 +53,23 @@ describe('release wiring (row 18)', () => {
     const yml = readFileSync(join(ROOT, '.github/workflows/release-please.yml'), 'utf8')
     const all = jobs(yml)
 
-    // release-please job exposes the package's output
-    expect(all['release-please'], 'release-please job').toContain(OUTPUT)
+    // chain: step output -> release job output (any name) -> publish job `if` through needs
+    const rel = all['release-please']
+    const stepOut = new RegExp(
+      `^\\s+(\\w+):\\s*\\$\\{\\{\\s*steps\\.(\\w+)\\.outputs\\['${OUTPUT}'\\]\\s*\\}\\}\\s*$`,
+      'm',
+    ).exec(rel)
+    expect(stepOut, `release job maps steps.<id>.outputs['${OUTPUT}'] to a job output`).not.toBeNull()
+    const [, outName, stepId] = stepOut as RegExpExecArray
+    expect(rel, 'the step id exists and is the release-please action').toMatch(new RegExp(`^\\s+id:\\s*${stepId}\\s*$`, 'm'))
 
     const publishers = Object.entries(all).filter(([, body]) => /npm publish/.test(body))
-    expect(publishers.length, 'a job that runs npm publish').toBeGreaterThanOrEqual(1)
-    const [id, body] = publishers.find(([, b]) => b.includes(OUTPUT)) ?? []
-    expect(id, `a publishing job gated on ${OUTPUT}`).toBeDefined()
-    const body_ = body as string
-
-    const ifLine = body_.split('\n').find((l) => /^ {4}if:/.test(l)) ?? ''
-    expect(ifLine).toContain(OUTPUT)
-    expect(ifLine).toContain("'true'")
+    const gated = publishers.find(([, b]) => {
+      const ifLine = (b.split('\n').find((l) => /^ {4}if:/.test(l)) ?? '').replace(/\s+#.*$/, '')
+      return new RegExp(`needs\\.release-please\\.outputs\\.${outName}\\s*==\\s*'true'`).test(ifLine)
+    })
+    expect(gated, `a job running npm publish whose if reads needs.release-please.outputs.${outName}`).toBeDefined()
+    const body_ = (gated as [string, string])[1]
     expect(body_).toMatch(/needs:.*release-please/s)
     // npm publish runs in the package directory
     expect(body_).toMatch(
