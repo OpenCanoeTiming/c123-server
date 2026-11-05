@@ -3927,6 +3927,7 @@
         }
       },
       "context": {
+        "tier": "live",
         "attemptId": "K1M_BR1_6:9"
       }
     },

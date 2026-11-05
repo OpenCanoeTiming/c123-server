@@ -57,7 +57,11 @@ fields provisional while run 2 runs, `status` never provisional, an Attempt unst
 and a first-run row wiped in place (the recorded jury re-run).
 
 **93 vectors:** 80 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
-needed, not a target.
+needed, not a target. **c123-server runs 87 of them, live-mini-server 20** (§1, "Which vectors each
+component runs"); 14 run in both suites.
+
+**Round 14** (2026-11-05, server#200) stated that split, and gave `live-explicit-not-yet-resets-field`
+the `context.tier: 'live'` the other five `live-ingest` vectors already carried.
 
 ---
 
@@ -118,7 +122,26 @@ Each vector has:
   'classification', body }` is a bare §8.3 push; the event `delete` with `attemptId` is a `DELETE`. `expect.notifications` may be a map of
   message type to count.
 
-**Which vectors the live tier runs** (`CONTRACTS.md` §8.3, "Merge on the live tier").
+**Which vectors each component runs.** Each component feeds its own merge function through a thin
+adapter (`TEST-ARCHITECTURE.md` §3.1); the sets overlap, and each suite asserts its own count.
+
+**c123-server runs 87: every vector not tagged `live-ingest`.** That is every merge vector whose
+`given` is `tcp`, `xml` and `operator-write` observations, connection and operator events, scope
+snapshots and on-course listings, plus all 8 `standing-assembly` and all 5 `workflow-state` vectors
+(`ARCHITECTURE.md` §3: c123-server owns the on-site domain layer whole, §4 and §5 with the anomaly
+checks, and the checks store). It runs **none of the six `live-ingest` vectors**: each feeds a bare
+§8.3 push, a `DELETE` or an explicit `not-yet` observation into a store that applies the live
+merge, and c123-server has no such store; on the bridge it only sends (`CONTRACTS.md` §8.3). The
+spike's live store was a spike (`DECISIONS/ADR-017`), not a server duty. A suite selects them by
+`invariant: 'live-ingest'`; every one also carries `context.tier: 'live'`. No on-site vector depends
+on a `live-ingest` one: the on-site side of a reset, a deletion or a replace is a `notifications`
+expectation of the `run-generation`, `INV-7` and `rebaseline` vectors.
+
+**live-mini-server runs 20** (`CONTRACTS.md` §8.3, "Merge on the live tier"), the subset below: 2 of
+`INV-1`, 2 `INV-3`, 1 each of `INV-4`, `INV-5` and `INV-6`, 6 `live-ingest`, 2 `operator-write` and 5
+`standing-assembly`. In live vectors an observation's `source` is the one the bridge states
+(`CONTRACTS.md` §8.3, "Attempt fields arrive already wrapped"), so `tcp` there is a forwarded on-site
+envelope, not a live source.
 live-mini-server runs: the `INV-1` vectors **except** the two built on scope snapshots
 (`retraction-not-from-fragment`, `retraction-not-in-other-race-snapshot`); every `INV-3`, `INV-4`,
 `INV-5`, `INV-6` and `live-ingest` vector; of the `operator-write` vectors only the two no-echo

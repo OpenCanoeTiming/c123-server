@@ -119,7 +119,8 @@ cover:
 - §5's standing assembly.
 
 The count is 93 as of round 9 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
-a thin adapter that feeds these vectors into its own merge function and asserts the result — proving
+a thin adapter that feeds the vectors `CONFORMANCE-VECTORS.md` §1 assigns to it (87 and 20; the sets
+overlap) into its own merge function and asserts the result — proving
 both satisfy the same data-defined contract without either depending on the other's code.
 
 **This is the minimum that proves the contract implementable before any server code exists.** Every

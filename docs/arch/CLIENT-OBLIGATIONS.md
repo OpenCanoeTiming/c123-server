@@ -20,7 +20,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 
 - [ ] Never reinterpret upstream-derived data, not even "just this once" for one feature; c123-server's domain layer is the only interpreter (ADR-002; ARCHITECTURE §2).
 - [ ] Import no interpretation logic from another repository; share only types and data (ADR-002; TEST-ARCHITECTURE §3.1).
-- [ ] Take the contract's types and its two JSON schemas from `@opencanoetiming/c123-contract` as a pinned dependency; never restate the contract in a parallel hand-written schema (ARCHITECTURE §3, §5).
+- [ ] Take the contract's types and its three JSON schemas from `@opencanoetiming/c123-contract` as a pinned dependency; never restate the contract in a parallel hand-written schema (ARCHITECTURE §3, §5).
 - [ ] Treat `phaseId` (Canoe123 `RaceId`), `entryId` (Canoe123 `Id`) and `classId` as opaque; never parse them for class, run, age category, crew or day (CONTRACTS §1.1, §2.3, §2.5; ADR-001).
 - [ ] Take structure only from its own fields: `Class.discipline`, `Phase.kind`, `Phase.pair`, `Phase.scoringKind`, `Phase.heats` (CONTRACTS §2.3, §2.4; ADR-014).
 - [ ] Key every Attempt-level record by `attemptId` = `(phaseId, bib)`, never by bib alone (CONTRACTS §2.6; ARCHITECTURE §5).
@@ -274,10 +274,10 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Apply the per-event `birthDatePublication` setting, provisioned out of band with the key: `'year'` by default, serving `birthYear` only, `null` where no `birthDate` was pushed; `'full'` serving `birthDate` as pushed, absent where none was; `'none'` serving neither key; the same in reads and on the stream (CONTRACTS §8.4).
 - [ ] Serve `GET /public/events/{eventId}/stream` as `text/event-stream`, carrying `attempt.updated`, `attempt.deleted`, `phase.updated`, `entry.updated`, `class.updated`, `course.updated`, `standing.updated`, `oncourse.updated` and `scope.replaced`, each with its `seq`, and a `heartbeat` `{ type: 'heartbeat', asOfSeq, serverTime }` at least every 15 s; every frame a default `message` event whose `data` is one JSON object carrying `type` (CONTRACTS §1.6, §8.4).
 - [ ] Never send `write.updated`, `sources.updated`, `check.updated`, `flag.updated`, `event.changed` or `diagnostics.updated` on the stream (CONTRACTS §2.10, §4, §8.4).
-- [ ] Encode every envelope as the wire encoding requires, `eventTime` omitted rather than `null`, so that every envelope and error validates against the two schemas (CONTRACTS §1.2, §1.7).
+- [ ] Encode every envelope as the wire encoding requires, `eventTime` omitted rather than `null`, so that every envelope and error validates against the two wire schemas (CONTRACTS §1.2, §1.7).
 
 **Tests**
-- [ ] Run, through a thin adapter into its own merge function, the tier-1 vectors CONFORMANCE-VECTORS §1 lists for the live tier: `INV-1` except the two scope-snapshot ones, `INV-3`, `INV-4`, `INV-5`, `INV-6`, `live-ingest`, the two `operator-correction-*` vectors, and `standing-assembly` except the three anomaly vectors (CONFORMANCE-VECTORS §1, §2; TEST-ARCHITECTURE §3.1).
+- [ ] Run, through a thin adapter into its own merge function, the 20 tier-1 vectors CONFORMANCE-VECTORS §1 lists for the live tier, and assert that count: `INV-1` except the two scope-snapshot ones, `INV-3`, `INV-4`, `INV-5`, `INV-6`, `live-ingest`, the two `operator-correction-*` vectors, and `standing-assembly` except the three anomaly vectors (CONFORMANCE-VECTORS §1, §2; TEST-ARCHITECTURE §3.1).
 - [ ] Add tier-1 time-window vectors for calendar `status`: just under, exactly at and just over 5 minutes (TEST-ARCHITECTURE §3.1).
 - [ ] Replay each admitted domain-state fixture's deltas as the §8.3 pushes they correspond to, check that values read back over the public reads match, and run the deltas-only gate-2 properties (those marked **D**) on the resulting public stream (TEST-ARCHITECTURE §3.2, §7).
 - [ ] Verify tenant isolation with the store's own integration tests: no leakage between two keys with equal local ids, no cross-event access, `403` for a revoked key, `404` for an unknown `eventId` (TEST-ARCHITECTURE §3.5; CONFORMANCE-VECTORS §3).
