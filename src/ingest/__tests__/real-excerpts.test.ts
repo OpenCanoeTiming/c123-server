@@ -101,10 +101,13 @@ describe('real TCP excerpts', () => {
     expect(rowOf(els, 'MX1J_XT_26_JUN', '12')).toMatchObject({ placement: { rank: 1, order: 1 }, qualified: true });
     expect(rowOf(els, 'MX1J_XT_26_JUN', '13')).toMatchObject({ placement: { rank: 2, order: 2 } });
   });
-  it('Results classification XER (cp3-cross): two rows, no Attempts', () => {
+  it('Results classification XER (cp3-cross): a snapshot of two ClassificationRows (§4.10), no Attempts', () => {
     const els = parseTcp(TCP.resultsXer, ctx()) as El[];
     expect(els.find((e) => e.push === 'classification')!.body.rows).toHaveLength(2);
-    expect(els.filter((e) => e.snapshot)).toEqual([]);
+    const snaps = els.filter((e) => e.snapshot);
+    expect(snaps.map((e) => e.snapshot.phaseId)).toEqual(['WX1_XER_26']);
+    expect(snaps[0].snapshot.rows).toHaveLength(2);
+    expect(els.filter((e) => e.attemptId)).toEqual([]);
   });
 });
 

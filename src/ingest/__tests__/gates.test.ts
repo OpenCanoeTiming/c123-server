@@ -162,6 +162,17 @@ describe('§4.6 gate parsing', () => {
     it('§4.6(d) time trial: Pen 0 and Total = Time (XT bib 23: 87.60 / 87.60) are relayed as given', () => {
       expect(rowOf(parseTcp(TCP.resultsXtFault, ctx()), 'WX1_XT_26', '23').outcome).toMatchObject({ kind: 'duration', runSeconds: 87.6, totalSeconds: 87.6 });
     });
+    it.each(['  1', '  5', ' 50', 'abc'])('§4.6(d) a Cross cell other than empty, 0 or 2 ("%s", slot 5) raises unparseable-cell and is null: the fault count stays the recorded one', (cell) => {
+      const msg = only(TCP.resultsXtFault, '23');
+      const g = msg.match(/Gates="([^"]*)"/)![1];
+      const cells = g.match(/.{3}/g)!;
+      cells[4] = cell;
+      const els = parseTcp(msg.replace(g, cells.join('')), ctx());
+      expect(diagnostics(els).filter((d) => d.kind === 'unparseable-cell')).toEqual([expect.objectContaining({ slot: 5, attemptId: 'WX1_XT_26:23', source: 'tcp' })]);
+      const f = rowOf(els, 'WX1_XT_26', '23').faults;
+      expect(f.count).toBe(1);
+      expect(f.gates).toEqual(['3']);
+    });
     it('§4.6(d) Cross cells are per slot with the 9-slot course (CROSS_SLOTS): the unparseable-cell slot is a slot position, not a gate number', () => {
       // synthetic: cell 8 (the roll zone, no gate number) holds text
       const msg = only(TCP.resultsXtFault, '23');
