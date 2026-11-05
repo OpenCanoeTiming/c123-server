@@ -76,7 +76,6 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
   const m = markOf(r.mark);
   const status = m !== undefined && m !== '*' ? m : undefined;
   if (status !== undefined) row['status'] = status;
-  if (m === '*' || r.pp.trim() === '*') row['underReview'] = true;
 
   // §4.7 placement: an empty Rank is no placement; the combined rank on a second XML run
   const rank = int(second && x ? x.totalRank : r.rank);
@@ -85,6 +84,10 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
     u.diagnostic({ kind: 'unparseable-field', where: attemptId, name: 'RankOrder', text: second && x ? x.totalRankOrder : r.rankOrder });
     row['placement'] = null;
   } else row['placement'] = rank === undefined || order === undefined ? null : ({ rank, order } satisfies Placement);
+
+  // §4.1: every row carrying a time, a mark or a placement states underReview, false without the mark; a blank row states nothing (INV-7)
+  const carrying = r.time !== undefined || m !== undefined || row['placement'] !== null;
+  if (carrying) row['underReview'] = m === '*' || r.pp.trim() === '*';
 
   // §4.6 gate cells
   const bad: CellProblem[] = [];
@@ -156,7 +159,11 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
   }
   const so = int(r.startOrder);
   if (so !== undefined) row['startOrder'] = so;
-  row['qualified'] = r.q.trim() === 'Q' ? true : fmt.progression ? false : NA;
+  // §4.7 qualified: known on every row carrying a time, a mark or a placement outside final/super-final/classification; a stated Q is never dropped
+  const noCut = fmt.stage === 'final' || fmt.stage === 'super-final' || fmt.kind === 'classification';
+  if (r.q.trim() === 'Q') row['qualified'] = true;
+  else if (noCut) row['qualified'] = NA;
+  else if (carrying) row['qualified'] = false;
   if (x !== undefined) {
     if (x.dtFinish.trim() !== '') {
       const ft = zonedInstant(env.date, x.dtFinish, env.zone);

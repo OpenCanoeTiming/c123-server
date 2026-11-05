@@ -1,6 +1,6 @@
 import type { Outcome, TimeToBeat } from '@opencanoetiming/c123-contract';
 import {
-  type CellProblem, type Node, UNASSIGNED, Unit, asArray, at, classificationRow, commaCells, faultsFromCells, fmtOf, gatesFromCells, int, judgingComplete, num, r3, readDoc,
+  type CellProblem, type Node, UNASSIGNED, Unit, asArray, at, classificationRow, commaCells, isNaRace, faultsFromCells, fmtOf, gatesFromCells, int, judgingComplete, num, r3, readDoc,
   splitRaceId, sumJudged, unparseableUnit, usable, zonedInstant,
 } from './common.js';
 import { type Candidates, emitCourse, emitPhase } from './phase.js';
@@ -22,7 +22,7 @@ function numAttr(u: Unit, where: string, n: Node | undefined, name: string, f: (
 
 function results(u: Unit, ctx: IngestContext, res: Node): void {
   const phaseId = at(res, 'RaceId');
-  if (phaseId === UNASSIGNED) return;
+  if (phaseId === UNASSIGNED || isNaRace(phaseId, at(res, 'ClassId'))) return;
   if (phaseId === '') {
     u.diagnostic({ kind: 'unparseable-field', where: 'Results', name: 'RaceId', text: '' });
     return;
@@ -45,17 +45,13 @@ function results(u: Unit, ctx: IngestContext, res: Node): void {
   }
   if (fmt.kind === 'classification') {
     if (fmt.token === 'RXER') return;
-    u.add({
-      push: 'classification', phaseId,
-      body: {
-        rows: rows.flatMap((row) => {
-          const p = row['Participant'] as Node | undefined;
-          const r = asArray(row['Result'])[0];
-          return classificationRow(u, `${phaseId}:${at(p, 'Bib').trim()}`, { entryId: at(p, 'Id'), bib: at(p, 'Bib'), rank: at(r, 'Rank'), order: at(r, 'RankOrder'), decidedIn: '' }) ?? [];
-        }),
-        asOf: ctx.observedAt,
-      },
+    const crows = rows.flatMap((row) => {
+      const p = row['Participant'] as Node | undefined;
+      const r = asArray(row['Result'])[0];
+      return classificationRow(u, `${phaseId}:${at(p, 'Bib').trim()}`, { entryId: at(p, 'Id'), bib: at(p, 'Bib'), rank: at(r, 'Rank'), order: at(r, 'RankOrder'), decidedIn: '' }) ?? [];
     });
+    u.add({ push: 'classification', phaseId, body: { rows: crows, asOf: ctx.observedAt } });
+    u.add({ snapshot: { source: 'tcp', phaseId, mode: 'results', rows: crows } }); // §4.10: a scope snapshot of ClassificationRows
     return;
   }
   const env = { u, phaseId, fmt, slots: ctx.courses?.[phaseId]?.slots, date: ctx.phaseDates?.[phaseId], zone: ctx.zone };
@@ -90,7 +86,7 @@ function onCourse(u: Unit, ctx: IngestContext, oc: Node): void {
     return;
   }
   const phaseId = at(p, 'RaceId');
-  if (phaseId === UNASSIGNED) return;
+  if (phaseId === UNASSIGNED || isNaRace(phaseId)) return;
   const results = asArray(oc['Result']);
   const c = results.find((r) => at(r, 'Type') === 'C');
   const t = results.find((r) => at(r, 'Type') === 'T');
@@ -178,7 +174,7 @@ function onCourse(u: Unit, ctx: IngestContext, oc: Node): void {
 // ---------------------------------------------------------------- Schedule, RaceConfig, TVS, TimeOfDay
 
 function schedule(u: Unit, ctx: IngestContext, sc: Node): void {
-  const races = asArray(sc['Race']).filter((r) => at(r, 'RaceId') !== UNASSIGNED && at(r, 'RaceId') !== '');
+  const races = asArray(sc['Race']).filter((r) => at(r, 'RaceId') !== UNASSIGNED && at(r, 'RaceId') !== '' && !isNaRace(at(r, 'RaceId')));
   const candidates: Candidates = new Map(Object.entries(ctx.phaseDates ?? {}));
   for (const r of races) candidates.set(at(r, 'RaceId'), ctx.phaseDates?.[at(r, 'RaceId')]);
   for (const r of races) {

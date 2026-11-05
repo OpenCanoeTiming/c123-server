@@ -165,6 +165,8 @@ export function splitRaceId(raceId: string): { classKey: string; token: string; 
 }
 
 export const UNASSIGNED = '<unassigned>';
+/** §0.4: the pseudo-class `NA` takes its Schedule rows, Phases and result rows with it; the class is the `RaceId`'s first part. */
+export const isNaRace = (raceId: string, classId = ''): boolean => classId === 'NA' || splitRaceId(raceId).classKey === 'NA';
 
 /** §4.10: one classification row. `decidedIn` is the XML `RecordType` verbatim, null where the source carries none (TCP). A row without a `RankOrder` is reported, not guessed. */
 export function classificationRow(u: Unit, where: string, f: { entryId: string; bib: string; rank: string; order: string; decidedIn: string }): ClassificationRow | undefined {
@@ -262,8 +264,8 @@ export function parseLayout(layout: string, captions?: string[]): Layout {
       out.slots.push({ slot: out.slots.length + 1, kind: 'gate', gateNumber: gate });
     } else if (ch === 'D' || ch === 'E') {
       out.slots.push({ slot: out.slots.length + 1, kind: ch === 'D' ? 'start-ramp' : 'roll-zone' });
-    } else if (ch === 'S') out.sectorEndsAfterGate.push(gate);
-    else if (ch === 'I') out.splitsAfterGate.push(gate);
+    } else if (ch === 'S') { if (gate > 0) out.sectorEndsAfterGate.push(gate); } // before the first gate records nothing (§2.3)
+    else if (ch === 'I') { if (gate > 0) out.splitsAfterGate.push(gate); }
     else out.unknownChars.push(ch);
   }
   if (captions !== undefined) {

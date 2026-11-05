@@ -1,4 +1,4 @@
-import { type Node, UNASSIGNED, Unit, asArray, classificationRow, fmtOf, has, int, ms, parseLayout, readDoc, splitRaceId, tx, unparseableUnit } from './common.js';
+import { type Node, UNASSIGNED, Unit, asArray, classificationRow, fmtOf, isNaRace, has, int, ms, parseLayout, readDoc, splitRaceId, tx, unparseableUnit } from './common.js';
 import { type Candidates, emitCourse, emitPhase } from './phase.js';
 import { type RowIn, buildRow, rowIsResult } from './rows.js';
 import type { CourseSlot, IngestContext, IngestElement } from './types.js';
@@ -31,19 +31,21 @@ function entry(u: Unit, p: Node, index: Map<string, Node>, bibHandling: string, 
   const name = (s: '' | '2') => `${tx(p, 'FamilyName' + s).trim()} ${tx(p, 'GivenName' + s).trim()}`.trim();
   u.obs('result-row', 'displayName', key, team ? tx(p, 'FamilyName').trim() : crew ? `${name('')}/${name('2')}` : name(''));
   const members: Record<string, unknown>[] = [];
+  let partial = false;
   if (team) {
     for (const k of ['Member1', 'Member2', 'Member3']) {
       const ref = tx(p, k);
       if (ref === '') continue;
       const found = index.get(ref);
-      if (found === undefined) u.diagnostic({ kind: 'unresolved-member', entryId, member: ref });
+      if (found === undefined) { u.diagnostic({ kind: 'unresolved-member', entryId, member: ref }); partial = true; }
       else members.push(member(found, '', ctx.externalIdScheme));
     }
   } else {
     members.push(member(p, '', ctx.externalIdScheme));
     if (crew) members.push(member(p, '2', ctx.externalIdScheme));
   }
-  u.obs('result-row', 'members', key, members);
+  if (partial) u.notYet('result-row', 'members', key); // no partial crew (§3)
+  else u.obs('result-row', 'members', key, members);
   const club = tx(p, 'Club').trim();
   if (club !== '') u.obs('result-row', 'club', key, club);
   const noc = tx(p, 'NOC').trim();
@@ -92,7 +94,7 @@ export function parseXmlSnapshot(xml: string, ctx: IngestContext): IngestElement
   const u = new Unit('xml', ctx.observedAt);
 
   const bibHandling = tx(asArray(root['Events'])[0], 'BibHandling').trim();
-  const schedule = asArray(root['Schedule']).filter((s) => tx(s, 'RaceId') !== UNASSIGNED && tx(s, 'RaceId') !== '');
+  const schedule = asArray(root['Schedule']).filter((s) => tx(s, 'RaceId') !== UNASSIGNED && tx(s, 'RaceId') !== '' && !isNaRace(tx(s, 'RaceId'), tx(s, 'ClassId')));
   const layouts = new Map<string, string>();
   for (const c of asArray(root['CourseData'])) layouts.set(tx(c, 'CourseNr').trim(), tx(c, 'CourseConfig'));
 
@@ -141,7 +143,7 @@ export function parseXmlSnapshot(xml: string, ctx: IngestContext): IngestElement
   const byRace = new Map<string, Node[]>();
   for (const r of asArray(root['Results'])) {
     const id = tx(r, 'RaceId');
-    if (id === UNASSIGNED || id === '') continue;
+    if (id === UNASSIGNED || id === '' || isNaRace(id)) continue;
     const list = byRace.get(id);
     if (list === undefined) byRace.set(id, [r]);
     else list.push(r);
@@ -154,15 +156,11 @@ export function parseXmlSnapshot(xml: string, ctx: IngestContext): IngestElement
     const rows = byRace.get(phaseId) ?? [];
     if (fmt.kind === 'classification') {
       if (fmt.token === 'RXER') continue;
-      u.add({
-        push: 'classification', phaseId,
-        body: {
-          rows: rows.flatMap((r) => classificationRow(u, `${phaseId}:${tx(r, 'Bib').trim()}`, {
-            entryId: tx(r, 'Id'), bib: tx(r, 'Bib'), rank: tx(r, 'Rnk'), order: tx(r, 'RnkOrder'), decidedIn: tx(r, 'RecordType'),
-          }) ?? []),
-          asOf: ctx.observedAt,
-        },
-      });
+      const crows = rows.flatMap((r) => classificationRow(u, `${phaseId}:${tx(r, 'Bib').trim()}`, {
+        entryId: tx(r, 'Id'), bib: tx(r, 'Bib'), rank: tx(r, 'Rnk'), order: tx(r, 'RnkOrder'), decidedIn: tx(r, 'RecordType'),
+      }) ?? []);
+      u.add({ push: 'classification', phaseId, body: { rows: crows, asOf: ctx.observedAt } });
+      u.add({ snapshot: { source: 'xml', phaseId, mode: 'results', rows: crows } }); // §4.10: a scope snapshot of ClassificationRows
       continue;
     }
     // the bound course is the caller's; the snapshot's own CourseData is the fallback, without captions
