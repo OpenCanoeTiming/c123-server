@@ -16,15 +16,17 @@ fs.writeFileSync(xmlOut, '<?xml version="1.0"?><Canoe123Data></Canoe123Data>\n')
 const tcp = net.createServer((s) => s.on('error', () => {}))
 tcp.listen(Number(opt('--port')), '127.0.0.1')
 // STUB_PLAYER_MODE=silent: binds but never answers health.
-// STUB_PLAYER_MODE=die-after: answers /status, exits 300 ms after its own start (not after the first
-// answer: a late first poll would let `up` finish with a healthy server before the death, #232).
+// STUB_PLAYER_MODE=die-after: answers /status once, writes <xml-out dir>/answered, then exits at once.
 const mode = process.env.STUB_PLAYER_MODE
-if (mode === 'die-after') setTimeout(() => process.exit(4), 300)
 const ctl = http.createServer((req, res) => {
   if (mode === 'silent') return
   if (req.url === '/status') {
     res.setHeader('content-type', 'application/json')
-    res.end(JSON.stringify({ state: 'playing' }))
+    res.end(JSON.stringify({ state: 'playing' }), () => {
+      if (mode !== 'die-after') return
+      fs.writeFileSync(path.join(path.dirname(xmlOut), 'answered'), '1')
+      process.exit(4)
+    })
   } else {
     res.statusCode = 404
     res.end()
