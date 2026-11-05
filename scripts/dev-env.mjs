@@ -9,7 +9,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const HEALTH_TIMEOUT_MS = 180_000 // the player reads a large recording before it answers
+const HEALTH_TIMEOUT_MS = 60_000 // both services bind within seconds; a hung child must not outlast the 2-minute acceptance
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 function fail(msg, code = 1) {
@@ -47,6 +47,28 @@ const isAlive = (pid) => {
     if (stat.slice(stat.lastIndexOf(')') + 2, stat.lastIndexOf(')') + 3) === 'Z') return false
   } catch { /* no procfs */ }
   return true
+}
+
+/** Command line of a pid: /proc first, then ps. null when neither source exists. */
+function cmdlineOf(pid) {
+  try {
+    return fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ')
+  } catch (e) {
+    if (fs.existsSync('/proc/self')) return e.code === 'ENOENT' ? '' : null // procfs present, pid gone
+  }
+  try {
+    return execFileSync('ps', ['-o', 'args=', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+  } catch (e) {
+    return e.code === 'ENOENT' ? null : '' // ps missing: unknown; ps failed: no such pid
+  }
+}
+
+/** A pid read from disk is this env's process only if it is alive and its command line holds the state dir. */
+function isOurs(pid, stateDir) {
+  if (!Number.isInteger(pid) || !isAlive(pid)) return false
+  const cmd = cmdlineOf(pid)
+  if (cmd === null) return true // no way to tell (e.g. Windows without ps): trust the pid
+  return cmd.includes(stateDir)
 }
 
 async function killPid(pid) {
@@ -96,9 +118,29 @@ function resolveDocs(o) {
   )
 }
 
+/** null when the file is absent; exits non-zero when it exists but cannot be read. */
 function readState(file) {
-  try { return JSON.parse(fs.readFileSync(file, 'utf8')) } catch { return null }
+  let text
+  try {
+    text = fs.readFileSync(file, 'utf8')
+  } catch (e) {
+    if (e.code === 'ENOENT') return null
+    fail(`cannot read ${file}: ${e.message}`)
+  }
+  try {
+    const st = JSON.parse(text)
+    if (st && typeof st === 'object') return st
+  } catch { /* fall through */ }
+  return fail(`${file} is unreadable (not valid JSON); inspect it, or remove it if nothing is running`)
 }
+
+function writeStateAtomic(file, st) {
+  const tmp = `${file}.${process.pid}.tmp`
+  fs.writeFileSync(tmp, JSON.stringify(st, null, 2) + '\n')
+  fs.renameSync(tmp, file)
+}
+
+const statePids = (st) => [st.server?.pid, st.player?.pid].filter((p) => Number.isInteger(p))
 
 async function down(stateDir) {
   const file = path.join(stateDir, 'state.json')
@@ -107,11 +149,37 @@ async function down(stateDir) {
     console.log('dev-env: nothing to stop')
     return
   }
-  const pids = [st.server?.pid, st.player?.pid].filter((p) => Number.isInteger(p))
+  const pids = statePids(st).filter((p) => isOurs(p, stateDir))
   const results = await Promise.all(pids.map(killPid))
   if (results.some((ok) => !ok)) fail(`could not stop all processes (pids ${pids.join(', ')}); state.json kept`)
   fs.rmSync(file, { force: true })
+  const lock = readLock(path.join(stateDir, 'up.lock'))
+  if (lock !== null && !isAlive(lock)) fs.rmSync(path.join(stateDir, 'up.lock'), { force: true })
   console.log('dev-env: stopped')
+}
+
+function readLock(file) {
+  try {
+    const n = Number(fs.readFileSync(file, 'utf8').trim())
+    return Number.isInteger(n) && n > 0 ? n : 0
+  } catch { return null }
+}
+
+/** Takes <state>/up.lock with `wx`; a lock held by a dead pid is replaced. */
+function takeLock(stateDir) {
+  const file = path.join(stateDir, 'up.lock')
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      fs.writeFileSync(file, String(process.pid), { flag: 'wx' })
+      return file
+    } catch (e) {
+      if (e.code !== 'EEXIST') fail(`cannot create ${file}: ${e.message}`)
+    }
+    const holder = readLock(file)
+    if (holder !== null && holder !== 0 && isAlive(holder)) fail(`already running: another up holds ${file} (pid ${holder})`)
+    fs.rmSync(file, { force: true }) // stale
+  }
+  return fail(`already running: another up holds ${file}`)
 }
 
 function run(cmd, args, opts = {}) {
@@ -125,35 +193,68 @@ function run(cmd, args, opts = {}) {
   })
 }
 
+function npmCi() {
+  const execpath = process.env.npm_execpath
+  const r = execpath && fs.existsSync(execpath)
+    ? spawnSync(process.execPath, [execpath, 'ci'], { cwd: ROOT, stdio: 'inherit' })
+    : spawnSync('npm', ['ci'], { cwd: ROOT, stdio: 'inherit', shell: process.platform === 'win32' })
+  return r.status === 0
+}
+
 async function up(o) {
   if (!o.recording) fail('--recording <id> is required', 2)
   const speed = o.speed === undefined ? 1 : Number(o.speed)
   if (!Number.isFinite(speed) || speed <= 0) fail(`invalid --speed ${o.speed}`, 2)
   const stateDir = path.resolve(o.stateDir ?? path.join(ROOT, '.dev-env'))
   const stateFile = path.join(stateDir, 'state.json')
-
-  const existing = readState(stateFile)
-  if (existing) {
-    const live = [existing.player?.pid, existing.server?.pid].some((p) => Number.isInteger(p) && isAlive(p))
-    if (live) fail(`already running (state: ${stateFile}); run with --down first`)
-    fs.rmSync(stateFile, { force: true }) // stale
-  }
-
   const docs = resolveDocs(o)
   fs.mkdirSync(path.join(stateDir, 'home'), { recursive: true })
 
+  const lockFile = takeLock(stateDir)
+  const children = []
+  let finished = false
+  const releaseLock = () => { try { fs.rmSync(lockFile, { force: true }) } catch { /* ignore */ } }
+  process.on('exit', releaseLock)
+  const cleanup = async () => {
+    await Promise.all(children.map((r) => killPid(r.pid)))
+    fs.rmSync(stateFile, { force: true })
+    releaseLock()
+  }
+  const abort = async (msg, log) => {
+    await cleanup()
+    fail(`${msg}${log ? ` (see ${log})` : ''}`)
+  }
+  for (const [sig, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {
+    process.on(sig, () => {
+      if (finished) return
+      finished = true
+      cleanup().then(() => {
+        console.error(`dev-env: interrupted (${sig}); stopped what had started`)
+        process.exit(code)
+      })
+    })
+  }
+
+  const existing = readState(stateFile)
+  if (existing) {
+    if (statePids(existing).some((p) => isOurs(p, stateDir))) {
+      releaseLock()
+      fail(`already running (state: ${stateFile}); run with --down first`)
+    }
+    fs.rmSync(stateFile, { force: true }) // stale: nothing of it is alive
+  }
+
   if (!fs.existsSync(path.join(ROOT, 'node_modules', '.package-lock.json'))) {
     console.log('dev-env: installing dependencies (npm ci)')
-    const r = spawnSync('npm', ['ci'], { cwd: ROOT, stdio: 'inherit' })
-    if (r.status !== 0) fail('npm ci failed')
+    if (!npmCi()) await abort('npm ci failed')
   }
 
   const cli = path.join(docs, 'tools', 'recordings-cli.js')
   const fetched = await run(process.execPath, [cli, 'fetch', o.recording])
-  if (fetched.code !== 0) fail(`could not fetch recording ${o.recording}: ${(fetched.err || fetched.out).trim()}`)
+  if (fetched.code !== 0) await abort(`could not fetch recording ${o.recording}: ${(fetched.err || fetched.out).trim()}`)
   const pathed = await run(process.execPath, [cli, 'path', o.recording])
   const recDir = pathed.out.trim().split('\n').pop()?.trim()
-  if (pathed.code !== 0 || !recDir) fail(`could not resolve recording ${o.recording}: ${(pathed.err || pathed.out).trim()}`)
+  if (pathed.code !== 0 || !recDir) await abort(`could not resolve recording ${o.recording}: ${(pathed.err || pathed.out).trim()}`)
 
   const [tcpPort, controlPort, serverPort] = await allocPorts(3)
   const xmlPath = path.join(stateDir, 'replay.xml')
@@ -161,7 +262,6 @@ async function up(o) {
   const serverLog = path.join(stateDir, 'server.log')
   fs.rmSync(xmlPath, { force: true })
 
-  const children = []
   const spawnDetached = (args, logFile, extra = {}) => {
     const fd = fs.openSync(logFile, 'w')
     const c = spawn(process.execPath, args, { detached: true, stdio: ['ignore', fd, fd], ...extra })
@@ -172,23 +272,26 @@ async function up(o) {
     children.push(rec)
     return rec
   }
-  const abort = async (msg, log) => {
-    await Promise.all(children.map((r) => killPid(r.pid)))
-    fs.rmSync(stateFile, { force: true })
-    fail(`${msg}${log ? ` (see ${log})` : ''}`)
+  const state = {
+    recording: o.recording, speed, xmlPath, startedAt: new Date().toISOString(),
+    player: null, server: null,
   }
-
   const player = spawnDetached([
     path.join(docs, 'tools', 'player.js'), recDir,
     '--port', String(tcpPort), '--control-port', String(controlPort),
     '--xml-out', xmlPath, '--autoplay', '--no-udp', '--no-cis', '--speed', String(speed),
   ], playerLog)
+  state.player = { pid: player.pid, tcpPort, controlPort }
+  writeStateAtomic(stateFile, state) // early, so --down reaches a partly started env
   const home = path.join(stateDir, 'home')
   const server = spawnDetached([
     '--import', 'tsx', 'src/cli.ts',
     '--host', '127.0.0.1', '--port', String(tcpPort), '--server-port', String(serverPort),
     '--xml', xmlPath, '--no-discovery', '--no-autodetect', '--no-tray',
   ], serverLog, { cwd: ROOT, env: { ...process.env, HOME: home, APPDATA: home } })
+
+  state.server = { pid: server.pid, port: serverPort }
+  writeStateAtomic(stateFile, state)
 
   const healthy = async (url) => {
     try { return (await fetch(url, { signal: AbortSignal.timeout(2000) })).status === 200 } catch { return false }
@@ -198,12 +301,17 @@ async function up(o) {
     { rec: server, name: 'server', url: `http://127.0.0.1:${serverPort}/api/status`, ok: false },
   ]
   const deadline = Date.now() + HEALTH_TIMEOUT_MS
-  while (targets.some((t) => !t.ok)) {
+  const checkAlive = async (what) => {
     for (const t of targets) {
-      if (t.ok) continue
-      if (t.rec.exited) await abort(`${t.name} exited before becoming healthy`, t.rec.log)
-      t.ok = await healthy(t.url)
+      if (t.rec.exited || !isAlive(t.rec.pid)) await abort(`${t.name} exited ${what}`, t.rec.log)
     }
+  }
+  while (targets.some((t) => !t.ok)) {
+    await checkAlive('before becoming healthy')
+    for (const t of targets) {
+      if (!t.ok) t.ok = await healthy(t.url)
+    }
+    await checkAlive('before becoming healthy')
     if (targets.every((t) => t.ok)) break
     if (Date.now() > deadline) {
       const t = targets.find((x) => !x.ok)
@@ -212,11 +320,9 @@ async function up(o) {
     await sleep(250)
   }
 
-  fs.writeFileSync(stateFile, JSON.stringify({
-    recording: o.recording, speed, xmlPath, startedAt: new Date().toISOString(),
-    player: { pid: player.pid, tcpPort, controlPort },
-    server: { pid: server.pid, port: serverPort },
-  }, null, 2) + '\n')
+  await sleep(0)
+  await checkAlive('right after answering')
+  finished = true
   for (const r of children) r.child.unref()
 
   console.log(`dev-env: up (recording ${o.recording}, speed ${speed})
