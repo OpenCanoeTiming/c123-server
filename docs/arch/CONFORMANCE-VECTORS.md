@@ -80,6 +80,16 @@ and the later-ingested, earlier-clocked observation wins by INV-6. Both gained `
 first dropped `source` from its `expect` (a Phase field's source is `bridge` on the live tier, where
 this vector also runs); what it asserts, `paused` presented, is unchanged.
 
+**Round 16** (2026-11-05, server#200, PR #235) stated four matching rules the harness needs (§1):
+a `not-yet` or `unavailable` expectation is matched whole, since those envelopes carry no other key
+(`CONTRACTS.md` §1.2), so a retraction that flips `state` and keeps a stale `value` fails; inside a
+`known` envelope's `value` a key left out is not asserted, but an `Outcome` expectation always states
+`kind` (18 expectations that wrote `{ totalSeconds }` alone now write `{ kind: 'duration', totalSeconds }`;
+`totalSeconds` exists on no other variant, so nothing they assert changed); `gateStatus` is exact over
+every presented gate, an unlisted presented gate being `plain`; a source-less observation is a unit of
+its own, and the `given`/`then` seam is always a unit boundary. Checked against the spike core on all
+87 server vectors: 84 pass, the same three as before (values, not matching).
+
 ---
 
 ## 1. Format
@@ -179,7 +189,10 @@ Each vector has:
   and after the last element. A merge port may take a unit whole (`applyUnit(elements)`) or one element
   at a time with a flush at the boundary; either satisfies this. Each observation keeps its own
   `ingestSeq`, which still orders the merge
-  within the unit. No `afterGivenIndex` in the file falls inside a unit, and none may.
+  within the unit. No `afterGivenIndex` in the file falls inside a unit, and none may. **Two edges:**
+  a source-less observation (the `unavailable` ones) states no upstream message, so it is a unit of
+  its own and never groups with a neighbour; and the seam between `given` and `then` is always a
+  unit boundary, since `then` follows an asserted intermediate state, which can only exist at one.
 
 **Which vectors each component runs.** Each component feeds its own merge function through a thin
 adapter (`TEST-ARCHITECTURE.md` §3.1); the sets overlap, and each suite asserts its own count.
@@ -231,7 +244,14 @@ age, scope snapshots, generation triggers or the checks store, none of which the
 invariants" means exactly this subset.
 
 **`expect` is the presented state after the last given.**
-- An envelope field left out of `expect` is not asserted.
+- An envelope field left out of `expect` is not asserted. **That subset rule applies to a `known`
+  envelope only:** `{ state: 'not-yet' }` and `{ state: 'unavailable', reason }` are matched whole,
+  because an envelope in those states carries no other key (`CONTRACTS.md` §1.2, "Wire encoding"), so
+  a presented `{ state: 'not-yet', value: … }` fails the expectation; that is what retraction (INV-7)
+  exists to prevent. Inside a `known` envelope's `value`, an object matches as a subset too (a key
+  left out is not asserted; arrays by length and order), with one obligation on the file: an
+  expectation on an `Outcome` (`CONTRACTS.md` §2.6, a discriminated union) always states `kind`, so a
+  partial `{ kind: 'duration', totalSeconds }` is not met by another variant.
 - Keys may be prefixed by an `attemptId` (`K1M_BR1_6:9.outcome`).
 - `diagnostics` asserts the current diagnostics; a `stale-mark` is current only while the withheld
   mark is on the presented row.
@@ -272,7 +292,12 @@ assembled `standing`, in order, plus `anomalies` (`CONTRACTS.md` §5).
 `given` holds `checks`, `flags` and `presented` (per Attempt: the current `run` and the presented
 `gates`, `null` where `Attempt.gates` is not `known`). A `then` step is a new `presented` state.
 `expect` is `gateStatus`, a map of `attemptId:run:gate` to `flagged | verified | stale | plain`, plus
-optionally the resulting `checks` (only the fields listed are asserted).
+optionally the resulting `checks` (only the fields listed are asserted). **`gateStatus` is exact over
+the presented gates:** its domain is every `attemptId:run:gate` of `presented` (after `then`), with
+the presented `run`; a key in that domain left out of the map is asserted `plain` (`CONTRACTS.md`
+§2.10: the display state is a lookup for every gate, `plain` where no flag and no check applies), a
+listed key outside it is asserted as listed, and an unlisted key outside it (an earlier generation's
+check, readable under its own `run`) is not asserted.
 
 ---
 
