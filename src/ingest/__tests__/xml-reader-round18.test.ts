@@ -101,6 +101,25 @@ describe('row 1-3 changedAfter (INV-2c, DERIVATIONS §0.3 "What the reader stamp
     s.reader.stop();
   });
 
+  it('row 2 long read, figures: stats at t5, t12 (closing), t15; t10 skipped; file changes at t13: changedAfter t12, observedAt t15, 3 s before detection', async () => {
+    const s = setup();
+    s.f.ctl.readMs = 7000;
+    const t0 = await s.startAndFirstStat(); // t5
+    await s.until(t0 + 7000 + 100);
+    s.units.length = 0;
+    s.f.ctl.readMs = 0;
+    await s.until(t0 + 8000); // t13
+    s.f.files[P] = file('cross.xml', 2000);
+    await s.until(t0 + 10000 + 1500); // past t15
+    expect([...new Set(s.f.statLog.map((x) => x.at).filter((at) => at <= t0 + 10000))]).toEqual([t0, t0 + 7000, t0 + 10000]); // the poll at t10 did not run
+    expect(s.units.length).toBe(1);
+    const ev = event(s.units[0]!);
+    expect(ev.changedAfter).toBe(iso(t0 + 7000));
+    expect(ev.observedAt).toBe(iso(t0 + 10000));
+    expect(Date.parse(ev.observedAt) - Date.parse(ev.changedAfter)).toBe(3000);
+    s.reader.stop();
+  });
+
   it('row 3 recovery: failed stats, then a change; changedAfter is the last good stat, earlier than one interval before detection', async () => {
     const s = setup();
     const t0 = await baseline(s);
@@ -168,6 +187,22 @@ describe('row 4-5 first read', () => {
     const i = firstStatShowing(s, 2000);
     expect(ev.changedAfter).toBe(iso(lastOtherStat(s, i, 2000)!.at));
     expect(Date.parse(ev.changedAfter)).toBeLessThan(Date.parse(ev.observedAt));
+    s.reader.stop();
+  });
+
+  it('row 5 first read whose file moves during the read: changedAfter is the first stat, observedAt the closing stat that showed the new signature', async () => {
+    const s = setup();
+    s.f.ctl.readMs = 3000;
+    s.f.duringNextRead(() => { s.f.files[P] = file('cross.xml', 2000); s.f.ctl.readMs = 0; }); // moves while the first read is in flight
+    const t = await s.startAndFirstStat();
+    await s.until(t + 30000);
+    expect(s.units.length).toBeGreaterThanOrEqual(1);
+    const closing = s.f.statLog[firstStatShowing(s, 2000)]!;
+    expect(closing.at).toBe(t + 3000);
+    const ev = event(s.units[s.units.length - 1]!);
+    expect(ev.observedAt).toBe(iso(t + 3000));
+    expect(ev.changedAfter).toBe(iso(t));
+    expect(phaseIds(s.units[s.units.length - 1]!).sort()).toEqual(phaseIds(parseXmlSnapshot(whole('cross.xml'), ctx()) as El[]).sort());
     s.reader.stop();
   });
 });
