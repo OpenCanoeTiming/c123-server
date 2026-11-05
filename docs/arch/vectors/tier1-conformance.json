@@ -960,6 +960,7 @@
             "outcome": {
               "state": "known",
               "value": {
+                "kind": "duration",
                 "totalSeconds": 85.55
               },
               "provisional": true
@@ -2069,6 +2070,7 @@
         "K1M_BR1_19:9.outcome": {
           "state": "known",
           "value": {
+            "kind": "duration",
             "totalSeconds": 88.2
           },
           "source": "tcp",
@@ -2441,6 +2443,7 @@
         "K1W_BR1_19:12.outcome": {
           "state": "known",
           "value": {
+            "kind": "duration",
             "totalSeconds": 103.2
           }
         },
@@ -2819,6 +2822,7 @@
         "K1W_BR1_19:12.outcome": {
           "state": "known",
           "value": {
+            "kind": "duration",
             "totalSeconds": 82.36
           },
           "confidence": "inferred"
@@ -3027,6 +3031,7 @@
             "C1M_BR1_19:7.outcome": {
               "state": "known",
               "value": {
+                "kind": "duration",
                 "totalSeconds": 102.69
               }
             },
@@ -3119,6 +3124,7 @@
             "C1M_BR1_19:7.outcome": {
               "state": "known",
               "value": {
+                "kind": "duration",
                 "totalSeconds": 96.69
               }
             }
@@ -3329,6 +3335,7 @@
         "K1M_BR1_19:55.outcome": {
           "state": "known",
           "value": {
+            "kind": "duration",
             "totalSeconds": 88.96
           }
         },
@@ -3471,6 +3478,7 @@
         "K1M_BR1_19:55.outcome": {
           "state": "known",
           "value": {
+            "kind": "duration",
             "totalSeconds": 88.96
           },
           "confidence": "inferred"
@@ -3538,6 +3546,7 @@
         "C1M_BR1_19:65.outcome": {
           "state": "known",
           "value": {
+            "kind": "duration",
             "totalSeconds": 90.12
           }
         }
@@ -3652,6 +3661,7 @@
             "K1W_BR2_19:19.outcome": {
               "state": "known",
               "value": {
+                "kind": "duration",
                 "totalSeconds": 41.53
               }
             },
@@ -3673,6 +3683,7 @@
         "K1W_BR2_19:19.outcome": {
           "state": "known",
           "value": {
+            "kind": "duration",
             "totalSeconds": 81.05
           }
         },
@@ -3763,6 +3774,7 @@
             "K1W_BR1_19:12.outcome": {
               "state": "known",
               "value": {
+                "kind": "duration",
                 "totalSeconds": 105.2
               },
               "source": "xml"
@@ -3814,6 +3826,7 @@
         "K1W_BR1_19:12.outcome": {
           "state": "known",
           "value": {
+            "kind": "duration",
             "totalSeconds": 105.2
           },
           "source": "tcp"
@@ -3896,6 +3909,7 @@
         "K1W_BR1_19:12.outcome": {
           "state": "known",
           "value": {
+            "kind": "duration",
             "totalSeconds": 90.0
           },
           "source": "xml"
@@ -4497,6 +4511,7 @@
             "K1M_BR1_19:9.outcome": {
               "state": "known",
               "value": {
+                "kind": "duration",
                 "totalSeconds": 88.2
               },
               "eventTime": "2026-09-15T10:06:30.000Z"
@@ -5121,12 +5136,14 @@
         "K1M_BR1_6:9.outcome": {
           "state": "known",
           "value": {
+            "kind": "duration",
             "totalSeconds": 87.1
           }
         },
         "K1M_BR2_6:9.outcome": {
           "state": "known",
           "value": {
+            "kind": "duration",
             "totalSeconds": 82.36
           }
         }
@@ -5161,6 +5178,7 @@
         "K1M_BR1_6:9.outcome": {
           "state": "known",
           "value": {
+            "kind": "duration",
             "totalSeconds": 87.1
           },
           "source": "xml",
