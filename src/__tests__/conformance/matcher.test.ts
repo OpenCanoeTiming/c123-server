@@ -559,6 +559,8 @@ describe('matching rules of round 16 (CONFORMANCE-VECTORS §1 "expect", "Workflo
     mismatch(() => matchMergeExpect({ outcome: { provisional: true } }, present({ ...stale, provisional: true })));
     mismatch(() => matchMergeExpect({ outcome: { provisional: true } }, present({ state: 'not-yet' })));
     mismatch(() => matchMergeExpect({ outcome: { provisional: true } }, present({ state: 'unavailable', reason: 'source-unreachable' })));
+    mismatch(() => matchMergeExpect({ outcome: { provisional: true } }, present({ state: 'garbage', provisional: true }))); // O5: not only the two closed variants
+    mismatch(() => matchMergeExpect({ outcome: { provisional: true } }, present({ provisional: true, state: undefined })));
     passes(() => matchMergeExpect({ outcome: { provisional: true } }, present({ state: 'known', value: {}, provisional: true })));
   });
 
@@ -579,7 +581,7 @@ describe('matching rules of round 16 (CONFORMANCE-VECTORS §1 "expect", "Workflo
     const log = (fields: unknown) => [msg(1, { type: 'attempt.updated', fields })];
     const n = { 'attempt.updated': { count: 1, fields: ['outcome'] } };
     passes(() => matchMergeExpect({ notifications: n, outcome: { state: 'not-yet' } }, obs({ presented: { [A]: { outcome: { state: 'not-yet' } } } }, log({ outcome: { state: 'not-yet' } }))));
-    mismatch(() => matchMergeExpect({ notifications: n, outcome: { state: 'not-yet' } }, obs({ presented: { [A]: { outcome: { state: 'not-yet' } } } }, log(stale))));
+    mismatch(() => matchMergeExpect({ notifications: n, outcome: { state: 'not-yet' } }, obs({ presented: { [A]: { outcome: { state: 'not-yet' } } } }, log({ outcome: stale }))));
   });
 
   it('round 16 partial value: subset inside a known value, but an Outcome expectation must state its kind', () => {
@@ -612,6 +614,10 @@ describe('matching rules of round 16 (CONFORMANCE-VECTORS §1 "expect", "Workflo
     passes(() => runVector(v, status({ 'P:1:2:4': 'plain' })));
     const w = { ...wf(presented, { 'P:1:1:4': 'stale', 'P:1:1:5': 'plain' }), then: [{ presented: { 'P:1': { run: 1, gates: [{ number: 4, penalty: 50 }, { number: 5, penalty: 0 }] } } }] } as unknown as Vector;
     passes(() => runVector(w, status({ 'P:1:1:4': 'stale', 'P:1:1:5': 'plain' })));
+    // a gate that exists only in the new presented is in the domain: unlisted, so asserted plain (O6)
+    const x = { ...w, then: [{ presented: { 'P:1': { run: 1, gates: [{ number: 4, penalty: 50 }, { number: 5, penalty: 0 }, { number: 6, penalty: 2 }] } } }] } as unknown as Vector;
+    passes(() => runVector(x, status({ 'P:1:1:4': 'stale', 'P:1:1:5': 'plain', 'P:1:1:6': 'plain' })));
+    mismatch(() => runVector(x, status({ 'P:1:1:4': 'stale', 'P:1:1:5': 'plain', 'P:1:1:6': 'stale' })));
   });
 
   const obsv = (seq: number, source: string | undefined, at: string): GivenElement =>

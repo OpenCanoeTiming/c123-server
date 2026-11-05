@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { VectorMismatch } from './matcher.js';
@@ -127,6 +129,14 @@ describe('expected-red ledger and modes (issue #200 rows 3, 4, 5)', () => {
     // This test is the ratchet's starting position; it is the one that changes (ids leave) as core issues land.
     expect(loadExpectedRed().length).toBeLessThanOrEqual(87);
     expect([...loadExpectedRed()].sort()).toEqual(serverVectors().map((v) => v.id).sort());
+  });
+
+  it('the ledger is read from the file it is given, not from a constant', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ledger-'));
+    const file = join(dir, 'red.json');
+    writeFileSync(file, JSON.stringify(['only-this']));
+    expect(loadExpectedRed(file)).toEqual(['only-this']);
+    expect(loadExpectedRed()).toEqual(JSON.parse(readFileSync(resolve(here, 'expected-red.json'), 'utf8')));
   });
 
   it('modes: a listed id runs as it.fails, an unlisted one as a plain it', () => {

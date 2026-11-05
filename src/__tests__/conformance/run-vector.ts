@@ -262,8 +262,8 @@ export function runVector(v: Vector, port: ConformancePort): void {
 
 export const isStrict = (env: Record<string, string | undefined> = process.env): boolean => env.VECTORS_STRICT === '1';
 
-export function loadExpectedRed(): string[] {
-  return JSON.parse(readFileSync(EXPECTED_RED_PATH, 'utf8')) as string[];
+export function loadExpectedRed(path: string = EXPECTED_RED_PATH): string[] {
+  return JSON.parse(readFileSync(path, 'utf8')) as string[];
 }
 
 /** `fails`: a ledger id outside strict mode (goes red when the vector starts passing). Else `plain`. */
