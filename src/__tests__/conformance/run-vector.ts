@@ -87,6 +87,51 @@ export function groupUnits(elements: GivenElement[], firstIndex = 0): Array<{ st
   return units;
 }
 
+const ZONE = /(Z|[+-]\d\d:?\d\d)$/;
+/** `ts` minus `seconds`, in the same notation (a vector may write a time with no zone; that stays so). */
+export function minusSeconds(ts: string, seconds: number): string {
+  const zoned = ZONE.test(ts);
+  const iso = new Date(Date.parse(zoned ? ts : `${ts}Z`) - seconds * 1000).toISOString();
+  return zoned ? iso : iso.slice(0, -1);
+}
+
+const isXmlElement = (e: GivenElement): boolean =>
+  ('field' in e && (e as { source?: unknown }).source === 'xml') ||
+  ('snapshot' in e && (e as { snapshot: { source?: unknown } }).snapshot.source === 'xml');
+const isRewrite = (e: GivenElement): boolean => 'event' in e && e.event === 'xml-rewrite-detected';
+
+/**
+ * Content age is resolved before `applyUnit` (CONFORMANCE-VECTORS §1 "Content age"): a rewrite event without the
+ * `changedAfter` key gets it stamped (`observedAt` minus the interval); a unit holding an `xml` element with no
+ * rewrite event before it gets a synthesised event at its head. Neither moves an element index or an `ingestSeq`
+ * of the vector (`span` is the unit's width in the vector's own indices); the synthesised event repeats the unit's first `xml` element's `ingestSeq`.
+ */
+export function resolveContentAge(
+  units: Array<{ start: number; elements: GivenElement[] }>,
+  intervalSeconds: number,
+): Array<{ start: number; span: number; elements: GivenElement[] }> {
+  let seenEvent = false;
+  return units.map((u) => {
+    const elements = u.elements.map((e) => {
+      if (!isRewrite(e)) return e;
+      seenEvent = true;
+      return 'changedAfter' in e ? e : { ...e, changedAfter: minusSeconds(e.observedAt, intervalSeconds) };
+    });
+    const first = elements.find(isXmlElement);
+    if (!seenEvent && first) {
+      seenEvent = true;
+      const event = {
+        ingestSeq: first.ingestSeq,
+        event: 'xml-rewrite-detected',
+        observedAt: first.observedAt,
+        changedAfter: minusSeconds(first.observedAt, intervalSeconds),
+      } as GivenElement;
+      return { start: u.start, span: u.elements.length, elements: [event, ...elements] };
+    }
+    return { start: u.start, span: u.elements.length, elements };
+  });
+}
+
 const MERGE_KEYS = ['id', 'invariant', 'description', 'context', 'given', 'expect', 'expectSequence', 'then', 'scope'];
 const STANDING_KEYS = ['id', 'invariant', 'description', 'context', 'given', 'expect', 'scope', 'ageCategoryId', 'upstreamCategoryRanks'];
 const WORKFLOW_KEYS = ['id', 'invariant', 'description', 'context', 'given', 'expect', 'expectSequence', 'then'];
@@ -157,7 +202,10 @@ function runMerge(v: Vector, port: ConformancePort): void {
     const resource = resolveResource(e.field as string, typeof e.scope === 'string' ? e.scope : vectorScope);
     return { ...e, resource, ...(resource === 'phase' ? { phaseId } : {}) };
   };
-  const units = [...groupUnits(given.map(tag)), ...groupUnits(then.map(tag), given.length)];
+  const units = resolveContentAge(
+    [...groupUnits(given.map(tag)), ...groupUnits(then.map(tag), given.length)],
+    context.xmlPollIntervalSeconds,
+  );
   const log: LoggedMessage[] = [];
   let seen = 0;
   let next = 0;
@@ -166,7 +214,7 @@ function runMerge(v: Vector, port: ConformancePort): void {
 
   const applyThrough = (index: number): void => {
     // Everything up to and including element `index`; -1 applies nothing.
-    while (next < units.length && units[next]!.start + units[next]!.elements.length - 1 <= index) {
+    while (next < units.length && units[next]!.start + units[next]!.span - 1 <= index) {
       const u = units[next++]!;
       merge.applyUnit(u.elements);
       const all = merge.notifications();

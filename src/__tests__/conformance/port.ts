@@ -53,6 +53,12 @@ export interface EventElement {
   observedAt: string;
   attemptId?: string;
   scope?: unknown;
+  /**
+   * `xml-rewrite-detected` only (CONFORMANCE-VECTORS §1 "Content age"; CONTRACTS §4 INV-2c): the content age of the
+   * snapshot that follows, `null` = unknown (fails every content-age comparison). The harness stamps it on a keyless
+   * event before `applyUnit`, so the core always sees the key.
+   */
+  changedAfter?: string | null;
   [extra: string]: unknown;
 }
 

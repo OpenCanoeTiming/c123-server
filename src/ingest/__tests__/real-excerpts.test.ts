@@ -103,7 +103,7 @@ describe('real TCP excerpts', () => {
   });
   it('Results classification XER (cp3-cross): a snapshot of two ClassificationRows (§4.10), no Attempts', () => {
     const els = parseTcp(TCP.resultsXer, ctx()) as El[];
-    expect(els.find((e) => e.push === 'classification')!.body.rows).toHaveLength(2);
+    expect(els.some((e) => e.push === 'classification')).toBe(false); // round 18: the snapshot is the only carrier
     const snaps = els.filter((e) => e.snapshot);
     expect(snaps.map((e) => e.snapshot.phaseId)).toEqual(['WX1_XER_26']);
     expect(snaps[0].snapshot.rows).toHaveLength(2);
@@ -153,8 +153,8 @@ describe('real XML excerpts', () => {
     expect(rowOf(cross(), 'WX1J_XS_26_JUN', '1')).toMatchObject({ heat: 1, qualified: true });
   });
   it('XML Results classification (cp3-cross XER bib 4): rank 1 decided in F', () => {
-    const c = (cross() as El[]).find((e) => e.push === 'classification')!;
-    expect(c.body.rows[0]).toMatchObject({ rank: 1, decidedIn: 'F' });
+    const c = (cross() as El[]).find((e) => e.snapshot?.phaseId === 'WX1_XER_26')!;
+    expect(c.snapshot.rows[0]).toMatchObject({ rank: 1, decidedIn: 'F' });
   });
   it('XML untimed junior time trial (cp3-cross MX1J_XT_26_JUN bib 51): placement 31, no time', () => {
     const r = rowOf(parseXmlSnapshot(xmlFixture('cross-untimed.xml'), ctx()), 'MX1J_XT_26_JUN', '51');

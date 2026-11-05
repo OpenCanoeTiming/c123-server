@@ -109,14 +109,14 @@ describe('§4.2 / §4.4 untimed row (round 17 rulings 8, 9)', () => {
 });
 
 describe('§4.10 decidedIn is nullable and verbatim (round 17 ruling 10)', () => {
-  const classif = (els: unknown): El => (els as El[]).find((e) => e.push === 'classification')!;
+  const classif = (els: unknown): { rows: El[] } => ({ rows: (els as El[]).find((e) => e.snapshot?.phaseId === 'WX1_XER_26')!.snapshot.rows });
   it('§4.10 ruling 10: a TCP classification row has decidedIn null (TCP carries no RecordType); the key is present', () => {
-    for (const r of classif(parseTcp(TCP.resultsXer, ctx())).body.rows) expect(r).toHaveProperty('decidedIn', null);
+    for (const r of classif(parseTcp(TCP.resultsXer, ctx())).rows) expect(r).toHaveProperty('decidedIn', null);
   });
   it('§4.10 ruling 10: the XML RecordType is relayed verbatim as the round token, not a format: SF stays "SF"', () => {
     const x = xmlFixture('cross.xml').replace('<RecordType>F</RecordType>', '<RecordType>SF</RecordType>');
     expect(x).toContain('<RecordType>SF</RecordType>');
-    expect(classif(parseXmlSnapshot(x, ctx())).body.rows[0]).toMatchObject({ decidedIn: 'SF' });
+    expect(classif(parseXmlSnapshot(x, ctx())).rows[0]).toMatchObject({ decidedIn: 'SF' });
   });
 });
 

@@ -52,8 +52,8 @@ as recorded), the INV-2d lift, placement only when ranked, no standing re-send o
 fields provisional while run 2 runs, `status` never provisional, an Attempt unstaged before its start,
 and a first-run row wiped in place (the recorded jury re-run).
 
-**93 vectors:** 80 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
-needed, not a target. **c123-server runs 87 of them, live-mini-server 23** (§1, "Which vectors each
+**94 vectors:** 81 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
+needed, not a target. **c123-server runs 88 of them, live-mini-server 23** (§1, "Which vectors each
 component runs"); 17 run in both suites.
 
 **Round 14** (2026-11-05, server#200) stated that split, made the two live lists total over every tag,
@@ -237,7 +237,7 @@ Each vector has:
 **Which vectors each component runs.** Each component feeds its own merge function through a thin
 adapter (`TEST-ARCHITECTURE.md` §3.1); the sets overlap, and each suite asserts its own count.
 
-**c123-server runs 87: every vector not tagged `live-ingest`.** The tag is the rule; apart from it,
+**c123-server runs 88: every vector not tagged `live-ingest`.** The tag is the rule; apart from it,
 every merge vector is on-site material (`tcp`, `xml` and `operator-write` observations, the
 source-less `unavailable` observation, connection and operator events, scope snapshots and
 on-course listings), and all 8 `standing-assembly` and all 5 `workflow-state` vectors are the
@@ -367,7 +367,7 @@ check, readable under its own `run`) is not asserted.
 | INV-2 rule 3 (single-source fields) | `inv2-rule3-single-source-field` | 1 |
 | INV-2 rule 4 (operator writes) | the six `operator-write-*` and `operator-correction-*` vectors, including `superseded`, plus `operator-write-confirmed-then-changed-upstream` | 7 |
 | INV-2b (surfaced, never adopted) | `inv2b-disagreement-surfaced-not-adopted` | 1 |
-| INV-2c (content age across sources; the same source always supersedes) | `inv2c-snapshot-older-than-push-refused-during-outage`, `inv2c-same-source-earlier-finish-supersedes` | 2 |
+| INV-2c (content age across sources; the same source always supersedes) | `inv2c-snapshot-older-than-push-refused-during-outage`, `inv2c-same-source-earlier-finish-supersedes`, `inv2c-first-read-unknown-age-refused` | 3 |
 | INV-3 and the trichotomy | `trichotomy-known-zero-not-confused-with-absence`, `trichotomy-unavailable-persists-explicitly`, `inv3-not-applicable-external-id` | 3 |
 | INV-4, INV-5, INV-6 | one each | 3 |
 | `provisional` in both upstream modes; pair fields; `status` | `provisional-incomplete-judging-then-settles`, `-first-push-already-complete`, `-run-closed-without-course`, `-pair-fields-while-run-2-on-course`, `status-never-provisional` | 5 |

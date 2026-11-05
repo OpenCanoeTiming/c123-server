@@ -15,7 +15,7 @@
  *     observedAt, eventTime?, judgingComplete? }` (fields: status, outcome, gates, courseOrder, timeToBeat, onCourse).
  *   - Entry/Class/Phase/Course values are observation elements too, addressed by `entryId` / `classId` /
  *     `phaseId` / `courseId` (+ `resource`), `field` = the contract field name.
- *   - Classification rows: `{ push: 'classification', phaseId, body: { rows, asOf } }`.
+ *   - Classification rows: a scope snapshot of ClassificationRows (round 18, DERIVATIONS §0.5: no push element).
  *   - A diagnostic is `{ diagnostic: { kind, ... } }`; an unparseable message is `{ unparseable: { reason, ... } }`.
  *   - Not-applicable / not-configured is `{ field, state: 'unavailable', reason }` (no value).
  *   - ctx: see `ctx()`.

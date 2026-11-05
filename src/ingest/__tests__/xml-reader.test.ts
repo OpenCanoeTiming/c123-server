@@ -139,6 +139,7 @@ describe('XML reader: validation and retry (DERIVATIONS §0.3)', () => {
     expect(s.units.length).toBe(0);
     expect(s.last()?.abandonedReads).toBe(1);
     expect(s.last()?.tornReads).toBe(4);
+    expect(s.last()?.state).toBe('reconnecting'); // round 18, §2.8: torn, stat unchanged since detection, is a failed poll
     await s.clock.advance(100); // no fifth read inside the same poll
     expect(s.f.readLog.length).toBe(4);
     // stat unchanged since the abandoned detection; the next poll still reads (file differs from last good read)
@@ -146,6 +147,8 @@ describe('XML reader: validation and retry (DERIVATIONS §0.3)', () => {
     expect(s.f.readLog.length).toBe(5);
     expect(s.units.length).toBe(1);
     expect(s.last()?.abandonedReads).toBe(1);
+    expect(s.last()?.tornReads).toBe(4); // the successful re-read adds none
+    expect(s.last()?.state).toBe('connected');
     s.reader.stop();
   });
 
@@ -168,9 +171,10 @@ describe('XML reader: validation and retry (DERIVATIONS §0.3)', () => {
     expect(evA.observedAt).toBe(iso(detA)); // not the time the retry succeeded (detA + 200)
     expect(s.last()?.lastRewriteDetectedAt).toBe(iso(detA));
     expect(detA).toBeGreaterThanOrEqual(wroteA);
-    // INV-2c: content age (event time minus the interval) is never later than the write. Stamped with the retry's
-    // success time (detA + 200) it would be later, so this can fail.
-    expect(Date.parse(evA.observedAt) - 5000).toBeLessThanOrEqual(wroteA);
+    // INV-2c (round 18): content age is the event's changedAfter, never later than the write; and it is the previous
+    // poll's stat, not a time derived from observedAt.
+    expect(Date.parse(evA.changedAfter)).toBeLessThanOrEqual(wroteA);
+    expect(Date.parse(evA.changedAfter)).toBeLessThan(detA);
 
     // (b) change detected, four torn reads (abandoned), the next poll succeeds
     await s.clock.advance(2000);
@@ -186,8 +190,9 @@ describe('XML reader: validation and retry (DERIVATIONS §0.3)', () => {
     const evB = s.units[1]!.find((e) => e.event === 'xml-rewrite-detected')!;
     expect(evB.observedAt).toBe(iso(detB)); // the first detection, not the poll that finally read it
     expect(s.last()?.lastRewriteDetectedAt).toBe(iso(detB));
-    // INV-2c: content age = detection time minus the poll interval is not later than the write
-    expect(Date.parse(evB.observedAt) - 5000).toBeLessThanOrEqual(wroteB);
+    // INV-2c (round 18): changedAfter is not later than the write
+    expect(Date.parse(evB.changedAfter)).toBeLessThanOrEqual(wroteB);
+    expect(Date.parse(evB.changedAfter)).toBeLessThan(detB);
     s.reader.stop();
   });
 });
@@ -398,7 +403,8 @@ describe('XML reader: review objections (PR #250)', () => {
     expect(ev.event).toBe('xml-rewrite-detected');
     expect(ev.observedAt).toBe(iso(det));
     expect(s.last()?.lastRewriteDetectedAt).toBe(iso(det));
-    expect(Date.parse(ev.observedAt) - 5000).toBeLessThanOrEqual(wrote);
+    expect(Date.parse(ev.changedAfter)).toBeLessThanOrEqual(wrote); // round 18: changedAfter, not observedAt - interval
+    expect(Date.parse(ev.changedAfter)).toBeLessThan(det);
     for (const e of s.units[0]!) expect(e.observedAt).toBe(iso(det));
     s.reader.stop();
   });
@@ -412,7 +418,11 @@ describe('XML reader: review objections (PR #250)', () => {
     await s.clock.advance(1000);
     expect(s.f.readLog.map((r) => r.at)).toEqual([first, first + 200]);
     expect(s.units.length).toBe(1);
-    expect(s.statuses.every((x) => x.state !== 'reconnecting' && x.state !== 'unreachable')).toBe(true);
+    // round 18 (DERIVATIONS §5): begin() reports reconnecting until the first poll reports; after that, no failure
+    const firstConnected = s.statuses.findIndex((x) => x.state === 'connected');
+    expect(firstConnected).toBeGreaterThanOrEqual(0);
+    expect(s.statuses.slice(0, firstConnected).every((x) => x.state === 'reconnecting')).toBe(true);
+    expect(s.statuses.slice(firstConnected).every((x) => x.state === 'connected')).toBe(true);
     s.reader.stop();
   });
 
