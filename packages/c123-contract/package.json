@@ -1,6 +1,6 @@
 {
   "name": "@opencanoetiming/c123-contract",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Shared wire-contract types and JSON schemas of the C123 server (types only, no runtime code)",
   "license": "MIT",
   "repository": {
