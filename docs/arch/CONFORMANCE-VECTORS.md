@@ -82,9 +82,9 @@ this vector also runs); what it asserts, `paused` presented, is unchanged.
 
 **Round 16** (2026-11-05, server#200, PR #235) stated four matching rules the harness needs (§1):
 a `not-yet` or `unavailable` expectation is matched whole, since those envelopes carry no other key
-(`CONTRACTS.md` §1.2), so a retraction that flips `state` and keeps a stale `value` fails; inside a
-`known` envelope's `value` a key left out is not asserted, but an `Outcome` expectation always states
-`kind` (18 expectations that wrote `{ totalSeconds }` alone now write `{ kind: 'duration', totalSeconds }`;
+(`CONTRACTS.md` §1.2), so a retraction that flips `state` and keeps a stale `value` fails, keyed on
+the presented envelope's `state`; inside a `known` envelope's `value` a key left out is not asserted,
+but an expectation that states an `Outcome` `value` always states its `kind` (18 expectations that wrote `{ totalSeconds }` alone now write `{ kind: 'duration', totalSeconds }`;
 `totalSeconds` exists on no other variant, so nothing they assert changed); `gateStatus` is exact over
 every presented gate, an unlisted presented gate being `plain`; a source-less observation is a unit of
 its own, and the `given`/`then` seam is always a unit boundary. Checked against the spike core on all
@@ -248,9 +248,12 @@ invariants" means exactly this subset.
   envelope only:** `{ state: 'not-yet' }` and `{ state: 'unavailable', reason }` are matched whole,
   because an envelope in those states carries no other key (`CONTRACTS.md` §1.2, "Wire encoding"), so
   a presented `{ state: 'not-yet', value: … }` fails the expectation; that is what retraction (INV-7)
-  exists to prevent. Inside a `known` envelope's `value`, an object matches as a subset too (a key
-  left out is not asserted; arrays by length and order), with one obligation on the file: an
-  expectation on an `Outcome` (`CONTRACTS.md` §2.6, a discriminated union) always states `kind`, so a
+  exists to prevent. **The match is keyed on the presented envelope's `state`, not on the
+  expectation's:** a presented `not-yet` or `unavailable` must equal the expectation exactly, and an
+  expectation that states no `state` (`{ provisional: true }`) is met only by a `known` envelope.
+  Inside a `known` envelope's `value`, an object matches as a subset too (a key left out is not
+  asserted; arrays by length and order), with one obligation on the file: an expectation that states
+  an `Outcome` `value` (`CONTRACTS.md` §2.6, a discriminated union) always states its `kind`, so a
   partial `{ kind: 'duration', totalSeconds }` is not met by another variant.
 - Keys may be prefixed by an `attemptId` (`K1M_BR1_6:9.outcome`).
 - `diagnostics` asserts the current diagnostics; a `stale-mark` is current only while the withheld
