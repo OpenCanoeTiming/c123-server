@@ -70,6 +70,13 @@ the number form of `notifications`: `inv5-identical-redelivery-is-a-noop` now as
 `{ "attempt.updated": 1 }`, which is what INV-5 means there (a correct core also sends the
 `standing.updated` §5 step 3 requires for the new unplaced entry, which the map does not assert).
 
+**Round 15** (2026-11-05, server#200) defined `scope` on a merge vector and on an observation (§1,
+"Scope of a field"): which of the Attempt, its Entry or its Phase a field name addresses, and that
+the Phase is `context.attemptId`'s. No vector changed. `inv6-clock-jump-does-not-reorder-merge` and
+`phasestatus-official-to-revised-skips-unofficial` assert `Phase.status` of `K1M_BR1_6` and stand:
+`running ⇄ paused` and `official → revised` directly are `CONTRACTS.md` §3.1's transitions, and the
+later-ingested, earlier-clocked observation wins by INV-6.
+
 ---
 
 ## 1. Format
@@ -128,6 +135,25 @@ Each vector has:
 - **Live-tier elements.** `{ ingestSeq, push: 'entry' | 'class' | 'phase' | 'course' | 'oncourse' |
   'classification', body }` is a bare §8.3 push; the event `delete` with `attemptId` is a `DELETE`. `expect.notifications` may be a map of
   message type to count.
+- **Scope of a field.** A `field` in an observation and an unprefixed key in `expect`,
+  `expectSequence` or `then` name a field of the Attempt, unless the name exists only on its Entry
+  (`CONTRACTS.md` §2.5: `displayName`, `members`, `club`, `nation`, `ageCategoryId`, `eventBib`,
+  `isTeam`) or only on its Phase (§2.4), in which case they name that resource's field. `status` and
+  `scheduledStart` exist on both the Attempt and the Phase, and `scope` decides: a vector's
+  `scope: 'phase'` makes them the Phase's; `scope: 'entry'` says the vector is about the Entry; an
+  observation's own `scope` says the same for that element and overrides the vector's; absent, or
+  `'attempt'`, they are the Attempt's. A vector's `scope` never moves a name that resolves on its own,
+  so `inv2-rule3-single-source-field` reads `ageCategoryId` from the Entry and `courseOrder` from the
+  Attempt under one `scope: 'entry'`. **The Phase is the one `context.attemptId` belongs to**
+  (`Attempt.phaseId`, the part of the id before the colon, §2.6) and the Entry is that Attempt's;
+  where no element sets the Attempt's `entry` pointer, every Entry field in the vector is one Entry's.
+  Neither needs a creation element: like the Attempt, each exists once observed. A merge port
+  therefore exposes three presented resources, the Attempt, its Entry and its Phase (a
+  `phase(phaseId)` beside `entry()`), and is told with each observation which one it addresses. A
+  Phase field has no run generation, so between two observations of one source only INV-6 orders
+  them, whatever their `kind`; `Phase.status` comes from `tcp` or `xml` (`DERIVATIONS.md` §2.2) and
+  its presented value is the mapped closed value, with `CONTRACTS.md` §3.1's transitions as the
+  legal ones; the first observation of a Phase is not a transition.
 - **Ingest units** (`CONTRACTS.md` §1.6). Messages are emitted per upstream message, not per
   observation: the core merges every observation one upstream message yields, then sends at most one
   message per changed resource. In a vector, **consecutive observations with the same `source` and the
