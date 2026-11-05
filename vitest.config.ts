@@ -1,14 +1,40 @@
 import { defineConfig } from 'vitest/config';
 
+// Real-process / real-port tests ("tools": dev-env spawns servers and stubs, pack runs
+// `npm pack`) must never overlap with unit tests that bind ephemeral or random ports and
+// assert on connection counts (issue #232). Two projects: units first, tools after, and
+// tools run one file at a time. One `npm run test -- --run` still runs everything.
+const TOOLS = ['scripts/__tests__/dev-env.test.ts', 'packages/c123-contract/__tests__/pack.test.ts'];
+const EXCLUDE = ['dist/**', 'node_modules/**'];
+
 export default defineConfig({
   test: {
-    exclude: ['dist/**', 'node_modules/**'],
-    // Type-level tests of the contract package (issue #199): expectTypeOf is a no-op at
-    // runtime, so exactly these files are run through tsc by vitest's typecheck mode.
-    typecheck: {
-      enabled: true,
-      include: ['packages/c123-contract/__tests__/*.test-d.ts'],
-      tsconfig: 'packages/c123-contract/__tests__/tsconfig.json',
-    },
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'unit',
+          exclude: [...EXCLUDE, ...TOOLS],
+          sequence: { groupOrder: 1 },
+          // Type-level tests of the contract package (issue #199): expectTypeOf is a no-op at
+          // runtime, so exactly these files are run through tsc by vitest's typecheck mode.
+          typecheck: {
+            enabled: true,
+            include: ['packages/c123-contract/__tests__/*.test-d.ts'],
+            tsconfig: 'packages/c123-contract/__tests__/tsconfig.json',
+          },
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'tools',
+          include: TOOLS,
+          exclude: EXCLUDE,
+          sequence: { groupOrder: 2 },
+          fileParallelism: false,
+        },
+      },
+    ],
   },
 });
