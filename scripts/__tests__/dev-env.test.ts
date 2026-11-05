@@ -403,9 +403,16 @@ describe('dev-env', () => {
 
     it('up: player dying after answering fails', async () => {
       const docs = makeDocs(), state = makeState()
-      const r = await up(docs, state, [], { STUB_PLAYER_MODE: 'die-after' })
+      // Ordering is forced, not timed: the real server is held back (preload) so it cannot be
+      // healthy before the stub, which exits right after its first /status answer, is dead.
+      const hold = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures/hold-server.cjs')
+      const r = await up(docs, state, [], {
+        STUB_PLAYER_MODE: 'die-after', NODE_OPTIONS: `--require ${hold}`, HOLD_SERVER_MS: '4000',
+      })
       expect(r.code).not.toBe(0)
       expect(r.stderr).toContain('player.log')
+      // the player really answered /status before it died (and `up` was therefore past the first poll)
+      expect(existsSync(path.join(state, 'answered'))).toBe(true)
       expect(await waitFor(() => !processesFor(state), 5_000)).toBe(true)
       expect(existsSync(path.join(state, 'state.json'))).toBe(false)
     }, T)

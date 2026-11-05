@@ -175,15 +175,23 @@ describe('TcpSource', () => {
 
     source.start();
 
-    // Wait for first connection
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    const countAfterStart = connectionCount;
+    // Wait (bounded) until at least one connection has been seen
+    const deadline = Date.now() + 5000;
+    while (connectionCount < 1 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(connectionCount).toBeGreaterThanOrEqual(1);
 
+    // Observe the client side: connect() emits 'connecting' synchronously, so no accept
+    // latency is involved (a connect already in flight at stop() may still be accepted by
+    // the server later, which is why the server-side count is not asserted).
+    const afterStop: SourceStatus[] = [];
+    source.on('status', (status) => afterStop.push(status));
     source.stop();
 
-    // Wait and verify no more connections
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    expect(connectionCount).toBe(countAfterStart);
+    // Wait well past several reconnect delays (initial 50ms): no reconnect attempt may start
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(afterStop).not.toContain('connecting');
     expect(source.status).toBe('disconnected');
   });
 

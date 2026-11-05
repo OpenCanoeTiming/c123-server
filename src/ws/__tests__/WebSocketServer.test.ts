@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import net from 'node:net';
 import { WebSocket } from 'ws';
 import { WebSocketServer } from '../WebSocketServer.js';
 import { createOnCourse, createTimeOfDay, createResults } from '../../protocol/factory.js';
@@ -8,9 +9,17 @@ describe('WebSocketServer', () => {
   let server: WebSocketServer;
   let testPort: number;
 
-  beforeEach(() => {
-    // Use random port to avoid conflicts
-    testPort = 30000 + Math.floor(Math.random() * 10000);
+  beforeEach(async () => {
+    // Ask the OS for a free port. A random pick in 30000-39999 overlaps the ephemeral
+    // range, where other tests' outbound sockets live: EADDRINUSE flake (#232).
+    testPort = await new Promise<number>((resolve, reject) => {
+      const probe = net.createServer();
+      probe.once('error', reject);
+      probe.listen(0, () => {
+        const { port } = probe.address() as net.AddressInfo;
+        probe.close(() => resolve(port));
+      });
+    });
     server = new WebSocketServer({ port: testPort });
   });
 
