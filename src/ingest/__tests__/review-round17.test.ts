@@ -258,3 +258,27 @@ describe('§2.3 a leading S or I before the first gate records nothing (round 17
     expect(v.every((n) => n >= 1)).toBe(true);
   });
 });
+
+describe('§4.1 a row whose only statement is PP="*" (final review N1)', () => {
+  // the recorded BR1 bib 83 row with every figure emptied and PP="*" (synthetic variant of the recorded row)
+  const ppOnly = (): string => {
+    const m = TCP.resultsBr1.split('<Row ').filter((p, i) => i === 0 || p.includes('Bib="  83"')).join('<Row ');
+    return m.replace(/<Result [^>]*\/>/, '<Result Type="T" HeatNr="0" Q="" IRM="" Pen="" Gates="" Time="" Total="" Rank="" RankOrder="" Behind="" PP="*" />');
+  };
+  it('§4.1 N1: the row keeps its statement: underReview true', () => {
+    expect(row(parseTcp(ppOnly(), ctx()), 'K1M_BR1_19', '83').underReview).toBe(true);
+  });
+  it('§4.1 N1 / INV-7: it does not flip the message to start-list: the snapshot mode is results', () => {
+    expect((parseTcp(ppOnly(), ctx()) as El[]).find((e) => e.snapshot)!.snapshot.mode).toBe('results');
+  });
+});
+
+describe('§4.6(d) Cross cell values on the on-course path (final review N2)', () => {
+  it.each(['1', '5', '50', 'abc'])('§4.6(d) an OnCourse Cross Gates token "%s" raises unparseable-cell (source tcp, slot 1)', (tok) => {
+    const els = parseTcp(withAttr(TCP.onCourseArmed, 'Gates', ',,,,,,,,', `${tok},,,,,,,,`), ctx());
+    expect(diagnostics(els).filter((d) => d.kind === 'unparseable-cell')).toEqual([expect.objectContaining({ attemptId: 'WX1_XT_26:25', source: 'tcp', slot: 1 })]);
+  });
+  it('§4.6(d) control: tokens empty, 0 and 2 raise nothing on course', () => {
+    expect(diagnostics(parseTcp(withAttr(TCP.onCourseArmed, 'Gates', ',,,,,,,,', '0,2,,0,,,,,'), ctx())).filter((d) => d.kind === 'unparseable-cell')).toEqual([]);
+  });
+});
