@@ -31,7 +31,7 @@ jobs:
   publish-contract:
     name: Publish c123-contract
     needs: release-please
-    if: needs.release-please.outputs.contract_release_created == 'true'  # step output packages/c123-contract--release_created
+    if: needs.release-please.outputs.contract_release_created == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
