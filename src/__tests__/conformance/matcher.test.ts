@@ -561,6 +561,7 @@ describe('matching rules of round 16 (CONFORMANCE-VECTORS §1 "expect", "Workflo
     mismatch(() => matchMergeExpect({ outcome: { provisional: true } }, present({ state: 'unavailable', reason: 'source-unreachable' })));
     mismatch(() => matchMergeExpect({ outcome: { provisional: true } }, present({ state: 'garbage', provisional: true }))); // O5: not only the two closed variants
     mismatch(() => matchMergeExpect({ outcome: { provisional: true } }, present({ provisional: true, state: undefined })));
+    mismatch(() => matchMergeExpect({ outcome: { provisional: true } }, present({ provisional: true }))); // the key truly absent (O5)
     passes(() => matchMergeExpect({ outcome: { provisional: true } }, present({ state: 'known', value: {}, provisional: true })));
   });
 

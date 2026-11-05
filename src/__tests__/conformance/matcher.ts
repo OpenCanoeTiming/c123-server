@@ -39,8 +39,8 @@ export function matchEnvelope(expected: unknown, actual: unknown, path: string):
     return;
   }
   // an expectation that states no `state` is met only by a `known` envelope, nothing else (also not an illegal state)
-  if (isObj(expected) && !own(expected, 'state') && isObj(actual) && own(actual, 'state') && actual.state !== 'known') {
-    throw new VectorMismatch(`${path}: presented state ${show(actual.state)}; an expectation without a state is met only by a known envelope`);
+  if (isObj(expected) && !own(expected, 'state') && isObj(actual) && actual.state !== 'known') {
+    throw new VectorMismatch(`${path}: presented state ${show(actual.state)} (no state key counts as not known); an expectation without a state is met only by a known envelope`);
   }
   matchValue(expected, actual, path);
 }
