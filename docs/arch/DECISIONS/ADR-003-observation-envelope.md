@@ -223,3 +223,18 @@ attribution alone (`DERIVATIONS.md` §4.11; `ADR-013` Revision 2).
 Vectors `inv2c-snapshot-older-than-push-refused-during-outage` and
 `inv2c-same-source-earlier-finish-supersedes` replace the two event-time vectors; gate-2 property 8
 (`TEST-ARCHITECTURE.md` §3.2) is restated to match.
+
+## Revision 6 — content age is the reader's `changedAfter`, not detection minus the poll interval (2026-11-05, second pass 2026-11-06)
+
+**The flaw (E1).** Revision 5 dated an `xml` observation at `lastRewriteDetectedAt` minus the poll
+interval. That overstated a first read's freshness by the file's whole age — the recordings open
+with write gaps of 205 to 3,335 s, so a file set at run time is routinely minutes old — and a
+delayed poll's by the delay. **The rule now.** The reader stamps every `xml-rewrite-detected` with
+`changedAfter`, its last stat before the change (`DERIVATIONS.md` §0.3); that is the content age
+INV-2c, INV-7's guard, rule 2's mark exception and INV-2b compare, and `null`, when no stat since
+start or `setPath` showed another signature, fails every such comparison and changes nothing else.
+The core computes nothing from the interval; the modification time is never an input. Classification
+rows are outside rules 1–2 and replace whole under this guard alone (`DERIVATIONS.md` §4.10). The
+outage example above now reads: content age = the poll before detection, the same instants. The
+vector set is unchanged (`CONFORMANCE-VECTORS.md` §1 keeps the subtraction for events written
+without the key, resolved by the harness); one vector is owed for the `null` case.

@@ -83,6 +83,16 @@ results table, and only these two:
   start-list-mode message for a race that had results means every result was deleted.
 - **An XML snapshot**, for every race in it. Rows are never deleted from the file; a retraction shows
   only as fields going empty.
+- **Mode is read the same way for every table**, classification Phases included, and **a table with
+  no rows is a scope snapshot in start-list mode** (TCP: a `Results` message with no row; XML: a
+  Schedule race with no `Results` row). The parser emits it like any other (`RXER` excepted: a title
+  that never carries rows, skipped by both parsers, §4.10). The core applies INV-7 to it as
+  written: a TCP table with no rows retracts as its start-list case; an XML table with no rows, like
+  an absent XML row, states nothing (`CONTRACTS.md` §4 INV-7, XML bullet). Recorded (cp3-cross,
+  E1): 741 empty Cross heat and final tables (521 XML, 220 TCP) and 508 empty classification tables
+  (354 XML, 154 TCP), every one before any row of that race existed, so none retracted anything; no
+  table emptied after rows existed, in any recording (all seven scanned, either source; the six
+  other than cp3-cross hold no empty table at all).
 
 **The TCP connect burst** (observed upstream behaviour, E1, all seven recordings). On connect, upstream
 sends the current race's whole `Results` table at once, before the rotation resumes: 152–1,167 rows in
@@ -93,9 +103,37 @@ current race within seconds (`CONTRACTS.md` §2.8 counts it for the bridge).
 rename. Readers validate every read (well-formed, root closing tag present) and retry on failure. No
 torn read was observed in 2,236 reads by a 5 s poller, but the window is real. The read is triggered
 when the file's modification time or size changes; the detection time is `xml.lastRewriteDetectedAt`
-(§5), and the write happened within one poll interval before it. The watcher polls; `fs.watch` is not
-used: it is unreliable over network shares and under some Windows filter drivers, and the poll interval
-already has contractual meaning, since INV-7's guard is stated in it (spike S5).
+(§5). The watcher polls; `fs.watch` is not
+used: it is unreliable over network shares and under some Windows filter drivers (spike S5).
+
+**What the reader stamps** (round 18; `CONTRACTS.md` §4 INV-2c). Each whole read is one unit:
+`xml-rewrite-detected`, then the snapshot's elements, all with `observedAt` = the first detection of
+the change read (not the moment a retry succeeded). **Detection** is the first stat, a poll's or a
+read's closing stat, that saw the signature later read whole. The event also carries
+**`changedAfter`**, the reader's last stat before the change: the time, taken before the call, of
+the last successful stat that showed a signature other than the one read whole. That is the
+previous poll in the steady state (one interval before detection), or the closing stat of a read;
+earlier only after failed stats, or a stat that itself hung; `null` when no stat since start or
+`setPath` showed a different signature (a first read whose file moved or failed validation before
+the read that succeeded therefore has one). The write happened after `changedAfter`; that is the
+snapshot's content age, and the core computes nothing from the poll interval. `null` means unknown
+and **fails every content-age comparison** (`CONTRACTS.md` §4 INV-2c); nothing else changes, so a
+first read presents where no `tcp` observation does and the next rewrite settles the rest. The
+file's modification time is never used: on a share it is the writer's clock, not ours
+(`CONTRACTS.md` §7.1 reports it on the re-baseline, as a report). Recorded (E2, review of round
+18): the file goes up to 55 min without a write (gaps of 230, 1,147 and 3,335 s between the first
+two snapshots of jarni-so-odp, nkz-20ne and cp3-cross, 205 s at nkz-19so, 5–10 s at the other
+three), so a file set at run time is routinely minutes old.
+
+**Validation and the states** (§5). A read that fails validation is **torn** while the file is still
+moving: after the retry bound, a stat that differs from the one at detection means a write in
+progress; that stat is the new signature's detection, read at the next poll. A stat unchanged since detection means the file is
+**invalid as it stands**: that poll is a failed poll (`reconnecting`, `unreachable` after five), and
+the file is re-read once per poll until its stat changes or it validates. A well-formed file whose
+root closes but that names no race is **valid and empty**: a rewrite of nothing, the unit is the
+event alone (`TEST-ARCHITECTURE.md` §3.2 property 3: an `xml-rewrite-detected` on its own changes
+nothing). No recording holds one: every first snapshot of the seven carried Participants, Classes,
+Schedule, Results, CourseData and Events.
 
 ### 0.4 Ingest filters
 
@@ -123,7 +161,14 @@ retracts.** The core owns everything that needs state:
 - the on-course set, the leave rule and `featuredByUpstream` (§4.1, §4.8);
 - the splits-armed state (§2.3, §4.8), the cell merge (§4.6(e)), retraction and contradiction (§4.12),
   echo matching (§6), `provisional`, and the diagnostics that compare observations
-  (`source-disagreement`, `contradicted-finish`, `duplicate-finish`, `stale-mark`).
+  (`source-disagreement`, `contradicted-finish`, `duplicate-finish`, `stale-mark`);
+- content age: the reader stamps `observedAt` and `changedAfter` (§0.3); the core compares them
+  (`CONTRACTS.md` §4 INV-2c, INV-7);
+- a classification Standing's publication: the parser emits a classification table as a scope
+  snapshot of `ClassificationRow`s and nothing else — `{push: 'classification'}` is what the bridge
+  sends to live (`CONTRACTS.md` §8.3), never a parser output; the core replaces the Phase's rows
+  whole from each such snapshot under INV-2c's guard, dates the Standing's `asOf` by the
+  `observedAt` of the snapshot that changed it, and publishes it first at its first row (§4.10).
 
 The parser raises `unparseable-cell` and `member-sum-mismatch` (`CONTRACTS.md` §4) and four
 ingest-only kinds that reach the admin log and never `GET /api/diagnostics`: `unknown-format-token`
@@ -220,7 +265,9 @@ cannot read is absent, not invented.
   - Source: `XML.CourseData.CourseNr` and `CourseConfig`: one character per course element.
 - **Parse the layout.**
   - `N` is a downstream gate and `R` an upstream gate. Gates are numbered 1.. in order.
-  - `S` ends a sector: record the number of the gate before it.
+  - `S` ends a sector: record the number of the gate before it; an end equal to the previous one is
+    not repeated (`CONTRACTS.md` §2.12: cp3-cross course 1 `DSNSNSRSNSNSNSESRS` gives
+    `[1,2,3,4,5,6,7]`, the roll zone's sector ending after gate 6 like the one before it).
   - `I` is a split point: record the gate before it.
   - `D` is the Kayak Cross start ramp (caption `ST`) and `E` the roll zone (`RZ`). Each is a judging
     slot that does not advance the gate number. Build `Course.slots` from the layout: one slot per
@@ -719,8 +766,25 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   classification rows carry no `RecordType`: a row's `decidedIn` is `null` until the snapshot states
   it for that `entryId`, and the core keeps the snapshot's across later TCP rows.
 - On site the rows reach the core as a scope snapshot of the classification Phase whose rows are
-  `CONTRACTS.md` §8.3 `ClassificationRow`s (`CONFORMANCE-VECTORS.md` §1); the gate-2 checker reads
-  that shape (`TEST-ARCHITECTURE.md` §3.2 property 15).
+  `CONTRACTS.md` §8.3 `ClassificationRow`s (`CONFORMANCE-VECTORS.md` §1), and as nothing else: the
+  parser emits no `{push: 'classification'}`, which is the bridge's message to live. **Precedence:**
+  classification rows are no Attempt's fields, so INV-2 rules 1–2 do not apply; the later-ingested
+  snapshot replaces the Phase's rows whole, whatever its `mode` (an empty table is start-list mode,
+  §0.3) and whichever source, under INV-2c's guard alone: an `xml` snapshot replaces rows a `tcp`
+  snapshot built only when its `changedAfter` is later than that snapshot's `observedAt` (`null`
+  never), and a `tcp` snapshot always replaces. Recorded (cp3-cross, E2, `scan-cls.ts`, third pass
+  of round 18): at 10:26:13 the XML carried upstream's newer build ahead of TCP's rotation, by 89 s
+  (MX1_XER_26, TCP at 10:27:42) and 119 s (WX1J_XER_26_JUN, TCP at 10:28:12), which rule 2 would
+  have held back; on the reversal TCP led, by 21 s (MX1_XER_26, 10:28:42, XML 10:29:03) and 44 s
+  (WX1J_XER_26_JUN, 10:29:24, XML 10:30:08). The guard admits both and still refuses a
+  save-cycle-stale file. `decidedIn` is kept per `entryId` from the last **admitted** XML row where
+  the TCP row states `null` (above); a refused snapshot moves nothing, `decidedIn` included (INV-2c
+  "retained and not presented"; E4, the recording holds no refusal). The core dates the
+  Standing's `asOf` by the `observedAt` of the latest snapshot that changed it (`CONTRACTS.md` §5;
+  TCP re-sends the same rows on rotation, 10:27:12, 10:35:14, 10:43:16, which move nothing), and
+  publishes the Standing first at its first row: an empty table before any row publishes nothing;
+  one after rows would publish it empty (no recorded instance, a default, §10 item 22). The gate-2
+  checker reads that shape (`TEST-ARCHITECTURE.md` §3.2 property 15).
 - Upstream generates these rows from the rounds. They are relayed, never recomputed.
 
 ### 4.11 `run` (run generation)
@@ -796,9 +860,10 @@ came from results-table observations:
 **Retraction from an XML snapshot.** The row carries no time, no finish time and no mark, for an
 Attempt previously known from a results-table observation: for a first-run or single-run row, retract
 as the TCP first-run case; for a second-run row, as the TCP time-empty case — before run 2 every
-second-run row already carries `TotalRnk` and `TotalTotal` with no time.
-**Guard (INV-2c, content age):** apply it against a `tcp` observation only when
-`xml.lastRewriteDetectedAt` minus the poll interval is later than that observation's `observedAt`.
+second-run row already carries `TotalRnk` and `TotalTotal` with no time. An absent XML row and an
+XML table with no rows state nothing (`CONTRACTS.md` §4 INV-7; the file lists every entry, §0.3).
+**Guard (INV-2c, content age):** apply it against a `tcp` observation only when the snapshot's
+`changedAfter` (§0.3; `null` never qualifies) is later than that observation's `observedAt`.
 Otherwise the snapshot may predate the push, and it is ignored for that field until the next
 snapshot. The same guard applies to the mark exception of INV-2 rule 2, and to any snapshot value
 displacing a `tcp` value during an outage. Recorded: the XML was five minutes *ahead* of TCP's rotation on one
@@ -864,7 +929,12 @@ review R16, E2: the spike applied the stale-mark check only to rows it had attri
 - **`tcp.state`, `xml.state`.**
   - A connection state machine: `connected` while the socket or file watch is open and live;
     `reconnecting` while a reconnect is in flight; `unreachable` after a stated number of failures.
-  - `xml` is `not-configured` when no path is set.
+  - `xml` is `not-configured` when no path is set; `reconnecting` from the moment a path is set
+    until its first poll reports; then per `CONTRACTS.md` §2.8: `connected` when the last poll found
+    the file unchanged since the last whole read or read it whole (a change under retry counts),
+    `reconnecting` on a failed poll — missing, unreadable, or invalid with a stat unchanged since
+    detection (§0.3) — and `unreachable` from the fifth consecutive failure. A valid file naming no
+    race is `connected`.
 - **`tcp.upstreamInstance`** is `Canoe123@System` on every message: `Main`, `Backup` or `Offline`.
 - **`tcp.timingClockOffsetSeconds`** is `TimeOfDay` (Canoe123's timing clock, once a second) minus the
   server clock at receipt. It is diagnostic only.
@@ -873,9 +943,10 @@ review R16, E2: the spike applied the stale-mark check only to rows it had attri
   its cap; `rejected` on `401`/`403`; `not-configured` with no key. `pendingResources` counts
   resources whose current state is not yet accepted; `lastAcceptedAt` and `lastError` are what they
   say.
-- **`xml.lastRewriteDetectedAt`** is the moment a change of the file was last detected. This is what
-  INV-2's rule 2 means by "a rewrite detected after the disconnect", and what §4.12's write-time
-  guard subtracts the poll interval from. The file is written on a timer (a venue setting, 65 s by
+- **`xml.lastRewriteDetectedAt`** is the first detection of the change last read whole (a change
+  under retry or abandoned is not reported until read whole). This is what INV-2's rule 2 means by
+  "a rewrite detected after the disconnect"; the guard of §4.12 reads the unit's `changedAfter`
+  (§0.3), not this field. The file is written on a timer (a venue setting, 65 s by
   default, 35 s at the recorded NKZ) and only when upstream has flagged a change: an operator edit,
   an import, or a slalom rank change. A penalty correction flags one only when a rank moves, when the
   race has a marked row (DNS, DNF, DSQ, CAP, RAL, DQB), or when it was typed in the results grid;
@@ -978,6 +1049,12 @@ changes: a late correction, a retraction, a contradiction, a re-baseline. The di
     (§4.4); `faults` is `not-yet` until a cell is judged (§4.6(d)); `qualified` is bounded by `stage`
     (§4.7); every row states `underReview` (§4.1); `decidedIn` is `null` from TCP (§4.10); DST
     arithmetic and the `NA` schedule rows are stated (§0.2, §0.4); `Member1..3` are not carried (§3).
+23. **Content age is the reader's `changedAfter`, not detection minus the interval** (round 18,
+    2026-11-05, server#202 review; §0.3, §4.12). The subtraction overstated a first read's freshness
+    by the file's whole age and a delayed poll's by the delay; `null` on a first read refuses what
+    cannot be dated. Also: an empty table is a start-list scope snapshot, the on-site parsers emit no
+    classification push, the `xml` states are defined for an invalid and an empty file (§5), and a
+    repeated sector end is dropped (§2.3).
 
 ---
 
@@ -1038,7 +1115,7 @@ but no code path or recording ever filled it.
 
 Items 1–7 and 13 were answered from the source on 2026-09-25 (#179; E1); item 8 was closed by INV-2c
 on 2026-10-14; items 15 and 17 were answered by the spike and the exit-delay measurement. Items 9, 11,
-12, 16, 18, 19, 20 and 21 remain.
+12, 16, 18, 19, 20, 21 and 22 remain.
 
 1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
    hardware judge terminals on their own port and raises a flag on the scoring service for about
@@ -1106,5 +1183,11 @@ on 2026-10-14; items 15 and 17 were answered by the spike and the exit-delay mea
     path `C123-PROTOCOL.md`'s "~4 s" describes — and a tail to 126–781 s. A venue setting;
     `CONTRACTS.md` §7.1 states the range. The protocol doc's figure is corrected in that repository.
 18. The XML poll interval (`pollIntervalMs`, 5 s in the spike and the vectors) and the torn-read retry
-    budget are deployment settings; INV-7's guard is stated in the interval. The venue values come from
+    budget are deployment settings. Since round 18 the guard reads the reader's `changedAfter` (§0.3),
+    so the interval bounds only how late a change is seen; the vectors keep `xmlPollIntervalSeconds`
+    for events written without `changedAfter`. The venue values come from
     S5's execution against Canoe123's real copy-over writer (maintainer).
+22. **A classification table emptied after it had rows.** The core would publish the Standing empty
+    (§4.10, whole replacement). No recording shows one (cp3-cross: all 508 empty classification
+    tables precede the first row). A default; if upstream can clear a built classification, the
+    maintainer says whether an empty Standing or the last built one is wanted. (Round 18.)

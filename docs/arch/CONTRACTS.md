@@ -42,6 +42,19 @@ untimed placed row is `finished`, and a Kayak Cross time trial's `duration` carr
 `penaltySeconds: 0` (§2.6). INV-2 rule 3 names its fields (§4); TCP's course refresh is scoped
 (§2.12). `DERIVATIONS.md` §0.5 states which derivations are the parser's and which the core's.
 
+**Revision, 2026-11-05 (contract round 18, the #202 and #201 reviews).** Rulings the XML reader and
+the merge core (#203) needed. **Content age is no longer "detection minus the poll interval":** an
+`xml` observation's content age is the last moment the reader saw the file in its previous state,
+carried on the `xml-rewrite-detected` event as `changedAfter` (§4 INV-2c, INV-7; defined in
+`DERIVATIONS.md` §0.3). In the steady state that is the previous poll, one interval before
+detection, so nothing already asserted changes; `null` when no stat since start or `setPath` showed
+a different signature, and **`null` fails every content-age comparison** (INV-2c). The file's
+modification time is never an input. `xml.lastRewriteDetectedAt` and the `xml` states are defined
+for an invalid and for an empty file (§2.8). A table with no rows is a scope snapshot in start-list
+mode; an empty XML table or an absent XML row states nothing (§4 INV-7); a classification snapshot
+replaces rows whole under INV-2c's guard alone (`DERIVATIONS.md` §4.10); `sectorEndsAfterGate` is
+strictly increasing (§2.12). No wire shape changed. (Second pass, 2026-11-06, after review.)
+
 ---
 
 ## 0. How to read this document
@@ -551,8 +564,8 @@ place. A classification Phase holds no Attempts; it feeds a `classification` Sta
 **Staleness, stated:** upstream rebuilds a classification only when the operator presses "calculate
 event result", so a later correction in a contributing Phase does not reach it until then. The
 classification is relayed as upstream last built it, never recomputed by us. **`Standing.asOf` is
-what tells a client how old it is** (§5): for a classification it is the ingest time of the last row
-observation, which moves only when the operator recalculates, so a client compares it with the
+what tells a client how old it is** (§5): for a classification it is the ingest time of the latest
+snapshot that changed its rows, which happens when the operator recalculates, so a client compares it with the
 `asOf` of the contributing Phases' standings to see that it lags them. `RXER` is a title for which upstream calculates nothing: a classification Phase
 that never holds rows.
 
@@ -962,7 +975,15 @@ states it. Switching to a backup instance is the timekeeper's manual work: the s
 hand (maintainer answer Q8). Automatic failover is **out of scope**. The field exists only so the
 admin UI can show which instance is live.
 
-**`xml.lastRewriteDetectedAt`** is the moment the last change of the file was detected. The file is
+**`xml.lastRewriteDetectedAt`** is the first detection of the change last read whole; a change still
+under retry, or abandoned, is not reported until it is read whole, so the field always dates the
+last snapshot the reader delivered (the re-baseline's own read is reported on its response, §7.1). **`xml.state`:** `connected` when the last poll found the file and it was
+either unchanged since the last whole read or read whole (a fresh change still under retry counts);
+`reconnecting` when the last poll failed, fewer than five in a row — the file missing, unreadable,
+or failing validation with a stat unchanged since its detection (a wrong root, a save upstream never
+completed); `unreachable` from the fifth consecutive failure. A well-formed file whose root closes but
+that names no race is a valid read that states nothing: `connected`, `lastRewriteDetectedAt`
+advances, nothing presented changes. The file is
 written on a timer whose interval is a venue setting (65 s by default; 35 s at the recorded NKZ), and
 only when upstream has flagged a change: an operator edit, an import, or a slalom rank change. A
 penalty correction flags one only when a rank moves, when the race has a marked row (DNS, DNF, DSQ,
@@ -1158,6 +1179,9 @@ Settled against observed upstream behaviour, after three wrong readings of a rec
   sends. **The refresh is scoped:** TCP's string, which strips the `S` markers, refreshes `gates`,
   `slots`, `splitsAfterGate` and `captions` of the bound course; `layout` and `sectorEndsAfterGate`
   are the snapshot's alone and are never derived from TCP (`DERIVATIONS.md` §2.3).
+- **`sectorEndsAfterGate` is strictly increasing.** A sector that ends after a non-gate slot (the
+  Cross roll zone) ends after the last gate before it, and an end equal to its predecessor is not
+  repeated; the slot itself is in `slots`.
 - **`D` is the Kayak Cross start ramp and `E` the roll zone** (observed upstream behaviour;
   recorded layout `DNNRNNNER` with captions `ST,1,2,3,4,5,6,RZ,7`). Each is a **judging slot**: it
   counts in upstream's transmitted gate count and in the width of every gate string, and it carries a
@@ -1263,7 +1287,9 @@ implementation must satisfy, not an algorithm.
   scope snapshots: a TCP result push, for the race it names, and an XML snapshot, for every race in
   it. Nothing else is. An on-course message describes one participant; a UDP fragment describes one
   row and is not consumed at all (`DECISIONS/ADR-011`); a disconnected source says nothing. A TCP
-  result push was complete in 17,496 of 17,496 recorded messages;
+  result push was complete in 17,496 of 17,496 recorded messages. **A table with no rows is a scope
+  snapshot in start-list mode** (its mode is read structurally like any other, `DERIVATIONS.md`
+  §0.3); recorded only before any row of that race ever existed, where it changes nothing;
 - an **operator write** (`operator-write`).
 
 - **INV-1 (monotonic knowledge against omission, per run generation).** A field's `state` never
@@ -1354,8 +1380,14 @@ implementation must satisfy, not an algorithm.
   a correction back.
 - **INV-2c (content age across sources).** A results-table observation supersedes a presented
   results-table value from the *other* source only when its content is newer than the presented
-  observation. Content age: for an `xml` observation, the snapshot's `lastRewriteDetectedAt` minus
-  the poll interval, since the file may have been written at any moment of that interval; for a
+  observation. Content age: for an `xml` observation, `changedAfter` of the snapshot's
+  `xml-rewrite-detected` event, the reader's last stat before the change (defined in
+  `DERIVATIONS.md` §0.3: the previous poll in the steady state, so one interval before detection,
+  since the file may have been written at any moment of that interval; `null` when no stat since
+  start or `setPath` showed a different signature). **`null` fails every content-age comparison —
+  this rule, INV-7's guard, rule 2's mark exception, INV-2b — and nothing else changes:** rules 1,
+  3 and 4, the same-source sentence below and the `gates` cell merge involve no content age.
+  The file's modification time is never an input, a share's clock being nobody's. For a
   `tcp` observation, its own `observedAt`, since a push is upstream's table at the moment of
   sending. A candidate whose content age is earlier than the presented observation's `observedAt` is
   retained and not presented, whatever rule 2 would otherwise allow; the next observation from that
@@ -1405,12 +1437,16 @@ implementation must satisfy, not an algorithm.
   - **XML:** a first-run or single-run row carrying no time, no finish time and no mark: as the TCP
     first-run case. A second-run row so carrying: as the TCP time-empty case — before run 2, every
     second-run row in the snapshot already carries the combined placement and total with no time.
+    **An absent XML row, and an XML table with no rows, state nothing and retract nothing:** the
+    file lists every entry of a race and a cleared result shows as fields going empty
+    (`DERIVATIONS.md` §0.3); an entry gone from the file is not a result statement. Not recorded
+    (a default; the re-baseline is the remedy for anything left standing).
   - **Never retracted:** an on-course inference, `entry`, `bib`, `startOrder`, `heat`, `startLane`,
     `run`, or a field whose Attempt was never present in a results-table observation.
   - **XML retractions are guarded by content age (INV-2c).** The snapshot lags TCP by up to a save
     cycle, so a snapshot written before a result push must not undo it. An XML retraction, and the
     mark exception of rule 2, apply to a `tcp` observation only when the snapshot's content age —
-    `lastRewriteDetectedAt` minus the poll interval — is later than that observation's `observedAt`.
+    its `changedAfter`, INV-2c — is later than that observation's `observedAt`.
     Otherwise the snapshot is ignored for that field, and the next snapshot settles it. A guard on
     our own clock, not an ordering rule; INV-6 still orders the merge.
   - A retraction is an explicit observation with its own ingest sequence, pushed as `not-yet`
@@ -1423,7 +1459,13 @@ implementation must satisfy, not an algorithm.
   field. A correction to who raced under a bib is an ordinary `known → known` change.
 - **INV-5 (idempotent supersession).** Re-delivering an identical observation, with the same `value`
   from the same source for the same run generation, is a no-op and triggers no client-visible
-  notification. `Phase.date` is assigned once and is never re-derived.
+  notification: nothing retained changes. The retained observation's content age (INV-2c) is kept
+  where the re-delivery's is `null` or not later (a first read after `setPath` re-delivering a
+  value the XML already stated keeps that value's `changedAfter`, so a standing
+  `source-disagreement` neither clears nor re-raises), and advances to the re-delivery's where that
+  is later: the age only rises, which clears no standing disagreement, and a retained candidate
+  restated by a later rewrite is settled by INV-2c, not by this rule. `Phase.date` is assigned
+  once and is never re-derived.
 - **INV-6 (ordering is a monotonic ingest sequence, never the wall clock).** Every "later" or "newer"
   above is defined over an internal, strictly increasing sequence, assigned at the ingest boundary
   together with `observedAt`. It is never defined by comparing `observedAt` values. A clock jump
@@ -1452,8 +1494,9 @@ re-baseline, per Phase or per Event:
    `entry`, `bib`, `startOrder`, `heat`, `startLane`, `run`, every gate check and flag (§2.10) and
    every `WriteRequest` survive; a pending write stays pending, and a check's `status` is recomputed;
 2. reads the current XML snapshot, validated, and ingests it as a scope snapshot with a fresh ingest
-   sequence. If no valid snapshot can be read, the action fails with `409 source-unavailable` and
-   changes nothing;
+   sequence — a unit like the reader's, its `changedAfter` by the same definition
+   (`DERIVATIONS.md` §0.3), met by nothing step 1 discarded. If no valid snapshot can be read, the
+   action fails with `409 source-unavailable` and changes nothing;
 3. lets the on-course stream and the next TCP push of each race in scope refill the `tcp` slots.
    Under rule 2 the `xml` observation is presented until then, because the `tcp` slots are empty;
 4. pushes the whole scope to every on-site client as `scope.replaced` (§7.2), and to live as a Phase
@@ -1496,7 +1539,8 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    cold start), the combined placement is on the Attempts and in the second Phase's `phase` standing
    only; the `pair` standing's first publication follows the resolution.
    **`asOf`** is the ingest time of the latest observation that changed the standing as serialised;
-   for a classification, the latest row observation (§2.4). **A standing is pushed only when its
+   for a classification, the latest scope snapshot that changed its rows (§2.4,
+   `DERIVATIONS.md` §4.10), not a snapshot re-sending the same rows. **A standing is pushed only when its
    serialised form changes:** an entry added or removed, or an entry's `rank`, `order`, `result`,
    `pairTotalSeconds`, `behindSeconds`, `provisional`, `underReview` or `decidedIn`, or `anomalies`.
 2. **Whole-class entries.**

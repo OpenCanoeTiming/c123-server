@@ -13,7 +13,17 @@ not stated, are listed unresolved under "Gaps and conflicts". Derived at 0c199af
 tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not tested"; round 17
 (2026-11-05) added the nullable `siblingPhaseId` and `decidedIn`, the member `externalId` as `null`, the
 untimed row's `status`, the Cross time trial's `duration` and the fixture's `gate2.exercised`; its review added
-the deferred `pair` standing, `StandingEntry.result: null` and `not-started → finished`.
+the deferred `pair` standing, `StandingEntry.result: null` and `not-started → finished`. Round 18
+(2026-11-05) changed no client duty: content age, the `xml` states and the classification snapshot
+are the server's reader and core (CONTRACTS §2.8, §4; DERIVATIONS §0.3, §0.5, §4.10, §5;
+CONFORMANCE-VECTORS §1; TEST-ARCHITECTURE §3.2), and `sectorEndsAfterGate` being strictly
+increasing narrows, never widens, what a client receives (CONTRACTS §2.12). Its second pass
+(2026-11-06) changed none either: `null` content age, INV-7 on an empty XML table, classification
+precedence and INV-5's no-op are the core's (CONTRACTS §4; DERIVATIONS §0.3, §4.10, §4.12), and a
+classification `Standing.asOf` is now worded as the latest snapshot that changed its rows
+(CONTRACTS §2.4, §5), which is what a client already compared. Its third pass (2026-11-06) changed
+none: INV-5's content age on a later re-delivery and `decidedIn` from an admitted XML row are the
+core's (CONTRACTS §4; DERIVATIONS §4.10; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §1).
 
 ---
 
