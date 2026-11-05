@@ -247,7 +247,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Expect no `format` token on a Phase; store `kind`, `scoringKind`, `pair` and `heats`, and serve `LivePhase` (CONTRACTS §8.3; ADR-007).
 - [ ] Take one resource changing as the unit of transfer, never a file, a day or an event (CONTRACTS §8.3; ADR-005).
 - [ ] When pushes stop, keep the last on-course set and the last running values; clear nothing by the passage of time (CONTRACTS §8.3).
-- [ ] Emit per push: `attempt.updated` for a partial Attempt push, `attempt.deleted` for a `DELETE`, `scope.replaced` for a Phase replace, the matching `*.updated` for Class, Phase, Entry and Course, `oncourse.updated` for the on-course set, then `standing.updated` for every affected Standing (CONTRACTS §8.3, §8.4).
+- [ ] Emit per push, one request being one ingest unit (CONTRACTS §1.6): `attempt.updated` for a partial Attempt push, `attempt.deleted` for a `DELETE`, `scope.replaced` for a Phase replace, the matching `*.updated` for Class, Phase, Entry and Course, `oncourse.updated` for the on-course set, then `standing.updated` for every affected Standing (CONTRACTS §8.3, §8.4).
 
 **Validation**
 - [ ] Reject a malformed body with `400 validation-failed` and `error.details: [{field, issue}]` naming each refused field (CONTRACTS §1.4, §8.3).
@@ -277,7 +277,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Encode every envelope as the wire encoding requires, `eventTime` omitted rather than `null`, so that every envelope and error validates against the two wire schemas (CONTRACTS §1.2, §1.7).
 
 **Tests**
-- [ ] Run, through a thin adapter into its own merge function, the 23 tier-1 vectors CONFORMANCE-VECTORS §1 lists for the live tier, and assert that count: `INV-1` except the two scope-snapshot ones, `INV-3`, `trichotomy`, `INV-4`, `INV-5`, `INV-6`, `under-review`, `phase-status-transition`, `live-ingest`, the two `operator-correction-*` vectors, and `standing-assembly` except the three anomaly vectors (CONFORMANCE-VECTORS §1, §2; TEST-ARCHITECTURE §3.1).
+- [ ] Run, through a thin adapter into its own merge function, the 23 tier-1 vectors CONFORMANCE-VECTORS §1 lists for the live tier, applying each vector's ingest units as §1 defines them, one ingest request being one unit, and asserting that count: `INV-1` except the two scope-snapshot ones, `INV-3`, `trichotomy`, `INV-4`, `INV-5`, `INV-6`, `under-review`, `phase-status-transition`, `live-ingest`, the two `operator-correction-*` vectors, and `standing-assembly` except the three anomaly vectors (CONFORMANCE-VECTORS §1, §2; CONTRACTS §1.6; TEST-ARCHITECTURE §3.1).
 - [ ] Add tier-1 time-window vectors for calendar `status`: just under, exactly at and just over 5 minutes (TEST-ARCHITECTURE §3.1).
 - [ ] Replay each admitted domain-state fixture's deltas as the §8.3 pushes they correspond to, check that values read back over the public reads match, and run the deltas-only gate-2 properties (those marked **D**) on the resulting public stream (TEST-ARCHITECTURE §3.2, §7).
 - [ ] Verify tenant isolation with the store's own integration tests: no leakage between two keys with equal local ids, no cross-event access, `403` for a revoked key, `404` for an unknown `eventId` (TEST-ARCHITECTURE §3.5; CONFORMANCE-VECTORS §3).

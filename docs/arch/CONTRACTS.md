@@ -285,7 +285,13 @@ own just-submitted correction is a second legitimate `WriteRequest`, not a retry
 **`seq` is one counter per server.** Every push-capable stream (§7's WebSocket, §8.4's public feed)
 stamps each outbound message with `seq`. Each outbound message takes the next value of the counter;
 an element's ingest sequence (INV-6, §4) is the value the counter had when it was ingested, so one
-element may produce many messages, each with its own `seq`. **The one message without `seq` is
+element may produce many messages, each with its own `seq`. **The unit of ingest is one upstream
+message:** one TCP message, one XML snapshot, one operator write, one connection event, one
+re-baseline; on the live tier, one §8.3 request. Every observation that unit yields is merged before
+anything is emitted, and then at most one message per changed resource is sent: §7.2's
+`attempt.updated` carries every field that unit changed, never one message per field. A core may
+apply observations one at a time, but it notifies per unit (`CONFORMANCE-VECTORS.md` §1, "Ingest
+units"). **The one message without `seq` is
 §8.4's `heartbeat`:** it carries `asOfSeq` instead, since it carries no state; a client neither buffers
 nor applies it, and steps 2 and 4 below concern only messages that carry `seq`. On site the heartbeat is
 `sources.updated`, which does carry `seq` (§7.2). It is the same number on every connection and in every `asOfSeq` a REST response

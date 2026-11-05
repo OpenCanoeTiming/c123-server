@@ -123,6 +123,15 @@ Each vector has:
 - **Live-tier elements.** `{ ingestSeq, push: 'entry' | 'class' | 'phase' | 'course' | 'oncourse' |
   'classification', body }` is a bare §8.3 push; the event `delete` with `attemptId` is a `DELETE`. `expect.notifications` may be a map of
   message type to count.
+- **Ingest units** (`CONTRACTS.md` §1.6). Messages are emitted per upstream message, not per
+  observation: the core merges every observation one upstream message yields, then sends at most one
+  message per changed resource. In a vector, **consecutive observations with the same `source` and the
+  same `observedAt` are one unit** (`observedAt` is the moment that upstream message was received,
+  `CONTRACTS.md` §1.2); every event, scope snapshot and live-tier element is a unit of its own. A
+  harness applying element by element finds the boundary by looking at the next element: it flushes
+  notifications when the next element is not an observation with the same `source` and `observedAt`,
+  and after the last element. Each observation keeps its own `ingestSeq`, which still orders the merge
+  within the unit. No `afterGivenIndex` in the file falls inside a unit, and none may.
 
 **Which vectors each component runs.** Each component feeds its own merge function through a thin
 adapter (`TEST-ARCHITECTURE.md` §3.1); the sets overlap, and each suite asserts its own count.
@@ -183,12 +192,15 @@ invariants" means exactly this subset.
   second-run Phase has a `phase` and a `pair` standing (`CONTRACTS.md` §5), so one serialised change
   there is two `standing.updated`; a creation message counts once however many snapshots preceded it.
   It is a number (every message of the vector), or a map from message type (`CONTRACTS.md` §7.2 on
-  site, §8.4 on live) to a count or to an object `{ count?, afterGivenIndex?, attemptId?, scope?,
-  fields? }`: `count` counts the messages of that type that match the filters; `afterGivenIndex`
-  counts only messages produced by givens after that 0-based index (the `expectSequence` convention);
-  `attemptId` restricts to messages for that Attempt; `scope` restricts `scope.replaced` to that scope;
-  `fields` names keys the single matching message's `fields` must carry (with the values `expect`
-  states for them; other keys are not asserted). A type absent from the map is not asserted.
+  site, §8.4 on live) to a count or to an object `{ count, afterGivenIndex?, attemptId?, scope?,
+  fields? }`: `count` (required) is the number of messages of that type that match the filters;
+  `afterGivenIndex` counts only messages of ingest units whose elements all follow that 0-based index
+  (the `expectSequence` convention); `attemptId` restricts to messages for that Attempt; `scope`
+  restricts `scope.replaced` to that scope; `fields` names keys the single matching message's `fields`
+  must carry, each with the value `expect` states for it under `<field>` or `<attemptId>.<field>` for
+  the message's Attempt (the object's `attemptId`, else `context.attemptId`), presence only where
+  `expect` states none; other keys are not asserted. A type absent from the map is not asserted. A
+  `notifications` expectation always counts §7.2 (on site) or §8.4 (live) messages, never a §8.3 push.
 - `note`, wherever it appears, is commentary for the reader and is never asserted. Every assertion of
   a vector is in `expect`, `expectSequence` or `then`.
 
