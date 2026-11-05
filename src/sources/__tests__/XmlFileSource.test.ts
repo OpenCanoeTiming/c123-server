@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { XmlFileSource } from '../XmlFileSource.js';
+import { FileWatcher } from '../FileWatcher.js';
 import type { SourceStatus } from '../types.js';
 
 describe('XmlFileSource', () => {
@@ -25,18 +26,9 @@ describe('XmlFileSource', () => {
   });
 
   afterEach(() => {
-    if (source) {
-      source.stop();
-    }
-    // Clean up temp files
-    try {
-      if (fs.existsSync(testFile)) {
-        fs.unlinkSync(testFile);
-      }
-      fs.rmdirSync(tempDir);
-    } catch {
-      // Ignore cleanup errors
-    }
+    vi.restoreAllMocks();
+    source?.stop();
+    fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
   it('should read XML file and emit message', async () => {
@@ -118,6 +110,18 @@ describe('XmlFileSource', () => {
   it('should detect file changes and emit new message', async () => {
     fs.writeFileSync(testFile, validXml);
 
+    // 'connected' comes from the source's own immediate read, before the native
+    // watcher has finished its initial scan. A write made before the watcher is
+    // ready is never reported (ignoreInitial), so wait for the watcher's own
+    // 'ready' instead of guessing a delay. Capture the instance it creates.
+    const watcherReady: Promise<void>[] = [];
+    const realStart = FileWatcher.prototype.start;
+    vi.spyOn(FileWatcher.prototype, 'start').mockImplementation(function (this: FileWatcher) {
+      // Subscribe before start(): 'ready' may fire before 'connected' does.
+      watcherReady.push(new Promise<void>((resolve) => this.once('ready', resolve)));
+      return realStart.call(this);
+    });
+
     source = new XmlFileSource({ path: testFile, pollInterval: 100 });
 
     const messages: string[] = [];
@@ -131,19 +135,23 @@ describe('XmlFileSource', () => {
 
     source.start();
     await connected;
+    expect(watcherReady).toHaveLength(1);
+    await watcherReady[0];
 
     expect(messages).toHaveLength(1);
 
-    // Modify the file (need to wait a bit for mtime to change)
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
     const updatedXml = validXml.replace('Test', 'Updated');
     fs.writeFileSync(testFile, updatedXml);
+    // The source skips a read when mtime is unchanged; make the change
+    // unambiguous instead of sleeping until the clock ticks.
+    const later = new Date(Date.now() + 5000);
+    fs.utimesSync(testFile, later, later);
 
-    // Wait for next poll
-    await new Promise((resolve) => setTimeout(resolve, 200));
-
-    expect(messages.length).toBeGreaterThanOrEqual(2);
+    // Bounded wait on the condition (watcher stability + debounce latency).
+    await vi.waitFor(() => expect(messages.length).toBeGreaterThanOrEqual(2), {
+      timeout: 5000,
+      interval: 20,
+    });
     expect(messages[messages.length - 1]).toContain('Updated');
   });
 
