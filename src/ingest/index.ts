@@ -5,3 +5,5 @@
 export { parseTcp } from './tcp.js';
 export { parseXmlSnapshot } from './xml.js';
 export type { IngestContext, IngestElement, CourseSlot } from './types.js';
+export { createXmlReader } from './xml-reader.js';
+export type { Clock, XmlFs, XmlReader, XmlReaderOptions, XmlReaderStatus, XmlSourceState } from './xml-reader.js';

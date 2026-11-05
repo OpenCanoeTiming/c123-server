@@ -9,6 +9,8 @@ const TOOLS = [
   'packages/c123-contract/__tests__/pack.test.ts',
   // child vitest processes: the real conformance suite and the ratchet fixture (issue #200)
   'src/__tests__/conformance/suite-runs.test.ts',
+  // a real child process rewriting a real file under the real XML reader (issue #202)
+  'src/ingest/__tests__/xml-reader.real.test.ts',
 ];
 const EXCLUDE = ['dist/**', 'node_modules/**'];
 
