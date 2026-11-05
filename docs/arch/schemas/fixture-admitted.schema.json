@@ -159,7 +159,8 @@
           "additionalProperties": false,
           "required": [
             "checker",
-            "violations"
+            "violations",
+            "exercised"
           ],
           "properties": {
             "checker": {
@@ -171,6 +172,34 @@
                 "type": "integer",
                 "minimum": 0
               }
+            },
+            "exercised": {
+              "type": "object",
+              "description": "per gate-2 property, the number of steps that evaluated it (TEST-ARCHITECTURE §3.2); 0 = the window is no evidence for that property",
+              "additionalProperties": false,
+              "patternProperties": {
+                "^P(1[0-5]|[1-9])$": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "P1",
+                "P2",
+                "P3",
+                "P4",
+                "P5",
+                "P6",
+                "P7",
+                "P8",
+                "P9",
+                "P10",
+                "P11",
+                "P12",
+                "P13",
+                "P14",
+                "P15"
+              ]
             }
           }
         }

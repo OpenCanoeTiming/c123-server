@@ -10,7 +10,9 @@ For each deployable other than c123-server, as named in `ARCHITECTURE.md`'s "The
 its own section plus the Common section is the definition of done for its migration to the new
 contract. Nothing here adds an obligation. Disagreements between documents, and duties implied but
 not stated, are listed unresolved under "Gaps and conflicts". Derived at 0c199af, plus the working
-tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not tested".
+tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not tested"; round 17
+(2026-11-05) added the nullable `siblingPhaseId` and `decidedIn`, the member `externalId` as `null`, the
+untimed row's `status`, the Cross time trial's `duration` and the fixture's `gate2.exercised`.
 
 ---
 
@@ -27,7 +29,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Keep `null` distinct from an absent key and from `0`; never coerce `null` to `0` or `""` (CONTRACTS §1.2, §1.3; ARCHITECTURE §5).
 - [ ] Branch on `error.code` only; never parse `error.message`; read `error.details` only on the three codes that define it, in the shape that code fixes: `[{field, issue}]` on `validation-failed`, `{ reason }` on `write-not-possible` and `source-unavailable`; expect the key absent on every other code (CONTRACTS §1.4).
 - [ ] Pin a specific domain-state fixture set by id and version in a committed reference; never a floating "latest" (TEST-ARCHITECTURE §6).
-- [ ] Consume only fixtures whose `admitted.status` is `admitted`, which `schemas/fixture-admitted.schema.json` allows only with gate 1 and gate 2 true, a window spanning whole races checked against published results with no mismatch, and a `human-checked-<date> by <name>` line certifying the fixture (TEST-ARCHITECTURE §3.2, §4, §6; ADR-017).
+- [ ] Consume only fixtures whose `admitted.status` is `admitted`, which `schemas/fixture-admitted.schema.json` allows only with gate 1 and gate 2 true, a window spanning whole races checked against published results with no mismatch, and a `human-checked-<date> by <name>` line certifying the fixture; read `evidence.gate2.exercised` for the properties the window evaluated zero times, for which the fixture is no evidence (TEST-ARCHITECTURE §3.2, §4, §6; ADR-017).
 - [ ] Fail, loudly, on a `domainLayerVersion.contract` mismatch between a fixture and the consumer; re-pin deliberately instead of warning; a `generator` change is re-admitted upstream, never re-pinned here (TEST-ARCHITECTURE §4, §6).
 - [ ] Keep tier-4 smoke tests few; they prove only that the wiring connects (TEST-ARCHITECTURE §3.4).
 
@@ -65,7 +67,8 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Render `left-without-finish` as an observed removal with no reason; show a mark only once `status` carries one; never infer DNF (CONTRACTS §2.6, §3.2, §7.1; ARCHITECTURE §6.G).
 - [ ] Render `outcome.kind: 'no-result'` as its mark, whatever time the row carried; never let a time suppress a mark (CONTRACTS §2.6).
 - [ ] Show `non-ranked` as raced and timed but unranked, and `ral` where its `placement` puts it (CONTRACTS §2.6).
-- [ ] Show a placed row whose `outcome` is `unavailable{not-applicable}` with its placement and no time; never detect placeholder values such as `100.00` on the client (CONTRACTS §2.6; DERIVATIONS §4.4).
+- [ ] Show a placed row whose `outcome` is `unavailable{not-applicable}` with its placement and no time, its `status` being `finished`; never detect placeholder values such as `100.00` on the client (CONTRACTS §2.6; DERIVATIONS §4.2, §4.4).
+- [ ] In a Kayak Cross time trial, expect `duration.penaltySeconds: 0` and `totalSeconds = runSeconds` by rule, and show the judging from `faults` (CONTRACTS §2.6; DERIVATIONS §4.4, §4.6).
 - [ ] Choose which Phase to display itself, from `Phase.status`, `stage`, `programmeOrder`, the on-course set and each Standing's `asOf`; expect no "current race" from the server; default to the Phase of the first on-course Attempt and the most recently changed Standing, and cycle or split when several Phases run at once (ARCHITECTURE §2; CONTRACTS §7.1, §7.2).
 - [ ] Read a second-run mark as describing run 2 only; the combined result stays in `placement` and `pairTotal` (CONTRACTS §2.6, §5).
 - [ ] Render `Gate.penalty: null` as not judged, never `0`; accept team values that are member sums such as 4, 52, 100 or 150 (CONTRACTS §1.3, §2.6; ADR-014).
@@ -82,7 +85,9 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Show a result without a rank until `placement` is known; never fill in a computed rank (CONTRACTS §5; ADR-012).
 - [ ] Render Standing entries in delivered order; unplaced entries (`rank: null`, `order: null`) come last, in an order with no ranking meaning (CONTRACTS §5).
 - [ ] Where standings are shown, show age-category standings alongside the class standing, not instead of it (CONTRACTS §2.3; ADR-014).
-- [ ] Render a `classification` Standing from its own entries, with `decidedIn`, as upstream last built it; a classification Phase has no Attempts (CONTRACTS §2.4, §2.7; DERIVATIONS §4.10).
+- [ ] Render a `classification` Standing from its own entries, with `decidedIn` as upstream's own round token (`F`, `SF`, `1/2`, `1/4`, `T`), shown verbatim and absent while `null`, as upstream last built it; a classification Phase has no Attempts (CONTRACTS §2.4, §2.7; DERIVATIONS §4.10).
+- [ ] Expect `pair.siblingPhaseId` to be `null` until the schedule names the other run; `role` and `combination` are already final (CONTRACTS §2.4; DERIVATIONS §2.1).
+- [ ] Read a member's `externalId` inside the `known` `members` value, where `null` means no registry identity; expect no per-member envelope on either tier (CONTRACTS §1.2, §2.5, §8.3).
 - [ ] Show a classification's age from its `Standing.asOf`, compared with the `asOf` of its contributing Phases' standings, so that a lag behind them is visible (CONTRACTS §2.4, §5).
 - [ ] Read a running athlete's live time from the Attempt and the on-course set, never from a standing: a standing entry's `result` is `pending` while the athlete is on course, and `standing.updated` arrives only when the standing changed (CONTRACTS §2.7, §5, §7.2; ADR-017).
 - [ ] Identify each Standing by its `standingKey` (CONTRACTS §2.7, §5).
@@ -217,10 +222,11 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Apply INV-1, INV-3, INV-4, INV-5, INV-6 and INV-2 rule 4, and honour explicit `not-yet`, `DELETE` and the Phase replace; apply none of INV-2 rules 1 to 3, INV-2b, INV-2c, INV-2d or INV-7 (CONTRACTS §4, §8.3; ARCHITECTURE §3).
 - [ ] Among bridge observations of one field, present the later-ingested one (CONTRACTS §4, §8.3).
 - [ ] Accept `stage` on the Phase push and serve it; it is structural, not a vendor token (CONTRACTS §2.4, §8.3; ADR-007).
+- [ ] Accept `pair.siblingPhaseId: null` on the Phase push and serve it as `null` (CONTRACTS §2.4, §8.3).
 - [ ] Expect the bridge to re-push the current state of every changed resource after an outage, a cleared rejection or a restart, and treat each as the idempotent `PUT` it is (CONTRACTS §1.5, §2.8, §8.3).
 - [ ] Assemble standings as c123-server does, from the pushed `placement` and `ageCategoryId`, without the category-rank check and without the order-anomaly check; rank nothing; emit `standing.updated` only when the standing's serialised form changed, never for a running athlete's ticks (CONTRACTS §5, §8, §8.3; ADR-012; ADR-017).
 - [ ] Set each Standing's `asOf` to the ingest time of the latest observation behind any of its entries (CONTRACTS §5).
-- [ ] Accept `PUT /ingest/v2/phases/{phaseId}/classification` for a Phase of `kind: 'classification'`, replace its rows whole, assemble the `classification` Standing from them as delivered and emit `standing.updated`; refuse Attempts on a classification Phase and classifications pushed as Attempts (CONTRACTS §2.4, §5, §8.3, §8.6).
+- [ ] Accept `PUT /ingest/v2/phases/{phaseId}/classification` for a Phase of `kind: 'classification'`, replace its rows whole (`decidedIn: string | null`, relayed as pushed), assemble the `classification` Standing from them as delivered and emit `standing.updated`; refuse Attempts on a classification Phase and classifications pushed as Attempts (CONTRACTS §2.4, §5, §8.3, §8.6).
 - [ ] Recompute nothing else: retire `EventLifecycleService`'s independent judgement, the independent ranking and the second XML parser (ARCHITECTURE §3; CONTRACTS §8).
 - [ ] Store a second run's `outcome`, which is run 2's own, and its `pairTotal` and `countingRun` as pushed; never recombine the runs (CONTRACTS §2.6, §8).
 - [ ] Keep its own `seq` counter: one per server, strictly increasing, persisted, never regressing across a restart (CONTRACTS §1.6).
@@ -242,7 +248,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Store every Attempt's `gates` as pushed (CONTRACTS §8.3).
 - [ ] Accept the Entry body's `isTeam` flag and serve it as `Entry.isTeam` (CONTRACTS §2.5, §8.3).
 - [ ] Wrap the bare values of Class, Phase, Entry and Course bodies as `known`, `source: 'bridge'`, `observedAt` the ingest time, `confidence: 'authoritative'`, `provisional: false`; keep the `source` the bridge states on Attempt fields (CONTRACTS §1.2, §8.3).
-- [ ] Store a `null` in a nullable body field (`club`, `nation`, `ageCategoryId`, `eventBib`, `courseId`, `scheduledStart`, `programmeOrder`, `title`, a member's `externalId`) as `unavailable{reason:'not-applicable'}` (CONTRACTS §8.3).
+- [ ] Store a `null` in a nullable body field (`club`, `nation`, `ageCategoryId`, `eventBib`, `courseId`, `scheduledStart`, `programmeOrder`, `title`) as `unavailable{reason:'not-applicable'}`; keep a member's `externalId: null` as `null` inside the `known` `members` value, never wrapped (CONTRACTS §2.5, §8.3).
 - [ ] Accept forward references: create a stub for a `classId` or `courseId` not yet pushed (CONTRACTS §8.3).
 - [ ] Expect no `format` token on a Phase; store `kind`, `scoringKind`, `pair` and `heats`, and serve `LivePhase` (CONTRACTS §8.3; ADR-007).
 - [ ] Take one resource changing as the unit of transfer, never a file, a day or an event (CONTRACTS §8.3; ADR-005).

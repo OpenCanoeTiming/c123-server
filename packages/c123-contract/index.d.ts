@@ -65,7 +65,8 @@ export type Phase = {
   title: Observed<string>             // organiser-authored race title, where set — [D] xml
   status: Observed<PhaseStatus>       // [D] — §3.1
 }
-export type PairRole = { role: 'first' | 'second'; siblingPhaseId: string; combination: 'best' | 'sum' }
+export type PairRole = { role: 'first' | 'second'; siblingPhaseId: string | null; combination: 'best' | 'sum' }
+                                    // siblingPhaseId null until the schedule names the other run — DERIVATIONS §2.1
 
 export type Stage = 'run' | 'time-trial' | 'heats' | 'quarter-final' | 'semi-final' | 'final'
            | 'super-final' | 'classification'
@@ -76,7 +77,7 @@ export type Person = {
   givenName: string
   familyName: string
   birthDate?: string                  // YYYY-MM-DD as entered upstream; see "Birth date" below
-  externalId: ExternalId | null       // null = no registry identity at all (not-applicable)
+  externalId: ExternalId | null       // null = no registry identity at all; served as null on both tiers, never wrapped (§1.2)
 }
 
 export type Entry = {
@@ -163,7 +164,7 @@ export type StandingEntry = {
   behindSeconds: number | null // this entry's ranked value minus the leader's; duration scopes only
   provisional: boolean
   underReview: boolean
-  decidedIn?: string           // classification scope only: the format of the round that placed the athlete
+  decidedIn?: string | null    // classification scope only: upstream's own round token (F, SF, 1/2, 1/4, T), verbatim, not a format; null until the snapshot states it — DERIVATIONS §4.10
 }
 
 export type Anomaly =
@@ -284,7 +285,7 @@ export type EntryPutMember = { givenName: string; familyName: string; birthDate?
 export type EntryPut = { classId: string; displayName: string; isTeam: boolean; club: string | null; nation: string | null;
                   ageCategoryId: string | null; eventBib: string | null; members: EntryPutMember[] }
 export type AttemptPut = Partial<Omit<Attempt, 'attemptId' | 'phaseId' | 'bib'>>   // non-empty at runtime; identity is the path
-export type ClassificationRow = { entryId: string; bib: string; rank: number | null; order: number; decidedIn: string }
+export type ClassificationRow = { entryId: string; bib: string; rank: number | null; order: number; decidedIn: string | null }
 export type ClassificationPut = { rows: ClassificationRow[]; asOf: Timestamp }
 export type OnCoursePut = { attemptIds: string[]; featuredByUpstream: string | null }
 export type PhaseAttemptsPut = { attempts: ({ bib: string } & AttemptPut)[] }

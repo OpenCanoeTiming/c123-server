@@ -193,7 +193,8 @@ describe('row 12 admission block', () => {
     },
     evidence: {
       gate1: { stepLogSha256: pair, finalStateSha256: pair, candidateSha256: pair },
-      gate2: { checker: 'gate2-properties@1', violations: {} },
+      gate2: { checker: 'gate2-properties@1', violations: {},
+        exercised: Object.fromEntries(Array.from({ length: 15 }, (_, i) => [`P${i + 1}`, i === 9 ? 0 : 40])) },
     },
   })
 

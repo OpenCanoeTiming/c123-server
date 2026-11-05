@@ -33,6 +33,15 @@ XML snapshot, operator write, connection event or re-baseline yields (on live, o
 merged before anything is emitted, and then at most one message per changed resource is sent; a core
 may apply observations one at a time but notifies per unit. No wire shape changed.
 
+**Revision, 2026-11-05 (contract round 17, findings server#240, #243, #247 and the #201 review).**
+Rulings the parsers and the gate-2 checker needed before the merge core (#203). Three shapes move:
+`PairRole.siblingPhaseId` and `ClassificationRow.decidedIn` (so `StandingEntry.decidedIn`) become
+nullable (§2.4, §2.7, §8.3), and a member's `externalId: null` is served as `null` on both tiers,
+never as a per-member envelope (§1.2, §2.5, §8.3). Two rules are stated where they were implied: an
+untimed placed row is `finished`, and a Kayak Cross time trial's `duration` carries
+`penaltySeconds: 0` (§2.6). INV-2 rule 3 names its fields (§4); TCP's course refresh is scoped
+(§2.12). `DERIVATIONS.md` §0.5 states which derivations are the parser's and which the core's.
+
 ---
 
 ## 0. How to read this document
@@ -172,8 +181,10 @@ contract (`Gate.penalty`, §2.6). This is the direct fix for `EVIDENCE.md` Exhib
   configured, or no course is defined for the Phase.
 - `'source-unreachable'`: the source is configured but not answering right now.
 - `'not-applicable'`: the fact does not exist for this entity, permanently and by its nature. For
-  example, a forerunner has no registry identity (§2.5), and a heat number does not apply to a race
-  without heats.
+  example, no `eventBib` exists where bibs are issued per race (§2.5), and a heat number does not
+  apply to a race without heats. A member with no registry identity is `externalId: null` inside a
+  `known` `members` value (§2.5), not an envelope: the Entry field is the wrapped unit, and nothing
+  inside a `value` is wrapped again.
 
 **How a client renders `unavailable`.** By default all three reasons render alike, as "not known",
 exactly as `not-yet` does; the reason is for the admin UI and diagnostics, and no client renders a
@@ -473,7 +484,8 @@ type Phase = {
   title: Observed<string>             // organiser-authored race title, where set — [D] xml
   status: Observed<PhaseStatus>       // [D] — §3.1
 }
-type PairRole = { role: 'first' | 'second'; siblingPhaseId: string; combination: 'best' | 'sum' }
+type PairRole = { role: 'first' | 'second'; siblingPhaseId: string | null; combination: 'best' | 'sum' }
+                                    // siblingPhaseId null until the schedule names the other run — DERIVATIONS §2.1
 ```
 
 **`format` is open** (maintainer answer Q6; `DECISIONS/ADR-014`). Every format Canoe123 supports is
@@ -499,6 +511,10 @@ pairing and combination behaviour.
   same day, and likewise for `HT`, `EL`, `TR` and `SR`.
 - `combination` is `'best'` exactly for `BR2`, `HT2`, `NHT2`, `EL2` and `TR2`. Upstream sums both runs
   for every other second run.
+- `role` and `combination` come from the token alone; `siblingPhaseId` is `null` until the schedule
+  names the other run (a TCP-first cold start, `DERIVATIONS.md` §2.1). A second-run Phase reads its
+  rows as a second run from its first row, sibling resolved or not (`DERIVATIONS.md` §4.4). An `NHT2`
+  whose first run the schedule never names has `pair: null`.
 - The tokens `QUA`/`SEM`/`FIN`, which appeared in an earlier draft of this contract and in the
   protocol documentation, **do not exist upstream**.
 - **Two further pairings** (observed upstream behaviour; neither appears in the corpus): a
@@ -555,7 +571,7 @@ type Person = {
   givenName: string
   familyName: string
   birthDate?: string                  // YYYY-MM-DD as entered upstream; see "Birth date" below
-  externalId: ExternalId | null       // null = no registry identity at all (not-applicable)
+  externalId: ExternalId | null       // null = no registry identity at all; served as null on both tiers, never wrapped (§1.2)
 }
 
 type Entry = {
@@ -594,7 +610,9 @@ type Entry = {
     asserts it from configuration (§6).
   - A person with no registry identity at all has `externalId: null`. This applies to forerunners,
     placeholders, and unregistered or foreign entrants. Such a person is an ordinary participant, fully
-    renderable in seeding order, never a degraded one.
+    renderable in seeding order, never a degraded one. On the wire the `null` sits inside the `known`
+    `members` value, on site and on live alike (§8.3): `members` is the wrapped unit, and there is no
+    per-member envelope (§1.2).
 - **Birth date** (maintainer answer Q4). The on-site contract (§7) carries only the **birth year**:
   no venue consumer needs the day, and the year is what places an athlete in an age category. The
   live ingest contract (§8.3) carries the birth date as entered, often `YYYY-01-01` with only the year
@@ -728,6 +746,11 @@ and the run is raced again. Meanwhile, it looks as if the athlete never did that
   Upstream's `Pen` and `Total` on a second-run result row describe the *counting* run. When run 1 is
   better, which was 41% of recorded second runs, they are run 1's figures, so they are never used
   for run 2. The combined result is `pairTotal`.
+  - **In a Kayak Cross time trial** (`XT`, `XT1`, `XT2`: duration-scored, `DERIVATIONS.md` §4.4),
+    `penaltySeconds` is `0` and `totalSeconds = runSeconds` by rule, on the `running` value too: Cross
+    has no time penalties, the judging is `faults` (§4.6(d)), and upstream's own rows agree
+    (`Pen 0`, `Total = Time`, 293 of 293 recorded). This is a stated constant, not an empty read as
+    zero.
 - **`ordinal`:** Cross. The athlete's order within the heat, **taken from upstream's placement, never
   from `Time`.** Athletes with faults rank after every clean finisher, whatever their finish order
   (`DECISIONS/ADR-009` addendum).
@@ -738,7 +761,7 @@ and the run is raced again. Meanwhile, it looks as if the athlete never did that
   and `Q` throughout. Such a row presents `outcome: unavailable{reason:'not-applicable'}` and its
   `placement` as stated; its time field is never presented, on either tier. A client shows the
   placement and no time. Decided in the domain layer so that no client detects `100.00` on its own.
-  Untimed is read from the snapshot row (`dtFinish` empty, time and placement present) and inherited
+  Its `status` is `finished`: upstream ranked the row (`DERIVATIONS.md` §4.2). Untimed is read from the snapshot row (`dtFinish` empty, time and placement present) and inherited
   by the Attempt's TCP row, which carries no finish time of its own; before the first snapshot a TCP
   row is presumed timed.
 - The earlier draft's gap, where running time had no shape (#166), is closed by the `running`
@@ -884,7 +907,7 @@ type StandingEntry = {
   behindSeconds: number | null // this entry's ranked value minus the leader's; duration scopes only
   provisional: boolean
   underReview: boolean
-  decidedIn?: string           // classification scope only: the format of the round that placed the athlete
+  decidedIn?: string | null    // classification scope only: upstream's own round token (F, SF, 1/2, 1/4, T), verbatim, not a format; null until the snapshot states it — DERIVATIONS §4.10
 }
 
 type Anomaly =
@@ -1131,7 +1154,9 @@ Settled against observed upstream behaviour, after three wrong readings of a rec
   does its Attempts' `gates` (§2.6).
 - **Only the snapshot carries course numbers.** TCP describes only the currently selected course,
   without its number. It is used only to refresh that course, and for the captions, which only TCP
-  sends.
+  sends. **The refresh is scoped:** TCP's string, which strips the `S` markers, refreshes `gates`,
+  `slots`, `splitsAfterGate` and `captions` of the bound course; `layout` and `sectorEndsAfterGate`
+  are the snapshot's alone and are never derived from TCP (`DERIVATIONS.md` §2.3).
 - **`D` is the Kayak Cross start ramp and `E` the roll zone** (observed upstream behaviour;
   recorded layout `DNNRNNNER` with captions `ST,1,2,3,4,5,6,RZ,7`). Each is a **judging slot**: it
   counts in upstream's transmitted gate count and in the width of every gate string, and it carries a
@@ -1289,9 +1314,13 @@ implementation must satisfy, not an algorithm.
      The second case fixes a defect in the previous rule. There, a correction visible in the snapshot
      during an outage stayed hidden until TCP's rotation came round again, which takes up to ~15 min.
   3. **Facts only one source carries** use that source alone:
-     - on-course facts, `courseOrder`, `timeToBeat`: TCP only;
-     - the superseded run's summary, age categories, members, event details, course numbers:
-       the XML only.
+     - on-course facts — `courseOrder`, `timeToBeat`, a `running` outcome — and `Course.captions`:
+       TCP only;
+     - `countingRun`, `Gate.memberPenalties`, `Entry.members`, `ageCategoryId`, `eventBib` and
+       `isTeam`, `Class.ageCategories`, `Event.details`, `Phase.courseId`, `Phase.scheduledStart` and
+       `title`, `Course.courseId`, `layout` and `sectorEndsAfterGate`: the XML only. A first run's own
+       figures are its own Attempt's and follow rules 1–2; the second-run row's `Prev*` columns are
+       not read (`DERIVATIONS.md` §4.5).
   4. **`operator-write` sits outside rules 1–3.**
      - **`provisional: true`** is an optimistic write awaiting one specific echo (§2.9). It is
        presented the instant it is submitted. The very next results-table observation of that field,
@@ -1875,10 +1904,10 @@ setting applies to public reads and the stream, not to this response, so `EntryP
 |---|---|
 | `PUT /ingest/v2/classes/{classId}` | `{ "code": string, "name": string, "discipline": "slalom"\|"cross", "ageCategories": [{ "ageCategoryId": string, "name": string }] }` |
 | `PUT /ingest/v2/courses/{courseId}` | `{ "gates": [{ "number": number, "kind": "downstream"\|"upstream" }], "sectorEndsAfterGate": number[], "splitsAfterGate": number[] }` |
-| `PUT /ingest/v2/phases/{phaseId}` | `{ "classId": string, "kind": "race"\|"classification", "stage": Stage, "scoringKind": "duration"\|"ordinal", "pair": { "role": "first"\|"second", "siblingPhaseId": string, "combination": "best"\|"sum" } \| null, "heats": boolean, "date": "YYYY-MM-DD", "courseId": string \| null, "scheduledStart": Timestamp \| null, "programmeOrder": number \| null, "title": string \| null, "status": PhaseStatus }` |
+| `PUT /ingest/v2/phases/{phaseId}` | `{ "classId": string, "kind": "race"\|"classification", "stage": Stage, "scoringKind": "duration"\|"ordinal", "pair": { "role": "first"\|"second", "siblingPhaseId": string \| null, "combination": "best"\|"sum" } \| null, "heats": boolean, "date": "YYYY-MM-DD", "courseId": string \| null, "scheduledStart": Timestamp \| null, "programmeOrder": number \| null, "title": string \| null, "status": PhaseStatus }` |
 | `PUT /ingest/v2/entries/{entryId}` | `{ "classId": string, "displayName": string, "isTeam": boolean, "club": string \| null, "nation": string \| null, "ageCategoryId": string \| null, "eventBib": string \| null, "members": [{ "givenName": string, "familyName": string, "birthDate"?: "YYYY-MM-DD", "externalId": { "scheme": string, "value": string } \| null }] }` |
 | `PUT /ingest/v2/attempts/{phaseId}/{bib}` | any non-empty subset of the `Observed` fields of §2.6, each wrapped per §1.2. **An explicit `{ "state": "not-yet" }` resets that field** |
-| `PUT /ingest/v2/phases/{phaseId}/classification` | `{ "rows": [ { "entryId": string, "bib": string, "rank": number \| null, "order": number, "decidedIn": string } ], "asOf": Timestamp }`: **the rows of a classification Phase (§2.4), whole, replaced on every push**, as upstream last built them. The store assembles the `classification` Standing from them and emits `standing.updated`. The Phase must have `kind: 'classification'`, else `400 validation-failed` |
+| `PUT /ingest/v2/phases/{phaseId}/classification` | `{ "rows": [ { "entryId": string, "bib": string, "rank": number \| null, "order": number, "decidedIn": string \| null } ], "asOf": Timestamp }`: **the rows of a classification Phase (§2.4), whole, replaced on every push**, as upstream last built them. The store assembles the `classification` Standing from them and emits `standing.updated`. The Phase must have `kind: 'classification'`, else `400 validation-failed` |
 | `PUT /ingest/v2/oncourse` | `{ "attemptIds": string[], "featuredByUpstream": string \| null }`: **the whole on-course set, in course order**, replaced on every push. An `attemptId` not yet pushed is stubbed (forward reference). Emits `oncourse.updated` |
 | `DELETE /ingest/v2/attempts/{phaseId}/{bib}` | no body. `204` whether or not the Attempt existed; the Attempt and its standing entries are removed |
 | `PUT /ingest/v2/phases/{phaseId}/attempts` | `{ "attempts": [ { "bib": string, ...the Observed fields of §2.6 } ] }`: **replaces every Attempt of the Phase**; Attempts absent from the body are removed. This is what an on-site re-baseline (§4) emits |
@@ -1900,7 +1929,7 @@ type EntryPutMember = { givenName: string; familyName: string; birthDate?: strin
 type EntryPut = { classId: string; displayName: string; isTeam: boolean; club: string | null; nation: string | null;
                   ageCategoryId: string | null; eventBib: string | null; members: EntryPutMember[] }
 type AttemptPut = Partial<Omit<Attempt, 'attemptId' | 'phaseId' | 'bib'>>   // non-empty at runtime; identity is the path
-type ClassificationRow = { entryId: string; bib: string; rank: number | null; order: number; decidedIn: string }
+type ClassificationRow = { entryId: string; bib: string; rank: number | null; order: number; decidedIn: string | null }
 type ClassificationPut = { rows: ClassificationRow[]; asOf: Timestamp }
 type OnCoursePut = { attemptIds: string[]; featuredByUpstream: string | null }
 type PhaseAttemptsPut = { attempts: ({ bib: string } & AttemptPut)[] }
@@ -1925,9 +1954,9 @@ type PhaseAttemptsPutResponse = { attempts: Attempt[] }
   (`EVIDENCE.md` Exhibit 12). **Every completed Attempt's `gates`
   must eventually be pushed:** that is the fix for `EVIDENCE.md` Exhibit 9.
 - **`externalId` is a required key per member, with `null` allowed.** Omitting it is
-  `400 validation-failed`. So is a bare string, or an object without `scheme`. In the store, a `null`
-  becomes `unavailable{reason:'not-applicable'}`. Such an entry is accepted and fully renderable
-  (§2.5).
+  `400 validation-failed`. So is a bare string, or an object without `scheme`. The store keeps the
+  `null` as `null` inside the `known` `members` value, as on site (§2.5); only Entry-level fields are
+  wrapped. Such an entry is accepted and fully renderable (§2.5).
 - **`birthDate` is optional, and carried as entered.** The store keeps it as pushed; publication is
   governed by the per-event `birthDatePublication` setting (§8.4, maintainer answer Q4).
 - **Bare values are wrapped by the store.** Class, Phase, Entry and Course bodies carry bare values,
@@ -1935,8 +1964,9 @@ type PhaseAttemptsPutResponse = { attempts: Attempt[] }
   each such `Observed` field as `{ state: 'known', value, observedAt: <ingest time of the push>,
   source: 'bridge', confidence: 'authoritative', provisional: false }`. A `null` in a nullable body
   field (`club`, `nation`, `ageCategoryId`, `eventBib`, `courseId`, `scheduledStart`, `programmeOrder`,
-  `title`, and each member's `externalId`) becomes `unavailable{reason:'not-applicable'}`. Attempt
-  fields arrive already wrapped and keep the `source` the bridge states.
+  `title`) becomes `unavailable{reason:'not-applicable'}`; a member's `externalId: null` and a
+  `pair.siblingPhaseId: null` stay `null` inside their value. Attempt fields arrive already wrapped
+  and keep the `source` the bridge states.
 - **On-course state is carried, because live shows who is on course and how their time and
   penalties come in** (maintainer, gap 21: "an important feature"). It rides on two things already
   here. **The set** is its own resource: `PUT /ingest/v2/oncourse`, whole, in course order, pushed
