@@ -14,3 +14,5 @@ import type { Attempt } from '@opencanoetiming/c123-contract'
 ```
 
 The package is published to GitHub Packages; pin an exact version.
+
+`schemas.sha256` locks the schema files. A schema edit in `docs/arch/schemas/` requires regenerating it, and that commit is what releases the package: `(cd docs/arch/schemas && sha256sum *.json) > packages/c123-contract/schemas.sha256`

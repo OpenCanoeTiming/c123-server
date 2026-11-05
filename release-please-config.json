@@ -27,6 +27,8 @@
       "release-type": "node",
       "package-name": "@opencanoetiming/c123-contract",
       "component": "c123-contract",
+      "initial-version": "0.1.0",
+      "prerelease": true,
       "include-component-in-tag": true,
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": false,
