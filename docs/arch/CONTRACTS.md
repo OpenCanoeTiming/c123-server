@@ -19,6 +19,14 @@ The decisions behind it are `DECISIONS/ADR-011` to `ADR-014`, plus dated revisio
 Review history that used to live inline in this document now lives in those ADRs. This document
 states the contract as it now stands.
 
+**Revision, 2026-11-05 (contract round 13, server#199).** Pins shapes only; no behaviour changes.
+Every wire shape that was prose now has a `ts` block, so the contract package's drift test covers it:
+`ErrorEnvelope` with `details` per code (§1.4), `ResultMark` (§2.6), `PhaseStatus` (§3.1),
+`Diagnostic` (§4), the on-site serialisations `OnsitePerson`/`OnsiteEntry`/`OnsiteEvent` (§7), the §7.1
+response types, `WsMessage` (§7.2), the §7.3/§7.4 request bodies, the §8.3 push bodies and responses,
+`LivePhase`, and the §8.4 public response, stream and heartbeat types. `error.schema.json` now
+enforces the per-code `details`; `fixture-admitted.schema.json` compiles under a strict validator.
+
 ---
 
 ## 0. How to read this document
@@ -224,13 +232,33 @@ client may parse it. Codes used anywhere in §7 or §8, each with the HTTP statu
 | `attempt-not-found` | 404 | §7 writes — `phaseId`/`bib` don't resolve to a known Attempt |
 | `write-not-found` | 404 | §7 |
 | `flag-not-found` | 404 | §7.4 |
-| `write-not-possible` | 409 | §7.3 — the write is well-formed but upstream offers no safe path for it now; `error.details.reason` says why |
-| `validation-failed` | 400 | both — malformed body; carries `error.details: [{field, issue}]` |
+| `write-not-possible` | 409 | §7.3, §7.4 — the write is well-formed but upstream offers no safe path for it now; `error.details: { reason: WriteNotPossibleReason }` says why |
+| `validation-failed` | 400 | both — malformed body; carries `error.details: [{field, issue}]`, one element per refused field |
 | `vendor-payload-rejected` | 400 | §8.6 — a raw vendor export where a structured resource was required |
 | `unauthorized` | 401 | §8 — missing or unrecognised `X-API-Key` |
 | `forbidden` | 403 | §8 — key recognised but revoked or suspended |
 | `rate-limited` | 429 | §8.3 — carries an HTTP `Retry-After` header, seconds |
-| `source-unavailable` | 409 | §7.1 re-baseline — the XML snapshot is not configured, not readable, or did not validate; `error.details` says which |
+| `source-unavailable` | 409 | §7.1 re-baseline — the XML snapshot is not configured, not readable, or did not validate; `error.details: { reason: SourceUnavailableReason }` says which |
+
+**`details` is present on exactly three codes, and its shape follows from `code`.** On every other
+code the key is absent, never `null`. `error.schema.json` (§1.7) enforces this per code.
+
+```ts
+type ErrorCode =
+  | 'event-not-found' | 'class-not-found' | 'course-not-found' | 'phase-not-found'
+  | 'attempt-not-found' | 'write-not-found' | 'flag-not-found' | 'write-not-possible'
+  | 'validation-failed' | 'vendor-payload-rejected' | 'unauthorized' | 'forbidden'
+  | 'rate-limited' | 'source-unavailable'
+type WriteNotPossibleReason = 'run-not-closed' | 'team-boat' | 'cross'       // §7.3, §7.4
+type SourceUnavailableReason = 'not-configured' | 'unreadable' | 'invalid'   // §7.1 re-baseline: not configured,
+                                                                             // not readable, did not validate
+type ErrorEnvelope = { error:
+  | { code: Exclude<ErrorCode, 'validation-failed' | 'write-not-possible' | 'source-unavailable'>; message: string }
+  | { code: 'validation-failed'; message: string; details: { field: string; issue: string }[] }
+  | { code: 'write-not-possible'; message: string; details: { reason: WriteNotPossibleReason } }
+  | { code: 'source-unavailable'; message: string; details: { reason: SourceUnavailableReason } }
+}
+```
 
 §7 has no `unauthorized`/`forbidden` — the on-site network is trusted (`CONSTRAINTS.md` §1.2, venue
 LAN), and no operation in §7 requires a credential, matching today's precedent.
@@ -299,6 +327,8 @@ and §8.4 each restate only the connection-specific detail, not this sequence.
 `docs/arch/schemas/observed.schema.json`, `error.schema.json` and `fixture-admitted.schema.json` (the
 fixture admission block of `TEST-ARCHITECTURE.md` §4: a machine-checked gate, not a wire shape) are
 real JSON Schema, not illustration — every envelope and every error response in §7 and §8 validates against one of them.
+Each compiles under a strict JSON Schema 2020-12 validator (Ajv `strict: true`, which is how the contract
+package's tests load them); a schema that needs strictness relaxed is a defect in the schema.
 They exist because these two shapes appear in nearly every response either contract sends, so a
 single machine-checkable definition of each is worth more than the same prose repeated at every use
 site staying in sync by discipline alone.
@@ -600,6 +630,8 @@ type Attempt = {
 type AttemptStatus =
   | 'not-started' | 'at-start' | 'on-course' | 'left-without-finish' | 'finished' | 'non-ranked'
   | 'dns' | 'dnf' | 'dsq' | 'dsq-r' | 'dqb' | 'cap' | 'ral' | 'other'
+type ResultMark = Exclude<AttemptStatus, 'not-started' | 'at-start' | 'on-course' | 'left-without-finish' | 'finished'>
+                                         // a result mark (§3.2): every status that is not a lifecycle state
 
 type Outcome =
   | { kind: 'pending' }                                                    // nothing yet
@@ -1102,6 +1134,12 @@ Settled against observed upstream behaviour, after three wrong readings of a rec
 Canoe123's 14-value race status is collapsed into a closed set, once, centrally, never left to each
 client (`EVIDENCE.md` Exhibit 10).
 
+```ts
+type PhaseStatus =
+  | 'scheduled' | 'running' | 'paused' | 'unofficial' | 'official' | 'revised'
+  | 'protested' | 'postponed' | 'cancelled' | 'other'
+```
+
 | Closed value | Canoe123 race status values mapped |
 |---|---|
 | `scheduled` | 0 Scheduled, 1 StartList, 8 GettingReady, 12 Rescheduled |
@@ -1253,14 +1291,11 @@ implementation must satisfy, not an algorithm.
   snapshot's content age (INV-2c) is later than the `tcp` observation it disagrees with; without the
   second condition every save in the seconds after a push would raise and clear a disagreement. Such
   a disagreement is surfaced as an
-  admin diagnostic,
-  `{ kind: 'source-disagreement'; attemptId: string; field: string; sources: SourceTag[] }`, served by
-  `GET /api/diagnostics` (§7.1), the same audience as `SourceStatus`. Two further diagnostic kinds
-  live there: `{ kind: 'contradicted-finish'; attemptId; finishTime: Timestamp | null; runSeconds: number }` (INV-2d) and
-  `{ kind: 'duplicate-finish'; phaseId; finishTime; bibs: string[] }` (§2.6), and
-  `{ kind: 'stale-mark'; attemptId; run; mark }` (§2.6, a mark carried over a re-run),
-  `{ kind: 'member-sum-mismatch'; attemptId; gate; crew: number; members: (number | null)[] }` (§2.6)
-  and `{ kind: 'unparseable-cell'; attemptId; source; slot; text: string }` (§1.3). All six are
+  admin diagnostic, `source-disagreement`, served by
+  `GET /api/diagnostics` (§7.1), the same audience as `SourceStatus`. Five further diagnostic kinds
+  live there: `contradicted-finish` (INV-2d), `duplicate-finish` (§2.6), `stale-mark` (§2.6, a mark
+  carried over a re-run), `member-sum-mismatch` (§2.6) and `unparseable-cell` (§1.3). Their shapes
+  are the `Diagnostic` block at the end of this section. All six are
   admin-facing, served by `GET /api/diagnostics` and pushed as `diagnostics.updated` (§7.2), never on
   the live tier, and never rendered by a scoreboard. It never changes the presented
   value by itself. There is no
@@ -1343,6 +1378,19 @@ implementation must satisfy, not an algorithm.
   together with `observedAt`. It is never defined by comparing `observedAt` values. A clock jump
   cannot reorder a merge decision. The sequence is exposed on the wire only as `seq` (§1.6), for
   reconciliation.
+
+**Diagnostics** (INV-2b). The six kinds, each with the fields the rule that raises it records. A
+diagnostic carries no envelope of its own: it is a derived admin fact, not an observation.
+
+```ts
+type Diagnostic =
+  | { kind: 'source-disagreement'; attemptId: string; field: string; sources: SourceTag[] }          // INV-2b
+  | { kind: 'contradicted-finish'; attemptId: string; finishTime: Timestamp | null; runSeconds: number }   // INV-2d
+  | { kind: 'duplicate-finish'; phaseId: string; finishTime: Timestamp; bibs: string[] }           // §2.6: the shared finish eventTime
+  | { kind: 'stale-mark'; attemptId: string; run: number; mark: ResultMark }                       // §2.6: the mark not presented
+  | { kind: 'member-sum-mismatch'; attemptId: string; gate: number; crew: number; members: (number | null)[] }   // §2.6
+  | { kind: 'unparseable-cell'; attemptId: string; source: 'tcp' | 'xml'; slot: number; text: string }           // §1.3: slot = Course.slots[].slot
+```
 
 **The operator re-baseline** (`DECISIONS/ADR-015`; §7.1). What no message will ever clear, the
 operator can: a stale row upstream keeps sending, or a half-correction that never completed. The
@@ -1490,8 +1538,15 @@ This contract serves clients that exist to display *this* timing system (`DECISI
 Canoe123-native tokens directly: `format`, and `phaseId` equal to `RaceId`. **There is no
 authentication:** the venue LAN is trusted (`CONSTRAINTS.md` §1.2).
 
-**Tier-specific serialisation.** `Person.birthDate` is replaced by `birthYear: number | null`. Every
-other shape is exactly §2's.
+**Tier-specific serialisation.** `Person.birthDate` is replaced by `birthYear: number | null`, and
+`Event` is served without `organiserId`, since the organiser is not modelled on-site (§2.1, §2.2).
+Every other shape is exactly §2's.
+
+```ts
+type OnsitePerson = Omit<Person, 'birthDate'> & { birthYear: number | null }   // null: no birth date entered upstream
+type OnsiteEntry = Omit<Entry, 'members'> & { members: Observed<OnsitePerson[]> }
+type OnsiteEvent = Omit<Event, 'organiserId'>
+```
 
 ### 7.1 Hydration (REST, snapshot)
 
@@ -1499,16 +1554,34 @@ Every response except `/api/sources` carries `asOfSeq: number` (§1.6) at the to
 
 | Method & path | 200 body | Error |
 |---|---|---|
-| `GET /api/events/current` | `{ asOfSeq, event: Event, classes: Class[], courses: Course[] }` | `404 event-not-found` |
+| `GET /api/events/current` | `{ asOfSeq, event: OnsiteEvent, classes: Class[], courses: Course[] }` | `404 event-not-found` |
 | `GET /api/classes/{classId}/phases` | `{ asOfSeq, phases: Phase[] }` | `404 class-not-found` |
-| `GET /api/classes/{classId}/entries` | `{ asOfSeq, entries: Entry[] }` | `404 class-not-found` |
+| `GET /api/classes/{classId}/entries` | `{ asOfSeq, entries: OnsiteEntry[] }` | `404 class-not-found` |
 | `GET /api/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }` | `404 phase-not-found` |
 | `GET /api/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`: every scope of §5, for the whole class and per age category | `404 class-not-found` |
 | `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null, asOf: Timestamp \| null }`: **every Attempt upstream currently lists on its on-course list**, across every running Phase, whatever its `status`: `at-start`, `on-course`, and, between a finish and upstream's closure of the run — upstream's auto-complete setting, measured over seven recordings and 1,995 closures: about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % of closures in [18, 20) s), about 47 s at one (medians 47 s, p90 57 s), a minority of manual closes under 5 s (12.6 % and 34.9 % on two days) and a long tail to 126–781 s. **No client may assume a fixed value.** Meanwhile the Attempt is listed as `finished` or a mark. The set is upstream's list; `status` says where each Attempt is. `asOf` is the ingest time of the latest on-course observation behind the set, `null` before any. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8). Kept current by `oncourse.updated` (§7.2) | — |
 | `GET /api/phases/{phaseId}/checks` | `{ asOfSeq, checks: GateCheck[], flags: GateFlag[] }`: every check and flag of the Phase, all run generations, `status` derived at serialisation (§2.10) | `404 phase-not-found` |
 | `GET /api/sources` | `SourceStatus`, unwrapped | — |
 | `GET /api/diagnostics` | `{ asOfSeq, diagnostics: Diagnostic[] }`: every current diagnostic of the six kinds in §4 (source disagreement, contradicted finish, duplicate finish, stale mark, member-sum mismatch, unparseable cell). Admin audience only | — |
-| `POST /api/rebaseline` | body `{ "scope": { "kind": "phase", "phaseId": string } \| { "kind": "event" } }`. `200 { asOfSeq, scope, snapshotWrittenAt, snapshotDetectedAt, attempts: number }`: the operator re-baseline (§4). Admin audience only; safe to repeat | `404 phase-not-found`; `409 source-unavailable` |
+| `POST /api/rebaseline` | body `{ "scope": { "kind": "phase", "phaseId": string } \| { "kind": "event" } }`. `200 { asOfSeq, scope, snapshotWrittenAt, snapshotDetectedAt, attempts: number }`: the operator re-baseline (§4). `snapshotWrittenAt` is the snapshot file's modification time as the filesystem reports it, `snapshotDetectedAt` the moment the file watch detected that write (`SourceStatus.xml.lastRewriteDetectedAt`, `DERIVATIONS.md` §0.3); both are present on `200`, since the action fails without a readable snapshot. `attempts` counts the Attempts of the scope after the re-baseline. Admin audience only; safe to repeat | `404 phase-not-found`; `409 source-unavailable` with `details.reason` (§1.4) |
+
+The `200` bodies, normatively (the table is the reading version):
+
+```ts
+type EventCurrentResponse = { asOfSeq: number; event: OnsiteEvent; classes: Class[]; courses: Course[] }
+type ClassPhasesResponse = { asOfSeq: number; phases: Phase[] }
+type ClassEntriesResponse = { asOfSeq: number; entries: OnsiteEntry[] }
+type PhaseAttemptsResponse = { asOfSeq: number; attempts: Attempt[] }
+type ClassStandingsResponse = { asOfSeq: number; standings: Standing[] }
+type OnCourseResponse = { asOfSeq: number; attempts: Attempt[]; featuredByUpstream: string | null; asOf: Timestamp | null }
+type PhaseChecksResponse = { asOfSeq: number; checks: GateCheck[]; flags: GateFlag[] }
+type SourcesResponse = SourceStatus
+type DiagnosticsResponse = { asOfSeq: number; diagnostics: Diagnostic[] }
+type RebaselineScope = { kind: 'phase'; phaseId: string } | { kind: 'event' }
+type RebaselineRequest = { scope: RebaselineScope }
+type RebaselineResponse = { asOfSeq: number; scope: RebaselineScope; snapshotWrittenAt: Timestamp;
+                            snapshotDetectedAt: Timestamp; attempts: number }
+```
 
 **Which competitor to feature** is a presentation decision (`ARCHITECTURE.md` §2). The default the
 maintainer named is the athlete next to pass the finish: the first Attempt in this list.
@@ -1536,10 +1609,14 @@ list.
 ### 7.2 Live updates (WebSocket `/ws`, delta)
 
 Every message carries `seq` (§1.6).
-- `attempt.updated`, `phase.updated`, `entry.updated` and `class.updated` carry only the changed
+- `attempt.updated`, `phase.updated`, `entry.updated` and `class.updated` carry the entity's id under
+  its own key (`attemptId`, `phaseId`, `entryId`, `classId`) and, under `fields`, only the changed
   fields. An omitted field is untouched, never reset. A run-generation change is sent as explicit
-  `not-yet` values (INV-1).
-- `standing.updated`, `course.updated`, `write.updated` and `sources.updated` carry the whole resource.
+  `not-yet` values (INV-1). The message that creates an id (§1.6) carries the whole resource in
+  `fields`, its structural fields included (`phaseId` and `bib` of an Attempt, `classId` of an Entry,
+  a Phase's format-derived fields); no later message restates identity.
+- `standing.updated`, `course.updated`, `write.updated` and `sources.updated` carry the whole resource,
+  under `standing`, `course`, `write` and `sources`.
   `standing.updated` is sent only when the standing's serialised form changed (§5 step 1), never for a
   running athlete's ticks.
 - **Liveness.** `sources.updated` is re-sent at least every `heartbeatSeconds` (a named server
@@ -1552,7 +1629,7 @@ Every message carries `seq` (§1.6).
 - **`check.updated`** carries `{ attemptId, run, gate, check: GateCheck | null }`, whole; `null` means
   the check was removed. It is sent on every check write and **whenever a check's derived `status`
   changes** because the presented gate penalty changed (§2.10). **`flag.updated`** carries the whole
-  `GateFlag`. Neither is ever sent on the live tier (§8.4).
+  `GateFlag` under `flag`. Neither is ever sent on the live tier (§8.4).
 - **A retraction** (§4 INV-7) or a contradiction (INV-2d) is sent as `attempt.updated` with explicit
   `not-yet` values, never by omission.
 - **`oncourse.updated`** carries the whole on-course set: `{ attemptIds: string[], featuredByUpstream:
@@ -1564,8 +1641,8 @@ Every message carries `seq` (§1.6).
   the `oncourse.updated` §7.3's retry waits for. The Attempts themselves arrive by `attempt.updated`;
   this message is what keeps the set current, including in Kayak Cross, where leaving the set changes
   no `status`.
-- **`diagnostics.updated`** carries the whole current `Diagnostic[]` whenever it changes. Admin
-  audience only; a scoreboard ignores it.
+- **`diagnostics.updated`** carries the whole current `Diagnostic[]` under `diagnostics` whenever it
+  changes. Admin audience only; a scoreboard ignores it.
 - **`event.changed`** carries the whole `Event`. It is sent when the current event changes: on the
   explicit "start a new event" action (`ARCHITECTURE.md` Scenario E), or when a client connects while
   an event is configured. On a *different* `eventId` than the one the client holds, the client
@@ -1577,7 +1654,30 @@ Every message carries `seq` (§1.6).
   fields only, and those entities are unchanged. A client applies it as a **replace**: Attempts and
   Standings of that scope absent from the message are removed. It is never merged.
 
+The message set, normatively; `type` is the discriminant and every message carries `seq`:
+
+```ts
+type WsMessage = { seq: number } & WsPayload
+type WsPayload =
+  | { type: 'attempt.updated'; attemptId: string; fields: Partial<Omit<Attempt, 'attemptId'>> }
+  | { type: 'phase.updated'; phaseId: string; fields: Partial<Omit<Phase, 'phaseId'>> }
+  | { type: 'entry.updated'; entryId: string; fields: Partial<Omit<OnsiteEntry, 'entryId'>> }
+  | { type: 'class.updated'; classId: string; fields: Partial<Omit<Class, 'classId'>> }
+  | { type: 'standing.updated'; standing: Standing }
+  | { type: 'course.updated'; course: Course }
+  | { type: 'write.updated'; write: WriteRequest }
+  | { type: 'sources.updated'; sources: SourceStatus }
+  | { type: 'check.updated'; attemptId: string; run: number; gate: number; check: GateCheck | null }
+  | { type: 'flag.updated'; flag: GateFlag }
+  | { type: 'oncourse.updated'; attemptIds: string[]; featuredByUpstream: string | null; asOf: Timestamp }
+  | { type: 'diagnostics.updated'; diagnostics: Diagnostic[] }
+  | { type: 'event.changed'; event: OnsiteEvent }
+  | { type: 'scope.replaced'; scope: RebaselineScope; attempts: Attempt[]; standings: Standing[] }
+```
+
 ```json
+{ "seq": 1043, "type": "phase.updated", "phaseId": "K1M_BR2_6",
+  "fields": { "status": { "state": "known", "value": "running", ... } } }
 { "seq": 1044, "type": "attempt.updated", "attemptId": "K1M_BR2_6:9",
   "fields": { "outcome": { "state": "known", "value": {"kind":"duration", ...}, ... } } }
 { "seq": 1045, "type": "attempt.updated", "attemptId": "K1M_BR2_6:9",
@@ -1620,6 +1720,10 @@ and the earlier status endpoint is withdrawn. Today's code carries a latent haza
 |---|---|---|---|---|
 | `POST /api/attempts/{phaseId}/{bib}/penalty` | `{ "gate": number, "value": 0\|2\|50 }` | `202`, `Location: /api/writes/{writeId}`, body = `WriteRequest{status:'pending'}` | `200`, current `WriteRequest` | `404 attempt-not-found`; `400 validation-failed` (`value` not in `{0,2,50}`; `gate` outside the Phase's course gates; or the course not configured); `409 write-not-possible` with `reason: 'run-not-closed'` or `'team-boat'` (below) |
 | `GET /api/writes/{writeId}` | — | `200 WriteRequest` | — | `404 write-not-found` |
+
+```ts
+type PenaltyWriteRequest = { gate: number; value: 0 | 2 | 50 }
+```
 
 **Penalty-check writes only finished runs** (maintainer, 2026-09-25, binding). It never writes for an
 athlete on course. So the only upstream write command in this contract is the **correction
@@ -1703,6 +1807,12 @@ targets the Attempt's current generation.
 | `POST /api/attempts/{phaseId}/{bib}/flags` | `{ "gate": number, "comment": string, "suggestedValue"?: number, "createdBy"?: string }`, with `Idempotency-Key` (§1.5) | `201 GateFlag`, open | `404 attempt-not-found`; `400 validation-failed` |
 | `POST /api/flags/{flagId}/resolution` | `{ "note"?: string, "resolvedBy"?: string }` | `200 GateFlag`, resolved. Repeating it on a resolved flag returns `200` unchanged | `404 flag-not-found` |
 
+```ts
+type GateCheckRequest = { checkedBy?: string }
+type GateFlagCreateRequest = { gate: number; comment: string; suggestedValue?: number; createdBy?: string }
+type FlagResolutionRequest = { note?: string; resolvedBy?: string }
+```
+
 A flag never changes a penalty. A judge who agrees with a flag's suggested value corrects the
 penalty through §7.3, and the flag is resolved separately.
 
@@ -1741,8 +1851,9 @@ future central registry could issue them. The shape of every endpoint below is t
 ### 8.3 Push — resource-based, Attempt-level
 
 Every push is an idempotent `PUT` upsert by identity (§1.5, INV-5). A successful push returns
-`200 { <resource> }`, the current resolved resource. A malformed body gets `400 validation-failed`,
-with `error.details` naming the field.
+`200 { <resource> }`, the current resolved resource under its singular noun (`class`, `course`,
+`phase`, `entry`, `attempt`; the `*PutResponse` block below), exactly as §8.4 then serves it. A
+malformed body gets `400 validation-failed`, with `error.details` naming the field.
 
 | Method & path | Body |
 |---|---|
@@ -1755,6 +1866,38 @@ with `error.details` naming the field.
 | `PUT /ingest/v2/oncourse` | `{ "attemptIds": string[], "featuredByUpstream": string \| null }`: **the whole on-course set, in course order**, replaced on every push. An `attemptId` not yet pushed is stubbed (forward reference). Emits `oncourse.updated` |
 | `DELETE /ingest/v2/attempts/{phaseId}/{bib}` | no body. `204` whether or not the Attempt existed; the Attempt and its standing entries are removed |
 | `PUT /ingest/v2/phases/{phaseId}/attempts` | `{ "attempts": [ { "bib": string, ...the Observed fields of §2.6 } ] }`: **replaces every Attempt of the Phase**; Attempts absent from the body are removed. This is what an on-site re-baseline (§4) emits |
+
+The bodies and the `200` responses, normatively. `LivePhase` is §2.4's `Phase` without `format`, the
+shape every live read and push carries.
+
+```ts
+type LivePhase = Omit<Phase, 'format'>   // no format token on the live tier — ADR-007
+
+type ClassPut = { code: string; name: string; discipline: 'slalom' | 'cross'; ageCategories: AgeCategory[] }
+type CoursePut = { gates: { number: number; kind: 'downstream' | 'upstream' }[]; sectorEndsAfterGate: number[];
+                   splitsAfterGate: number[] }
+type PhasePut = { classId: string; kind: 'race' | 'classification'; stage: Stage; scoringKind: 'duration' | 'ordinal';
+                  pair: PairRole | null; heats: boolean; date: string; courseId: string | null;
+                  scheduledStart: Timestamp | null; programmeOrder: number | null; title: string | null;
+                  status: PhaseStatus }
+type EntryPutMember = { givenName: string; familyName: string; birthDate?: string; externalId: ExternalId | null }
+type EntryPut = { classId: string; displayName: string; isTeam: boolean; club: string | null; nation: string | null;
+                  ageCategoryId: string | null; eventBib: string | null; members: EntryPutMember[] }
+type AttemptPut = Partial<Omit<Attempt, 'attemptId' | 'phaseId' | 'bib'>>   // non-empty at runtime; identity is the path
+type ClassificationRow = { entryId: string; bib: string; rank: number | null; order: number; decidedIn: string }
+type ClassificationPut = { rows: ClassificationRow[]; asOf: Timestamp }
+type OnCoursePut = { attemptIds: string[]; featuredByUpstream: string | null }
+type PhaseAttemptsPut = { attempts: ({ bib: string } & AttemptPut)[] }
+
+type ClassPutResponse = { class: Class }
+type CoursePutResponse = { course: Course }
+type PhasePutResponse = { phase: LivePhase }
+type EntryPutResponse = { entry: Entry }                       // as stored: birthDate as pushed, §8.4's setting applies to reads
+type AttemptPutResponse = { attempt: Attempt }
+type ClassificationPutResponse = { standing: PublicStanding }  // the classification Standing assembled from the rows
+type OnCoursePutResponse = { attemptIds: string[]; featuredByUpstream: string | null; asOf: Timestamp }
+type PhaseAttemptsPutResponse = { attempts: Attempt[] }
+```
 
 - **No format token on `Phase`.** The live contract carries only the structural properties of the
   format: `kind`, `scoringKind`, `pair` and `heats`. A vendor's round names would not fit a
@@ -1840,6 +1983,7 @@ organisers' events, running in parallel, each visibly carrying live results.
 - `upcoming`: none ever.
 
 `dateRange` spans the dates of the event's Phases. `limit` defaults to 50, with a maximum of 200.
+`nextCursor` is always present: an opaque string while more events follow, `null` on the last page.
 Omitting `status` returns every event:
 - live events first;
 - then upcoming ones, soonest start first;
@@ -1850,7 +1994,7 @@ out-of-band.
 
 | Method & path | 200 body | Error |
 |---|---|---|
-| `GET /public/events/{eventId}` | `{ asOfSeq, event: Event, classes: Class[], phases: Phase[], courses: Course[] }` | `404 event-not-found` |
+| `GET /public/events/{eventId}` | `{ asOfSeq, event: Event, classes: Class[], phases: LivePhase[], courses: Course[] }` | `404 event-not-found` |
 | `GET /public/events/{eventId}/classes/{classId}/entries` | `{ asOfSeq, entries: Entry[] }`, birth data per the publication setting below | `404 event-not-found`, else `404 class-not-found` |
 | `GET /public/events/{eventId}/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`, each `Standing` **without `anomalies`** (§2.7) | as above |
 | `GET /public/events/{eventId}/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }` | `404 event-not-found`, else `404 phase-not-found` |
@@ -1860,19 +2004,57 @@ out-of-band.
 bridge pushed, so the setting can change later without a re-push. The setting,
 `birthDatePublication: 'none' | 'year' | 'full'`, is provisioned out-of-band with the event's key
 (§8.1, like `organiserName`) and **defaults to `'year'`**: each member is served with `birthYear`
-only. `'full'` serves `birthDate` as pushed; `'none'` serves neither. Public reads and the stream
-apply the same setting.
+only, `null` where no `birthDate` was pushed, as on-site (§7). `'full'` serves `birthDate` as pushed,
+absent where none was; `'none'` serves neither key. Public reads and the stream apply the same
+setting.
 
 **Push transport: Server-Sent Events.** `GET /public/events/{eventId}/stream`, with
 `Accept: text/event-stream`. It carries `attempt.updated`, `attempt.deleted` (`{ seq, attemptId }`,
 after a `DELETE`; the client removes the Attempt and its standing entries), `phase.updated`,
 `entry.updated`, `class.updated`, `course.updated`, `standing.updated` (without `anomalies`),
 `oncourse.updated` (the whole set, as §7.2) and `scope.replaced`, in §7.2's shapes, and a
-**`heartbeat`** event `{ asOfSeq, serverTime }` at least every 15 s, since the live tier has no
+**`heartbeat`** message `{ type: 'heartbeat', asOfSeq, serverTime }` at least every 15 s, since the live tier has no
 `SourceStatus`: a client receiving nothing for two intervals treats the stream as dead, marks its
-display stale and re-hydrates (§1.6). A `scope.replaced` is applied as a replace, exactly as on-site.
-The stream never carries `write.updated`, `sources.updated`, `check.updated`, `flag.updated` or
-`event.changed`. §1.6's subscribe-before-snapshot and reconnection rules apply.
+display stale and re-hydrates (§1.6). **Framing:** every SSE frame is a default `message` event, no
+`event:` field, whose `data` is one JSON object carrying `type`, so a client branches on `type`
+exactly as the WebSocket client does. The heartbeat is a member of that same union; it carries
+`asOfSeq` in place of `seq`, because it changes no state and a client applies nothing from it. A
+`scope.replaced` is applied as a replace, exactly as on-site; on this tier its scope is always
+`{ kind: 'phase' }` (§8.3).
+The stream never carries `write.updated`, `sources.updated`, `check.updated`, `flag.updated`,
+`diagnostics.updated` or `event.changed`. §1.6's subscribe-before-snapshot and reconnection rules
+apply.
+
+The public shapes, normatively (`PublicStanding` is §2.7's `Standing` without `anomalies`, in reads
+and on the stream alike):
+
+```ts
+type PublicEventsQuery = { status?: 'live' | 'upcoming' | 'past' | 'all'; cursor?: string; limit?: number }
+type PublicEventSummary = { eventId: string; organiserName: string; name: string;
+                            dateRange: { start: string; end: string }; status: 'live' | 'upcoming' | 'past' }
+type PublicEventsResponse = { asOfSeq: number; events: PublicEventSummary[]; nextCursor: string | null }
+type PublicEventResponse = { asOfSeq: number; event: Event; classes: Class[]; phases: LivePhase[]; courses: Course[] }
+type PublicPerson = Omit<Person, 'birthDate'> & { birthYear?: number | null; birthDate?: string }   // per birthDatePublication
+type PublicEntry = Omit<Entry, 'members'> & { members: Observed<PublicPerson[]> }
+type PublicEntriesResponse = { asOfSeq: number; entries: PublicEntry[] }
+type PublicStanding = Omit<Standing, 'anomalies'>
+type PublicStandingsResponse = { asOfSeq: number; standings: PublicStanding[] }
+type PublicAttemptsResponse = { asOfSeq: number; attempts: Attempt[] }
+type PublicOnCourseResponse = { asOfSeq: number; attempts: Attempt[]; featuredByUpstream: string | null; asOf: Timestamp }
+type PublicHeartbeat = { type: 'heartbeat'; asOfSeq: number; serverTime: Timestamp }
+type PublicStreamMessage =
+  | { seq: number; type: 'attempt.updated'; attemptId: string; fields: Partial<Omit<Attempt, 'attemptId'>> }
+  | { seq: number; type: 'attempt.deleted'; attemptId: string }
+  | { seq: number; type: 'phase.updated'; phaseId: string; fields: Partial<Omit<LivePhase, 'phaseId'>> }
+  | { seq: number; type: 'entry.updated'; entryId: string; fields: Partial<Omit<PublicEntry, 'entryId'>> }
+  | { seq: number; type: 'class.updated'; classId: string; fields: Partial<Omit<Class, 'classId'>> }
+  | { seq: number; type: 'course.updated'; course: Course }
+  | { seq: number; type: 'standing.updated'; standing: PublicStanding }
+  | { seq: number; type: 'oncourse.updated'; attemptIds: string[]; featuredByUpstream: string | null; asOf: Timestamp }
+  | { seq: number; type: 'scope.replaced'; scope: { kind: 'phase'; phaseId: string }; attempts: Attempt[];
+      standings: PublicStanding[] }
+  | PublicHeartbeat
+```
 
 ### 8.5 Corrections after the on-site session has ended
 

@@ -25,7 +25,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Take structure only from its own fields: `Class.discipline`, `Phase.kind`, `Phase.pair`, `Phase.scoringKind`, `Phase.heats` (CONTRACTS §2.3, §2.4; ADR-014).
 - [ ] Key every Attempt-level record by `attemptId` = `(phaseId, bib)`, never by bib alone (CONTRACTS §2.6; ARCHITECTURE §5).
 - [ ] Keep `null` distinct from an absent key and from `0`; never coerce `null` to `0` or `""` (CONTRACTS §1.2, §1.3; ARCHITECTURE §5).
-- [ ] Branch on `error.code` only; never parse `error.message` (CONTRACTS §1.4).
+- [ ] Branch on `error.code` only; never parse `error.message`; read `error.details` only on the three codes that define it, in the shape that code fixes: `[{field, issue}]` on `validation-failed`, `{ reason }` on `write-not-possible` and `source-unavailable`; expect the key absent on every other code (CONTRACTS §1.4).
 - [ ] Pin a specific domain-state fixture set by id and version in a committed reference; never a floating "latest" (TEST-ARCHITECTURE §6).
 - [ ] Consume only fixtures whose `admitted.status` is `admitted`, which `schemas/fixture-admitted.schema.json` allows only with gate 1 and gate 2 true, a window spanning whole races checked against published results with no mismatch, and a `human-checked-<date> by <name>` line certifying the fixture (TEST-ARCHITECTURE §3.2, §4, §6; ADR-017).
 - [ ] Fail, loudly, on a `domainLayerVersion.contract` mismatch between a fixture and the consumer; re-pin deliberately instead of warning; a `generator` change is re-admitted upstream, never re-pinned here (TEST-ARCHITECTURE §4, §6).
@@ -73,7 +73,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Expect `gates: unavailable{not-configured}` when no course is configured, with the penalty sum still in `outcome.penaltySeconds` (CONTRACTS §2.6, §2.12).
 - [ ] For Kayak Cross, show `faults` (its `gates` is `unavailable{not-applicable}`) and the heat order from `ordinal.order`; read `faults.lastCleanSlot` as upstream's 1-based slot position counting the start ramp and roll zone, never as a gate number, and map through `Course.slots` if a gate is wanted (CONTRACTS §2.6, §2.12; DERIVATIONS §4.6).
 - [ ] Render `timeToBeat` by its `mode`, unsigned `target` or signed `delta`, with `holder`; never as a rank (CONTRACTS §2.6).
-- [ ] Show the six diagnostic kinds, `source-disagreement`, `contradicted-finish`, `duplicate-finish`, `stale-mark`, `member-sum-mismatch` and `unparseable-cell`, to the admin audience only (CONTRACTS §4, §7.1, §7.2).
+- [ ] Show the six diagnostic kinds, `source-disagreement`, `contradicted-finish`, `duplicate-finish`, `stale-mark`, `member-sum-mismatch` and `unparseable-cell`, in §4's `Diagnostic` shapes, to the admin audience only (CONTRACTS §4, §7.1, §7.2).
 - [ ] While a half-correction stands, present exactly what upstream states, with no hiding and no marking (CONTRACTS §4; ARCHITECTURE §6.I).
 
 **Results and standings**
@@ -92,9 +92,9 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] After any reconnection, repeat the whole handshake for every resource held; there is no replay and no resume, and the last applied `seq` serves only to discard already-applied messages after re-hydration (CONTRACTS §1.6, §8.4).
 - [ ] Use `seq` only to tell whether a change is already incorporated; never as ranking or authority (CONTRACTS §1.6).
 - [ ] Create an entity when a `*.updated` message names an id not held; the first message for a new id carries the whole resource (CONTRACTS §1.6).
-- [ ] Apply `attempt.updated`, `phase.updated`, `entry.updated` and `class.updated` as per-field deltas; an omitted field is untouched, never reset (CONTRACTS §7.2).
+- [ ] Apply `attempt.updated`, `phase.updated`, `entry.updated` and `class.updated` as per-field deltas: the id under `attemptId`/`phaseId`/`entryId`/`classId`, the changed fields under `fields`; an omitted field is untouched, never reset; the first message for an unknown id creates the entity from `fields`, which then carries the whole resource (CONTRACTS §1.6, §7.2).
 - [ ] Apply an explicit `{ "state": "not-yet" }` in a delta as a reset of that field (CONTRACTS §7.2, §8.3).
-- [ ] Replace the whole resource on `standing.updated` and `course.updated` (CONTRACTS §7.2).
+- [ ] Replace the whole resource on `standing.updated` (under `standing`) and `course.updated` (under `course`) (CONTRACTS §7.2).
 - [ ] Replace the whole on-course set, in the message's order, on every `oncourse.updated` (CONTRACTS §7.2, §8.4).
 - [ ] Apply `scope.replaced` as a replace, never a merge: remove every Attempt and Standing of the scope absent from the message, and leave Phases, Entries, Classes and Courses untouched (CONTRACTS §7.2, §8.4; ADR-015).
 
@@ -123,7 +123,8 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 
 ### On-site clients — c123-scoreboard, c123-penalty-check
 
-- [ ] Hydrate from the REST reads that apply: `/api/events/current`, `/api/classes/{classId}/phases`, `/entries`, `/standings`, `/api/phases/{phaseId}/attempts`, `/api/oncourse`, each carrying `asOfSeq` (CONTRACTS §7.1).
+- [ ] Hydrate from the REST reads that apply: `/api/events/current`, `/api/classes/{classId}/phases`, `/entries`, `/standings`, `/api/phases/{phaseId}/attempts`, `/api/oncourse`, each carrying `asOfSeq`, in the §7.1 response types (CONTRACTS §7.1).
+- [ ] Expect the on-site serialisations: a person carries `birthYear: number | null` and no `birthDate`, and the Event carries no `organiserId` (CONTRACTS §7).
 - [ ] Take live updates from the WebSocket `/ws`, every message carrying `seq` (CONTRACTS §7.2; ARCHITECTURE §8).
 - [ ] Handle `404 event-not-found` on `/api/events/current` as "no event configured yet" (CONTRACTS §1.4, §7.1).
 - [ ] On `event.changed` naming a different `eventId` than the one held, discard everything and re-hydrate (CONTRACTS §1.6, §7.2).
@@ -173,14 +174,14 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] While the Attempt is in the on-course set — which lists a finisher as `finished` until upstream's closure, typically about 20 s after the finish and a venue setting — disable the write, or on `409 write-not-possible` with `reason: 'run-not-closed'` tell the judge (CONTRACTS §7.1, §7.3; ARCHITECTURE §6.B).
 - [ ] Retry a write refused as `run-not-closed` on the first `oncourse.updated` whose `attemptIds` no longer contain the Attempt; reusing the `Idempotency-Key` or taking a new one are both correct, since a `409` creates no `WriteRequest` (CONTRACTS §1.5, §7.3).
 - [ ] Hide or disable the penalty write up front for an Attempt whose Entry has `isTeam: true`, since the operator corrects team boats in Canoe123; treat `409 write-not-possible` with `reason: 'team-boat'` only as the backstop (CONTRACTS §2.5, §7.3; ARCHITECTURE §6.B).
-- [ ] Handle `404 attempt-not-found` and `400 validation-failed` with `error.details`: a value outside {0, 2, 50}, a gate outside the course, a course not configured (CONTRACTS §1.4, §7.3).
+- [ ] Handle `404 attempt-not-found` and `400 validation-failed` with `error.details: [{field, issue}]`: a value outside {0, 2, 50}, a gate outside the course, a course not configured; and `409 write-not-possible` with `error.details.reason` from `run-not-closed`, `team-boat`, `cross` (CONTRACTS §1.4, §7.3, §7.4).
 - [ ] Allow writes against closed Phases; they are tracked identically (CONTRACTS §2.9, §7.3; ARCHITECTURE §3).
 - [ ] Send every write through the server and keep no terminal channel; nothing reacts to the operator's "reset scoring terminals" (CONTRACTS §7.3; ARCHITECTURE §3; ADR-011).
 - [ ] Read penalties only from `Attempt.gates`; delete its own gate parser, including the REST trim path (ARCHITECTURE §3; CONTRACTS §2.6).
 
 **Write confirmation**
 - [ ] Show no value of its own before the server's push; render the server's optimistic value (CONTRACTS §2.9; ARCHITECTURE §6.B).
-- [ ] Track each write through `write.updated`, which carries the whole `WriteRequest`, or `GET /api/writes/{writeId}` (CONTRACTS §7.2, §7.3).
+- [ ] Track each write through `write.updated`, which carries the whole `WriteRequest` under `write`, or `GET /api/writes/{writeId}` (CONTRACTS §7.2, §7.3).
 - [ ] Show a write as `pending`, distinctly, until it resolves; never show it as settled and never clear it on the client's own (CONTRACTS §2.9; ARCHITECTURE §2).
 - [ ] Render all four statuses: `pending`, `confirmed`, `mismatched` with `confirmedValue`, and `superseded` (CONTRACTS §2.9, §7.3; ADR-010).
 - [ ] On `mismatched`, show what upstream actually holds, as `Attempt.gates` presents it (ARCHITECTURE §6.B).
@@ -192,7 +193,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 
 **Gate checks and flags**
 - [ ] Hydrate checks and flags from `GET /api/phases/{phaseId}/checks`, which returns every run generation and `asOfSeq` (CONTRACTS §7.1).
-- [ ] Apply `check.updated`, whole, where `check: null` means removed, and `flag.updated`, the whole `GateFlag` (CONTRACTS §7.2).
+- [ ] Apply `check.updated`, whole, where `check: null` means removed, and `flag.updated`, the whole `GateFlag` under `flag` (CONTRACTS §7.2).
 - [ ] Check a gate with `PUT /api/attempts/{phaseId}/{bib}/checks/{gate}`, body `{ checkedBy? }`; re-verify after a correction by repeating it (CONTRACTS §7.4).
 - [ ] Remove a check with `DELETE /api/attempts/{phaseId}/{bib}/checks/{gate}`, which returns `204` whether or not one existed (CONTRACTS §7.4).
 - [ ] Raise a flag with `POST /api/attempts/{phaseId}/{bib}/flags`, body `{ gate, comment, suggestedValue?, createdBy? }`, with an `Idempotency-Key`; expect `201` and an open `GateFlag` (CONTRACTS §1.5, §7.4).
@@ -231,7 +232,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Treat `eventId` and `entryId` as opaque; give no field a meaning derived from how it was minted (CONTRACTS §1.1, §8.2; ADR-006).
 
 **Ingest**
-- [ ] Implement `PUT /ingest/v2/classes/{classId}`, `/courses/{courseId}`, `/phases/{phaseId}`, `/entries/{entryId}` and `/attempts/{phaseId}/{bib}` as idempotent upserts returning `200` with the current resolved resource, whether new, duplicate or superseded (CONTRACTS §1.5, §8.3).
+- [ ] Implement `PUT /ingest/v2/classes/{classId}`, `/courses/{courseId}`, `/phases/{phaseId}`, `/entries/{entryId}` and `/attempts/{phaseId}/{bib}` as idempotent upserts returning `200` with the current resolved resource under its singular noun (`class`, `course`, `phase`, `entry`, `attempt`; the `*PutResponse` types), whether new, duplicate or superseded (CONTRACTS §1.5, §8.3).
 - [ ] Treat an identical re-delivery as a no-op with no client-visible notification (CONTRACTS §4, §8.3).
 - [ ] Apply Attempt pushes partially: an omitted field is untouched, and an explicit `{ "state": "not-yet" }` resets it (CONTRACTS §8.3).
 - [ ] Implement `DELETE /ingest/v2/attempts/{phaseId}/{bib}`: `204` whether or not it existed; remove the Attempt and its standing entries (CONTRACTS §8.3).
@@ -243,13 +244,13 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Wrap the bare values of Class, Phase, Entry and Course bodies as `known`, `source: 'bridge'`, `observedAt` the ingest time, `confidence: 'authoritative'`, `provisional: false`; keep the `source` the bridge states on Attempt fields (CONTRACTS §1.2, §8.3).
 - [ ] Store a `null` in a nullable body field (`club`, `nation`, `ageCategoryId`, `eventBib`, `courseId`, `scheduledStart`, `programmeOrder`, `title`, a member's `externalId`) as `unavailable{reason:'not-applicable'}` (CONTRACTS §8.3).
 - [ ] Accept forward references: create a stub for a `classId` or `courseId` not yet pushed (CONTRACTS §8.3).
-- [ ] Expect no `format` token on a Phase; store `kind`, `scoringKind`, `pair` and `heats` (CONTRACTS §8.3; ADR-007).
+- [ ] Expect no `format` token on a Phase; store `kind`, `scoringKind`, `pair` and `heats`, and serve `LivePhase` (CONTRACTS §8.3; ADR-007).
 - [ ] Take one resource changing as the unit of transfer, never a file, a day or an event (CONTRACTS §8.3; ADR-005).
 - [ ] When pushes stop, keep the last on-course set and the last running values; clear nothing by the passage of time (CONTRACTS §8.3).
 - [ ] Emit per push: `attempt.updated` for a partial Attempt push, `attempt.deleted` for a `DELETE`, `scope.replaced` for a Phase replace, the matching `*.updated` for Class, Phase, Entry and Course, `oncourse.updated` for the on-course set, then `standing.updated` for every affected Standing (CONTRACTS §8.3, §8.4).
 
 **Validation**
-- [ ] Reject a malformed body with `400 validation-failed` and `error.details` naming the field (CONTRACTS §1.4, §8.3).
+- [ ] Reject a malformed body with `400 validation-failed` and `error.details: [{field, issue}]` naming each refused field (CONTRACTS §1.4, §8.3).
 - [ ] Require the `externalId` key on every member, `null` allowed; reject an omitted key, a bare string or an object without `scheme` with `400 validation-failed` (CONTRACTS §8.3; ADR-006).
 - [ ] Reject values outside the closed vocabularies, such as `discipline`, `scoringKind`, `kind`, `combination`, statuses and marks, with `400 validation-failed`; never extend them (CONTRACTS §8.6).
 - [ ] Reject a raw vendor payload with `400 vendor-payload-rejected` (CONTRACTS §8.6; ADR-005).
@@ -262,7 +263,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Accept the correction of a mis-bibbed run as a re-pointed `entry` (CONTRACTS §4, §8.5).
 
 **Public read**
-- [ ] Serve `GET /public/events` with `status=live|upcoming|past|all`, `cursor`, `limit` (default 50, maximum 200), `nextCursor` and `asOfSeq` (CONTRACTS §8.4).
+- [ ] Serve `GET /public/events` with `status=live|upcoming|past|all`, `cursor`, `limit` (default 50, maximum 200), `nextCursor` (always present, `null` on the last page) and `asOfSeq` (CONTRACTS §8.4).
 - [ ] Derive calendar `status` only from ingest recency, `live` meaning a push within 5 minutes as a named constant; never from `Phase.status` (CONTRACTS §8.4).
 - [ ] Read "now" for the calendar through an injected `Clock`, never `Date.now()` (TEST-ARCHITECTURE §3.1, §5).
 - [ ] Compute `dateRange` from the event's Phase dates; order an unfiltered list live, then upcoming by soonest start, then past by latest end; answer "no match" with an empty list, never `404` (CONTRACTS §8.4).
@@ -270,9 +271,9 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Serve the event, entries, standings and attempts reads with `asOfSeq` and their `404` codes, without authentication and without requiring the reader to know the owning organiser (CONTRACTS §2.1, §8.4).
 - [ ] Serve `GET /public/events/{eventId}/oncourse`, and push `oncourse.updated`, each with the set as last pushed, in course order, `featuredByUpstream`, and `asOf` the push's ingest time (CONTRACTS §7.2, §8.4).
 - [ ] Serve every public `Standing`, in reads and on the stream, without `anomalies` (CONTRACTS §2.7, §8.4).
-- [ ] Apply the per-event `birthDatePublication` setting, provisioned out of band with the key: `'year'` by default, serving `birthYear` only; `'full'` serving `birthDate` as pushed; `'none'` serving neither; the same in reads and on the stream (CONTRACTS §8.4).
-- [ ] Serve `GET /public/events/{eventId}/stream` as `text/event-stream`, carrying `attempt.updated`, `attempt.deleted`, `phase.updated`, `entry.updated`, `class.updated`, `course.updated`, `standing.updated`, `oncourse.updated` and `scope.replaced`, each with its `seq`, and a `heartbeat { asOfSeq, serverTime }` at least every 15 s (CONTRACTS §1.6, §8.4).
-- [ ] Never send `write.updated`, `sources.updated`, `check.updated`, `flag.updated`, `event.changed` or any diagnostic on the stream (CONTRACTS §2.10, §4, §8.4).
+- [ ] Apply the per-event `birthDatePublication` setting, provisioned out of band with the key: `'year'` by default, serving `birthYear` only, `null` where no `birthDate` was pushed; `'full'` serving `birthDate` as pushed, absent where none was; `'none'` serving neither key; the same in reads and on the stream (CONTRACTS §8.4).
+- [ ] Serve `GET /public/events/{eventId}/stream` as `text/event-stream`, carrying `attempt.updated`, `attempt.deleted`, `phase.updated`, `entry.updated`, `class.updated`, `course.updated`, `standing.updated`, `oncourse.updated` and `scope.replaced`, each with its `seq`, and a `heartbeat` `{ type: 'heartbeat', asOfSeq, serverTime }` at least every 15 s; every frame a default `message` event whose `data` is one JSON object carrying `type` (CONTRACTS §1.6, §8.4).
+- [ ] Never send `write.updated`, `sources.updated`, `check.updated`, `flag.updated`, `event.changed` or `diagnostics.updated` on the stream (CONTRACTS §2.10, §4, §8.4).
 - [ ] Encode every envelope as the wire encoding requires, `eventTime` omitted rather than `null`, so that every envelope and error validates against the two schemas (CONTRACTS §1.2, §1.7).
 
 **Tests**
@@ -287,9 +288,9 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 
 - [ ] Own spectator-facing layout, locale and its own, likely lighter, display-lifetime policy (ARCHITECTURE §3).
 - [ ] Provide the on-course view, with running time and penalties as they come in (ARCHITECTURE §3; CONTRACTS §8.3).
-- [ ] Hydrate from the public reads, including `/public/events/{eventId}/oncourse`, and take updates from the SSE stream (CONTRACTS §8.4; ARCHITECTURE §8).
+- [ ] Hydrate from the public reads, including `/public/events/{eventId}/oncourse`, and take updates from the SSE stream, branching on `data.type` of default `message` events; apply nothing from `heartbeat`, which carries `asOfSeq` and no `seq` (CONTRACTS §8.4; ARCHITECTURE §8).
 - [ ] Handle `404 event-not-found`, `class-not-found` and `phase-not-found` (CONTRACTS §1.4, §8.4).
-- [ ] Render the calendar from the delivered `status`; page with `cursor` and `nextCursor`; treat an empty list as "no events match" (CONTRACTS §8.4).
+- [ ] Render the calendar from the delivered `status`; page with `cursor` and `nextCursor`, stopping at `null`; treat an empty list as "no events match" (CONTRACTS §8.4).
 - [ ] Show a multi-day event as one calendar entry, with results grouped by Phase `date` (ARCHITECTURE §6.E; CONTRACTS §2.2).
 - [ ] Order the on-course view by the pushed set; treat an Attempt's `courseOrder` as informational, since it may lag (CONTRACTS §8.3, §8.4).
 - [ ] Take the on-course set's age from `asOf` on the on-course read and on `oncourse.updated` (CONTRACTS §2.6, §7.2, §8.4).
@@ -306,7 +307,11 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 
 ## Gaps and conflicts
 
-None open at the commit that closed round 6. The three found at 0c199af were resolved into
-obligations above: the stale tick is measured from the client's own receipt (rendering clients),
-the live-tier vector subset is listed by name (live-mini-server), and classification rows have an
-ingest shape (live-mini-server, live-mini-client).
+The three found at 0c199af were resolved into obligations above: the stale tick is measured from
+the client's own receipt (rendering clients), the live-tier vector subset is listed by name
+(live-mini-server), and classification rows have an ingest shape (live-mini-server,
+live-mini-client).
+
+Open since round 13 (2026-11-05), returned to the maintainer: no §8.3 push carries `Event.name`,
+`Event.details` or a Course's `layout`, `slots` and `captions`, yet §8.4 serves `Event` and `Course`
+whole. Until settled, live-mini-server has no stated source for those fields (CONTRACTS §8.3, §8.4).

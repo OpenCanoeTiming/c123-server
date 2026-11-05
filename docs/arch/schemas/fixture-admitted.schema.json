@@ -199,8 +199,10 @@
         "const": true
       },
       "gate3": {
+        "type": "object",
         "properties": {
           "mechanical": {
+            "type": "object",
             "properties": {
               "mismatch": {
                 "const": 0
@@ -214,6 +216,7 @@
             }
           },
           "human": {
+            "type": "string",
             "pattern": "^human-checked-\\d{4}-\\d{2}-\\d{2} by .+$"
           }
         }
