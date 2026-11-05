@@ -210,13 +210,29 @@ function runStanding(v: Vector, port: ConformancePort): void {
   }
 }
 
+/**
+ * `gateStatus` (CONFORMANCE-VECTORS §1, round 16): exact over the presented gates. Every `attemptId:run:gate` of
+ * `presented` (with the presented `run`) is asserted, `plain` where the vector lists none; a listed key outside that
+ * domain is asserted as listed; an unlisted key outside it is not asserted.
+ */
+export function matchGateStatus(want: Record<string, string>, g: WorkflowGiven, got: Record<string, string>, path: string): void {
+  const domain = new Set<string>();
+  for (const [aid, p] of Object.entries(g.presented)) for (const gate of (p.gates ?? []) as Array<{ number: number }>) domain.add(`${aid}:${p.run}:${gate.number}`);
+  const keys = new Set([...domain, ...Object.keys(want)]);
+  for (const k of keys) {
+    const expected = Object.prototype.hasOwnProperty.call(want, k) ? want[k] : 'plain';
+    if (!Object.prototype.hasOwnProperty.call(got, k)) throw new VectorMismatch(`${path}.${k}: expected ${expected}, the port states none`);
+    if (got[k] !== expected) throw new VectorMismatch(`${path}.${k}: expected ${String(expected)}${domain.has(k) && !Object.prototype.hasOwnProperty.call(want, k) ? ' (presented gate, unlisted)' : ''}, got ${String(got[k])}`);
+  }
+}
+
 function runWorkflow(v: Vector, port: ConformancePort): void {
   const given = v.given as WorkflowGiven;
   const check = (g: WorkflowGiven, expect: Record<string, unknown>, where: string): void => {
     const result = port.gateStatus(g);
     for (const [key, want] of Object.entries(expect)) {
       if (key === 'note') continue;
-      if (key === 'gateStatus') matchValue(want, result.gateStatus, `${where}gateStatus`);
+      if (key === 'gateStatus') matchGateStatus(want as Record<string, string>, g, result.gateStatus, `${where}gateStatus`);
       else if (key === 'checks') matchValue(want, result.checks, `${where}checks`);
       else throw new VectorMismatch(`unsupported expect key '${key}' in a workflow vector`);
     }

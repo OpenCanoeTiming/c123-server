@@ -22,6 +22,31 @@ const isObj = (x: unknown): x is Record<string, unknown> =>
   typeof x === 'object' && x !== null && !Array.isArray(x);
 const show = (x: unknown): string => (x === undefined ? 'undefined (absent)' : JSON.stringify(x));
 
+const VARIANT_CLOSED = new Set(['not-yet', 'unavailable']);
+
+/**
+ * An expectation on a presented field envelope (CONFORMANCE-VECTORS §1, round 16). Keyed on the presented
+ * envelope's `state`: a `not-yet` or `unavailable` envelope must equal the expectation whole (CONTRACTS §1.2:
+ * `not-yet` carries no other key, `unavailable` only `reason`), so a stateless expectation is met only by `known`;
+ * inside a `known` envelope the subset rule applies. An expectation stating an `Outcome` `value` states its `kind`.
+ */
+export function matchEnvelope(expected: unknown, actual: unknown, path: string): void {
+  if (isObj(actual) && typeof actual.state === 'string' && VARIANT_CLOSED.has(actual.state)) {
+    if (!isObj(expected) || typeof expected.state !== 'string') {
+      throw new VectorMismatch(`${path}: presented is ${show(actual)}; an expectation without a state is met only by a known envelope`);
+    }
+    matchWhole(expected, actual, path);
+    return;
+  }
+  matchValue(expected, actual, path);
+}
+
+function matchWhole(expected: Record<string, unknown>, actual: Record<string, unknown>, path: string): void {
+  const extra = Object.keys(actual).filter((k) => !own(expected, k));
+  if (extra.length) throw new VectorMismatch(`${path}: presented ${show(actual)} carries ${extra.join(', ')} beyond the expectation (a ${String(actual.state)} envelope is matched whole)`);
+  matchValue(expected, actual, path);
+}
+
 /** Subset match of `expected` against `actual`; throws `VectorMismatch` at the first difference. */
 export function matchValue(expected: unknown, actual: unknown, path = '$'): void {
   if (expected === null) {
@@ -155,7 +180,7 @@ export function matchNotifications(
         if (!own(carried, f)) throw new VectorMismatch(`notifications.${type}: message fields lack '${f}'`);
         const keys = msgAttempt === obs.attemptId ? [`${msgAttempt}.${f}`, f] : [`${msgAttempt}.${f}`];
         const stated = keys.find((k) => own(stepExpect, k));
-        if (stated !== undefined) matchValue(stepExpect[stated], carried[f], `notifications.${type}.fields.${f}`);
+        if (stated !== undefined) matchEnvelope(stepExpect[stated], carried[f], `notifications.${type}.fields.${f}`);
       }
     }
   }
@@ -222,5 +247,8 @@ export function readPath(source: unknown, path: string): { found: boolean; value
 function readInto(want: unknown, source: Record<string, unknown>, field: string, key: string): void {
   const r = readPath(source, field);
   if (!r.found) throw new VectorMismatch(`${key}: field absent from the resource it addresses`);
-  matchValue(want, r.value, key);
+  if (field === 'outcome' && isObj(want) && isObj(want.value) && !own(want.value, 'kind')) {
+    throw new VectorMismatch(`${key}: an expectation stating an Outcome value must state its kind`);
+  }
+  matchEnvelope(want, r.value, key);
 }

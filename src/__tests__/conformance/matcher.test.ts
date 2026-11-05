@@ -16,9 +16,9 @@ const msg = (unitStart: number, message: NotificationMessage): LoggedMessage => 
 
 describe('expect semantics (CONFORMANCE-VECTORS §1 "expect is the presented state after the last given")', () => {
   it('rule: an envelope field left out of expect is not asserted', () => {
-    const o = obs({ presented: { [A]: { outcome: { state: 'known', value: { totalSeconds: 85 }, source: 'tcp', provisional: false, confidence: 'authoritative' } } } });
+    const o = obs({ presented: { [A]: { outcome: { state: 'known', value: { kind: 'duration', totalSeconds: 85 }, source: 'tcp', provisional: false, confidence: 'authoritative' } } } });
     passes(() => matchMergeExpect({ outcome: { state: 'known' } }, o));
-    passes(() => matchMergeExpect({ outcome: { state: 'known', value: { totalSeconds: 85 } } }, o));
+    passes(() => matchMergeExpect({ outcome: { state: 'known', value: { kind: 'duration', totalSeconds: 85 } } }, o));
     mismatch(() => matchMergeExpect({ outcome: { state: 'known', provisional: true } }, o));
   });
 
@@ -112,7 +112,7 @@ describe('expect semantics (CONFORMANCE-VECTORS §1 "expect is the presented sta
 
   it('scope of a field (§1): scope entry reads Entry-only names from the Entry and moves nothing else (vector inv2-rule3-single-source-field)', () => {
     const o = obs({ entry: { ageCategoryId: { state: 'known', value: 'DM' }, members: [{ externalId: { state: 'unavailable', reason: 'not-applicable' } }] }, presented: { [A]: { courseOrder: { state: 'known', value: 1 }, status: { state: 'known', value: 'on-course' } } } }, [], A, 'entry');
-    passes(() => matchMergeExpect({ ageCategoryId: { value: 'DM' }, 'members[0].externalId': { reason: 'not-applicable' }, courseOrder: { value: 1 }, status: { value: 'on-course' } }, o));
+    passes(() => matchMergeExpect({ ageCategoryId: { value: 'DM' }, 'members[0].externalId': { state: 'unavailable', reason: 'not-applicable' }, courseOrder: { value: 1 }, status: { value: 'on-course' } }, o));
     mismatch(() => matchMergeExpect({ courseOrder: { value: 2 } }, o));
   });
 
@@ -543,5 +543,90 @@ describe('closed keys and indices (review O2, O3)', () => {
     expect(readPath(entry, 'members[1].externalId').found).toBe(false);
     expect(readPath({ 'members[0].externalId': 1 }, 'members[0].externalId').found).toBe(false); // no synthetic flat key
     expect(resolveResource('format')).toBe('phase');
+  });
+});
+
+describe('matching rules of round 16 (CONFORMANCE-VECTORS §1 "expect", "Workflow-state", "Ingest units")', () => {
+  const stale = { state: 'not-yet', value: { kind: 'duration', totalSeconds: 85 } }; // a retraction that flipped state and kept the value
+  const present = (envelope: unknown) => obs({ presented: { [A]: { outcome: envelope } } });
+
+  it('round 16 closed variants: a flipped not-yet that keeps a stale value fails an expectation { state: not-yet }', () => {
+    passes(() => matchMergeExpect({ outcome: { state: 'not-yet' } }, present({ state: 'not-yet' })));
+    mismatch(() => matchMergeExpect({ outcome: { state: 'not-yet' } }, present(stale)));
+  });
+
+  it('round 16 closed variants: a stateless expectation is met only by a known envelope (vector rerun-retracts-run-scoped-fields shape)', () => {
+    mismatch(() => matchMergeExpect({ outcome: { provisional: true } }, present({ ...stale, provisional: true })));
+    mismatch(() => matchMergeExpect({ outcome: { provisional: true } }, present({ state: 'not-yet' })));
+    mismatch(() => matchMergeExpect({ outcome: { provisional: true } }, present({ state: 'unavailable', reason: 'source-unreachable' })));
+    passes(() => matchMergeExpect({ outcome: { provisional: true } }, present({ state: 'known', value: {}, provisional: true })));
+  });
+
+  it('round 16 closed variants: an unavailable envelope carrying an extra key fails; reason is compared', () => {
+    const want = { state: 'unavailable', reason: 'not-applicable' };
+    passes(() => matchMergeExpect({ outcome: want }, present({ state: 'unavailable', reason: 'not-applicable' })));
+    mismatch(() => matchMergeExpect({ outcome: want }, present({ state: 'unavailable', reason: 'not-applicable', value: 1 })));
+    mismatch(() => matchMergeExpect({ outcome: want }, present({ state: 'unavailable', reason: 'source-unreachable' })));
+    mismatch(() => matchMergeExpect({ outcome: want }, present({ state: 'not-yet' })));
+  });
+
+  it('round 16 closed variants: a known envelope still matches as a subset, and a stateless expectation reads a known one', () => {
+    passes(() => matchMergeExpect({ outcome: { state: 'known' } }, present({ state: 'known', value: 1, source: 'tcp' })));
+    mismatch(() => matchMergeExpect({ outcome: { state: 'not-yet' } }, present({ state: 'known', value: 1 })));
+  });
+
+  it('round 16 closed variants: the same rule applies to notification fields', () => {
+    const log = (fields: unknown) => [msg(1, { type: 'attempt.updated', fields })];
+    const n = { 'attempt.updated': { count: 1, fields: ['outcome'] } };
+    passes(() => matchMergeExpect({ notifications: n, outcome: { state: 'not-yet' } }, obs({ presented: { [A]: { outcome: { state: 'not-yet' } } } }, log({ outcome: { state: 'not-yet' } }))));
+    mismatch(() => matchMergeExpect({ notifications: n, outcome: { state: 'not-yet' } }, obs({ presented: { [A]: { outcome: { state: 'not-yet' } } } }, log(stale))));
+  });
+
+  it('round 16 partial value: subset inside a known value, but an Outcome expectation must state its kind', () => {
+    const o = present({ state: 'known', value: { kind: 'duration', runSeconds: 80, penaltySeconds: 5, totalSeconds: 85 } });
+    passes(() => matchMergeExpect({ outcome: { state: 'known', value: { kind: 'duration', totalSeconds: 85 } } }, o));
+    expect(() => matchMergeExpect({ outcome: { state: 'known', value: { totalSeconds: 85 } } }, o)).toThrow(/state its kind/);
+    mismatch(() => matchMergeExpect({ outcome: { state: 'known', value: { kind: 'no-result', totalSeconds: 85 } } }, o));
+    passes(() => matchMergeExpect({ outcome: { state: 'known' } }, o)); // no value stated: outside the obligation
+  });
+
+  const wf = (presented: unknown, expectGate: Record<string, string>): Vector => ({ id: 'w', invariant: 'x', description: '', given: { checks: [], flags: [], presented }, expect: { gateStatus: expectGate } }) as unknown as Vector;
+  const status = (map: Record<string, string>) => scriptedPort({}, undefined, { gateStatus: () => ({ gateStatus: map }) });
+  const presented = { 'P:1': { run: 1, gates: [{ number: 4, penalty: 2 }, { number: 5, penalty: 0 }] } };
+
+  it('round 16 gateStatus: a spurious status on a presented gate the vector does not list fails (unlisted = plain)', () => {
+    const v = wf(presented, { 'P:1:1:4': 'verified' });
+    passes(() => runVector(v, status({ 'P:1:1:4': 'verified', 'P:1:1:5': 'plain' })));
+    mismatch(() => runVector(v, status({ 'P:1:1:4': 'verified', 'P:1:1:5': 'stale' })));
+    mismatch(() => runVector(v, status({ 'P:1:1:4': 'verified' }))); // the port states nothing for a presented gate
+  });
+
+  it('round 16 gateStatus: a listed key outside the presented domain is asserted as listed, an unlisted one is not', () => {
+    const v = wf(presented, { 'P:1:1:4': 'verified', 'P:1:1:5': 'plain', 'P:1:1:9': 'stale' });
+    passes(() => runVector(v, status({ 'P:1:1:4': 'verified', 'P:1:1:5': 'plain', 'P:1:1:9': 'stale', 'Q:1:1:1': 'stale' })));
+    mismatch(() => runVector(v, status({ 'P:1:1:4': 'verified', 'P:1:1:5': 'plain', 'P:1:1:9': 'plain' })));
+  });
+
+  it('round 16 gateStatus: the domain uses the presented run and, after then, the new presented', () => {
+    const v = { ...wf(presented, { 'P:1:2:4': 'plain' }), given: { checks: [], flags: [], presented: { 'P:1': { run: 2, gates: [{ number: 4, penalty: 2 }] } } } } as unknown as Vector;
+    passes(() => runVector(v, status({ 'P:1:2:4': 'plain' })));
+    const w = { ...wf(presented, { 'P:1:1:4': 'stale', 'P:1:1:5': 'plain' }), then: [{ presented: { 'P:1': { run: 1, gates: [{ number: 4, penalty: 50 }, { number: 5, penalty: 0 }] } } }] } as unknown as Vector;
+    passes(() => runVector(w, status({ 'P:1:1:4': 'stale', 'P:1:1:5': 'plain' })));
+  });
+
+  const obsv = (seq: number, source: string | undefined, at: string): GivenElement =>
+    ({ ingestSeq: seq, field: 'members[0].externalId', ...(source ? { source } : {}), observedAt: at, state: 'unavailable', reason: 'not-applicable' }) as GivenElement;
+
+  it('round 16 unit edges: a source-less pair makes two units, even at one observedAt', () => {
+    expect(groupUnits([obsv(1, undefined, 't'), obsv(2, undefined, 't')]).map((u) => u.elements.length)).toEqual([1, 1]);
+    expect(groupUnits([obsv(1, 'xml', 't'), obsv(2, undefined, 't'), obsv(3, 'xml', 't')]).map((u) => u.elements.length)).toEqual([1, 1, 1]);
+  });
+
+  it('round 16 unit edges: the given/then seam is always a boundary, even for equal source and observedAt', () => {
+    const rec = newRecorder();
+    const e = (seq: number) => ({ ingestSeq: seq, field: 'outcome', source: 'tcp', kind: 'inference', observedAt: 'same', value: 1, confidence: 'authoritative' });
+    const v = { id: 'x', invariant: 'x', description: '', context: { attemptId: A }, given: [e(1)], then: [e(2)], expect: {} } as Vector;
+    runVector(v, scriptedPort({}, rec));
+    expect(rec.units.map((u) => u.length)).toEqual([1, 1]);
   });
 });
