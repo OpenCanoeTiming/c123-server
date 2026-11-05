@@ -235,15 +235,20 @@ the step index, the Attempt, the field and the property number.
 4. **No regression by omission (INV-1, INV-3).** A regression occurs only at: a scope snapshot of
    the Attempt's race (property 5); a listing of the Attempt that increments `run` in the same delta
    (property 10) or contradicts a finish (property 7); a `rebaseline` of its scope (property 13).
-   `unavailable` appears only with a closed reason and never at any other kind of step (INV-3).
+   `unavailable` appears only with a closed reason, and only at a step that carries the field for the
+   Attempt (property 3) or at a scope snapshot of its race, never at a connection event, a `fragment`
+   or by itself (INV-3): a `not-configured` decided from `SourceStatus` or a fabricated `RaceConfig`
+   (`DERIVATIONS.md` §4.6) is presented at the Attempt's next such step.
 5. **Retraction is scoped and guarded (INV-7).** At a scope-snapshot step for race R, a regression
    of an Attempt of R touches only the fields INV-7 names for the case — first or single run:
    `outcome`, `gates`, `placement`, `underReview`, `qualified` and a mark in `status`; paired second
    run with the row absent: those plus `pairTotal` and `countingRun`; second run with an empty time:
    `outcome` and `gates` only — and never `entry`, `bib`, `startOrder`, `heat`, `startLane` or
    `run`. It never touches a field whose presented value is an on-course inference
-   (`kind: inference`, or `outcome.kind: 'running'`). Afterwards `status` is `at-start` or
-   `on-course` if the on-course listing holds the Attempt, else `not-started`. For an `xml` snapshot
+   (`kind: inference`, or `outcome.kind: 'running'`). Afterwards `status` is what the on-course
+   listing shows for the Attempt (`at-start`, `on-course`, or an inferred `finished` that still
+   stands), else `not-started`; a `finished → on-course` at this step is this property's, not
+   property 7's. For an `xml` snapshot
    retracting or displacing a `tcp`-presented field, the latest `xml-rewrite-detected` time minus
    the poll interval is later than that field's `observedAt`; otherwise the field is unchanged at
    that step. Where the replay log carries the snapshot's rows, as the vector format does, the
@@ -252,26 +257,33 @@ the step index, the Attempt, the field and the property number.
 6. **Precedence (INV-2 rules 1–3).** (a) Once a result field presents a `result-row` observation, it
    never afterwards presents an `inference` for the same generation, except through a contradiction
    (property 7) or after a retraction (property 5). (b) `gates` is merged cell by cell: while
-   upstream still lists the Attempt (no `oncourse-left` for it yet in this generation; equivalently, it
-   is still in the latest `oncourse.updated`, **D**), a judged cell (`0`, `2`, `50`) never becomes
+   upstream still lists the Attempt (no `oncourse-left` for it yet in this generation, read from the
+   raw stream at admission; "still in the latest `oncourse.updated`" is the **D** reading, for a re-run
+   on the published fixture only), a judged cell (`0`, `2`, `50`) never becomes
    `null`; after it has left, cells change only at a results-table
    step. (c) A field presented from `tcp` flips to `xml` only: after a `tcp-disconnected` that
    followed the step that ingested the presented `tcp` observation; by rule 2's mark exception
    (`status` from `not-started`, `at-start` or `left-without-finish` to a mark); by an INV-7
    retraction from the snapshot (property 5); by rule 1, a snapshot result row superseding an on-course
    inference; or at a `rebaseline` — the first four under property 8's content-age guard. (d) Each field's presented `source` lies in the
-   set `DERIVATIONS.md` gives for it: `courseOrder`, `timeToBeat` and a `running` outcome only
-   `tcp`; the superseded run's summary, age categories, members, event details and course numbers
-   only `xml`.
-7. **Contradiction (INV-2d).** `status` goes `finished → on-course` only at an on-course listing of
-   the Attempt with the generation's start and no finish, and in that same step `outcome` becomes
+   set `CONTRACTS.md` §4 INV-2 rule 3 names: `courseOrder`, `timeToBeat`, a `running` outcome and
+   `Course.captions` only `tcp`; `countingRun`, `Entry.members`, `ageCategoryId`, `eventBib` and
+   `isTeam`, `Class.ageCategories`, `Event.details`, `Phase.courseId`, `Phase.scheduledStart` and
+   `title`, `Course.layout` and `sectorEndsAfterGate` only `xml`. Fields without an envelope of their
+   own (`Gate.memberPenalties`, `Course.courseId`) are not clauses. A first run's own figures are its
+   own Attempt's, from either source.
+7. **Contradiction (INV-2d).** `status` goes `finished → on-course` only at: an on-course listing of
+   the Attempt with the generation's start and no finish (this property); a listing with a new start
+   (property 10, `at-start` being the other target there); a retraction (property 5); or a
+   `rebaseline` of its scope (property 13), which ingests a scope snapshot. In the first
+   case, in that same step `outcome` becomes
    `running`, `placement`, `pairTotal` and `countingRun` become `not-yet`, and `diagnostics.updated`
    carries a `contradicted-finish` for the Attempt, with `finishTime` (`null` where no finish time is
    known) and `runSeconds`. While that diagnostic stands, no step presents a results-table `outcome`
    for the Attempt carrying the contradicted finish: equal `eventTime` where both have one, else equal
    run time (`DERIVATIONS.md` §4.12). The diagnostic disappears only at a step presenting a different
    finish by the same comparison, a mark or a retraction, or at a listing of the Attempt with a
-   finish; after such a lift the contradicted rows stay unpresented. Kayak Cross Attempts never show this transition.
+   finish; after such a lift the contradicted rows stay unpresented. Kayak Cross Attempts never show the first case.
 8. **Content age across sources (INV-2c).** A presented results-table field flips from `tcp` to `xml`
    only if the latest `xml-rewrite-detected` time minus the poll interval is later than the presented
    `tcp` observation's `observedAt` (property 5's guard is this rule applied to retraction). A flip
@@ -289,16 +301,19 @@ the step index, the Attempt, the field and the property number.
     presented afterwards (`DERIVATIONS.md` §4.11).
 11. **Provisional (§1.2).** `status` is never provisional. Any other presented result value has
     `provisional: true` exactly when: it is an inference (`kind: inference`, or
-    `outcome.kind: 'running'`); or upstream still lists the Attempt (no `oncourse-left` yet;
-    equivalently, it is in the latest `oncourse.updated`) and either a presented `gates` cell is `null`
-    or `gates` is not `known` because no course is bound; or it is a second run's `placement`,
+    `outcome.kind: 'running'`); or upstream still lists the Attempt (no `oncourse-left` yet, from the
+    raw stream at admission; the latest `oncourse.updated` in a **D** re-run) and either a presented
+    `gates` cell is `null`, a Kayak Cross Attempt's slot cells leave a slot blank (`faults` is read
+    over the slot cells, `DERIVATIONS.md` §4.6(d)), or `gates`, in Cross `faults`, is not `known`
+    because no course is bound; or it is a second run's `placement`,
     `pairTotal` or `countingRun` carried over from run 1, from the listing that starts run 2 until a
     row of run 2, carrying its time or its mark, restates that field — judged field by field, since
     `countingRun` arrives only with the XML row; or its `source` is `operator-write` with a pending
     `WriteRequest`. It goes `false → true` only through a regression first (property 4), at an
     on-course listing of the Attempt that starts a run or that lists it while no course is bound (a
-    cold start: the results push precedes the first snapshot), or when a course binds and shows a
-    blank cell. A `standing.updated` entry's `provisional` is the disjunction over its Attempt's `outcome`,
+    cold start: the results push precedes the first snapshot), or when a course binds — the first
+    step after which the Attempt's Phase has a `known` `courseId` and that Course a `known` `gates`
+    (`phase.updated`, `course.updated`; **D**) — and shows a blank cell. A `standing.updated` entry's `provisional` is the disjunction over its Attempt's `outcome`,
     `placement` and `pairTotal` (§5 step 5).
 12. **Marks (§2.6) D.** When `status` is a no-result mark, `outcome` is `{ kind: 'no-result' }` with
     the same status, whatever time the row carried. Two Attempts of one Phase presenting the same
@@ -321,18 +336,17 @@ the step index, the Attempt, the field and the property number.
     is `pending` while its Attempt is `pending` or `running`. A `standing.updated` appears only at a
     step that changed the standing as serialised (§5 step 1): an Attempt's `placement`, a result
     outcome, `pairTotal`, `provisional` or `underReview`; an Entry's `ageCategoryId` becoming known (a
-    category standing's first publication); a snapshot's category ranks raising or clearing an
-    anomaly; or `scope.replaced`. A running athlete's tick never produces one. **A `classification`
+    category standing's first publication); a second Phase's `pair.siblingPhaseId` becoming known
+    (the `pair` standing's first publication, §5 step 1); a snapshot's category ranks raising or
+    clearing an anomaly; or `scope.replaced`. A running athlete's tick never produces one. **A `classification`
     standing has no Attempts:** its entries come from the classification Phase's rows (§5 step 2), each
     entry's `rank`, `order` and `decidedIn` equal its row's, its first publication is its first row
     observation, and it changes only at a row observation or `scope.replaced`. The spike's checker
     applied the Attempt clause to it and reported 673 violations on the Cross event result (XER), which
-    was never part of a spike window (`DECISIONS/ADR-017` Revision 4). **A `classification`
-    standing has no Attempts:** its entries come from the classification Phase's rows (§5 step 2), each
-    entry's `rank`, `order` and `decidedIn` equal its row's, its first publication is its first row
-    observation, and it changes only at a row observation or `scope.replaced`. The spike's checker
-    applied the Attempt clause to it and reported 673 violations on the Cross event result (XER), which
-    was never part of a spike window (`DECISIONS/ADR-017` Revision 4).
+    was never part of a spike window (`DECISIONS/ADR-017` Revision 4). A classification row is
+    `CONTRACTS.md` §8.3's `ClassificationRow`, flat: `rank: number | null`, a numeric `order`,
+    `decidedIn: string | null`; on site it arrives in a scope snapshot of the classification Phase
+    (`CONFORMANCE-VECTORS.md` §1), and a `null` `decidedIn` is relayed as `null`.
 
 *What this gate is, and is not.* It is a mechanical, oracle-free check: it needs no ground truth,
 only the shape the invariants already commit to, and it catches the whole class of "deterministic
@@ -348,11 +362,16 @@ reported to the design authority, never relaxed in the checker.
 Revision 4). The gate-2 checker is written by a different author than the merge core, from this
 section's text alone, and **mutation-tested per property**: each property must fail on a replay
 deliberately broken for it, and a property that no window exercises is not evidence until one does (in
-the spike, P10 and P13 ran zero times and P4, P7 and P8 two to four). Properties that judge membership,
+the spike, P10 and P13 ran zero times and P4, P7 and P8 two to four). **The fixture says which:**
+`evidence.gate2.exercised` records, per property, the number of steps that evaluated it
+(`schemas/fixture-admitted.schema.json`); a zero does not block admission, it tells every consumer
+that the fixture is no evidence for that property, and `violations` lists only what was evaluated. Properties that judge membership,
 element classification or attribution — 3, 6, 10, 11, 13 and 14 — **read upstream's raw stream**, not
 the ingest's own elements: a checker that trusts the `oncourse-left` the code under test emitted cannot
 see a wrong leave, and the spike's did not see a 10.7 s TCP stall empty a Kayak Cross heat's on-course
-set. A checker failure has three possible verdicts — contract conflict, implementation bug, checker
+set. At admission the checker therefore runs with the recording (`--recording`); without it only the
+properties marked **D**, and the **D** readings of 6(b) and 11, can be evaluated, and such a run admits
+nothing. A checker failure has three possible verdicts — contract conflict, implementation bug, checker
 bug — and the design authority assigns it; "the reading that makes the vectors pass" is not a verdict,
 and a spike brief must not make it one.
 
@@ -538,7 +557,8 @@ nothing; a public read of an unknown `eventId` is `404`, never another organiser
                            "human": "human-checked-2026-09-16 by <name>" },
                 "evidence": { "gate1": { "stepLogSha256": ["…", "…"], "finalStateSha256": ["…", "…"],
                                          "candidateSha256": ["…", "…"] },
-                              "gate2": { "checker": "…", "violations": {} } } },
+                              "gate2": { "checker": "…", "violations": {},
+                                         "exercised": { "P1": 412, "P2": 412, "…": 0 } } } },
   "asOfSeq": 0,
   "steps": [
     { "kind": "hydration", "observedAt": "2026-09-15T10:13:50.000Z", "asOfSeq": 1040,
@@ -576,7 +596,8 @@ that enforces it: `schemas/fixture-admitted.schema.json`. The block carries `sta
 `admitted`, and the schema's `if/then` allows `admitted` **only** with `gate1` and `gate2` true,
 `gate3.mechanical.against: "published-results"`, `windowSpansWholeRaces: true`, `mismatch` 0 and
 `gate3.human` matching `human-checked-<date> by <name>`; the `evidence` block carries the two step-log,
-final-state and candidate hashes of gate 1 and the checker's violation counts. The first schema stated
+final-state and candidate hashes of gate 1 and the checker's violation counts and, per property, how
+many steps evaluated it (`exercised`; §3.2). The first schema stated
 completeness only in prose, so a block with `gate2: false` and a TODO validated (opponent review R10).
 A candidate is never something a consumer pins to; only an admitted fixture is published to the
 catalogue at all (§6). Gate 2 is never relaxed to admit: a candidate waits for the contract amendment

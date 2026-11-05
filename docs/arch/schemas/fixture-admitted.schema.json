@@ -159,7 +159,8 @@
           "additionalProperties": false,
           "required": [
             "checker",
-            "violations"
+            "violations",
+            "exercised"
           ],
           "properties": {
             "checker": {
@@ -170,6 +171,90 @@
               "additionalProperties": {
                 "type": "integer",
                 "minimum": 0
+              }
+            },
+            "exercised": {
+              "type": "object",
+              "description": "per gate-2 property, the number of steps that evaluated it (TEST-ARCHITECTURE §3.2); 0 = the window is no evidence for that property",
+              "additionalProperties": false,
+              "required": [
+                "P1",
+                "P2",
+                "P3",
+                "P4",
+                "P5",
+                "P6",
+                "P7",
+                "P8",
+                "P9",
+                "P10",
+                "P11",
+                "P12",
+                "P13",
+                "P14",
+                "P15"
+              ],
+              "properties": {
+                "P1": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "P2": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "P3": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "P4": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "P5": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "P6": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "P7": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "P8": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "P9": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "P10": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "P11": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "P12": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "P13": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "P14": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "P15": {
+                  "type": "integer",
+                  "minimum": 0
+                }
               }
             }
           }
