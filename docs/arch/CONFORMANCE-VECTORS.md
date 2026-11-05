@@ -57,11 +57,13 @@ fields provisional while run 2 runs, `status` never provisional, an Attempt unst
 and a first-run row wiped in place (the recorded jury re-run).
 
 **93 vectors:** 80 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
-needed, not a target. **c123-server runs 87 of them, live-mini-server 20** (§1, "Which vectors each
-component runs"); 14 run in both suites.
+needed, not a target. **c123-server runs 87 of them, live-mini-server 23** (§1, "Which vectors each
+component runs"); 17 run in both suites.
 
-**Round 14** (2026-11-05, server#200) stated that split, and gave `live-explicit-not-yet-resets-field`
-the `context.tier: 'live'` the other five `live-ingest` vectors already carried.
+**Round 14** (2026-11-05, server#200) stated that split, made the two live lists total over every tag,
+gave `live-explicit-not-yet-resets-field` the `context.tier: 'live'` the other five `live-ingest`
+vectors already carried, and turned the last three prose `notifications` into data (the object form in
+§1); no vector asserts anything different. `note` is commentary and is never asserted.
 
 ---
 
@@ -125,36 +127,51 @@ Each vector has:
 **Which vectors each component runs.** Each component feeds its own merge function through a thin
 adapter (`TEST-ARCHITECTURE.md` §3.1); the sets overlap, and each suite asserts its own count.
 
-**c123-server runs 87: every vector not tagged `live-ingest`.** That is every merge vector whose
-`given` is `tcp`, `xml` and `operator-write` observations, connection and operator events, scope
-snapshots and on-course listings, plus all 8 `standing-assembly` and all 5 `workflow-state` vectors
-(`ARCHITECTURE.md` §3: c123-server owns the on-site domain layer whole, §4 and §5 with the anomaly
-checks, and the checks store). It runs **none of the six `live-ingest` vectors**: each feeds a bare
-§8.3 push, a `DELETE` or an explicit `not-yet` observation into a store that applies the live
-merge, and c123-server has no such store; on the bridge it only sends (`CONTRACTS.md` §8.3). The
+**c123-server runs 87: every vector not tagged `live-ingest`.** The tag is the rule; apart from it,
+every merge vector is on-site material (`tcp`, `xml` and `operator-write` observations, the two
+source-less `unavailable` observations, connection and operator events, scope snapshots and
+on-course listings), and all 8 `standing-assembly` and all 5 `workflow-state` vectors are the
+server's (`ARCHITECTURE.md` §3: c123-server owns the on-site domain layer whole, `CONTRACTS.md` §4
+and §5 with the anomaly checks, and the checks store). It runs **none of the six `live-ingest`
+vectors**. Five feed a bare §8.3 push, a `DELETE` or an explicit `not-yet` observation into a store
+that applies the live merge, and c123-server has no such store: on the bridge it only sends
+(`CONTRACTS.md` §8.3). The sixth, `live-running-then-finished-latest-wins`, is `tcp` observations
+only, but its result row carries `eventTime`, which the format above forbids on site (`ADR-017` D1)
+and allows only as a live push, and it asserts §8.3's "the later-ingested one is presented". The
 spike's live store was a spike (`DECISIONS/ADR-017`), not a server duty. A suite selects them by
 `invariant: 'live-ingest'`; every one also carries `context.tier: 'live'`. No on-site vector depends
-on a `live-ingest` one: the on-site side of a reset, a deletion or a replace is a `notifications`
-expectation of the `run-generation`, `INV-7` and `rebaseline` vectors.
+on a `live-ingest` one: the on-site side of a reset or a replace is a `notifications` expectation of
+the `run-generation`, `INV-7` and `rebaseline` vectors (`attempt.updated` with explicit `not-yet`,
+`scope.replaced`); on site a retraction is field-level and there is no deletion message
+(`CONTRACTS.md` §7.2).
 
-**live-mini-server runs 20** (`CONTRACTS.md` §8.3, "Merge on the live tier"), the subset below: 2 of
-`INV-1`, 2 `INV-3`, 1 each of `INV-4`, `INV-5` and `INV-6`, 6 `live-ingest`, 2 `operator-write` and 5
-`standing-assembly`. In live vectors an observation's `source` is the one the bridge states
+**live-mini-server runs 23** (`CONTRACTS.md` §8.3, "Merge on the live tier"). The two lists below
+cover every tag in the file, each tag in exactly one, with named exceptions where a tag is split; a
+suite asserts 23. In live vectors an observation's `source` is the one the bridge states
 (`CONTRACTS.md` §8.3, "Attempt fields arrive already wrapped"), so `tcp` there is a forwarded on-site
-envelope, not a live source.
-live-mini-server runs: the `INV-1` vectors **except** the two built on scope snapshots
-(`retraction-not-from-fragment`, `retraction-not-in-other-race-snapshot`); every `INV-3`, `INV-4`,
-`INV-5`, `INV-6` and `live-ingest` vector; of the `operator-write` vectors only the two no-echo
+envelope, not a live source; `provisional` and `confidence` arrive the same way, so a live adapter
+feeds them resolved.
+
+**Runs:** the `INV-1` vectors **except** the two built on scope snapshots
+(`retraction-not-from-fragment`, `retraction-not-in-other-race-snapshot`); every `INV-3`,
+`trichotomy`, `INV-4`, `INV-5`, `INV-6`, `under-review`, `phase-status-transition` and `live-ingest`
+vector (plain resolved observations, presented as pushed and later-ingested wins); of the
+`operator-write` vectors only the two no-echo
 corrections (`operator-correction-not-displaced-by-redelivery`,
 `operator-correction-displaced-by-changed-upstream-value`), since a `WriteRequest` exists on site
 only; and the `standing-assembly` vectors **except** the three anomaly
 ones (`standing-category-rank-disagreement-recorded`, `standing-order-disagreement-anomaly`,
 `standing-cross-never-checked`), since the live tier assembles without steps 4 and 7 of
-`CONTRACTS.md` §5. It runs none tagged `INV-2 …`, `INV-2b`, `INV-2c`, `INV-2d`, `INV-7`,
-`run-generation`, `oncourse`, `provisional`, `two-run`, `cross-outcome`, `left-without-finish`,
-`marks`, `half-correction`, `rebaseline` or `workflow-state`: those need the on-course stream,
-connection events, scope snapshots, generation triggers or the checks store, none of which the live
-wire carries (a generation change reaches live as explicit `not-yet`). `ARCHITECTURE.md` §3's "the same merge invariants" means exactly this subset.
+`CONTRACTS.md` §5. That is 2 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 6 + 2 + 5 = 23.
+
+**Runs none tagged** `INV-2 rule 1`, `INV-2 rule 1 gates`, `INV-2 rule 2`, `INV-2 rule 2 exception`,
+`INV-2 rule 3`, `INV-2b`, `INV-2c`, `INV-2d`, `INV-7`, `INV-7 guard`, `placement`, `provisional`,
+`ongoing-recomputation`, `run-generation`, `attempt-status-transition`, `left-without-finish`,
+`marks`, `half-correction`, `rebaseline`, `oncourse`, `standing-push`, `two-run`, `cross-outcome` or
+`workflow-state`: those need the on-course stream and its inferences, connection events and content
+age, scope snapshots, generation triggers or the checks store, none of which the live wire carries
+(a generation change reaches live as explicit `not-yet`). `ARCHITECTURE.md` §3's "the same merge
+invariants" means exactly this subset.
 
 **`expect` is the presented state after the last given.**
 - An envelope field left out of `expect` is not asserted.
@@ -165,6 +182,15 @@ wire carries (a generation change reaches live as explicit `not-yet`). `ARCHITEC
 - `notifications` asserts the number of client-visible messages, one per changed resource: a
   second-run Phase has a `phase` and a `pair` standing (`CONTRACTS.md` §5), so one serialised change
   there is two `standing.updated`; a creation message counts once however many snapshots preceded it.
+  It is a number (every message of the vector), or a map from message type (`CONTRACTS.md` §7.2 on
+  site, §8.4 on live) to a count or to an object `{ count?, afterGivenIndex?, attemptId?, scope?,
+  fields? }`: `count` counts the messages of that type that match the filters; `afterGivenIndex`
+  counts only messages produced by givens after that 0-based index (the `expectSequence` convention);
+  `attemptId` restricts to messages for that Attempt; `scope` restricts `scope.replaced` to that scope;
+  `fields` names keys the single matching message's `fields` must carry (with the values `expect`
+  states for them; other keys are not asserted). A type absent from the map is not asserted.
+- `note`, wherever it appears, is commentary for the reader and is never asserted. Every assertion of
+  a vector is in `expect`, `expectSequence` or `then`.
 
 **`expectSequence` + `then`** assert an intermediate state. `afterGivenIndex` is 0-based, and `-1`
 means before any given. The observations in `then` are applied after it.

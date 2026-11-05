@@ -277,7 +277,7 @@ tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not
 - [ ] Encode every envelope as the wire encoding requires, `eventTime` omitted rather than `null`, so that every envelope and error validates against the two wire schemas (CONTRACTS §1.2, §1.7).
 
 **Tests**
-- [ ] Run, through a thin adapter into its own merge function, the 20 tier-1 vectors CONFORMANCE-VECTORS §1 lists for the live tier, and assert that count: `INV-1` except the two scope-snapshot ones, `INV-3`, `INV-4`, `INV-5`, `INV-6`, `live-ingest`, the two `operator-correction-*` vectors, and `standing-assembly` except the three anomaly vectors (CONFORMANCE-VECTORS §1, §2; TEST-ARCHITECTURE §3.1).
+- [ ] Run, through a thin adapter into its own merge function, the 23 tier-1 vectors CONFORMANCE-VECTORS §1 lists for the live tier, and assert that count: `INV-1` except the two scope-snapshot ones, `INV-3`, `trichotomy`, `INV-4`, `INV-5`, `INV-6`, `under-review`, `phase-status-transition`, `live-ingest`, the two `operator-correction-*` vectors, and `standing-assembly` except the three anomaly vectors (CONFORMANCE-VECTORS §1, §2; TEST-ARCHITECTURE §3.1).
 - [ ] Add tier-1 time-window vectors for calendar `status`: just under, exactly at and just over 5 minutes (TEST-ARCHITECTURE §3.1).
 - [ ] Replay each admitted domain-state fixture's deltas as the §8.3 pushes they correspond to, check that values read back over the public reads match, and run the deltas-only gate-2 properties (those marked **D**) on the resulting public stream (TEST-ARCHITECTURE §3.2, §7).
 - [ ] Verify tenant isolation with the store's own integration tests: no leakage between two keys with equal local ids, no cross-event access, `403` for a revoked key, `404` for an unknown `eventId` (TEST-ARCHITECTURE §3.5; CONFORMANCE-VECTORS §3).
@@ -315,3 +315,10 @@ live-mini-client).
 Open since round 13 (2026-11-05), returned to the maintainer: no §8.3 push carries `Event.name`,
 `Event.details` or a Course's `layout`, `slots` and `captions`, yet §8.4 serves `Event` and `Course`
 whole. Until settled, live-mini-server has no stated source for those fields (CONTRACTS §8.3, §8.4).
+
+Open since round 14 (2026-11-05), returned to the maintainer: nothing names when the on-site bridge
+sends `DELETE /ingest/v2/attempts/{phaseId}/{bib}`. On site an Attempt is never removed: a retraction
+is field-level (INV-7) and a re-baseline reaches live as a Phase replace, which removes absent
+Attempts by itself; so today only a §8.5 organiser correction has a reason to call `DELETE`, and no
+server vector covers a bridge trigger. Whether an upstream start-list removal should become one is a
+maintainer question (CONTRACTS §4, §8.3, §8.5).
