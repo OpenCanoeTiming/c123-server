@@ -74,7 +74,7 @@ const ATTEMPT_FIELDS = new Set([
   'onCourse', // the on-course listing statement (INV-2d), an Attempt-level observation
 ]);
 const ENTRY_FIELDS = new Set(['displayName', 'members', 'club', 'nation', 'ageCategoryId', 'eventBib', 'isTeam']);
-const PHASE_FIELDS = new Set(['classId', 'kind', 'scoringKind', 'pair', 'heats', 'stage', 'date', 'courseId', 'programmeOrder', 'title']);
+const PHASE_FIELDS = new Set(['classId', 'kind', 'scoringKind', 'pair', 'heats', 'stage', 'date', 'courseId', 'programmeOrder', 'title', 'format']);
 const BOTH_FIELDS = new Set(['status', 'scheduledStart']);
 /** Keys defined by §1 alone; they name no resource field. */
 export const SECTION_KEYS = new Set(['diagnostics', 'writeRequest', 'notifications', 'note', 'oncourse', 'featuredByUpstream', 'attempts', 'standing']);
@@ -208,7 +208,19 @@ export function matchMergeExpect(expect: Record<string, unknown>, obs: MergeObse
   }
 }
 
+/** Walks `a.b[0].c` over own properties; `found: false` where any step is absent. */
+export function readPath(source: unknown, path: string): { found: boolean; value?: unknown } {
+  let cur: unknown = source;
+  for (const m of path.matchAll(/([^[.\]]+)|\[(\d+)\]/g)) {
+    const seg = m[1] ?? m[2]!;
+    if (typeof cur !== 'object' || cur === null || !own(cur, seg)) return { found: false };
+    cur = (cur as Record<string, unknown>)[seg];
+  }
+  return { found: true, value: cur };
+}
+
 function readInto(want: unknown, source: Record<string, unknown>, field: string, key: string): void {
-  if (!own(source, field)) throw new VectorMismatch(`${key}: field absent from the resource it addresses`);
-  matchValue(want, source[field], key);
+  const r = readPath(source, field);
+  if (!r.found) throw new VectorMismatch(`${key}: field absent from the resource it addresses`);
+  matchValue(want, r.value, key);
 }

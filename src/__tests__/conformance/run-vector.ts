@@ -87,10 +87,67 @@ export function groupUnits(elements: GivenElement[], firstIndex = 0): Array<{ st
   return units;
 }
 
+const MERGE_KEYS = ['id', 'invariant', 'description', 'context', 'given', 'expect', 'expectSequence', 'then', 'scope'];
+const STANDING_KEYS = ['id', 'invariant', 'description', 'context', 'given', 'expect', 'scope', 'ageCategoryId', 'upstreamCategoryRanks'];
+const WORKFLOW_KEYS = ['id', 'invariant', 'description', 'context', 'given', 'expect', 'expectSequence', 'then'];
+function noAssertions(where: string, el: unknown): void {
+  if (typeof el !== 'object' || el === null) throw new VectorMismatch(`${where}: expected an object`);
+  for (const k of ASSERTION_KEYS) if (k in el) throw new VectorMismatch(`${where}: an element carries '${k}', which no one reads`);
+}
+
+const STEP_KEYS = ['afterGivenIndex', 'expect'];
+const WORKFLOW_GIVEN_KEYS = ['checks', 'flags', 'presented'];
+
+function closed(where: string, obj: unknown, allowed: string[]): void {
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) throw new VectorMismatch(`${where}: expected an object`);
+  for (const k of Object.keys(obj)) {
+    if (!allowed.includes(k)) throw new VectorMismatch(`${where}: unknown key '${k}' (an assertion outside the read paths would pass unread)`);
+  }
+}
+
+/**
+ * Closed key sets (CONFORMANCE-VECTORS §1: "Every assertion of a vector is in `expect`, `expectSequence` or `then`"):
+ * a key the harness does not read is refused, not dropped. Per vector shape, for a step, and for `then` elements.
+ */
+export function assertClosedKeys(v: Vector): void {
+  const g = v.given as Record<string, unknown>;
+  const shape = Array.isArray(v.given) ? 'merge' : 'entries' in g ? 'standing' : 'checks' in g && 'presented' in g ? 'workflow' : 'unknown';
+  if (shape === 'unknown') throw new VectorMismatch(`unrecognised vector shape for ${v.id}`);
+  closed(`${v.id}`, v, shape === 'merge' ? MERGE_KEYS : shape === 'standing' ? STANDING_KEYS : WORKFLOW_KEYS);
+  if (shape === 'standing') closed(`${v.id}.given`, g, ['entries']);
+  if (shape === 'workflow') closed(`${v.id}.given`, g, WORKFLOW_GIVEN_KEYS);
+  (v.expectSequence ?? []).forEach((s, i) => closed(`${v.id}.expectSequence[${i}]`, s, STEP_KEYS));
+  (v.then ?? []).forEach((t, i) => {
+    if (shape === 'workflow') closed(`${v.id}.then[${i}]`, t, ['presented']);
+    else noAssertions(`${v.id}.then[${i}]`, t);
+  });
+  if (shape === 'merge') (v.given as unknown[]).forEach((e, i) => noAssertions(`${v.id}.given[${i}]`, e));
+}
+
+/** An element is an input. These keys carry assertions, and no element may hold one (they would never be read). */
+const ASSERTION_KEYS = ['expect', 'expectSequence', 'then', 'checks', 'gateStatus', 'notifications', 'diagnostics', 'writeRequest'];
+
+/** `notifications.*.afterGivenIndex`: 0-based into `given`, in range, on a unit boundary (§1, R4b). */
+function checkNotificationIndices(where: string, expect: Record<string, unknown>, given: GivenElement[]): void {
+  const n = expect.notifications;
+  if (typeof n !== 'object' || n === null) return;
+  const lasts = new Set(groupUnits(given).map((u) => u.start + u.elements.length - 1));
+  for (const [type, spec] of Object.entries(n)) {
+    if (typeof spec !== 'object' || spec === null || !('afterGivenIndex' in spec)) continue;
+    const i = (spec as { afterGivenIndex: unknown }).afterGivenIndex;
+    if (typeof i !== 'number' || !Number.isInteger(i) || i < -1 || i >= given.length) {
+      throw new VectorMismatch(`${where}notifications.${type}.afterGivenIndex ${String(i)} is out of range of given (${given.length} elements)`);
+    }
+    if (i !== -1 && !lasts.has(i)) throw new VectorMismatch(`${where}notifications.${type}.afterGivenIndex ${i} falls inside an ingest unit (§1 forbids it)`);
+  }
+}
+
 function runMerge(v: Vector, port: ConformancePort): void {
   const context = resolveContext(v.context);
   const merge = port.createMergePort(context);
   const given = v.given as GivenElement[];
+  checkNotificationIndices('', v.expect, given);
+  for (const s of v.expectSequence ?? []) checkNotificationIndices(`after given[${s.afterGivenIndex}]: `, s.expect, given);
   const then = (v.then ?? []) as GivenElement[];
   const phaseId = resolvePhaseId(context);
   const vectorScope = typeof v.scope === 'string' ? v.scope : undefined;
@@ -177,6 +234,7 @@ function runWorkflow(v: Vector, port: ConformancePort): void {
 
 /** Runs one vector; resolves when it passes, throws (`VectorMismatch` for a wrong answer) when it does not. */
 export function runVector(v: Vector, port: ConformancePort): void {
+  assertClosedKeys(v);
   if (Array.isArray(v.given)) return runMerge(v, port);
   const g = v.given as Record<string, unknown>;
   if ('entries' in g) return runStanding(v, port);

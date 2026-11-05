@@ -4,7 +4,12 @@ import { defineConfig } from 'vitest/config';
 // `npm pack`) must never overlap with unit tests that bind ephemeral or random ports and
 // assert on connection counts (issue #232). Two projects: units first, tools after, and
 // tools run one file at a time. One `npm run test -- --run` still runs everything.
-const TOOLS = ['scripts/__tests__/dev-env.test.ts', 'packages/c123-contract/__tests__/pack.test.ts'];
+const TOOLS = [
+  'scripts/__tests__/dev-env.test.ts',
+  'packages/c123-contract/__tests__/pack.test.ts',
+  // child vitest processes: the real conformance suite and the ratchet fixture (issue #200)
+  'src/__tests__/conformance/suite-runs.test.ts',
+];
 const EXCLUDE = ['dist/**', 'node_modules/**'];
 
 export default defineConfig({

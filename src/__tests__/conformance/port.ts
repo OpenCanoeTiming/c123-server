@@ -81,11 +81,10 @@ export interface MergePort {
   /** field -> envelope, plus the Attempt's plain fields. */
   presented(attemptId: string): Record<string, unknown>;
   /**
-   * The Entry's fields, flat, keyed by the field name as the vectors write it
-   * (`displayName`, `ageCategoryId`, `members[0].externalId`, ...). Without an id: the Entry of
-   * `context.attemptId`.
+   * The presented Entry of `context.attemptId`, keyed by field name (`displayName`, `ageCategoryId`, `members`, ...).
+   * A path such as `members[0].externalId` is read by the harness by walking this object.
    */
-  entry(entryId?: string): Record<string, unknown>;
+  entry(): Record<string, unknown>;
   /** The Phase's presented fields, keyed by field name; `phaseId` is `context.phase`, else the phase of `context.attemptId`. */
   phase(phaseId: string): Record<string, unknown>;
   /** The attemptIds of every Attempt that exists, as strings. */

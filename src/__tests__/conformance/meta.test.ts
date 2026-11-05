@@ -1,12 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { VectorMismatch } from './matcher.js';
 import { CoreMissing, corePort } from './core-adapter.js';
 import {
-  groupUnits, isServerVector, loadExpectedRed, loadVectors, modeFor, registerVectorTests, runVector, serverVectors, testName,
+  assertClosedKeys, groupUnits, isServerVector, loadExpectedRed, loadVectors, modeFor, registerVectorTests, runVector, serverVectors, testName,
   type ItLike, type Vector,
 } from './run-vector.js';
 import { wrongPort } from './test-ports.js';
@@ -59,17 +58,43 @@ describe('vector count and ids (issue #200 rows 1, 2)', () => {
     for (const id of LIVE_INGEST) expect(names).not.toContain(`vector ${id}`);
   });
 
-  it('vector count and ids: no afterGivenIndex falls inside an ingest unit and none is out of range (§1, round 12 R4b)', () => {
+  it('vector count and ids: no afterGivenIndex, in a step or in notifications, falls inside an ingest unit or out of range (§1, R4b)', () => {
+    const indices = (expect: Record<string, unknown>): number[] => {
+      const n = expect.notifications;
+      if (typeof n !== 'object' || n === null) return [];
+      return Object.values(n).flatMap((s) => (typeof s === 'object' && s !== null && 'afterGivenIndex' in s ? [(s as { afterGivenIndex: number }).afterGivenIndex] : []));
+    };
+    let seen = 0;
     for (const v of serverVectors()) {
       if (!Array.isArray(v.given)) continue;
       const n = v.given.length;
       const units = groupUnits(v.given as GivenElement[]);
-      for (const s of v.expectSequence ?? []) {
-        expect(s.afterGivenIndex, v.id).toBeGreaterThanOrEqual(-1);
-        expect(s.afterGivenIndex, v.id).toBeLessThan(n);
-        const inside = units.find((u) => u.start < s.afterGivenIndex + 1 && s.afterGivenIndex < u.start + u.elements.length - 1);
-        expect(inside, `${v.id}: afterGivenIndex ${s.afterGivenIndex} falls inside a unit`).toBeUndefined();
+      const lasts = new Set(units.map((u) => u.start + u.elements.length - 1));
+      const all = [
+        ...(v.expectSequence ?? []).map((s) => s.afterGivenIndex),
+        ...indices(v.expect),
+        ...(v.expectSequence ?? []).flatMap((s) => indices(s.expect)),
+      ];
+      for (const i of all) {
+        seen++;
+        expect(Number.isInteger(i), `${v.id}: ${i}`).toBe(true);
+        expect(i, v.id).toBeGreaterThanOrEqual(-1);
+        expect(i, v.id).toBeLessThan(n);
+        expect(i === -1 || lasts.has(i), `${v.id}: afterGivenIndex ${i} falls inside a unit`).toBe(true);
       }
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('vector count and ids: every vector passes the closed key sets (no assertion outside the read paths)', () => {
+    for (const v of serverVectors()) expect(() => assertClosedKeys(v), v.id).not.toThrow();
+  });
+
+  it('row 15 vacuity: every expect and every expectSequence step holds a key other than note (review O4)', () => {
+    const real = (e: Record<string, unknown>) => Object.keys(e).some((k) => k !== 'note');
+    for (const v of serverVectors()) {
+      expect(real(v.expect), `${v.id}: expect`).toBe(true);
+      (v.expectSequence ?? []).forEach((s, i) => expect(real(s.expect), `${v.id}: step ${i}`).toBe(true));
     }
   });
 
@@ -79,7 +104,13 @@ describe('vector count and ids (issue #200 rows 1, 2)', () => {
       expect(src, f).not.toMatch(/\.(skip|todo|only|skipIf|runIf)\b|\b(xit|xdescribe|fit|fdescribe)\(/);
     }
     // the only selection is the live-ingest tag, in one named function
-    expect(readFileSync(resolve(here, 'vectors.test.ts'), 'utf8')).toContain('serverVectors()');
+    // The wiring that a child run cannot tell apart while every id is still listed (review O1, edit 4): the ledger
+    // must be the file's, not derived from the vectors. The child runs in suite-runs.test.ts cover the rest.
+    const wiring = readFileSync(resolve(here, 'vectors.test.ts'), 'utf8');
+    expect(wiring).toContain('vectors: serverVectors(),');
+    expect(wiring).toContain('expectedRed: loadExpectedRed(),');
+    expect(wiring).toContain('strict: isStrict(),');
+    expect(wiring).toContain('port: corePort,');
   });
 });
 
@@ -107,40 +138,6 @@ describe('expected-red ledger and modes (issue #200 rows 3, 4, 5)', () => {
     expect(modeFor('a', ['a'], true)).toBe('plain');
     expect(testName('a')).toBe('vector a');
   });
-
-  // The ratchet itself is vitest's `it.fails`; proving that the registration wires it, and that it bites, takes
-  // one small child run of a fixture that uses the real registration code (issue #200 "Test plan" rows 4, 5).
-  const runFixture = (strict: boolean) => {
-    const env: NodeJS.ProcessEnv = {};
-    for (const [k, v] of Object.entries(process.env)) if (!k.startsWith('VITEST') && k !== 'VECTORS_STRICT') env[k] = v;
-    if (strict) env.VECTORS_STRICT = '1';
-    const r = spawnSync(
-      process.execPath,
-      [resolve(root, 'node_modules/vitest/vitest.mjs'), 'run', '--config', resolve(here, 'fixtures/ratchet-vitest.config.ts'), '--root', resolve(here, 'fixtures'), '--reporter=json'],
-      { env, encoding: 'utf8', timeout: 90_000 },
-    );
-    const out = r.stdout.slice(r.stdout.indexOf('{'));
-    const json = JSON.parse(out) as { testResults: Array<{ assertionResults: Array<{ title: string; status: string }> }> };
-    const status: Record<string, string> = {};
-    for (const t of json.testResults) for (const a of t.assertionResults) status[a.title] = a.status;
-    return { exit: r.status, status };
-  };
-
-  it('a passing vector on the list fails the suite (ledger ratchet, via it.fails)', () => {
-    const { exit, status } = runFixture(false);
-    expect(status['vector fx-passes']).toBe('failed'); // listed, but passes: goes red, forcing it off the list
-    expect(status['vector fx-fails']).toBe('passed'); // listed and failing: reads green
-    expect(status['vector fx-unlisted-fails']).toBe('failed'); // not listed: a plain it, red
-    expect(exit).toBe(1);
-  }, 120_000);
-
-  it('VECTORS_STRICT ignores the ledger: an unpassed vector is red and none reads as passing', () => {
-    const { exit, status } = runFixture(true);
-    expect(status['vector fx-passes']).toBe('passed'); // really passes
-    expect(status['vector fx-fails']).toBe('failed'); // really fails, though listed
-    expect(status['vector fx-unlisted-fails']).toBe('failed');
-    expect(exit).toBe(1);
-  }, 120_000);
 });
 
 describe('harness can fail (issue #200 row 15)', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchMergeExpect, matchValue, resolveResource, SECTION_KEYS, VectorMismatch, type LoggedMessage, type MergeObservation } from './matcher.js';
+import { matchMergeExpect, matchValue, readPath, resolveResource, SECTION_KEYS, VectorMismatch, type LoggedMessage, type MergeObservation } from './matcher.js';
 import { groupUnits, loadVectors, resolveContext, runVector, serverVectors, type Vector } from './run-vector.js';
 import { newRecorder, scriptedPort, type Scripted } from './test-ports.js';
 import type { GivenElement, NotificationMessage } from './port.js';
@@ -111,7 +111,7 @@ describe('expect semantics (CONFORMANCE-VECTORS §1 "expect is the presented sta
   });
 
   it('scope of a field (§1): scope entry reads Entry-only names from the Entry and moves nothing else (vector inv2-rule3-single-source-field)', () => {
-    const o = obs({ entry: { ageCategoryId: { state: 'known', value: 'DM' }, 'members[0].externalId': { state: 'unavailable', reason: 'not-applicable' } }, presented: { [A]: { courseOrder: { state: 'known', value: 1 }, status: { state: 'known', value: 'on-course' } } } }, [], A, 'entry');
+    const o = obs({ entry: { ageCategoryId: { state: 'known', value: 'DM' }, members: [{ externalId: { state: 'unavailable', reason: 'not-applicable' } }] }, presented: { [A]: { courseOrder: { state: 'known', value: 1 }, status: { state: 'known', value: 'on-course' } } } }, [], A, 'entry');
     passes(() => matchMergeExpect({ ageCategoryId: { value: 'DM' }, 'members[0].externalId': { reason: 'not-applicable' }, courseOrder: { value: 1 }, status: { value: 'on-course' } }, o));
     mismatch(() => matchMergeExpect({ courseOrder: { value: 2 } }, o));
   });
@@ -488,5 +488,60 @@ describe('standing and workflow vectors (issue #200 rows 11, 12)', () => {
     try { runVector(v, scriptedPort({}, undefined, { gateStatus: (g) => { seen = g as unknown as WorkflowGivenLike; return { gateStatus: {} }; } })); } catch { /* wrong answer */ }
     expect(seen!.checks.map((c) => c.valueAtCheck)).toEqual([null, 0, null, 2]);
     expect(seen!.presented['C1W_BR1_19:38']!.gates.map((g) => g.penalty)).toEqual([0, null, null, null]);
+  });
+});
+
+describe('closed keys and indices (review O2, O3)', () => {
+  const el = (seq: number, at = `t${seq}`) => ({ ingestSeq: seq, field: 'outcome', source: 'tcp', kind: 'inference', observedAt: at, value: 1, confidence: 'authoritative' });
+  const merge = (over: Record<string, unknown>): Vector => ({ id: 'x', invariant: 'x', description: '', context: { attemptId: A }, given: [el(1), el(2)], expect: {}, ...over }) as Vector;
+  const refuses = (v: Vector, re: RegExp) => expect(() => runVector(v, scriptedPort({ presented: { [A]: { outcome: {} } } }))).toThrow(re);
+
+  it('§1 R4b: a notifications afterGivenIndex out of range is refused, in expect and in a step', () => {
+    refuses(merge({ expect: { notifications: { 'attempt.updated': { count: 0, afterGivenIndex: 99 } } } }), /out of range/);
+    refuses(merge({ expect: { notifications: { 'attempt.updated': { count: 0, afterGivenIndex: -2 } } } }), /out of range/);
+    refuses(merge({ expect: { notifications: { 'attempt.updated': { count: 0, afterGivenIndex: 2 } } } }), /out of range/);
+    refuses(merge({ expectSequence: [{ afterGivenIndex: 0, expect: { notifications: { 'attempt.updated': { count: 0, afterGivenIndex: 99 } } } }] }), /out of range/);
+  });
+
+  it('§1 "Ingest units": a notifications afterGivenIndex inside a unit is refused; on a boundary or -1 it is accepted', () => {
+    const same = { given: [el(1, 'same'), el(2, 'same'), el(3, 'later')] };
+    refuses(merge({ ...same, expect: { notifications: { 'attempt.updated': { count: 0, afterGivenIndex: 0 } } } }), /inside an ingest unit/);
+    passes(() => runVector(merge({ ...same, expect: { notifications: { 'attempt.updated': { count: 0, afterGivenIndex: 1 } } } }), scriptedPort({})));
+    passes(() => runVector(merge({ ...same, expect: { notifications: { 'attempt.updated': { count: 0, afterGivenIndex: -1 } } } }), scriptedPort({})));
+  });
+
+  it('§1 "Every assertion of a vector is in expect, expectSequence or then": unknown vector keys are refused (a typo, expectSequense)', () => {
+    refuses(merge({ expectSequense: [] }), /unknown key 'expectSequense'/);
+    refuses(merge({ expectation: {} }), /unknown key/);
+  });
+
+  it('§1: a standing vector with expectSequence or then is refused, not ignored', () => {
+    const s = { id: 's', invariant: 'x', description: '', scope: { kind: 'phase', phaseId: 'P' }, given: { entries: [] }, expect: { standing: [] } };
+    passes(() => runVector(s as unknown as Vector, scriptedPort({})));
+    refuses({ ...s, expectSequence: [{ afterGivenIndex: -1, expect: { standing: [{ entryId: 'nope' }] } }] } as unknown as Vector, /unknown key 'expectSequence'/);
+    refuses({ ...s, then: [{}] } as unknown as Vector, /unknown key 'then'/);
+    refuses({ ...s, given: { entries: [], extra: 1 } } as unknown as Vector, /unknown key 'extra'/);
+  });
+
+  it('§1: a workflow then element holds only presented; expect or checks in it is refused', () => {
+    const w = { id: 'w', invariant: 'x', description: '', given: { checks: [], flags: [], presented: {} }, then: [{ presented: {} }], expect: { gateStatus: {} } };
+    passes(() => runVector(w as unknown as Vector, scriptedPort({})));
+    refuses({ ...w, then: [{ presented: {}, expect: { gateStatus: { 'a:1:1': 'stale' } } }] } as unknown as Vector, /unknown key 'expect'/);
+    refuses({ ...w, then: [{ presented: {}, checks: [] }] } as unknown as Vector, /unknown key 'checks'/);
+    refuses({ ...w, given: { checks: [], flags: [], presented: {}, expect: {} } } as unknown as Vector, /unknown key 'expect'/);
+  });
+
+  it('§1: a step holds only afterGivenIndex and expect; a merge then element holds no expect', () => {
+    refuses(merge({ expectSequence: [{ afterGivenIndex: -1, expect: {}, extra: 1 }] }), /unknown key 'extra'/);
+    refuses(merge({ then: [{ ...el(3), expect: { outcome: { state: 'known' } } }] }), /carries 'expect'/);
+    refuses(merge({ given: [{ ...el(1), notifications: { 'attempt.updated': 5 } }] }), /carries 'notifications'/);
+  });
+
+  it('review: members[0].externalId is read by path from the Entry, and an absent step fails', () => {
+    const entry = { members: [{ externalId: { state: 'unavailable', reason: 'not-applicable' } }] };
+    expect(readPath(entry, 'members[0].externalId')).toEqual({ found: true, value: { state: 'unavailable', reason: 'not-applicable' } });
+    expect(readPath(entry, 'members[1].externalId').found).toBe(false);
+    expect(readPath({ 'members[0].externalId': 1 }, 'members[0].externalId').found).toBe(false); // no synthetic flat key
+    expect(resolveResource('format')).toBe('phase');
   });
 });
