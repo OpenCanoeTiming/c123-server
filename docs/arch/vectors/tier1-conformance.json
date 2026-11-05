@@ -1493,12 +1493,12 @@
       "expect": {
         "status": {
           "state": "known",
-          "value": "paused",
-          "source": "tcp"
+          "value": "paused"
         }
       },
       "context": {
-        "attemptId": "K1M_BR1_6:9"
+        "attemptId": "K1M_BR1_6:9",
+        "phase": "K1M_BR1_6"
       }
     },
     {
@@ -5384,7 +5384,8 @@
         }
       },
       "context": {
-        "attemptId": "K1M_BR1_6:9"
+        "attemptId": "K1M_BR1_6:9",
+        "phase": "K1M_BR1_6"
       }
     },
     {
