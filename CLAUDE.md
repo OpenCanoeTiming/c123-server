@@ -101,6 +101,18 @@ npm run build
 
 Rebuild work is test-first: tier-1 vectors (`docs/arch/vectors/tier1-conformance.json`) land as failing tests before the code; any time-windowed rule reads an injected `Clock` (TEST-ARCHITECTURE §3.1, §5). The recorded-data recipe below is tier 4 (whole line) and manual checks.
 
+### Dev environment (one command)
+
+`npm run dev:env -- --recording <id> [--speed N]` installs dependencies if needed, fetches the
+recording (cached), starts `player.js` and the server on free ports (detached, own `HOME`), and
+prints the ports and how to attach. Stop with `npm run dev:env -- --down`. Needs
+`c123-protocol-docs` (`--protocol-docs`, `C123_PROTOCOL_DOCS`, or beside the main checkout).
+
+State lives in `.dev-env/` (gitignored; override with `--state-dir`): `state.json`, `player.log`,
+`server.log`, `replay.xml`, `home/`. Read ports from `.dev-env/state.json`:
+`player.tcpPort`, `player.controlPort`, `server.port` (plus pids). Each worktree has its own
+state dir and ports, so several environments run side by side.
+
 ### Testing with recorded data
 
 ```bash

@@ -22,3 +22,6 @@ installer/iss-defines.iss
 .superpowers/
 .claude/
 docs/superpowers/
+
+# Per-worktree dev environment (scripts/dev-env.mjs)
+.dev-env/

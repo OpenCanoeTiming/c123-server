@@ -16,6 +16,7 @@
     "test": "vitest",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
+    "dev:env": "node scripts/dev-env.mjs",
     "postinstall": "node scripts/sync-design-system.js",
     "prebuild": "node scripts/sync-design-system.js"
   },
