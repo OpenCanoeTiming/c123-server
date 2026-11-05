@@ -163,7 +163,7 @@ describe('harness can fail (issue #200 row 15)', () => {
   it('a wrong port also fails when it answers with nothing at all (empty answers)', () => {
     const empty = {
       createMergePort: () => ({
-        applyUnit() {}, presented: () => ({}), entry: () => ({}), attempts: () => [], oncourse: () => ({ attemptIds: [] }),
+        applyUnit() {}, presented: () => ({}), entry: () => ({}), phase: () => ({}), attempts: () => [], oncourse: () => ({ attemptIds: [] }),
         diagnostics: () => [], writeRequest: () => undefined, notifications: () => [],
       }),
       assembleStanding: () => ({ standing: [], anomalies: [] }),

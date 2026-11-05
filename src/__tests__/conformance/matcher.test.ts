@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { matchMergeExpect, matchValue, VectorMismatch, type LoggedMessage, type MergeObservation } from './matcher.js';
-import { groupUnits, loadVectors, resolveContext, runVector, type Vector } from './run-vector.js';
+import { matchMergeExpect, matchValue, resolveResource, SECTION_KEYS, VectorMismatch, type LoggedMessage, type MergeObservation } from './matcher.js';
+import { groupUnits, loadVectors, resolveContext, runVector, serverVectors, type Vector } from './run-vector.js';
 import { newRecorder, scriptedPort, type Scripted } from './test-ports.js';
 import type { GivenElement, NotificationMessage } from './port.js';
 
@@ -10,7 +10,7 @@ const mismatch = (f: () => void): void => expect(f).toThrow(VectorMismatch);
 
 function obs(script: Scripted, log: LoggedMessage[] = [], attemptId = A, vectorScope?: string): MergeObservation {
   const port = scriptedPort(script).createMergePort({ attemptId, xmlPollIntervalSeconds: 5 });
-  return { port, attemptId, log, ...(vectorScope ? { vectorScope } : {}) };
+  return { port, attemptId, log, phaseId: attemptId.slice(0, attemptId.lastIndexOf(':')), ...(vectorScope ? { vectorScope } : {}) };
 }
 const msg = (unitStart: number, message: NotificationMessage): LoggedMessage => ({ unitStart, message });
 
@@ -88,21 +88,76 @@ describe('expect semantics (CONFORMANCE-VECTORS §1 "expect is the presented sta
     passes(() => matchMergeExpect({ run: { value: 2 } }, o));
   });
 
-  it('rule: in a vector of scope entry, Entry fields (displayName, ageCategoryId, members[0].externalId) read the Entry, other keys the Attempt', () => {
-    const o = obs({ entry: { displayName: { state: 'known', value: 'FR51' }, 'members[0].externalId': { state: 'unavailable', reason: 'not-applicable' } }, presented: { [A]: { courseOrder: { state: 'known', value: 1 } } } }, [], A, 'entry');
-    passes(() => matchMergeExpect({ courseOrder: { value: 1 } }, o));
-    // without the entry scope the same key addresses the Attempt, which does not present it
-    mismatch(() => matchMergeExpect({ displayName: { value: 'FR51' } }, obs({ entry: { displayName: { state: 'known', value: 'FR51' } }, presented: { [A]: {} } })));
-    passes(() => matchMergeExpect({ displayName: { value: 'FR51' }, 'members[0].externalId': { state: 'unavailable', reason: 'not-applicable' } }, o));
-    mismatch(() => matchMergeExpect({ ageCategoryId: { state: 'known' } }, o));
+  it('scope of a field (§1): a plain status reads the Attempt, never the Phase', () => {
+    const o = obs({ presented: { [A]: { status: { state: 'known', value: 'dns' } } }, phases: { K1M_BR1_6: { status: { state: 'known', value: 'official' } } } });
+    passes(() => matchMergeExpect({ status: { value: 'dns' } }, o));
+    mismatch(() => matchMergeExpect({ status: { value: 'official' } }, o));
   });
 
-  it('unexpressible: a vector of scope phase is refused, not guessed (vectors inv6-clock-jump-does-not-reorder-merge, phasestatus-official-to-revised-skips-unofficial)', () => {
-    for (const id of ['inv6-clock-jump-does-not-reorder-merge', 'phasestatus-official-to-revised-skips-unofficial']) {
-      const v = loadVectors().find((x) => x.id === id)!;
-      expect(v.scope, id).toBe('phase');
-      expect(() => runVector(v, scriptedPort({ presented: { [A]: { status: v.expect.status as object } } })), id).toThrow(/unexpressible/);
+  it('scope of a field (§1): a vector of scope phase reads status and scheduledStart from the Phase of context.attemptId (K1M_BR1_6)', () => {
+    const o = obs({ presented: { [A]: { status: { state: 'known', value: 'dns' } } }, phases: { K1M_BR1_6: { status: { state: 'known', value: 'paused' }, scheduledStart: { state: 'known', value: 't' } } } }, [], A, 'phase');
+    passes(() => matchMergeExpect({ status: { value: 'paused' }, scheduledStart: { value: 't' } }, o));
+    mismatch(() => matchMergeExpect({ status: { value: 'dns' } }, o));
+    // a prefixed key still addresses that Attempt
+    passes(() => matchMergeExpect({ [`${A}.status`]: { value: 'dns' } }, o));
+  });
+
+  it('scope of a field (§1): the Phase is context.phase where present, else the phase of context.attemptId', () => {
+    const v = { id: 'x', invariant: 'x', description: '', scope: 'phase', context: { attemptId: 'K1M_BR1_6:9', phase: 'OTHER_PHASE' }, given: [] as unknown[], expect: { status: { value: 'official' } } } as Vector;
+    const official = { status: { state: 'known', value: 'official' } };
+    passes(() => runVector(v, scriptedPort({ phases: { OTHER_PHASE: official } })));
+    mismatch(() => runVector({ ...v, context: { attemptId: 'K1M_BR1_6:9' } }, scriptedPort({ phases: { OTHER_PHASE: official } })));
+    passes(() => runVector({ ...v, context: { attemptId: 'K1M_BR1_6:9' } }, scriptedPort({ phases: { K1M_BR1_6: official } })));
+  });
+
+  it('scope of a field (§1): scope entry reads Entry-only names from the Entry and moves nothing else (vector inv2-rule3-single-source-field)', () => {
+    const o = obs({ entry: { ageCategoryId: { state: 'known', value: 'DM' }, 'members[0].externalId': { state: 'unavailable', reason: 'not-applicable' } }, presented: { [A]: { courseOrder: { state: 'known', value: 1 }, status: { state: 'known', value: 'on-course' } } } }, [], A, 'entry');
+    passes(() => matchMergeExpect({ ageCategoryId: { value: 'DM' }, 'members[0].externalId': { reason: 'not-applicable' }, courseOrder: { value: 1 }, status: { value: 'on-course' } }, o));
+    mismatch(() => matchMergeExpect({ courseOrder: { value: 2 } }, o));
+  });
+
+  it('scope of a field (§1): a path resolves by its first segment, status and scheduledStart by scope', () => {
+    expect(resolveResource('members[0].externalId')).toBe('entry');
+    expect(resolveResource('status')).toBe('attempt');
+    expect(resolveResource('status', 'phase')).toBe('phase');
+    expect(resolveResource('status', 'entry')).toBe('attempt');
+    expect(resolveResource('status', 'attempt')).toBe('attempt');
+    expect(resolveResource('title')).toBe('phase');
+    expect(resolveResource('outcome', 'phase')).toBe('attempt');
+  });
+
+  it('scope of a field (§1): an observation tells the port its resource; an observation scope overrides the vector scope', () => {
+    const rec = newRecorder();
+    const el = (seq: number, field: string, extra: Record<string, unknown> = {}) => ({ ingestSeq: seq, field, source: 'tcp', kind: 'result-row', observedAt: `t${seq}`, value: 1, confidence: 'authoritative', ...extra });
+    const v = { id: 'x', invariant: 'x', description: '', scope: 'phase', context: { attemptId: A }, given: [el(1, 'status'), el(2, 'status', { scope: 'attempt' }), el(3, 'outcome'), el(4, 'displayName')], expect: {} } as Vector;
+    runVector(v, scriptedPort({}, rec));
+    const tagged = rec.units.flat() as unknown as Array<{ resource: string; phaseId?: string }>;
+    expect(tagged.map((e) => e.resource)).toEqual(['phase', 'attempt', 'attempt', 'entry']);
+    expect(tagged[0]!.phaseId).toBe('K1M_BR1_6');
+  });
+
+  it('scope of a field (§1): a key that resolves to nothing fails loudly, a vector never passes by being unread', () => {
+    expect(() => matchMergeExpect({ nonsense: {} }, obs({}))).toThrow(/unresolved/);
+    expect(() => matchMergeExpect({ standing: {} }, obs({}))).toThrow(/unresolved/);
+    expect(() => matchMergeExpect({ [`${A}.displayName`]: {} }, obs({}))).toThrow(/unresolved/);
+    const v = { id: 'x', invariant: 'x', description: '', context: { attemptId: A }, given: [{ ingestSeq: 1, field: 'mystery', source: 'tcp', kind: 'inference', observedAt: 't', value: 1, confidence: 'authoritative' }], expect: {} } as Vector;
+    expect(() => runVector(v, scriptedPort({}))).toThrow(/unresolved/);
+  });
+
+  it('scope of a field (§1): every observation field and expect key in the 87 server vectors resolves', () => {
+    const unresolved: string[] = [];
+    const check = (id: string, name: string, scope: unknown) => { try { resolveResource(name, scope); } catch { unresolved.push(`${id}: ${name}`); } };
+    for (const v of serverVectors().filter((x) => Array.isArray(x.given))) {
+      for (const e of [...(v.given as GivenElement[]), ...((v.then ?? []) as GivenElement[])]) if ('field' in e) check(v.id, e.field as string, typeof e.scope === 'string' ? e.scope : v.scope);
+      for (const ex of [v.expect, ...(v.expectSequence ?? []).map((s) => s.expect)]) {
+        for (const k of Object.keys(ex)) {
+          if (SECTION_KEYS.has(k)) continue;
+          const m = /^[^.:\s]+:[^.\s]+\.(.+)$/.exec(k);
+          check(v.id, m ? m[1]! : k, v.scope);
+        }
+      }
     }
+    expect(unresolved).toEqual([]);
   });
 
   it('rule: an expect key the Attempt does not present fails, it is never skipped', () => {

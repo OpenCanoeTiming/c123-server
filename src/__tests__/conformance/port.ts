@@ -35,6 +35,14 @@ export interface ObservationElement {
   judgingComplete?: boolean | null;
   runClosed?: boolean;
   attemptId?: string;
+  /** Observation-level `scope` (CONFORMANCE-VECTORS §1 "Scope of a field"): `'phase'` makes `status`/`scheduledStart` the Phase's. */
+  scope?: string;
+  /**
+   * Added by the harness, never in the vector data: which resource this observation addresses, resolved by the
+   * §1 "Scope of a field" rule. A `phase` observation also carries `phaseId`.
+   */
+  resource?: 'attempt' | 'entry' | 'phase';
+  phaseId?: string;
   [extra: string]: unknown;
 }
 
@@ -78,6 +86,8 @@ export interface MergePort {
    * `context.attemptId`.
    */
   entry(entryId?: string): Record<string, unknown>;
+  /** The Phase's presented fields, keyed by field name; `phaseId` is `context.phase`, else the phase of `context.attemptId`. */
+  phase(phaseId: string): Record<string, unknown>;
   /** The attemptIds of every Attempt that exists, as strings. */
   attempts(): unknown[];
   oncourse(): { attemptIds: string[]; featuredByUpstream?: unknown };
@@ -104,7 +114,10 @@ export interface StandingGiven {
 export interface StandingResult {
   standing: unknown[];
   anomalies: unknown[];
-  /** The assembled Standing's own `ageCategoryId` (CONTRACTS §5: null = whole class). */
+  /**
+   * The assembled Standing's own `ageCategoryId` (CONTRACTS §5: null = whole class). Asserted whenever the vector's
+   * `expect` states one (`standing-age-category-assembled`).
+   */
   ageCategoryId?: string | null;
 }
 

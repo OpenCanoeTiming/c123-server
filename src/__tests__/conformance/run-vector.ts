@@ -14,7 +14,7 @@ import type {
   VectorContext,
   WorkflowGiven,
 } from './port.js';
-import { matchMergeExpect, matchValue, VectorMismatch, type LoggedMessage, type MergeObservation } from './matcher.js';
+import { matchMergeExpect, matchValue, resolveResource, VectorMismatch, type LoggedMessage, type MergeObservation } from './matcher.js';
 
 export interface Vector {
   id: string;
@@ -55,6 +55,12 @@ export function resolveContext(raw: Record<string, unknown> | undefined): Vector
   };
 }
 
+/** `context.phase`, else the phase of `context.attemptId` (`${phaseId}:${bib}`; a convention of the vector file, §1). */
+export function resolvePhaseId(context: VectorContext): string {
+  if (typeof context.phase === 'string') return context.phase;
+  return context.attemptId.slice(0, context.attemptId.lastIndexOf(':'));
+}
+
 const isObservation = (e: GivenElement): boolean => 'field' in e;
 
 /**
@@ -86,12 +92,20 @@ function runMerge(v: Vector, port: ConformancePort): void {
   const merge = port.createMergePort(context);
   const given = v.given as GivenElement[];
   const then = (v.then ?? []) as GivenElement[];
-  const units = [...groupUnits(given), ...groupUnits(then, given.length)];
+  const phaseId = resolvePhaseId(context);
+  const vectorScope = typeof v.scope === 'string' ? v.scope : undefined;
+  // Tell the port, per observation, which resource it addresses (§1 "Scope of a field").
+  const tag = (e: GivenElement): GivenElement => {
+    if (!('field' in e)) return e;
+    const resource = resolveResource(e.field as string, typeof e.scope === 'string' ? e.scope : vectorScope);
+    return { ...e, resource, ...(resource === 'phase' ? { phaseId } : {}) };
+  };
+  const units = [...groupUnits(given.map(tag)), ...groupUnits(then.map(tag), given.length)];
   const log: LoggedMessage[] = [];
   let seen = 0;
   let next = 0;
-  const obs: MergeObservation = { port: merge, attemptId: context.attemptId, log };
-  if (typeof v.scope === 'string') obs.vectorScope = v.scope;
+  const obs: MergeObservation = { port: merge, attemptId: context.attemptId, log, phaseId };
+  if (vectorScope !== undefined) obs.vectorScope = vectorScope;
 
   const applyThrough = (index: number): void => {
     // Everything up to and including element `index`; -1 applies nothing.

@@ -58,16 +58,39 @@ export interface MergeObservation {
   port: MergePort;
   attemptId: string; // context.attemptId, defaulted
   log: LoggedMessage[];
-  /**
-   * The vector-level `scope` of a merge vector (`entry` | `phase`). Not defined in CONFORMANCE-VECTORS §1; the
-   * data uses it on four merge vectors. `entry`: Entry-named keys address the Entry. `phase`: the keys address a
-   * Phase, which the port has no accessor for, so they are refused rather than guessed.
-   */
+  /** The vector-level `scope` of a merge vector, if any (§1 "Scope of a field"). */
   vectorScope?: string;
+  /** `context.phase`, else the phase of `context.attemptId` (a vector-file convention, §1). */
+  phaseId: string;
 }
 
-/** Fields of the Entry resource (CONTRACTS `Entry`); read only in a vector whose scope is `entry`. */
-const ENTRY_FIELD = /^(displayName|members|club|nation|ageCategoryId|eventBib|isTeam)(\[|\.|$)/;
+/**
+ * CONFORMANCE-VECTORS §1 "Scope of a field". Field sets from CONTRACTS §2.4 (Phase), §2.5 (Entry), §2.6 (Attempt).
+ * `status` and `scheduledStart` exist on both the Attempt and the Phase; `scope` decides.
+ */
+const ATTEMPT_FIELDS = new Set([
+  'attemptId', 'phaseId', 'bib', 'entry', 'run', 'startOrder', 'heat', 'startLane', 'outcome', 'gates', 'splits',
+  'faults', 'courseOrder', 'timeToBeat', 'placement', 'pairTotal', 'countingRun', 'underReview', 'qualified',
+  'onCourse', // the on-course listing statement (INV-2d), an Attempt-level observation
+]);
+const ENTRY_FIELDS = new Set(['displayName', 'members', 'club', 'nation', 'ageCategoryId', 'eventBib', 'isTeam']);
+const PHASE_FIELDS = new Set(['classId', 'kind', 'scoringKind', 'pair', 'heats', 'stage', 'date', 'courseId', 'programmeOrder', 'title']);
+const BOTH_FIELDS = new Set(['status', 'scheduledStart']);
+/** Keys defined by §1 alone; they name no resource field. */
+export const SECTION_KEYS = new Set(['diagnostics', 'writeRequest', 'notifications', 'note', 'oncourse', 'featuredByUpstream', 'attempts', 'standing']);
+
+export type Resource = 'attempt' | 'entry' | 'phase';
+
+/** The resource a field name addresses; a path resolves by its first segment. Unresolvable names throw. */
+export function resolveResource(name: string, scope?: unknown): Resource {
+  const first = /^[^[.]+/.exec(name)?.[0] ?? name;
+  if (BOTH_FIELDS.has(first)) return scope === 'phase' ? 'phase' : 'attempt';
+  if (ATTEMPT_FIELDS.has(first)) return 'attempt';
+  if (ENTRY_FIELDS.has(first)) return 'entry';
+  if (PHASE_FIELDS.has(first)) return 'phase';
+  throw new VectorMismatch(`unresolved: '${name}' names no Attempt, Entry or Phase field and is not a section-defined key`);
+}
+
 const PREFIXED = /^([^.:\s]+:[^.\s]+)\.(.+)$/;
 
 /** Splits `K1M_BR1_6:9.outcome` into attempt and field; an unprefixed key addresses `attemptId`. */
@@ -166,21 +189,26 @@ export function matchMergeExpect(expect: Record<string, unknown>, obs: MergeObse
         matchValue(want, obs.port.attempts(), 'attempts');
         continue;
       case 'standing':
-        throw new VectorMismatch("unsupported: 'standing' in a merge vector (only live-ingest vectors use it)");
+        throw new VectorMismatch("unresolved: 'standing' in a merge vector; the merge port serves no standing map (only live-ingest vectors use it)");
     }
     const { attemptId, field, prefixed } = splitKey(key, obs.attemptId);
-    if (obs.vectorScope === 'phase' && !prefixed) {
-      throw new VectorMismatch(`unexpressible: '${key}' in a vector with scope 'phase' addresses a Phase; the port has no Phase accessor and CONFORMANCE-VECTORS §1 does not define the scope key`);
-    }
-    if (obs.vectorScope === 'entry' && ENTRY_FIELD.test(field)) {
-      if (prefixed) throw new VectorMismatch(`unsupported: '${key}' addresses an Entry field through an Attempt prefix`);
-      const entry = obs.port.entry();
-      if (!own(entry, field)) throw new VectorMismatch(`${key}: Entry field absent`);
-      matchValue(want, entry[field], key);
+    if (prefixed) {
+      // `<attemptId>.<field>` always addresses that Attempt's field
+      if (resolveResource(field) !== 'attempt') {
+        throw new VectorMismatch(`unresolved: '${key}' prefixes an Attempt but '${field}' is not an Attempt field`);
+      }
+      readInto(want, obs.port.presented(attemptId), field, key);
       continue;
     }
-    const presented = obs.port.presented(attemptId);
-    if (!own(presented, field)) throw new VectorMismatch(`${key}: field absent from presented(${attemptId})`);
-    matchValue(want, presented[field], key);
+    const resource = resolveResource(field, obs.vectorScope);
+    const source = resource === 'attempt' ? obs.port.presented(attemptId)
+      : resource === 'entry' ? obs.port.entry()
+      : obs.port.phase(obs.phaseId);
+    readInto(want, source, field, key);
   }
+}
+
+function readInto(want: unknown, source: Record<string, unknown>, field: string, key: string): void {
+  if (!own(source, field)) throw new VectorMismatch(`${key}: field absent from the resource it addresses`);
+  matchValue(want, source[field], key);
 }

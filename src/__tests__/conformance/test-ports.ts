@@ -12,6 +12,7 @@ import type {
 export interface Scripted {
   presented?: Record<string, Record<string, unknown>>;
   entry?: Record<string, unknown>;
+  phases?: Record<string, Record<string, unknown>>;
   attempts?: unknown[];
   oncourse?: { attemptIds: string[]; featuredByUpstream?: unknown };
   diagnostics?: unknown[];
@@ -45,6 +46,7 @@ export function scriptedPort(script: Scripted, rec?: Recorder, overrides?: Parti
           return script.presented?.[attemptId] ?? {};
         },
         entry: () => script.entry ?? {},
+        phase: (id) => script.phases?.[id] ?? {},
         attempts: () => script.attempts ?? [],
         oncourse: () => script.oncourse ?? { attemptIds: [] },
         diagnostics: () => script.diagnostics ?? [],
@@ -78,6 +80,7 @@ export function wrongPort(): ConformancePort {
         },
         presented: () => wrongEnvelope as Record<string, unknown>,
         entry: () => wrongEnvelope as Record<string, unknown>,
+        phase: () => wrongEnvelope as Record<string, unknown>,
         attempts: () => [WRONG],
         oncourse: () => ({ attemptIds: [WRONG], featuredByUpstream: WRONG }),
         diagnostics: () => [{ kind: WRONG }],
