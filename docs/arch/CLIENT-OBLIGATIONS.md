@@ -13,7 +13,11 @@ not stated, are listed unresolved under "Gaps and conflicts". Derived at 0c199af
 tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not tested"; round 17
 (2026-11-05) added the nullable `siblingPhaseId` and `decidedIn`, the member `externalId` as `null`, the
 untimed row's `status`, the Cross time trial's `duration` and the fixture's `gate2.exercised`; its review added
-the deferred `pair` standing, `StandingEntry.result: null` and `not-started → finished`.
+the deferred `pair` standing, `StandingEntry.result: null` and `not-started → finished`. Round 18
+(2026-11-05) changed no client duty: content age, the `xml` states and the classification snapshot
+are the server's reader and core (CONTRACTS §2.8, §4; DERIVATIONS §0.3, §0.5, §4.10, §5;
+CONFORMANCE-VECTORS §1; TEST-ARCHITECTURE §3.2), and `sectorEndsAfterGate` being strictly
+increasing narrows, never widens, what a client receives (CONTRACTS §2.12).
 
 ---
 

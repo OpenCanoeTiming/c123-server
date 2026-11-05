@@ -42,6 +42,17 @@ untimed placed row is `finished`, and a Kayak Cross time trial's `duration` carr
 `penaltySeconds: 0` (§2.6). INV-2 rule 3 names its fields (§4); TCP's course refresh is scoped
 (§2.12). `DERIVATIONS.md` §0.5 states which derivations are the parser's and which the core's.
 
+**Revision, 2026-11-05 (contract round 18, the #202 and #201 reviews).** Rulings the XML reader and
+the merge core (#203) needed. **Content age is no longer "detection minus the poll interval":** an
+`xml` observation's content age is the last moment the reader saw the file in its previous state,
+carried on the `xml-rewrite-detected` event as `changedAfter` (§4 INV-2c, INV-7; `DERIVATIONS.md`
+§0.3). In the steady state that is one interval before detection, so nothing already asserted
+changes; after a skipped or failed poll it is earlier; on the first read after start or `setPath` it
+is `null`, unknown, and such a snapshot displaces or retracts nothing a `tcp` observation presents.
+The file's modification time is never an input. `xml.lastRewriteDetectedAt` and the `xml` states are
+defined for an invalid and for an empty file (§2.8). A table with no rows is a scope snapshot in
+start-list mode (§4); `sectorEndsAfterGate` is strictly increasing (§2.12). No wire shape changed.
+
 ---
 
 ## 0. How to read this document
@@ -962,7 +973,15 @@ states it. Switching to a backup instance is the timekeeper's manual work: the s
 hand (maintainer answer Q8). Automatic failover is **out of scope**. The field exists only so the
 admin UI can show which instance is live.
 
-**`xml.lastRewriteDetectedAt`** is the moment the last change of the file was detected. The file is
+**`xml.lastRewriteDetectedAt`** is the first detection of the change last read whole; a change still
+under retry, or abandoned, is not reported until it is read whole, so the field always dates the
+snapshot the merge holds. **`xml.state`:** `connected` when the last poll found the file and it was
+either unchanged since the last whole read or read whole (a fresh change still under retry counts);
+`reconnecting` when the last poll failed, fewer than five in a row — the file missing, unreadable,
+or failing validation with a stat unchanged since its detection (a wrong root, a save upstream never
+completed); `unreachable` from the fifth consecutive failure. A well-formed file whose root closes but
+that names no race is a valid read that states nothing: `connected`, `lastRewriteDetectedAt`
+advances, nothing presented changes. The file is
 written on a timer whose interval is a venue setting (65 s by default; 35 s at the recorded NKZ), and
 only when upstream has flagged a change: an operator edit, an import, or a slalom rank change. A
 penalty correction flags one only when a rank moves, when the race has a marked row (DNS, DNF, DSQ,
@@ -1158,6 +1177,9 @@ Settled against observed upstream behaviour, after three wrong readings of a rec
   sends. **The refresh is scoped:** TCP's string, which strips the `S` markers, refreshes `gates`,
   `slots`, `splitsAfterGate` and `captions` of the bound course; `layout` and `sectorEndsAfterGate`
   are the snapshot's alone and are never derived from TCP (`DERIVATIONS.md` §2.3).
+- **`sectorEndsAfterGate` is strictly increasing.** A sector that ends after a non-gate slot (the
+  Cross roll zone) ends after the last gate before it, and an end equal to its predecessor is not
+  repeated; the slot itself is in `slots`.
 - **`D` is the Kayak Cross start ramp and `E` the roll zone** (observed upstream behaviour;
   recorded layout `DNNRNNNER` with captions `ST,1,2,3,4,5,6,RZ,7`). Each is a **judging slot**: it
   counts in upstream's transmitted gate count and in the width of every gate string, and it carries a
@@ -1263,7 +1285,9 @@ implementation must satisfy, not an algorithm.
   scope snapshots: a TCP result push, for the race it names, and an XML snapshot, for every race in
   it. Nothing else is. An on-course message describes one participant; a UDP fragment describes one
   row and is not consumed at all (`DECISIONS/ADR-011`); a disconnected source says nothing. A TCP
-  result push was complete in 17,496 of 17,496 recorded messages;
+  result push was complete in 17,496 of 17,496 recorded messages. **A table with no rows is a scope
+  snapshot in start-list mode** (its mode is read structurally like any other, `DERIVATIONS.md`
+  §0.3); recorded only before any row of that race ever existed, where it changes nothing;
 - an **operator write** (`operator-write`).
 
 - **INV-1 (monotonic knowledge against omission, per run generation).** A field's `state` never
@@ -1354,8 +1378,14 @@ implementation must satisfy, not an algorithm.
   a correction back.
 - **INV-2c (content age across sources).** A results-table observation supersedes a presented
   results-table value from the *other* source only when its content is newer than the presented
-  observation. Content age: for an `xml` observation, the snapshot's `lastRewriteDetectedAt` minus
-  the poll interval, since the file may have been written at any moment of that interval; for a
+  observation. Content age: for an `xml` observation, the last moment the reader saw the file in
+  its previous state — `changedAfter` of the snapshot's `xml-rewrite-detected` event
+  (`DERIVATIONS.md` §0.3): the poll before detection in the steady state, so one interval earlier,
+  since the file may have been written at any moment of that interval; earlier after a skipped or
+  failed poll; `null` on the first read after start or `setPath`, when nothing is known about the
+  file's age — `null` is earlier than every observation, so such a snapshot fills only what no `tcp`
+  observation presents; the file's modification time is never an input, a share's clock being
+  nobody's. For a
   `tcp` observation, its own `observedAt`, since a push is upstream's table at the moment of
   sending. A candidate whose content age is earlier than the presented observation's `observedAt` is
   retained and not presented, whatever rule 2 would otherwise allow; the next observation from that
@@ -1410,7 +1440,7 @@ implementation must satisfy, not an algorithm.
   - **XML retractions are guarded by content age (INV-2c).** The snapshot lags TCP by up to a save
     cycle, so a snapshot written before a result push must not undo it. An XML retraction, and the
     mark exception of rule 2, apply to a `tcp` observation only when the snapshot's content age —
-    `lastRewriteDetectedAt` minus the poll interval — is later than that observation's `observedAt`.
+    its `changedAfter`, INV-2c — is later than that observation's `observedAt`.
     Otherwise the snapshot is ignored for that field, and the next snapshot settles it. A guard on
     our own clock, not an ordering rule; INV-6 still orders the merge.
   - A retraction is an explicit observation with its own ingest sequence, pushed as `not-yet`

@@ -97,6 +97,15 @@ classification Phase's scope snapshot (`ClassificationRow`s), the `untimed` row 
 on an observation is stamped by the core (`DERIVATIONS.md` §0.5, §4.11). Nothing any vector asserts
 changed.
 
+**Round 18** (2026-11-05, the server#202 and #201 reviews) redefined content age (`CONTRACTS.md` §4
+INV-2c): an `xml-rewrite-detected` event may carry `changedAfter`, the last moment the reader saw
+the file in its previous state (`null` = unknown), and that is the snapshot's content age; an event
+without it keeps meaning `observedAt` minus `context.xmlPollIntervalSeconds`, so no vector changed.
+§1 also states that an empty table is a start-list scope snapshot and that a classification
+snapshot replaces the Phase's rows whole. One vector is owed (the first read after `setPath` during
+an outage, `changedAfter: null`, refused; the next rewrite presented); it lands with the harness
+change that reads the key, since the suite counts are pinned in code.
+
 ---
 
 ## 1. Format
@@ -131,13 +140,17 @@ Each vector has:
   and a row is attributed to it by `outcome.runSeconds`; an attributed row's presented `outcome` then
   carries the finish as `eventTime`. Live-tier pushes are resolved values and may carry it.
 - **Connection and operator events.** Each has `ingestSeq`, `event` and `observedAt`. The events are
-  `tcp-disconnected`, `tcp-connected`, `xml-rewrite-detected`, `oncourse-empty`, `oncourse-left`
+  `tcp-disconnected`, `tcp-connected`, `xml-rewrite-detected` (optionally `changedAfter: Timestamp |
+  null`, see Content age), `oncourse-empty`, `oncourse-left`
   (this Attempt stopped being listed) and `rebaseline` (with `scope`). They exist because INV-2's
   rule 2 depends on TCP continuity, INV-7's guard on the rewrite time, and the re-baseline is an
   event in the ingest sequence.
-- **Content age** (INV-2c and INV-7's guard). An `xml` observation's or snapshot's content age is the
-  latest preceding `xml-rewrite-detected` time minus `context.xmlPollIntervalSeconds`, which defaults
-  to 5 where absent; with no preceding rewrite event, its own `observedAt` minus the interval. A `tcp`
+- **Content age** (INV-2c and INV-7's guard). An `xml` observation's or snapshot's content age is
+  the latest preceding `xml-rewrite-detected` event's `changedAfter` where the event carries that
+  key (a `Timestamp`, or `null`: unknown, earlier than every observation; `DERIVATIONS.md` §0.3);
+  where it does not, that event's `observedAt` minus `context.xmlPollIntervalSeconds`, which defaults
+  to 5 where absent; with no preceding rewrite event, its own `observedAt` minus the interval. A
+  reader always stamps `changedAfter`; the subtraction exists for vectors written without it. A `tcp`
   observation's content age is its `observedAt`.
 - **Scope snapshots** (INV-7). `{ ingestSeq, snapshot: { source, phaseId, mode, rows }, observedAt }`.
   `mode` is `results` or `start-list`; each row carries `bib` and the resolved fields the row states
@@ -147,10 +160,13 @@ Each vector has:
   `DERIVATIONS.md` §4.4 — and `finishTime` **on XML rows only**: a TCP row carries no finish
   time, and INV-2d and generation attribution match it by `outcome.runSeconds`). A row's `placement` is
   given resolved: `null` where upstream's `Rank` is empty, whatever its `RankOrder`
-  (`DERIVATIONS.md` §4.7). A row that carries nothing states no result. **A scope snapshot of a
+  (`DERIVATIONS.md` §4.7). A row that carries nothing states no result. A table with no rows is a
+  scope snapshot with `mode: 'start-list'` and `rows: []` (`DERIVATIONS.md` §0.3). **A scope snapshot of a
   classification Phase** (`CONTRACTS.md` §2.4) carries `CONTRACTS.md` §8.3 `ClassificationRow`s
   instead — `entryId`, `bib`, `rank`, `order`, `decidedIn`, the last `null` where only TCP has stated
-  the row — and creates no Attempt (`DERIVATIONS.md` §4.10).
+  the row — creates no Attempt, and replaces the Phase's rows whole; on site it is the only element
+  that carries classification rows, the `push: 'classification'` element being the live tier's
+  (`DERIVATIONS.md` §4.10).
 - **On-course listing.** An observation with `field: 'onCourse'` and
   `value: { dtStart, dtFinish }` states what the on-course stream lists for the Attempt (INV-2d).
 - A `kind: 'fragment'` observation stands for any single-row, non-snapshot message.
@@ -416,3 +432,8 @@ presented-state fact, covered by `inv2b-disagreement-surfaced-not-adopted`.
     not tell which row shape property 15 reads; it is `CONTRACTS.md` §8.3's flat row, `decidedIn` being
     upstream's round token or `null`. `live-classification-rows-replaced-whole` wrote `XF`/`XS` for it and
     now writes `F`/`SF`; whole replacement and relay, which it asserts, are unchanged.
+15. **Content age is carried by the rewrite event, not computed from the interval** (round 18,
+    server#202 review). Detection minus the interval dated a first read after `setPath` as fresh
+    whatever the file's age, and a delayed poll's read as earlier than it could be; `changedAfter`
+    states what the reader knows, `null` included. Decision 6's interval stays as the reading of an
+    event written without the key, so every existing vector asserts what it did.
