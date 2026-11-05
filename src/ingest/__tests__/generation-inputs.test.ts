@@ -4,6 +4,9 @@ import { TCP } from './fixtures/tcp.js';
 import { ctx, xmlFixture, obsOf, rowOf, instant, withAttr, type El } from './helpers.js';
 
 // DERIVATIONS §4.11, §4.12: what the parser SUPPLIES. Deciding a generation, a retraction, a contradiction or a stale mark is the core's (#203).
+// keeps the header and the closing tags: only whole <Row> elements are dropped
+const keepRow = (msg: string, needle: string): string => msg.replace(/<Row [\s\S]*?<\/Row>/g, (r) => (r.includes(needle) ? r : ''));
+
 describe('§4.11 run generation inputs', () => {
   it('§4.11 an on-course listing states dtStart/dtFinish as the vector\'s onCourse value (bib 56: dtStart 9:55:00.230 = 07:55:00.230Z, dtFinish null)', () => {
     const o = obsOf(parseTcp(TCP.onCourseRunning, ctx()), 'onCourse');
@@ -50,7 +53,7 @@ describe('§4.12 retraction and contradiction inputs', () => {
     expect(r.status).toBeUndefined();
   });
   it('§4.12 second-run row with Time empty and IRM empty: timeEmpty, placement and pairTotal still from the row (synthetic: bib 108 with Time and gates cleared)', () => {
-    let m = TCP.resultsBr2.split('<Row ').filter((p, i) => i === 0 || p.includes('Bib=" 108"') || p.includes('Bib="108"')).join('<Row ');
+    let m = keepRow(TCP.resultsBr2, 'Id="9047.K1M"');
     if (!m.includes('Id="9047.K1M"')) throw new Error('fixture row missing');
     m = withAttr(m, 'Time', '91.64', '');
     const g = m.match(/Gates="([^"]*)"/)![1];

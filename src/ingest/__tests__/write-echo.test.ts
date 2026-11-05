@@ -5,6 +5,9 @@ import { ctx, xmlFixture, rowOf, penalties, withAttr } from './helpers.js';
 
 // DERIVATIONS §6: what the wire provides for echo matching. Matching (confirmed / mismatched / superseded) is the core's.
 // The parser must supply a field-level, comparable value for the target field of a correction: the gate penalty of one gate, per generation.
+// keeps the header and the closing tags: only whole <Row> elements are dropped
+const keepRow = (msg: string, needle: string): string => msg.replace(/<Row [\s\S]*?<\/Row>/g, (r) => (r.includes(needle) ? r : ''));
+
 describe('§6 WriteRequest echo matching', () => {
   it('§6 an echo is a later results-table observation: a Results row states each gate\'s penalty separately (bib 108 gate 16 = 50)', () => {
     expect(penalties(rowOf(parseTcp(TCP.resultsBr2, ctx()), 'K1M_BR2_19', '108').gates)[15]).toBe(50);
@@ -16,7 +19,7 @@ describe('§6 WriteRequest echo matching', () => {
     expect(b.placement).not.toEqual(a.placement);
   });
   it('§6 a correction of one gate changes only that gate in the parsed row (gate 12: "  2" -> "  0")', () => {
-    const m = TCP.resultsBr2.split('<Row ').filter((p, i) => i === 0 || p.includes('Id="9047.K1M"')).join('<Row ');
+    const m = keepRow(TCP.resultsBr2, 'Id="9047.K1M"');
     const g = m.match(/Gates="([^"]*)"/)![1];
     const cells = g.match(/.{3}/g)!;
     cells[11] = '  0';

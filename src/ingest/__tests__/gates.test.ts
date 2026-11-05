@@ -115,7 +115,7 @@ describe('§4.6 gate parsing', () => {
       const els = parseXmlSnapshot(team([4, 52, 100], [2, 2, 0], [2, 50, 50], [0, 0, 50]), c());
       const g = rowOf(els, 'K1MT_TSR_19', '7').gates as El[];
       expect(g.map((x) => x.penalty)).toEqual([4, 52, 100]);
-      expect(g.map((x) => x.memberPenalties)).toEqual([[2, 2, 0], [2, 50, 50], [0, 0, 50]]);
+      expect(g.map((x) => x.memberPenalties)).toEqual([[2, 2, 0], [2, 50, 0], [0, 50, 50]]); // per gate: (member1[i], member2[i], member3[i]); sums 4, 52, 100
       expect(diagnostics(els)).toEqual([]);
     });
     it('§4.6(c) a crew cell that differs from the member sum is presented as the crew cell and raises member-sum-mismatch', () => {
