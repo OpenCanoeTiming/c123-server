@@ -119,7 +119,8 @@ cover:
 - §5's standing assembly.
 
 The count is 93 as of round 9 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
-a thin adapter that feeds these vectors into its own merge function and asserts the result — proving
+a thin adapter that feeds the vectors `CONFORMANCE-VECTORS.md` §1 assigns to it (87 and 23; 17 are in
+both) into its own merge function and asserts the result — proving
 both satisfy the same data-defined contract without either depending on the other's code.
 
 **This is the minimum that proves the contract implementable before any server code exists.** Every
@@ -696,8 +697,9 @@ the *previous* tier's already-verified output, so the tier at which a test first
 component at fault.
 
 - Tier 1 fails → the merge rule itself, in whichever implementation failed it (`c123-server` or
-  `live-mini-server`) — wrong before a single recording is even involved. Symmetric: both
-  implementations run the same vectors independently, so this step has no asymmetry to worry about.
+  `live-mini-server`) — wrong before a single recording is even involved. Symmetric only for the 17
+  vectors both run (`CONFORMANCE-VECTORS.md` §1), where the other implementation is a comparison; a
+  failure in a vector only one of them runs names that implementation alone.
 - A candidate domain-state fixture fails **gate 1** (§3.2, determinism) → `c123-server` specifically,
   unambiguously — a non-determinism bug, not a wrong-answer one.
 - Gate 1 passes, **gate 2** (invariant conformance) fails → `c123-server` again, unambiguously — its

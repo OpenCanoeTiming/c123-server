@@ -27,6 +27,12 @@ response types, `WsMessage` (§7.2), the §7.3/§7.4 request bodies, the §8.3 p
 `LivePhase`, and the §8.4 public response, stream and heartbeat types. `error.schema.json` now
 enforces the per-code `details`; `fixture-admitted.schema.json` compiles under a strict validator.
 
+**Revision, 2026-11-05 (contract round 14, server#200).** One behavioural rule, stated where it was
+implied: **the unit of ingest is one upstream message** (§1.6). Every observation one TCP message,
+XML snapshot, operator write, connection event or re-baseline yields (on live, one §8.3 request) is
+merged before anything is emitted, and then at most one message per changed resource is sent; a core
+may apply observations one at a time but notifies per unit. No wire shape changed.
+
 ---
 
 ## 0. How to read this document
@@ -285,7 +291,13 @@ own just-submitted correction is a second legitimate `WriteRequest`, not a retry
 **`seq` is one counter per server.** Every push-capable stream (§7's WebSocket, §8.4's public feed)
 stamps each outbound message with `seq`. Each outbound message takes the next value of the counter;
 an element's ingest sequence (INV-6, §4) is the value the counter had when it was ingested, so one
-element may produce many messages, each with its own `seq`. **The one message without `seq` is
+element may produce many messages, each with its own `seq`. **The unit of ingest is one upstream
+message:** one TCP message, one XML snapshot, one operator write, one connection event, one
+re-baseline; on the live tier, one §8.3 request. Every observation that unit yields is merged before
+anything is emitted, and then at most one message per changed resource is sent: §7.2's
+`attempt.updated` carries every field that unit changed, never one message per field. A core may
+apply observations one at a time, but it notifies per unit (`CONFORMANCE-VECTORS.md` §1, "Ingest
+units"). **The one message without `seq` is
 §8.4's `heartbeat`:** it carries `asOfSeq` instead, since it carries no state; a client neither buffers
 nor applies it, and steps 2 and 4 below concern only messages that carry `seq`. On site the heartbeat is
 `sources.updated`, which does carry `seq` (§7.2). It is the same number on every connection and in every `asOfSeq` a REST response
