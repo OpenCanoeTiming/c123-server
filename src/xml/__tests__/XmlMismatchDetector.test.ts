@@ -13,6 +13,34 @@ describe('XmlMismatchDetector', () => {
   let detector: XmlMismatchDetector;
   let tempDir: string;
   let xmlPath: string;
+  let detectorErrors: Error[];
+  let pendingChecks: Promise<void>[];
+
+  // The detector re-reads the XML from a timer while a test rewrites it. A plain
+  // writeFile truncates first, so a concurrent read can see an empty file
+  // ("Invalid XML: not a Canoe123 file"). Replace the file atomically instead,
+  // the way a reader should be able to rely on.
+  let writeSeq = 0;
+  const writeXml = async (target: string, content: string) => {
+    const tmp = `${target}.${writeSeq++}.tmp`;
+    await fsPromises.writeFile(tmp, content);
+    await fsPromises.rename(tmp, target);
+  };
+
+  // Production (server.ts) always listens for 'error'; so does the test, and it
+  // asserts that no error was emitted. Rechecks are timer-driven (`void
+  // checkMismatch()`), so every call is tracked and awaited before teardown.
+  const makeDetector = (config: ConstructorParameters<typeof XmlMismatchDetector>[2]) => {
+    const d = new XmlMismatchDetector(eventState, xmlDataService, config);
+    d.on('error', (err) => detectorErrors.push(err));
+    const real = d.checkMismatch.bind(d);
+    d.checkMismatch = () => {
+      const p = real();
+      pendingChecks.push(p);
+      return p;
+    };
+    return d;
+  };
 
   const makeXml = (raceIds: string[]) => {
     const schedules = raceIds
@@ -42,6 +70,8 @@ ${schedules}
   };
 
   beforeEach(async () => {
+    detectorErrors = [];
+    pendingChecks = [];
     eventState = new EventState();
     xmlDataService = new XmlDataService();
     xmlDataService.setCacheTtl(0); // Disable TTL for tests
@@ -52,6 +82,10 @@ ${schedules}
 
   afterEach(async () => {
     detector?.stop();
+    // A recheck started by the interval may still be reading; let it finish
+    // before the directory goes away.
+    await Promise.allSettled(pendingChecks);
+    expect(detectorErrors).toEqual([]);
     eventState.destroy();
     await fsPromises.rm(tempDir, { recursive: true, force: true });
   });
@@ -59,7 +93,7 @@ ${schedules}
   describe('matching schedules', () => {
     it('does not emit mismatch when fingerprints match', async () => {
       const raceIds = ['K1M_BR1', 'K1M_BR2'];
-      await fsPromises.writeFile(xmlPath, makeXml(raceIds));
+      await writeXml(xmlPath, makeXml(raceIds));
       xmlDataService.setPath(xmlPath);
 
       // Simulate TCP schedule with same races
@@ -70,7 +104,7 @@ ${schedules}
         },
       });
 
-      detector = new XmlMismatchDetector(eventState, xmlDataService, {
+      detector = makeDetector({
         gracePeriodMs: 10,
         recheckIntervalMs: 10000,
       });
@@ -89,7 +123,7 @@ ${schedules}
   describe('mismatched schedules', () => {
     it('emits mismatch after grace period when fingerprints differ', async () => {
       // XML has races A, B
-      await fsPromises.writeFile(xmlPath, makeXml(['K1M_BR1', 'K1M_BR2']));
+      await writeXml(xmlPath, makeXml(['K1M_BR1', 'K1M_BR2']));
       xmlDataService.setPath(xmlPath);
 
       // TCP has races C, D (different event)
@@ -103,7 +137,7 @@ ${schedules}
         },
       });
 
-      detector = new XmlMismatchDetector(eventState, xmlDataService, {
+      detector = makeDetector({
         gracePeriodMs: 20,
         recheckIntervalMs: 10000,
       });
@@ -129,7 +163,7 @@ ${schedules}
   describe('auto-resolution', () => {
     it('emits resolved when fingerprints match again after mismatch', async () => {
       // Start with mismatch
-      await fsPromises.writeFile(xmlPath, makeXml(['K1M_BR1']));
+      await writeXml(xmlPath, makeXml(['K1M_BR1']));
       xmlDataService.setPath(xmlPath);
 
       eventState.processMessage({
@@ -137,7 +171,7 @@ ${schedules}
         data: { races: [{ raceId: 'C1M_BR1', order: 1 }] },
       });
 
-      detector = new XmlMismatchDetector(eventState, xmlDataService, {
+      detector = makeDetector({
         gracePeriodMs: 10,
         recheckIntervalMs: 30,
       });
@@ -150,7 +184,7 @@ ${schedules}
       expect(detector.mismatchState.detected).toBe(true);
 
       // Now fix — update XML to match TCP
-      await fsPromises.writeFile(xmlPath, makeXml(['C1M_BR1']));
+      await writeXml(xmlPath, makeXml(['C1M_BR1']));
       xmlDataService.clearCache();
 
       const resolvedPromise = new Promise<void>((resolve) => {
@@ -165,7 +199,7 @@ ${schedules}
 
   describe('race ID check', () => {
     it('triggers mismatch check when TCP race ID not in XML', async () => {
-      await fsPromises.writeFile(xmlPath, makeXml(['K1M_BR1']));
+      await writeXml(xmlPath, makeXml(['K1M_BR1']));
       xmlDataService.setPath(xmlPath);
 
       // TCP schedule with different race
@@ -174,7 +208,7 @@ ${schedules}
         data: { races: [{ raceId: 'UNKNOWN_RACE', order: 1 }] },
       });
 
-      detector = new XmlMismatchDetector(eventState, xmlDataService, {
+      detector = makeDetector({
         gracePeriodMs: 10,
         recheckIntervalMs: 10000,
       });
@@ -192,10 +226,10 @@ ${schedules}
 
   describe('edge cases', () => {
     it('does not emit when no TCP schedule', async () => {
-      await fsPromises.writeFile(xmlPath, makeXml(['K1M_BR1']));
+      await writeXml(xmlPath, makeXml(['K1M_BR1']));
       xmlDataService.setPath(xmlPath);
 
-      detector = new XmlMismatchDetector(eventState, xmlDataService, {
+      detector = makeDetector({
         gracePeriodMs: 10,
       });
 
@@ -215,7 +249,7 @@ ${schedules}
         data: { races: [{ raceId: 'K1M_BR1', order: 1 }] },
       });
 
-      detector = new XmlMismatchDetector(eventState, xmlDataService, {
+      detector = makeDetector({
         gracePeriodMs: 10,
       });
 
@@ -229,7 +263,7 @@ ${schedules}
     });
 
     it('grace period cancels if resolved before expiry', async () => {
-      await fsPromises.writeFile(xmlPath, makeXml(['K1M_BR1']));
+      await writeXml(xmlPath, makeXml(['K1M_BR1']));
       xmlDataService.setPath(xmlPath);
 
       eventState.processMessage({
@@ -237,7 +271,7 @@ ${schedules}
         data: { races: [{ raceId: 'C1M_BR1', order: 1 }] },
       });
 
-      detector = new XmlMismatchDetector(eventState, xmlDataService, {
+      detector = makeDetector({
         gracePeriodMs: 100, // Long grace period
         recheckIntervalMs: 10000,
       });
@@ -249,7 +283,7 @@ ${schedules}
       await detector.checkMismatch(); // Starts grace period
 
       // Fix XML before grace period expires
-      await fsPromises.writeFile(xmlPath, makeXml(['C1M_BR1']));
+      await writeXml(xmlPath, makeXml(['C1M_BR1']));
       await detector.checkMismatch(); // Should cancel grace period
 
       // Wait longer than grace period
@@ -262,10 +296,10 @@ ${schedules}
 
   describe('lifecycle', () => {
     it('stop cleans up timers and listeners', async () => {
-      await fsPromises.writeFile(xmlPath, makeXml(['K1M_BR1']));
+      await writeXml(xmlPath, makeXml(['K1M_BR1']));
       xmlDataService.setPath(xmlPath);
 
-      detector = new XmlMismatchDetector(eventState, xmlDataService, {
+      detector = makeDetector({
         gracePeriodMs: 10,
       });
       detector.start();

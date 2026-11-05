@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import https from 'node:https';
+import { randomBytes } from 'node:crypto';
 
 const RECORDING_FILENAME = 'rec-2025-12-28T09-34-10.jsonl';
 
@@ -59,34 +60,49 @@ function findRecordingPath(): string | null {
 }
 
 /**
- * Download file from URL to destination
+ * Download file from URL to destination.
+ *
+ * Several test files (each in its own worker) call getRecordingPath() on a
+ * cold cache at the same time. They must not share a write target: each
+ * download goes to its own temp file and is renamed over `dest` only when
+ * complete, so no worker unlinks or reads another worker's partial file.
  */
 async function downloadFile(url: string, dest: string): Promise<void> {
   // Ensure cache directory exists
-  if (!fs.existsSync(CACHE_DIR)) {
-    fs.mkdirSync(CACHE_DIR, { recursive: true });
-  }
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
 
+  const tmp = `${dest}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
+  try {
+    await downloadToFile(url, tmp);
+    fs.renameSync(tmp, dest);
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
+}
+
+function downloadToFile(url: string, tmp: string, redirects = 0): Promise<void> {
   return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest);
+    const file = fs.createWriteStream(tmp);
+    const fail = (err: Error) => {
+      file.close(() => reject(err));
+    };
 
     https
       .get(url, (response) => {
         if (response.statusCode === 301 || response.statusCode === 302) {
-          // Follow redirect
           const redirectUrl = response.headers.location;
-          if (redirectUrl) {
-            file.close();
-            fs.unlinkSync(dest);
-            downloadFile(redirectUrl, dest).then(resolve).catch(reject);
+          response.resume();
+          if (redirectUrl && redirects < 5) {
+            file.close(() => {
+              downloadToFile(redirectUrl, tmp, redirects + 1).then(resolve, reject);
+            });
             return;
           }
         }
 
         if (response.statusCode !== 200) {
-          file.close();
-          fs.unlinkSync(dest);
-          reject(new Error(`Failed to download: HTTP ${response.statusCode}`));
+          response.resume();
+          fail(new Error(`Failed to download: HTTP ${response.statusCode}`));
           return;
         }
 
@@ -99,13 +115,7 @@ async function downloadFile(url: string, dest: string): Promise<void> {
           file.close(() => resolve());
         });
       })
-      .on('error', (err) => {
-        file.close();
-        if (fs.existsSync(dest)) {
-          fs.unlinkSync(dest);
-        }
-        reject(err);
-      });
+      .on('error', (err) => fail(err));
   });
 }
 
