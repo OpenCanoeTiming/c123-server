@@ -20,6 +20,9 @@
     "postinstall": "node scripts/sync-design-system.js",
     "prebuild": "node scripts/sync-design-system.js"
   },
+  "workspaces": [
+    "packages/*"
+  ],
   "dependencies": {
     "@opencanoetiming/timing-design-system": "^0.9.0",
     "chokidar": "^5.0.0",
@@ -32,6 +35,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@opencanoetiming/c123-contract": "0.0.0",
     "@types/express": "^5.0.0",
     "@types/node": "^26.6.2",
     "@types/ws": "^8.5.13",

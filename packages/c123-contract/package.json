@@ -1,0 +1,30 @@
+{
+  "name": "@opencanoetiming/c123-contract",
+  "version": "0.0.0",
+  "description": "Shared wire-contract types and JSON schemas of the C123 server (types only, no runtime code)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenCanoeTiming/c123-server.git",
+    "directory": "packages/c123-contract"
+  },
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts"
+    },
+    "./schemas/*": "./schemas/*.json",
+    "./schemas/*.json": "./schemas/*.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.d.ts",
+    "schemas"
+  ],
+  "scripts": {
+    "prepack": "node -e \"const f=require('fs');f.mkdirSync('schemas',{recursive:true});for(const n of f.readdirSync('../../docs/arch/schemas'))if(n.endsWith('.json'))f.copyFileSync('../../docs/arch/schemas/'+n,'schemas/'+n)\""
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}
