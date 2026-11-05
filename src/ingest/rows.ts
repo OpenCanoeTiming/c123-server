@@ -86,8 +86,9 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
   } else row['placement'] = rank === undefined || order === undefined ? null : ({ rank, order } satisfies Placement);
 
   // §4.1: every row carrying a time, a mark or a placement states underReview, false without the mark; a blank row states nothing (INV-7)
-  const carrying = r.time !== undefined || m !== undefined || row['placement'] !== null;
-  if (carrying) row['underReview'] = m === '*' || r.pp.trim() === '*';
+  const star = m === '*' || r.pp.trim() === '*';
+  const carrying = r.time !== undefined || m !== undefined || row['placement'] !== null || star;
+  if (carrying) row['underReview'] = star;
 
   // §4.6 gate cells
   const bad: CellProblem[] = [];
