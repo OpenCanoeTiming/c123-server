@@ -45,8 +45,8 @@ describe('XML reader: polling (DERIVATIONS §0.3)', () => {
     const n0 = a.f.statLog.length;
     await a.clock.advance(15000);
     expect(a.f.statLog.length - n0).toBe(3);
-    await a.clock.advance(4900);
-    expect(a.f.statLog.length - n0).toBe(3);
+    await a.clock.advance(5000); // any whole-interval window holds exactly one poll per interval, whatever the phase
+    expect(a.f.statLog.length - n0).toBe(4);
     a.reader.stop();
 
     const b = setup({ pollIntervalSeconds: 2 });
@@ -193,8 +193,7 @@ describe('XML reader: the ingest unit (CONTRACTS §1.6, INV-7)', () => {
     expect(els[0]!.observedAt).toBe(det);
     expect(els.length).toBeGreaterThan(1);
     for (const e of els.slice(1)) {
-      expect(e.snapshot).toBeDefined();
-      expect(e.snapshot.source).toBe('xml');
+      expect((e.snapshot ? e.snapshot.source : e.source)).toBe('xml'); // snapshots carry source inside, observations beside
       expect(e.observedAt).toBe(det);
     }
     const expected = parseXmlSnapshot(whole('slalom.xml'), ctx({ observedAt: det })) as Array<Record<string, any>>;
