@@ -514,7 +514,8 @@ pairing and combination behaviour.
 - `role` and `combination` come from the token alone; `siblingPhaseId` is `null` until the schedule
   names the other run (a TCP-first cold start, `DERIVATIONS.md` §2.1). A second-run Phase reads its
   rows as a second run from its first row, sibling resolved or not (`DERIVATIONS.md` §4.4). An `NHT2`
-  whose first run the schedule never names has `pair: null`.
+  has `pair: null` until its first-run token is known (`DERIVATIONS.md` §10 item 21): with the token
+  unknown, no sibling can ever resolve, and its rows read as a single run.
 - The tokens `QUA`/`SEM`/`FIN`, which appeared in an earlier draft of this contract and in the
   protocol documentation, **do not exist upstream**.
 - **Two further pairings** (observed upstream behaviour; neither appears in the corpus): a
@@ -657,7 +658,7 @@ type Attempt = {
   pairTotal: Observed<number | null>   // second run of a pair only: the combined result, seconds
   countingRun: Observed<1 | 2>         // second run of a 'best' pair only: which run counts
   underReview: Observed<boolean>       // upstream's "under review" mark
-  qualified: Observed<boolean>         // progression mark (Q); not-applicable where unused
+  qualified: Observed<boolean>         // progression mark (Q): known on every placed or marked row, false without Q; not-applicable in a final, super-final or classification — DERIVATIONS §4.7
 }
 
 type AttemptStatus =
@@ -902,7 +903,7 @@ type StandingEntry = {
   bib: string
   rank: number | null          // relayed; age-category rank assembled — §5
   order: number | null         // null until placed
-  result: Outcome              // the Attempt's outcome when it is a result; { kind: 'pending' } while pending or running — §5
+  result: Outcome | null       // the Attempt's outcome when it is a result; { kind: 'pending' } while pending or running; null for an untimed row (outcome unavailable{not-applicable}, §2.6) — §5
   pairTotalSeconds?: number | null // pair scope only: the combined result the placement is based on
   behindSeconds: number | null // this entry's ranked value minus the leader's; duration scopes only
   provisional: boolean
@@ -1213,6 +1214,8 @@ reliable signal that a Phase's results changed is ordinary field-level change: a
   - `at-start`: staged in the start gate, armed for the start impulse and not yet started. It is 8% of
     on-course traffic in recordings, and #166 had no status for it.
   - `not-started → on-course` directly is legal too, when staging is not observed.
+  - `not-started → finished`, when a result row places an Attempt never listed on course: an untimed
+    row (§2.6), or a Kayak Cross result whose heat's listing was missed (`DERIVATIONS.md` §4.2).
   - `at-start → not-started`, when the Attempt is unstaged before any start (observed: a bib staged
     for 5 s in the next day's race, then removed).
   - `left-without-finish → at-start | on-course`, when upstream lists it again in the same
@@ -1316,11 +1319,13 @@ implementation must satisfy, not an algorithm.
   3. **Facts only one source carries** use that source alone:
      - on-course facts — `courseOrder`, `timeToBeat`, a `running` outcome — and `Course.captions`:
        TCP only;
-     - `countingRun`, `Gate.memberPenalties`, `Entry.members`, `ageCategoryId`, `eventBib` and
-       `isTeam`, `Class.ageCategories`, `Event.details`, `Phase.courseId`, `Phase.scheduledStart` and
-       `title`, `Course.courseId`, `layout` and `sectorEndsAfterGate`: the XML only. A first run's own
-       figures are its own Attempt's and follow rules 1–2; the second-run row's `Prev*` columns are
-       not read (`DERIVATIONS.md` §4.5).
+     - `countingRun`, `Entry.members`, `ageCategoryId`, `eventBib` and `isTeam`,
+       `Class.ageCategories`, `Event.details`, `Phase.courseId`, `Phase.scheduledStart` and `title`,
+       `Course.layout` and `sectorEndsAfterGate`: the XML only. (`Gate.memberPenalties` reaches
+       `gates` only from the snapshot, §2.6, and `Course.courseId` is structural; neither has a
+       `source` of its own, so neither is listed.) A first run's own figures are its own Attempt's and
+       follow rules 1–2; the second-run row's `PrevTime`, `PrevPen`, `PrevTotal`, `PrevStatus`,
+       `PrevRnk` and `PrevRnkOrder` are not read (`DERIVATIONS.md` §4.5).
   4. **`operator-write` sits outside rules 1–3.**
      - **`provisional: true`** is an optimistic write awaiting one specific echo (§2.9). It is
        presented the instant it is submitted. The very next results-table observation of that field,
@@ -1484,14 +1489,19 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    once per age category the class has.
 
    `standingKey = "<scope.kind>:<phaseId>[:<heat>]/<ageCategoryId | 'all'>"`, with `phaseId` being the
-   second Phase for a pair.
+   second Phase for a pair. **A `pair` standing exists once the second Phase's `pair.siblingPhaseId`
+   is known** (§2.4): its scope names both Phases. Until the schedule names the first run (a TCP-first
+   cold start), the combined placement is on the Attempts and in the second Phase's `phase` standing
+   only; the `pair` standing's first publication follows the resolution.
    **`asOf`** is the ingest time of the latest observation that changed the standing as serialised;
    for a classification, the latest row observation (§2.4). **A standing is pushed only when its
    serialised form changes:** an entry added or removed, or an entry's `rank`, `order`, `result`,
    `pairTotalSeconds`, `behindSeconds`, `provisional`, `underReview` or `decidedIn`, or `anomalies`.
 2. **Whole-class entries.**
    - Each Attempt of the Phase with a `known` `placement` is an entry; `placement` is `known` only
-     when upstream ranks the row (§2.6). It gets that `placement`'s `rank` and `order`.
+     when upstream ranks the row (§2.6). It gets that `placement`'s `rank` and `order`. An untimed
+     row's entry (§2.6: `outcome` is `unavailable{not-applicable}`) has `result: null` and
+     `behindSeconds: null`; a client shows its placement and no time.
    - Entries sort by `order`.
    - In a heat Phase's `phase` standing, entries sort by `(heat, order)`, as upstream does.
    - For a `pair`, the Attempts are the second Phase's. Their placement is already the combined one,

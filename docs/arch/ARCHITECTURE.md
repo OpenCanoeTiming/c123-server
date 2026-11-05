@@ -265,7 +265,7 @@ This is now simply how every venue runs: CIS is not consumed (`DECISIONS/ADR-011
 
 - **A server started cold at any point of the day** reads the XML snapshot once. From it, it recovers
   every race's rows:
-  - run 1's frozen row, and run 2's summary of run 1;
+  - run 1's frozen row and run 2's own row;
   - placements, age categories, members and course layouts.
 
   On a real event, a cold start in the afternoon recovered 397 first runs and 384 second runs complete.

@@ -117,8 +117,8 @@ Phase table). It emits that message's resolved values and per-message diagnostic
 retracts.** The core owns everything that needs state:
 - the run generation and attribution, which stamp `run` on each observation (§4.11);
 - `eventTime` where `ctx` had no Phase date (§0.2);
-- course binding, `gates` from retained cells and the `unavailable{not-configured}` determination
-  (§4.6);
+- course binding, `gates` and Cross `faults` from retained cells, and the `unavailable{not-configured}`
+  determination (§4.6);
 - the untimed flag's inheritance by a TCP row (§4.4);
 - the on-course set, the leave rule and `featuredByUpstream` (§4.1, §4.8);
 - the splits-armed state (§2.3, §4.8), the cell merge (§4.6(e)), retraction and contradiction (§4.12),
@@ -126,9 +126,13 @@ retracts.** The core owns everything that needs state:
   (`source-disagreement`, `contradicted-finish`, `duplicate-finish`, `stale-mark`).
 
 The parser raises `unparseable-cell` and `member-sum-mismatch` (`CONTRACTS.md` §4) and four
-ingest-only kinds that reach the admin log and never `GET /api/diagnostics`: `unknown-format-token`,
-`unresolved-member`, `unparseable-field` and `gates-absent`. A parser diagnostic reports, never
-guesses: a value it cannot read is absent, not invented.
+ingest-only kinds that reach the admin log and never `GET /api/diagnostics`: `unknown-format-token`
+(a format token outside `CONTRACTS.md` §2.4's table; the Phase is still built by the table's last
+row), `unresolved-member` (a team member reference matching no participant, §3), `unparseable-field`
+(an attribute whose text is not of its type, such as a `Rank` with an empty `RankOrder`, §4.7, or a
+time that does not parse) and `gates-absent` (a finished slalom on-course listing without `Gates`,
+§4.6(a): no duration inference is possible). A parser diagnostic reports, never guesses: a value it
+cannot read is absent, not invented.
 
 ---
 
@@ -177,8 +181,8 @@ guesses: a value it cannot read is absent, not invented.
   - `pair.siblingPhaseId` is the Phase with the same `classId` and the first-run token. When several
     exist, take the one with the same schedule date. This mirrors upstream's own pairing behaviour.
     Until the schedule names it, `siblingPhaseId` is `null`; `role` and `combination` are the token's
-    regardless, so §4.4's second-run reading applies from the first row. An `NHT2` whose first-run
-    token the schedule never names has `pair: null` (§10 item 21).
+    regardless, so §4.4's second-run reading applies from the first row. An `NHT2` has `pair: null`
+    until its first-run token is known (§10 item 21); its rows read as a single run meanwhile.
 - **`date`.**
   - Source: the date part of `XML.Schedule.StartTime`, a full date-time with offset. Envelope:
     `source: 'xml'`, `confidence: 'authoritative'`.
@@ -362,9 +366,10 @@ it carries: a DNF row can keep a time, even another athlete's finish (`CONTRACTS
   - `DNS`, `DNF`, `CAP`, `RAL`, `DSQ`, `DSQ-R` and `DQB` map to `dns`, `dnf`, `cap`, `ral`, `dsq`,
     `dsq-r` and `dqb`.
   - `NON-RK` maps to `non-ranked`, a finished run excluded from ranking.
-  - `*` means `underReview: true`, with the run otherwise `finished`. Every result row states
-    `underReview`, `false` without the mark, so a withdrawn `*` clears; a row that stated it only when
-    true could never clear it (INV-1).
+  - `*` means `underReview: true`, with the run otherwise `finished`. Every result row that carries a
+    time, a mark or a placement states `underReview`, `false` without the mark, so a withdrawn `*`
+    clears; a row that stated it only when true could never clear it (INV-1). A row carrying none of
+    the three states nothing (INV-7's blank row, `CONFORMANCE-VECTORS.md` §1).
   - Empty with a time means `finished`.
   - Any other value maps to `other`.
 - **No-results arrive only here, and not always promptly.**
@@ -400,7 +405,7 @@ it carries: a DNF row can keep a time, even another athlete's finish (`CONTRACTS
 
 **`running`.**
 - `elapsedSeconds` is `OnCourse.Result[T]@Time`, whole seconds while running. `penaltySeconds` is
-  `@Pen`.
+  `@Pen`; in a Kayak Cross time trial it is `0` by rule (§4.4), `@Pen` being ignored in Cross (§4.6(d)).
 - The value is upstream's own display. It includes a configurable offset, and during a split hold it
   shows the split time. It is relayed as displayed: `confidence: 'authoritative'`,
   `provisional: true`.
@@ -556,13 +561,24 @@ slalom course every slot is a gate, so cell `i` is gate `i+1`.
   9-gate Cross course it divided evenly as width 10, which is silently wrong.
 
 **No course bound yet** (§0.5). With no course in `ctx` the parser emits the parsed cells as they
-stand — `cells`, 30 from a fixed-width string, every token from an on-course string — and no `gates`,
-and raises no `unparseable-cell`, since a cell may belong to no slot. The core presents
-`gates: not-yet` (`CONTRACTS.md` §1.2: nothing is yet known to be unconfigured), retains the latest
-cells per source, and builds `Gate[]` from them, first `slotCount` cells, when the course binds;
-`unavailable{not-configured}` only once the snapshot shows the Phase's course with an empty or
-fabricated layout (§2.3). Recorded: 0 such rows, since the snapshot preceded the first push in every
-recording.
+stand — `cells`, 30 from a fixed-width string, every token from an on-course string — and no `gates`
+or `faults`, and raises no `unparseable-cell`, since a cell may belong to no slot. The core retains
+the latest cells per source and decides among three states:
+- **`not-yet`** while nothing is known either way: the Phase's `courseId` is not yet read and no
+  `RaceConfig` for the Phase has been seen (`CONTRACTS.md` §1.2).
+- **`known`**, built from the retained cells when the course binds: `Gate[]` from the first
+  `slotCount` cells, or in Kayak Cross `faults` from the cells and the captions (d); the parser's
+  cell→`Gate[]`/`faults` function is reused.
+- **`unavailable{not-configured}`** when nothing configured can supply a course: the XML source is
+  not configured (`SourceStatus.xml`, §5), so no `courseId` can ever bind; the snapshot shows the Phase
+  with no `CourseNr`, or a course whose layout is empty (the snapshot's determination); or the
+  `RaceConfig` for the current Phase is fabricated by §2.3's tests (the parser's determination, from
+  the gate string, the transmitted count and the captions, applied by the core to the current Phase).
+  A later snapshot or `RaceConfig` that binds a real course replaces it.
+
+Recorded: none in the replayed windows (`DECISIONS/ADR-017` S1-12, S1-30), where the snapshot preceded
+the first push; whole recordings were not recounted, and gate 2 reaches this path at every cold start
+without a snapshot.
 
 **(c) Team rows** (`TR1/TR2`, `TSR`, `TS1/TS2/TSF`, `TFI`; source and static sample only, no recording).
 - `Gates` holds the per-gate **sum** over the members (4, 52, 100, 150…). Upstream computes it from
@@ -642,7 +658,9 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
 - **`scheduledStart`.** In slalom, `StartTime` (`H:MM:SS`) is the scheduled start, built per §0.2.
 - **`startOrder`** is `@StartOrder`.
 - **`qualified`** is `Results.Result@Q` or `XML.Results.Qualified`, equal to `"Q"`, stated `known` on
-  every result row of a Phase whose `stage` is not `final`, `super-final` or `classification`. On
+  every result row that carries a time, a mark or a placement (a blank row states nothing, INV-7) in a
+  Phase whose `stage` is not `final`, `super-final` or `classification`; on a `run` Phase without a
+  cut this is `known: false` throughout. On
   those three it is `unavailable{not-applicable}`, except that a row there carrying `Q` is still
   presented `true`: a stated fact is never dropped. The boundary is by `stage` (round 17, E4;
   recorded: `Q` throughout the junior time trial, E1).
@@ -948,7 +966,7 @@ changes: a late correction, a retraction, a contradiction, a re-baseline. The di
 21. **The leave rule has a number**, `onCourseLeaveAfterSeconds` = 3 s, and `at-start` is any listing
     without a start (S1-8, S1-16, S1-17; §4.1).
 22. **The parser/core line is stated** (round 17, 2026-11-05, server#201 review and #247; §0.5).
-    `Prev*` is not read (§4.5); `run` is stamped by the core (§4.11); cells are retained before a
+    the six `Prev*` run-1 columns are not read (§4.5); `run` is stamped by the core (§4.11); cells are retained before a
     course binds (§4.6); the untimed flag is the parser's and its inheritance the core's, 47 Attempts
     (§4.4); an untimed row is `finished` (§4.2); an `XT` `duration` carries `penaltySeconds: 0`
     (§4.4); `faults` is `not-yet` until a cell is judged (§4.6(d)); `qualified` is bounded by `stage`
@@ -996,6 +1014,7 @@ but no code path or recording ever filled it.
 | `Results.TieBreaker` | Upstream's internal tie key. Its effect reaches us already applied, in the order fields |
 | `Results.GateTimes` | **Not gate passages.** Each stamp is the official time at which a judge first entered a penalty for the gate, minus 2 s. Gaps are back-filled in 2 s steps, and the order along the course is only approximately monotonic. If ever needed: `Gate.judgedAt`, `confidence: 'inferred'`, never an `eventTime` |
 | `Results.PrevRnk` (Cross meaning), `RoundNr`, `HasWildcard`, `Tag` | Cross ladder bookkeeping. Progression is relayed through `qualified` and the classification |
+| `Results.PrevTime`, `PrevPen`, `PrevTotal`, `PrevStatus`, `PrevRnk` (slalom meaning), `PrevRnkOrder` | Run 1's figures restated on the second-run row. Run 1 is its own Attempt, whose row is frozen and complete (§4.5); `PrevCatRnk*` stays the §5 step 4 check |
 | `Results.CheckList*`, `_*Order`, `Print*`, `Sector*`, `PrevGates`, `PrevSplit1`, `ForceTVSChannel`, `TVSStream*` | Internal: print copies, paper check-list workflow, TV routing |
 | `Events.Description`, `Country`, `NOC`, `TimeMode`, `TimingProvider`, `StartListsLocked`, report and logo fields, `ReportLanguage*`, `RankingOrderMode`, `AssignBibsReverse`, ODF codes, `CatHandling` | Free text, print layout, or never filled. Logos could brand a live page later. **Caution: `CanoeDiscipline` reads `Slalom` for a Cross event** |
 | `GateStatistics` (all) | Derivable from `gates`. Always zero for two-run formats in recordings |

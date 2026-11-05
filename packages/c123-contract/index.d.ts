@@ -113,7 +113,7 @@ export type Attempt = {
   pairTotal: Observed<number | null>   // second run of a pair only: the combined result, seconds
   countingRun: Observed<1 | 2>         // second run of a 'best' pair only: which run counts
   underReview: Observed<boolean>       // upstream's "under review" mark
-  qualified: Observed<boolean>         // progression mark (Q); not-applicable where unused
+  qualified: Observed<boolean>         // progression mark (Q): known on every placed or marked row, false without Q; not-applicable in a final, super-final or classification — DERIVATIONS §4.7
 }
 
 export type AttemptStatus =
@@ -159,7 +159,7 @@ export type StandingEntry = {
   bib: string
   rank: number | null          // relayed; age-category rank assembled — §5
   order: number | null         // null until placed
-  result: Outcome              // the Attempt's outcome when it is a result; { kind: 'pending' } while pending or running — §5
+  result: Outcome | null       // the Attempt's outcome when it is a result; { kind: 'pending' } while pending or running; null for an untimed row (outcome unavailable{not-applicable}, §2.6) — §5
   pairTotalSeconds?: number | null // pair scope only: the combined result the placement is based on
   behindSeconds: number | null // this entry's ranked value minus the leader's; duration scopes only
   provisional: boolean

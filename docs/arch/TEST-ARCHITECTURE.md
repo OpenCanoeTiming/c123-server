@@ -264,14 +264,15 @@ the step index, the Attempt, the field and the property number.
    retraction from the snapshot (property 5); by rule 1, a snapshot result row superseding an on-course
    inference; or at a `rebaseline` — the first four under property 8's content-age guard. (d) Each field's presented `source` lies in the
    set `CONTRACTS.md` §4 INV-2 rule 3 names: `courseOrder`, `timeToBeat`, a `running` outcome and
-   `Course.captions` only `tcp`; `countingRun`, `Gate.memberPenalties`, `Entry.members`,
-   `ageCategoryId`, `eventBib` and `isTeam`, `Class.ageCategories`, `Event.details`,
-   `Phase.courseId`, `Phase.scheduledStart` and `title`, `Course.courseId`, `layout` and
-   `sectorEndsAfterGate` only `xml`. A first run's own figures are its own Attempt's, from either
-   source.
+   `Course.captions` only `tcp`; `countingRun`, `Entry.members`, `ageCategoryId`, `eventBib` and
+   `isTeam`, `Class.ageCategories`, `Event.details`, `Phase.courseId`, `Phase.scheduledStart` and
+   `title`, `Course.layout` and `sectorEndsAfterGate` only `xml`. Fields without an envelope of their
+   own (`Gate.memberPenalties`, `Course.courseId`) are not clauses. A first run's own figures are its
+   own Attempt's, from either source.
 7. **Contradiction (INV-2d).** `status` goes `finished → on-course` only at: an on-course listing of
    the Attempt with the generation's start and no finish (this property); a listing with a new start
-   (property 10, `at-start` being the other target there); or a retraction (property 5). In the first
+   (property 10, `at-start` being the other target there); a retraction (property 5); or a
+   `rebaseline` of its scope (property 13), which ingests a scope snapshot. In the first
    case, in that same step `outcome` becomes
    `running`, `placement`, `pairTotal` and `countingRun` become `not-yet`, and `diagnostics.updated`
    carries a `contradicted-finish` for the Attempt, with `finishTime` (`null` where no finish time is
@@ -279,7 +280,7 @@ the step index, the Attempt, the field and the property number.
    for the Attempt carrying the contradicted finish: equal `eventTime` where both have one, else equal
    run time (`DERIVATIONS.md` §4.12). The diagnostic disappears only at a step presenting a different
    finish by the same comparison, a mark or a retraction, or at a listing of the Attempt with a
-   finish; after such a lift the contradicted rows stay unpresented. Kayak Cross Attempts never show this transition.
+   finish; after such a lift the contradicted rows stay unpresented. Kayak Cross Attempts never show the first case.
 8. **Content age across sources (INV-2c).** A presented results-table field flips from `tcp` to `xml`
    only if the latest `xml-rewrite-detected` time minus the poll interval is later than the presented
    `tcp` observation's `observedAt` (property 5's guard is this rule applied to retraction). A flip
@@ -299,7 +300,9 @@ the step index, the Attempt, the field and the property number.
     `provisional: true` exactly when: it is an inference (`kind: inference`, or
     `outcome.kind: 'running'`); or upstream still lists the Attempt (no `oncourse-left` yet, from the
     raw stream at admission; the latest `oncourse.updated` in a **D** re-run) and either a presented
-    `gates` cell is `null` or `gates` is not `known` because no course is bound; or it is a second run's `placement`,
+    `gates` cell is `null`, a Kayak Cross Attempt's slot cells leave a slot blank (`faults` is read
+    over the slot cells, `DERIVATIONS.md` §4.6(d)), or `gates`, in Cross `faults`, is not `known`
+    because no course is bound; or it is a second run's `placement`,
     `pairTotal` or `countingRun` carried over from run 1, from the listing that starts run 2 until a
     row of run 2, carrying its time or its mark, restates that field — judged field by field, since
     `countingRun` arrives only with the XML row; or its `source` is `operator-write` with a pending

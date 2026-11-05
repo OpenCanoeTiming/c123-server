@@ -12,7 +12,8 @@ contract. Nothing here adds an obligation. Disagreements between documents, and 
 not stated, are listed unresolved under "Gaps and conflicts". Derived at 0c199af, plus the working
 tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not tested"; round 17
 (2026-11-05) added the nullable `siblingPhaseId` and `decidedIn`, the member `externalId` as `null`, the
-untimed row's `status`, the Cross time trial's `duration` and the fixture's `gate2.exercised`.
+untimed row's `status`, the Cross time trial's `duration` and the fixture's `gate2.exercised`; its review added
+the deferred `pair` standing, `StandingEntry.result: null` and `not-started → finished`.
 
 ---
 
@@ -67,7 +68,8 @@ untimed row's `status`, the Cross time trial's `duration` and the fixture's `gat
 - [ ] Render `left-without-finish` as an observed removal with no reason; show a mark only once `status` carries one; never infer DNF (CONTRACTS §2.6, §3.2, §7.1; ARCHITECTURE §6.G).
 - [ ] Render `outcome.kind: 'no-result'` as its mark, whatever time the row carried; never let a time suppress a mark (CONTRACTS §2.6).
 - [ ] Show `non-ranked` as raced and timed but unranked, and `ral` where its `placement` puts it (CONTRACTS §2.6).
-- [ ] Show a placed row whose `outcome` is `unavailable{not-applicable}` with its placement and no time, its `status` being `finished`; never detect placeholder values such as `100.00` on the client (CONTRACTS §2.6; DERIVATIONS §4.2, §4.4).
+- [ ] Show a placed row whose `outcome` is `unavailable{not-applicable}` with its placement and no time, its `status` being `finished` and its `StandingEntry.result` `null`; never detect placeholder values such as `100.00` on the client (CONTRACTS §2.6, §2.7, §3.2, §5; DERIVATIONS §4.2, §4.4).
+- [ ] Expect a `pair` standing only once the second Phase's `pair.siblingPhaseId` is known; before that the combined placement is on the Attempts and the `phase` standing (CONTRACTS §2.4, §5).
 - [ ] In a Kayak Cross time trial, expect `duration.penaltySeconds: 0` and `totalSeconds = runSeconds` by rule, and show the judging from `faults` (CONTRACTS §2.6; DERIVATIONS §4.4, §4.6).
 - [ ] Choose which Phase to display itself, from `Phase.status`, `stage`, `programmeOrder`, the on-course set and each Standing's `asOf`; expect no "current race" from the server; default to the Phase of the first on-course Attempt and the most recently changed Standing, and cycle or split when several Phases run at once (ARCHITECTURE §2; CONTRACTS §7.1, §7.2).
 - [ ] Read a second-run mark as describing run 2 only; the combined result stays in `placement` and `pairTotal` (CONTRACTS §2.6, §5).
@@ -222,7 +224,7 @@ untimed row's `status`, the Cross time trial's `duration` and the fixture's `gat
 - [ ] Apply INV-1, INV-3, INV-4, INV-5, INV-6 and INV-2 rule 4, and honour explicit `not-yet`, `DELETE` and the Phase replace; apply none of INV-2 rules 1 to 3, INV-2b, INV-2c, INV-2d or INV-7 (CONTRACTS §4, §8.3; ARCHITECTURE §3).
 - [ ] Among bridge observations of one field, present the later-ingested one (CONTRACTS §4, §8.3).
 - [ ] Accept `stage` on the Phase push and serve it; it is structural, not a vendor token (CONTRACTS §2.4, §8.3; ADR-007).
-- [ ] Accept `pair.siblingPhaseId: null` on the Phase push and serve it as `null` (CONTRACTS §2.4, §8.3).
+- [ ] Accept `pair.siblingPhaseId: null` on the Phase push and serve it as `null`; publish the `pair` standing only once it is non-null (CONTRACTS §2.4, §5, §8.3).
 - [ ] Expect the bridge to re-push the current state of every changed resource after an outage, a cleared rejection or a restart, and treat each as the idempotent `PUT` it is (CONTRACTS §1.5, §2.8, §8.3).
 - [ ] Assemble standings as c123-server does, from the pushed `placement` and `ageCategoryId`, without the category-rank check and without the order-anomaly check; rank nothing; emit `standing.updated` only when the standing's serialised form changed, never for a running athlete's ticks (CONTRACTS §5, §8, §8.3; ADR-012; ADR-017).
 - [ ] Set each Standing's `asOf` to the ingest time of the latest observation behind any of its entries (CONTRACTS §5).
