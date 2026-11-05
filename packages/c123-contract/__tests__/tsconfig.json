@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "types": []
   },
-  "include": ["./*.test-d.ts", "./_types.ts", "./observed-samples.ts"]
+  "include": ["./*.test-d.ts", "./observed-samples.ts"]
 }

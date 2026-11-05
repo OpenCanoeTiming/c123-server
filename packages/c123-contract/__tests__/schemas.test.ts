@@ -101,22 +101,64 @@ describe('row 10 observed schema enforces §1.2', () => {
 // ---------------------------------------------------------------- row 11: CONTRACTS §1.4
 describe('row 11 error schema enforces §1.4', () => {
   const v = () => validator('error.schema.json')
+  const WITH_DETAILS = ['validation-failed', 'write-not-possible', 'source-unavailable']
+  const WITHOUT_DETAILS = [
+    'event-not-found', 'class-not-found', 'course-not-found', 'phase-not-found', 'attempt-not-found',
+    'write-not-found', 'flag-not-found', 'vendor-payload-rejected', 'unauthorized', 'forbidden', 'rate-limited',
+  ]
+  const err = (code: string, extra: object = {}) => ({ error: { code, message: 'm', ...extra } })
 
-  test('error accepts the §1.4 example and every code of the closed table', () => {
+  test('error accepts the §1.4 example', () => {
     const validate = v()
     expect(validate({ error: { code: 'phase-not-found', message: 'no Phase K1M_ST_BR3_6 in this event' } }), JSON.stringify(validate.errors)).toBe(true)
-    for (const code of [
-      'event-not-found', 'class-not-found', 'course-not-found', 'phase-not-found', 'attempt-not-found',
-      'write-not-found', 'flag-not-found', 'write-not-possible', 'validation-failed',
-      'vendor-payload-rejected', 'unauthorized', 'forbidden', 'rate-limited', 'source-unavailable',
-    ]) {
-      expect(validate({ error: { code, message: 'm' } }), code).toBe(true)
-    }
   })
 
-  test('error accepts validation-failed details [{field, issue}]', () => {
+  test.each(WITHOUT_DETAILS)('error accepts %s without details', (code) => {
+    expect(v()(err(code))).toBe(true)
+  })
+
+  test.each(WITHOUT_DETAILS)('error rejects %s with details (absent, never present or null)', (code) => {
     const validate = v()
-    expect(validate({ error: { code: 'validation-failed', message: 'm', details: [{ field: 'gate', issue: 'out of range' }] } })).toBe(true)
+    expect(validate(err(code, { details: [] }))).toBe(false)
+    expect(validate(err(code, { details: null }))).toBe(false)
+    expect(validate(err(code, { details: { reason: 'cross' } }))).toBe(false)
+  })
+
+  test('error accepts validation-failed with details [{field, issue}] and rejects other shapes', () => {
+    const validate = v()
+    expect(validate(err('validation-failed', { details: [{ field: 'gate', issue: 'out of range' }] }))).toBe(true)
+    expect(validate(err('validation-failed', { details: [] }))).toBe(true)
+    expect(validate(err('validation-failed'))).toBe(false)
+    expect(validate(err('validation-failed', { details: null }))).toBe(false)
+    expect(validate(err('validation-failed', { details: { reason: 'cross' } }))).toBe(false)
+    expect(validate(err('validation-failed', { details: [{ field: 'gate' }] }))).toBe(false)
+    expect(validate(err('validation-failed', { details: [{ field: 'g', issue: 'i', extra: 1 }] }))).toBe(false)
+  })
+
+  test.each(['run-not-closed', 'team-boat', 'cross'])('error accepts write-not-possible with reason %s', (reason) => {
+    expect(v()(err('write-not-possible', { details: { reason } }))).toBe(true)
+  })
+
+  test('error rejects write-not-possible with a missing, unknown or misshapen details', () => {
+    const validate = v()
+    expect(validate(err('write-not-possible'))).toBe(false)
+    expect(validate(err('write-not-possible', { details: { reason: 'unreadable' } }))).toBe(false)
+    expect(validate(err('write-not-possible', { details: { reason: 'because' } }))).toBe(false)
+    expect(validate(err('write-not-possible', { details: {} }))).toBe(false)
+    expect(validate(err('write-not-possible', { details: [{ field: 'a', issue: 'b' }] }))).toBe(false)
+    expect(validate(err('write-not-possible', { details: null }))).toBe(false)
+  })
+
+  test.each(['not-configured', 'unreadable', 'invalid'])('error accepts source-unavailable with reason %s', (reason) => {
+    expect(v()(err('source-unavailable', { details: { reason } }))).toBe(true)
+  })
+
+  test('error rejects source-unavailable with a missing, unknown or misshapen details', () => {
+    const validate = v()
+    expect(validate(err('source-unavailable'))).toBe(false)
+    expect(validate(err('source-unavailable', { details: { reason: 'run-not-closed' } }))).toBe(false)
+    expect(validate(err('source-unavailable', { details: { reason: 'offline' } }))).toBe(false)
+    expect(validate(err('source-unavailable', { details: [] }))).toBe(false)
   })
 
   test('error rejects a missing code, an unknown code and a missing message', () => {
@@ -126,18 +168,12 @@ describe('row 11 error schema enforces §1.4', () => {
     expect(validate({ error: { code: 'PhaseNotFound', message: 'x' } })).toBe(false)
     expect(validate({ error: { code: 'phase-not-found' } })).toBe(false)
     expect(validate({ code: 'phase-not-found', message: 'x' })).toBe(false)
+    expect(WITH_DETAILS.length + WITHOUT_DETAILS.length).toBe(14)
   })
 })
 
 // ---------------------------------------------------------------- row 12: TEST-ARCHITECTURE §3.2, §4
 describe('row 12 admission block', () => {
-  // fixture-admitted.schema.json does not compile under strictTypes (its `then` branch uses
-  // `properties` without `type: object`); that is row 9's red, recorded in the result file.
-  // Row 12 asserts behaviour, so it compiles with strictTypes off and everything else strict.
-  const admissionValidator = () => {
-    const a = new Ajv2020({ strict: true, strictTypes: false, allErrors: true })
-    return a.compile(load('fixture-admitted.schema.json'))
-  }
   const sha = 'a'.repeat(64)
   const pair = [sha, 'b'.repeat(64)]
   const admitted = () => ({
@@ -160,12 +196,12 @@ describe('row 12 admission block', () => {
   })
 
   test('fixture-admitted accepts a fully admitted block', () => {
-    const validate = admissionValidator()
+    const validate = validator('fixture-admitted.schema.json')
     expect(validate(admitted()), JSON.stringify(validate.errors)).toBe(true)
   })
 
   test('fixture-admitted accepts a candidate that fails the gates (candidates are legal)', () => {
-    const validate = admissionValidator()
+    const validate = validator('fixture-admitted.schema.json')
     const c = admitted()
     c.status = 'candidate'
     c.gate1 = false
@@ -185,14 +221,14 @@ describe('row 12 admission block', () => {
     ['an empty human line', (b) => { b.gate3.human = '' }],
   ]
   test.each(refusals)('fixture-admitted refuses status admitted with %s', (_name, mutate) => {
-    const validate = admissionValidator()
+    const validate = validator('fixture-admitted.schema.json')
     const b = admitted()
     mutate(b)
     expect(validate(b)).toBe(false)
   })
 
   test('fixture-admitted refuses a block missing a required part', () => {
-    const validate = admissionValidator()
+    const validate = validator('fixture-admitted.schema.json')
     for (const key of ['status', 'gate1', 'gate2', 'gate3', 'evidence'] as const) {
       const b: Record<string, unknown> = admitted()
       delete b[key]

@@ -1,319 +1,146 @@
-// Rows 4-7. CONTRACTS §1.4, §3.1, §7.1-§7.4. Compile-time assertions, enforced by
-// vitest typecheck (vitest.config.ts). Names that CONTRACTS does not give are fixed
-// here and the implementer follows them (issue #199 "Naming").
+// Rows 4-8 (on-site half). Shape equality with CONTRACTS is row 1; these keep only what
+// two-way equality does not demonstrate: narrowing by discriminant, and null versus
+// absent where the contract says so (§1.2, §1.3). Enforced by vitest typecheck.
 import { expectTypeOf, test } from 'vitest'
 import type {
-  Attempt, Class, Course, Entry, Event, GateCheck, GateFlag, Observed, Person, Phase,
-  PhaseStatus, SourceStatus, SourceTag, Standing, Timestamp, WriteRequest,
-  // names fixed by this test:
-  ErrorCode, ErrorEnvelope, WriteNotPossibleReason, Diagnostic, OnsitePerson, OnsiteEntry,
-  EventCurrentResponse, ClassPhasesResponse, ClassEntriesResponse, PhaseAttemptsResponse,
-  ClassStandingsResponse, OnCourseResponse, PhaseChecksResponse, SourcesResponse,
-  DiagnosticsResponse, RebaselineScope, RebaselineRequest, RebaselineResponse, WsMessage,
-  PenaltyWriteRequest, GateCheckRequest, GateFlagCreateRequest, FlagResolutionRequest,
+  Diagnostic, ErrorCode, ErrorEnvelope, Gate, GateCheck, GateFlag, Observed, StandingEntry,
+  Standing, WsMessage, WriteRequest, Attempt, Timestamp, Event, OnsiteEvent,
 } from '../index.js'
-import type { OptionalKeys, RequiredKeys } from './_types.js'
 
-type Msg<T extends string> = Extract<WsMessage, { type: T }>
+type Err = ErrorEnvelope['error']
+type NoDetails = Exclude<ErrorCode, 'validation-failed' | 'write-not-possible' | 'source-unavailable'>
 
-const ERROR_CODES = [
-  'event-not-found', 'class-not-found', 'course-not-found', 'phase-not-found',
-  'attempt-not-found', 'write-not-found', 'flag-not-found', 'write-not-possible',
-  'validation-failed', 'vendor-payload-rejected', 'unauthorized', 'forbidden',
-  'rate-limited', 'source-unavailable',
-] as const
-type ErrorCodes = (typeof ERROR_CODES)[number]
+test('ErrorEnvelope narrows details by code (§1.4)', () => {
+  expectTypeOf<Extract<Err, { code: 'validation-failed' }>['details']>().toEqualTypeOf<{ field: string; issue: string }[]>()
+  expectTypeOf<Extract<Err, { code: 'write-not-possible' }>['details']['reason']>().toEqualTypeOf<'run-not-closed' | 'team-boat' | 'cross'>()
+  expectTypeOf<Extract<Err, { code: 'source-unavailable' }>['details']['reason']>().toEqualTypeOf<'not-configured' | 'unreadable' | 'invalid'>()
+  expectTypeOf<Err['message']>().toEqualTypeOf<string>()
+  expectTypeOf<Err['code']>().toEqualTypeOf<ErrorCode>()
 
-// ---------------------------------------------------------------- row 4
-test('error envelope per §1.4: code is the closed union, message a string', () => {
-  expectTypeOf<ErrorCode>().toEqualTypeOf<ErrorCodes>()
-  expectTypeOf<ErrorEnvelope>().toHaveProperty('error')
-  expectTypeOf<ErrorEnvelope['error']['code']>().toEqualTypeOf<ErrorCode>()
-  expectTypeOf<ErrorEnvelope['error']['message']>().toEqualTypeOf<string>()
-  expectTypeOf<RequiredKeys<ErrorEnvelope>>().toEqualTypeOf<'error'>()
-  expectTypeOf<RequiredKeys<ErrorEnvelope['error']>>().toEqualTypeOf<'code' | 'message'>()
-  expectTypeOf<OptionalKeys<ErrorEnvelope['error']>>().toEqualTypeOf<'details'>()
-  // @ts-expect-error code outside the closed vocabulary
-  const bad: ErrorEnvelope = { error: { code: 'no-such-code', message: 'x' } }
-  // @ts-expect-error code is required
-  const noCode: ErrorEnvelope = { error: { message: 'x' } }
-  void [bad, noCode]
+  function narrow(e: Err) {
+    if (e.code === 'validation-failed') expectTypeOf(e.details).toEqualTypeOf<{ field: string; issue: string }[]>()
+    if (e.code === 'write-not-possible') expectTypeOf(e.details.reason).toEqualTypeOf<'run-not-closed' | 'team-boat' | 'cross'>()
+    if (e.code === 'source-unavailable') expectTypeOf(e.details.reason).toEqualTypeOf<'not-configured' | 'unreadable' | 'invalid'>()
+    if (e.code === 'event-not-found') {
+      // @ts-expect-error details does not exist on a code that carries none
+      void e.details
+    }
+  }
+  void narrow
 })
 
-// ---------------------------------------------------------------- row 5 (§3.1 PhaseStatus used by Phase.status)
-test('§7.1 phase status vocabulary per §3.1 is closed (10 values)', () => {
-  expectTypeOf<PhaseStatus>().toEqualTypeOf<
-    'scheduled' | 'running' | 'paused' | 'unofficial' | 'official' | 'revised'
-    | 'protested' | 'postponed' | 'cancelled' | 'other'
-  >()
-  expectTypeOf<Phase['status']>().toEqualTypeOf<Observed<PhaseStatus>>()
+test('ErrorEnvelope: details is required on its three codes and absent on every other (§1.4)', () => {
+  // every code without details is valid bare, and refused with details (fresh literals: excess keys are errors)
+  expectTypeOf<{ code: NoDetails; message: string }>().toExtend<Err>()
+  expectTypeOf<NoDetails>().toEqualTypeOf<'event-not-found' | 'class-not-found' | 'course-not-found' | 'phase-not-found' | 'attempt-not-found' | 'write-not-found' | 'flag-not-found' | 'vendor-payload-rejected' | 'unauthorized' | 'forbidden' | 'rate-limited'>()
+  // @ts-expect-error details is absent on event-not-found
+  const d_event_not_found: Err = { code: 'event-not-found', message: 'm', details: [] }
+  void d_event_not_found
+  // @ts-expect-error details is absent on class-not-found
+  const d_class_not_found: Err = { code: 'class-not-found', message: 'm', details: [] }
+  void d_class_not_found
+  // @ts-expect-error details is absent on course-not-found
+  const d_course_not_found: Err = { code: 'course-not-found', message: 'm', details: [] }
+  void d_course_not_found
+  // @ts-expect-error details is absent on phase-not-found
+  const d_phase_not_found: Err = { code: 'phase-not-found', message: 'm', details: [] }
+  void d_phase_not_found
+  // @ts-expect-error details is absent on attempt-not-found
+  const d_attempt_not_found: Err = { code: 'attempt-not-found', message: 'm', details: [] }
+  void d_attempt_not_found
+  // @ts-expect-error details is absent on write-not-found
+  const d_write_not_found: Err = { code: 'write-not-found', message: 'm', details: [] }
+  void d_write_not_found
+  // @ts-expect-error details is absent on flag-not-found
+  const d_flag_not_found: Err = { code: 'flag-not-found', message: 'm', details: [] }
+  void d_flag_not_found
+  // @ts-expect-error details is absent on vendor-payload-rejected
+  const d_vendor_payload_rejected: Err = { code: 'vendor-payload-rejected', message: 'm', details: [] }
+  void d_vendor_payload_rejected
+  // @ts-expect-error details is absent on unauthorized
+  const d_unauthorized: Err = { code: 'unauthorized', message: 'm', details: [] }
+  void d_unauthorized
+  // @ts-expect-error details is absent on forbidden
+  const d_forbidden: Err = { code: 'forbidden', message: 'm', details: [] }
+  void d_forbidden
+  // @ts-expect-error details is absent on rate-limited
+  const d_rate_limited: Err = { code: 'rate-limited', message: 'm', details: [] }
+  void d_rate_limited
+  // @ts-expect-error details is never null
+  const dn: Err = { code: 'forbidden', message: 'm', details: null }
+  void dn
+  // the three that carry it are refused without it
+  expectTypeOf<{ code: 'validation-failed'; message: string }>().not.toExtend<Err>()
+  expectTypeOf<{ code: 'write-not-possible'; message: string }>().not.toExtend<Err>()
+  expectTypeOf<{ code: 'source-unavailable'; message: string }>().not.toExtend<Err>()
+  // and refused with another code's details
+  expectTypeOf<{ code: 'write-not-possible'; message: string; details: { reason: 'invalid' } }>().not.toExtend<Err>()
+  expectTypeOf<{ code: 'source-unavailable'; message: string; details: { reason: 'cross' } }>().not.toExtend<Err>()
 })
 
-// ---------------------------------------------------------------- row 5: on-site tier serialisation (§7 header)
-test('§7.1 Entry on-site: Person.birthDate is replaced by birthYear: number | null', () => {
-  expectTypeOf<RequiredKeys<OnsitePerson>>().toEqualTypeOf<'givenName' | 'familyName' | 'birthYear' | 'externalId'>()
-  expectTypeOf<OptionalKeys<OnsitePerson>>().toEqualTypeOf<never>()
-  expectTypeOf<OnsitePerson['birthYear']>().toEqualTypeOf<number | null>()
-  expectTypeOf<OnsitePerson['externalId']>().toEqualTypeOf<Person['externalId']>()
-  expectTypeOf<keyof OnsiteEntry>().toEqualTypeOf<keyof Entry>()
-  expectTypeOf<OnsiteEntry['members']>().toEqualTypeOf<Observed<OnsitePerson[]>>()
-  expectTypeOf<OnsiteEntry['displayName']>().toEqualTypeOf<Entry['displayName']>()
-  expectTypeOf<OnsiteEntry['isTeam']>().toEqualTypeOf<Entry['isTeam']>()
-  expectTypeOf<'birthDate' extends keyof OnsitePerson ? true : false>().toEqualTypeOf<false>()
-})
-
-// ---------------------------------------------------------------- row 5: one per REST row of §7.1
-test('§7.1 GET /api/events/current', () => {
-  expectTypeOf<keyof EventCurrentResponse>().toEqualTypeOf<'asOfSeq' | 'event' | 'classes' | 'courses'>()
-  expectTypeOf<RequiredKeys<EventCurrentResponse>>().toEqualTypeOf<'asOfSeq' | 'event' | 'classes' | 'courses'>()
-  expectTypeOf<EventCurrentResponse['asOfSeq']>().toEqualTypeOf<number>()
-  expectTypeOf<EventCurrentResponse['event']>().toEqualTypeOf<Event>()
-  expectTypeOf<EventCurrentResponse['classes']>().toEqualTypeOf<Class[]>()
-  expectTypeOf<EventCurrentResponse['courses']>().toEqualTypeOf<Course[]>()
-})
-
-test('§7.1 GET /api/classes/{classId}/phases', () => {
-  expectTypeOf<keyof ClassPhasesResponse>().toEqualTypeOf<'asOfSeq' | 'phases'>()
-  expectTypeOf<ClassPhasesResponse['asOfSeq']>().toEqualTypeOf<number>()
-  expectTypeOf<ClassPhasesResponse['phases']>().toEqualTypeOf<Phase[]>()
-})
-
-test('§7.1 GET /api/classes/{classId}/entries', () => {
-  expectTypeOf<keyof ClassEntriesResponse>().toEqualTypeOf<'asOfSeq' | 'entries'>()
-  expectTypeOf<ClassEntriesResponse['asOfSeq']>().toEqualTypeOf<number>()
-  expectTypeOf<ClassEntriesResponse['entries']>().toEqualTypeOf<OnsiteEntry[]>()
-})
-
-test('§7.1 GET /api/phases/{phaseId}/attempts', () => {
-  expectTypeOf<keyof PhaseAttemptsResponse>().toEqualTypeOf<'asOfSeq' | 'attempts'>()
-  expectTypeOf<PhaseAttemptsResponse['asOfSeq']>().toEqualTypeOf<number>()
-  expectTypeOf<PhaseAttemptsResponse['attempts']>().toEqualTypeOf<Attempt[]>()
-})
-
-test('§7.1 GET /api/classes/{classId}/standings', () => {
-  expectTypeOf<keyof ClassStandingsResponse>().toEqualTypeOf<'asOfSeq' | 'standings'>()
-  expectTypeOf<ClassStandingsResponse['asOfSeq']>().toEqualTypeOf<number>()
-  // on-site keeps anomalies (§2.7)
-  expectTypeOf<ClassStandingsResponse['standings']>().toEqualTypeOf<Standing[]>()
-  expectTypeOf<'anomalies' extends keyof Standing ? true : false>().toEqualTypeOf<true>()
-})
-
-test('§7.1 GET /api/oncourse', () => {
-  expectTypeOf<keyof OnCourseResponse>().toEqualTypeOf<'asOfSeq' | 'attempts' | 'featuredByUpstream' | 'asOf'>()
-  expectTypeOf<RequiredKeys<OnCourseResponse>>().toEqualTypeOf<'asOfSeq' | 'attempts' | 'featuredByUpstream' | 'asOf'>()
-  expectTypeOf<OnCourseResponse['attempts']>().toEqualTypeOf<Attempt[]>()
-  expectTypeOf<OnCourseResponse['featuredByUpstream']>().toEqualTypeOf<string | null>()
-  expectTypeOf<OnCourseResponse['asOf']>().toEqualTypeOf<Timestamp | null>()
-})
-
-test('§7.1 GET /api/phases/{phaseId}/checks', () => {
-  expectTypeOf<keyof PhaseChecksResponse>().toEqualTypeOf<'asOfSeq' | 'checks' | 'flags'>()
-  expectTypeOf<PhaseChecksResponse['asOfSeq']>().toEqualTypeOf<number>()
-  expectTypeOf<PhaseChecksResponse['checks']>().toEqualTypeOf<GateCheck[]>()
-  expectTypeOf<PhaseChecksResponse['flags']>().toEqualTypeOf<GateFlag[]>()
-})
-
-test('§7.1 GET /api/sources is SourceStatus, unwrapped (no asOfSeq)', () => {
-  expectTypeOf<SourcesResponse>().toEqualTypeOf<SourceStatus>()
-  expectTypeOf<'asOfSeq' extends keyof SourcesResponse ? true : false>().toEqualTypeOf<false>()
-})
-
-test('§7.1 GET /api/diagnostics', () => {
-  expectTypeOf<keyof DiagnosticsResponse>().toEqualTypeOf<'asOfSeq' | 'diagnostics'>()
-  expectTypeOf<DiagnosticsResponse['asOfSeq']>().toEqualTypeOf<number>()
-  expectTypeOf<DiagnosticsResponse['diagnostics']>().toEqualTypeOf<Diagnostic[]>()
-})
-
-test('§7.1 diagnostics: the six kinds of §4 INV-2b with their stated fields', () => {
-  expectTypeOf<Diagnostic['kind']>().toEqualTypeOf<
-    'source-disagreement' | 'contradicted-finish' | 'duplicate-finish'
-    | 'stale-mark' | 'member-sum-mismatch' | 'unparseable-cell'
-  >()
-  type D<K extends Diagnostic['kind']> = Extract<Diagnostic, { kind: K }>
-  expectTypeOf<keyof D<'source-disagreement'>>().toEqualTypeOf<'kind' | 'attemptId' | 'field' | 'sources'>()
-  expectTypeOf<D<'source-disagreement'>['attemptId']>().toEqualTypeOf<string>()
-  expectTypeOf<D<'source-disagreement'>['field']>().toEqualTypeOf<string>()
-  expectTypeOf<D<'source-disagreement'>['sources']>().toEqualTypeOf<SourceTag[]>()
-  expectTypeOf<keyof D<'contradicted-finish'>>().toEqualTypeOf<'kind' | 'attemptId' | 'finishTime' | 'runSeconds'>()
-  expectTypeOf<D<'contradicted-finish'>['finishTime']>().toEqualTypeOf<Timestamp | null>()
-  expectTypeOf<D<'contradicted-finish'>['runSeconds']>().toEqualTypeOf<number>()
-  expectTypeOf<keyof D<'duplicate-finish'>>().toEqualTypeOf<'kind' | 'phaseId' | 'finishTime' | 'bibs'>()
-  expectTypeOf<D<'duplicate-finish'>['phaseId']>().toEqualTypeOf<string>()
-  expectTypeOf<D<'duplicate-finish'>['bibs']>().toEqualTypeOf<string[]>()
-  expectTypeOf<keyof D<'stale-mark'>>().toEqualTypeOf<'kind' | 'attemptId' | 'run' | 'mark'>()
-  expectTypeOf<D<'stale-mark'>['run']>().toEqualTypeOf<number>()
-  expectTypeOf<keyof D<'member-sum-mismatch'>>().toEqualTypeOf<'kind' | 'attemptId' | 'gate' | 'crew' | 'members'>()
-  expectTypeOf<D<'member-sum-mismatch'>['gate']>().toEqualTypeOf<number>()
-  expectTypeOf<D<'member-sum-mismatch'>['crew']>().toEqualTypeOf<number>()
-  expectTypeOf<D<'member-sum-mismatch'>['members']>().toEqualTypeOf<(number | null)[]>()
-  expectTypeOf<keyof D<'unparseable-cell'>>().toEqualTypeOf<'kind' | 'attemptId' | 'source' | 'slot' | 'text'>()
-  expectTypeOf<D<'unparseable-cell'>['text']>().toEqualTypeOf<string>()
-  expectTypeOf<D<'unparseable-cell'>['slot']>().toEqualTypeOf<number>()
-})
-
-test('§7.1 POST /api/rebaseline', () => {
-  expectTypeOf<RebaselineScope>().toEqualTypeOf<{ kind: 'phase'; phaseId: string } | { kind: 'event' }>()
-  expectTypeOf<keyof RebaselineRequest>().toEqualTypeOf<'scope'>()
-  expectTypeOf<RebaselineRequest['scope']>().toEqualTypeOf<RebaselineScope>()
-  expectTypeOf<keyof RebaselineResponse>().toEqualTypeOf<
-    'asOfSeq' | 'scope' | 'snapshotWrittenAt' | 'snapshotDetectedAt' | 'attempts'
-  >()
-  expectTypeOf<RebaselineResponse['asOfSeq']>().toEqualTypeOf<number>()
-  expectTypeOf<RebaselineResponse['scope']>().toEqualTypeOf<RebaselineScope>()
-  expectTypeOf<RebaselineResponse['attempts']>().toEqualTypeOf<number>()
-  // the contract names the two timestamps but does not type them; they must be present and string-valued
-  expectTypeOf<RebaselineResponse['snapshotWrittenAt']>().toExtend<string | null>()
-  expectTypeOf<RebaselineResponse['snapshotDetectedAt']>().toExtend<string | null>()
-})
-
-test('§7.1 refusal codes of the read table are in the §1.4 union', () => {
-  expectTypeOf<
-    'event-not-found' | 'class-not-found' | 'phase-not-found' | 'source-unavailable'
-  >().toExtend<ErrorCode>()
-})
-
-// ---------------------------------------------------------------- row 6
-test('§7.2 WebSocket message set is exactly the 14 types, each with seq', () => {
-  expectTypeOf<WsMessage['type']>().toEqualTypeOf<
-    'attempt.updated' | 'phase.updated' | 'entry.updated' | 'class.updated'
-    | 'standing.updated' | 'course.updated' | 'write.updated' | 'sources.updated'
-    | 'check.updated' | 'flag.updated' | 'oncourse.updated' | 'diagnostics.updated'
-    | 'event.changed' | 'scope.replaced'
-  >()
+test('WsMessage narrows payload by type, and every message carries seq (§7.2)', () => {
   expectTypeOf<WsMessage['seq']>().toEqualTypeOf<number>()
+  function narrow(m: WsMessage) {
+    switch (m.type) {
+      case 'attempt.updated':
+        expectTypeOf(m.attemptId).toEqualTypeOf<string>()
+        expectTypeOf(m.fields).toEqualTypeOf<Partial<Omit<Attempt, 'attemptId'>>>()
+        break
+      case 'check.updated':
+        expectTypeOf(m.check).toEqualTypeOf<GateCheck | null>()
+        expectTypeOf(m.run).toEqualTypeOf<number>()
+        break
+      case 'flag.updated':
+        expectTypeOf(m.flag).toEqualTypeOf<GateFlag>()
+        break
+      case 'write.updated':
+        expectTypeOf(m.write).toEqualTypeOf<WriteRequest>()
+        break
+      case 'standing.updated':
+        expectTypeOf(m.standing).toEqualTypeOf<Standing>()
+        break
+      case 'diagnostics.updated':
+        expectTypeOf(m.diagnostics).toEqualTypeOf<Diagnostic[]>()
+        break
+      case 'event.changed':
+        expectTypeOf(m.event).toEqualTypeOf<OnsiteEvent>()
+        break
+      case 'oncourse.updated':
+        expectTypeOf(m.asOf).toEqualTypeOf<Timestamp>()
+        break
+      default:
+        break
+    }
+    // @ts-expect-error a payload key is not available before narrowing
+    void m.standing
+  }
+  void narrow
 })
 
-test('§7.2 attempt.updated: attemptId and only the changed Observed fields of §2.6', () => {
-  type M = Msg<'attempt.updated'>
-  expectTypeOf<RequiredKeys<M>>().toEqualTypeOf<'seq' | 'type' | 'attemptId' | 'fields'>()
-  expectTypeOf<M['attemptId']>().toEqualTypeOf<string>()
-  type F = M['fields']
-  expectTypeOf<RequiredKeys<F>>().toEqualTypeOf<never>()
-  expectTypeOf<OptionalKeys<F>>().toEqualTypeOf<
-    'entry' | 'run' | 'startOrder' | 'scheduledStart' | 'heat' | 'startLane' | 'status' | 'outcome'
-    | 'gates' | 'splits' | 'faults' | 'courseOrder' | 'timeToBeat' | 'placement' | 'pairTotal'
-    | 'countingRun' | 'underReview' | 'qualified'
-  >()
-  expectTypeOf<NonNullable<F['outcome']>>().toEqualTypeOf<Attempt['outcome']>()
-  expectTypeOf<NonNullable<F['run']>>().toEqualTypeOf<Attempt['run']>()
-  expectTypeOf<NonNullable<F['status']>>().toEqualTypeOf<Attempt['status']>()
-  expectTypeOf<NonNullable<F['placement']>>().toEqualTypeOf<Attempt['placement']>()
-  // an explicit not-yet is a legal field value (retraction, run generation, §7.2)
-  const retraction: M = { seq: 1, type: 'attempt.updated', attemptId: 'K1M_BR1_19:57', fields: { outcome: { state: 'not-yet' } } }
-  void retraction
-  // @ts-expect-error identity fields are not changeable fields
-  const idField: M['fields'] = { phaseId: 'x' }
-  void idField
+test('the on-site Event carries no organiserId (§2.1, §2.2); Event itself does', () => {
+  expectTypeOf<'organiserId' extends keyof OnsiteEvent ? true : false>().toEqualTypeOf<false>()
+  expectTypeOf<'organiserId' extends keyof Event ? true : false>().toEqualTypeOf<true>()
 })
 
-test('§7.2 phase.updated / entry.updated / class.updated carry seq and type (key names not pinned by the contract)', () => {
-  expectTypeOf<Msg<'phase.updated'>['seq']>().toEqualTypeOf<number>()
-  expectTypeOf<Msg<'entry.updated'>['seq']>().toEqualTypeOf<number>()
-  expectTypeOf<Msg<'class.updated'>['seq']>().toEqualTypeOf<number>()
-})
-
-test('§7.2 standing.updated carries the whole Standing', () => {
-  expectTypeOf<RequiredKeys<Msg<'standing.updated'>>>().toEqualTypeOf<'seq' | 'type' | 'standing'>()
-  expectTypeOf<Msg<'standing.updated'>['standing']>().toEqualTypeOf<Standing>()
-})
-
-test('§7.2 write.updated carries the whole WriteRequest', () => {
-  expectTypeOf<RequiredKeys<Msg<'write.updated'>>>().toEqualTypeOf<'seq' | 'type' | 'write'>()
-  expectTypeOf<Msg<'write.updated'>['write']>().toEqualTypeOf<WriteRequest>()
-})
-
-test('§7.2 check.updated: attemptId, run, gate, check: GateCheck | null (null = removed)', () => {
-  type M = Msg<'check.updated'>
-  expectTypeOf<RequiredKeys<M>>().toEqualTypeOf<'seq' | 'type' | 'attemptId' | 'run' | 'gate' | 'check'>()
-  expectTypeOf<M['attemptId']>().toEqualTypeOf<string>()
-  expectTypeOf<M['run']>().toEqualTypeOf<number>()
-  expectTypeOf<M['gate']>().toEqualTypeOf<number>()
-  expectTypeOf<M['check']>().toEqualTypeOf<GateCheck | null>()
-})
-
-test('§7.2 flag.updated carries seq and type (whole GateFlag; key name not pinned)', () => {
-  expectTypeOf<Msg<'flag.updated'>['seq']>().toEqualTypeOf<number>()
-})
-
-test('§7.2 oncourse.updated: attemptIds, featuredByUpstream, asOf', () => {
-  type M = Msg<'oncourse.updated'>
-  expectTypeOf<RequiredKeys<M>>().toEqualTypeOf<'seq' | 'type' | 'attemptIds' | 'featuredByUpstream' | 'asOf'>()
-  expectTypeOf<M['attemptIds']>().toEqualTypeOf<string[]>()
-  expectTypeOf<M['featuredByUpstream']>().toEqualTypeOf<string | null>()
-  expectTypeOf<M['asOf']>().toEqualTypeOf<Timestamp>()
-})
-
-test('§7.2 event.changed carries the whole Event', () => {
-  expectTypeOf<RequiredKeys<Msg<'event.changed'>>>().toEqualTypeOf<'seq' | 'type' | 'event'>()
-  expectTypeOf<Msg<'event.changed'>['event']>().toEqualTypeOf<Event>()
-})
-
-test('§7.2 scope.replaced: scope, every Attempt and Standing of it (never Phases, Entries, Classes, Courses)', () => {
-  type M = Msg<'scope.replaced'>
-  expectTypeOf<RequiredKeys<M>>().toEqualTypeOf<'seq' | 'type' | 'scope' | 'attempts' | 'standings'>()
-  expectTypeOf<M['scope']>().toEqualTypeOf<RebaselineScope>()
-  expectTypeOf<M['attempts']>().toEqualTypeOf<Attempt[]>()
-  expectTypeOf<M['standings']>().toEqualTypeOf<Standing[]>()
-})
-
-test('§7.2 sources.updated / course.updated / diagnostics.updated carry seq and type (key names not pinned)', () => {
-  expectTypeOf<Msg<'sources.updated'>['seq']>().toEqualTypeOf<number>()
-  expectTypeOf<Msg<'course.updated'>['seq']>().toEqualTypeOf<number>()
-  expectTypeOf<Msg<'diagnostics.updated'>['seq']>().toEqualTypeOf<number>()
-})
-
-// ---------------------------------------------------------------- row 7: §7.3
-test('§7.3 POST /api/attempts/{phaseId}/{bib}/penalty: body gate + value in {0,2,50}', () => {
-  expectTypeOf<keyof PenaltyWriteRequest>().toEqualTypeOf<'gate' | 'value'>()
-  expectTypeOf<PenaltyWriteRequest['gate']>().toEqualTypeOf<number>()
-  expectTypeOf<PenaltyWriteRequest['value']>().toEqualTypeOf<0 | 2 | 50>()
-  // @ts-expect-error value outside {0,2,50}
-  const bad: PenaltyWriteRequest = { gate: 1, value: 4 }
-  void bad
-})
-
-test('§7.3 penalty write response is a WriteRequest (pending/confirmed/mismatched/superseded) and GET /api/writes/{writeId}', () => {
-  expectTypeOf<WriteRequest['status']>().toEqualTypeOf<'pending' | 'confirmed' | 'mismatched' | 'superseded'>()
-  expectTypeOf<WriteRequest['target']['field']>().toEqualTypeOf<'gate-penalty'>()
-  expectTypeOf<RequiredKeys<WriteRequest>>().toEqualTypeOf<'writeId' | 'target' | 'requestedValue' | 'submittedAt' | 'status'>()
-  expectTypeOf<OptionalKeys<WriteRequest>>().toEqualTypeOf<'confirmedValue' | 'confirmedAt'>()
-})
-
-test('§7.3 refusals: write-not-possible reasons are run-not-closed, team-boat, cross; codes are in §1.4', () => {
-  expectTypeOf<WriteNotPossibleReason>().toEqualTypeOf<'run-not-closed' | 'team-boat' | 'cross'>()
-  expectTypeOf<
-    'attempt-not-found' | 'validation-failed' | 'write-not-possible' | 'write-not-found'
-  >().toExtend<ErrorCode>()
-})
-
-// ---------------------------------------------------------------- row 7: §7.4
-test('§7.4 PUT /api/attempts/{phaseId}/{bib}/checks/{gate}: body {checkedBy?}, response GateCheck', () => {
-  expectTypeOf<RequiredKeys<GateCheckRequest>>().toEqualTypeOf<never>()
-  expectTypeOf<OptionalKeys<GateCheckRequest>>().toEqualTypeOf<'checkedBy'>()
-  expectTypeOf<NonNullable<GateCheckRequest['checkedBy']>>().toEqualTypeOf<string>()
-  expectTypeOf<GateCheck['status']>().toEqualTypeOf<'verified' | 'stale'>()
-  expectTypeOf<GateCheck['valueAtCheck']>().toEqualTypeOf<number | null>()
-  expectTypeOf<RequiredKeys<GateCheck>>().toEqualTypeOf<'attemptId' | 'run' | 'gate' | 'checkedAt' | 'valueAtCheck' | 'status'>()
-  expectTypeOf<OptionalKeys<GateCheck>>().toEqualTypeOf<'checkedBy'>()
-  expectTypeOf<'attempt-not-found' | 'validation-failed' | 'write-not-possible'>().toExtend<ErrorCode>()
-})
-
-test('§7.4 DELETE /api/attempts/{phaseId}/{bib}/checks/{gate}: refusal code is in §1.4', () => {
-  expectTypeOf<'attempt-not-found'>().toExtend<ErrorCode>()
-})
-
-test('§7.4 POST /api/attempts/{phaseId}/{bib}/flags: body and GateFlag response', () => {
-  expectTypeOf<RequiredKeys<GateFlagCreateRequest>>().toEqualTypeOf<'gate' | 'comment'>()
-  expectTypeOf<OptionalKeys<GateFlagCreateRequest>>().toEqualTypeOf<'suggestedValue' | 'createdBy'>()
-  expectTypeOf<GateFlagCreateRequest['gate']>().toEqualTypeOf<number>()
-  expectTypeOf<GateFlagCreateRequest['comment']>().toEqualTypeOf<string>()
-  expectTypeOf<NonNullable<GateFlagCreateRequest['suggestedValue']>>().toEqualTypeOf<number>()
-  expectTypeOf<RequiredKeys<GateFlag>>().toEqualTypeOf<'flagId' | 'attemptId' | 'run' | 'gate' | 'createdAt' | 'comment'>()
-  expectTypeOf<OptionalKeys<GateFlag>>().toEqualTypeOf<'createdBy' | 'suggestedValue' | 'resolution'>()
-})
-
-test('§7.4 POST /api/flags/{flagId}/resolution: body and refusal', () => {
-  expectTypeOf<RequiredKeys<FlagResolutionRequest>>().toEqualTypeOf<never>()
-  expectTypeOf<OptionalKeys<FlagResolutionRequest>>().toEqualTypeOf<'note' | 'resolvedBy'>()
-  expectTypeOf<'flag-not-found'>().toExtend<ErrorCode>()
+test('null stays distinct from an absent key where the contract says so (§1.2, §1.3)', () => {
+  // Gate.penalty: null = not judged, required, never omitted and never coerced to 0
+  const judged: Gate = { number: 1, penalty: null }
+  void judged
+  // @ts-expect-error penalty may be null but not absent
+  const omitted: Gate = { number: 1 }
+  void omitted
+  // memberPenalties is absent until the snapshot; its cells may be null
+  const team: Gate = { number: 1, penalty: 4, memberPenalties: [2, null, 2] }
+  void team
+  // @ts-expect-error an absent memberPenalties is the key omitted, not null
+  const nullMembers: Gate = { number: 1, penalty: 4, memberPenalties: null }
+  void nullMembers
+  // rank/order are null until placed: required keys with null values
+  expectTypeOf<StandingEntry['rank']>().toEqualTypeOf<number | null>()
+  // @ts-expect-error eventTime is omitted, never null
+  const evt: Observed<number> = { state: 'known', value: 1, observedAt: 'x', eventTime: null, source: 'tcp', confidence: 'authoritative', provisional: false }
+  void evt
+  // a known value of null is legal only where T allows it
+  const nullable: Observed<number | null> = { state: 'known', value: null, observedAt: 'x', source: 'tcp', confidence: 'authoritative', provisional: false }
+  void nullable
 })
