@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
+import { type Decl, extractDecls } from './extract.js'
 import { CONTRACTS_MD, PKG_DIR, TSC } from './paths.js'
 
 const EXPECTED_NAMES = [
@@ -102,69 +103,6 @@ const EXPECTED_NAMES = [
   'PublicStreamMessage',
 ]
 
-// The one ts block that declares nothing: the worked example of §2.11 (illustrative
-// field lines, not types). Excluded by its first line, not by being empty.
-const ILLUSTRATIVE_BLOCK_FIRST_LINE = /^\/\/ t\+0\.0s/
-
-type Decl = { name: string; generic: boolean; text: string }
-
-function extractDecls(markdown: string): { decls: Decl[]; skippedBlocks: number } {
-  const lines = markdown.split('\n')
-  const out: Decl[] = []
-  let skippedBlocks = 0
-  let inTs = false
-  let skipBlock = false
-  let firstLine = true
-  let declsInBlock = 0
-  let cur: string[] | null = null
-  const flush = () => {
-    if (cur) {
-      const head = /^type (\w+)(<[^=]*>)?\s*=/.exec(cur[0])
-      if (head) {
-        out.push({ name: head[1], generic: !!head[2], text: cur.join('\n') })
-        declsInBlock++
-      }
-    }
-    cur = null
-  }
-  for (const line of lines) {
-    if (!inTs) {
-      if (/^```ts\s*$/.test(line)) {
-        inTs = true
-        firstLine = true
-        skipBlock = false
-        declsInBlock = 0
-      }
-      continue
-    }
-    if (/^```/.test(line)) {
-      flush()
-      inTs = false
-      if (skipBlock) skippedBlocks++
-      else if (declsInBlock === 0) throw new Error('a ts block declared no type and is not the named illustrative block')
-      continue
-    }
-    if (firstLine && line.trim() !== '') {
-      firstLine = false
-      if (ILLUSTRATIVE_BLOCK_FIRST_LINE.test(line)) skipBlock = true
-    }
-    if (skipBlock) continue
-    if (line.trim() === '') {
-      flush()
-      continue
-    }
-    if (/^type \w+/.test(line)) {
-      flush()
-      cur = [line]
-    } else if (cur && (/^\s/.test(line) || line.startsWith('}'))) {
-      cur.push(line) // multi-line object and union declarations, trailing comments
-    } else {
-      throw new Error(`unrecognised top-level line in a ts block: ${line}`)
-    }
-  }
-  return { decls: out, skippedBlocks }
-}
-
 const tmpDirs: string[] = []
 function tmp(): string {
   const d = mkdtempSync(join(tmpdir(), 'c123-drift-'))
@@ -250,3 +188,55 @@ describe('CONTRACTS drift (rows 1-3)', () => {
   }, 120_000)
 })
 
+
+// ---------------------------------------------------------------- row 2: the extractor fails loudly (review O2)
+describe('extractor throws on what it cannot read (row 2)', () => {
+  const md = (body: string) => '# t\n\n```ts\ntype A = string\n```\n\n' + body
+  const ts = (inner: string) => md('```ts\n' + inner + '\n```\n')
+
+  test('D1 generic default beside other declarations throws', () => {
+    expect(() => extractDecls(ts('type NewOne<T = string> = { a: T }\ntype B = string'))).toThrow(/declaration head/)
+  })
+  test('D2 "=" on the next line throws', () => {
+    expect(() => extractDecls(ts('type NewTwo\n  = string'))).toThrow(/declaration head/)
+  })
+  test('D3 a ```typescript fence throws', () => {
+    expect(() => extractDecls(md('```typescript\ntype X = string\n```\n'))).toThrow(/fence/)
+  })
+  test('D4 an info string after ts throws', () => {
+    expect(() => extractDecls(md('```ts title="x"\ntype X = string\n```\n'))).toThrow(/fence/)
+  })
+  test('D5 an indented fence throws', () => {
+    expect(() => extractDecls(md('- item\n\n   ```ts\n   type X = string\n   ```\n'))).toThrow(/fence/)
+  })
+  test('D8 a type line inside the skipped illustrative block throws', () => {
+    expect(() => extractDecls(md('```ts\n// t+0.0s example\noutcome: { }\ntype NewEight = string\n```\n'))).toThrow(/skipped block/)
+  })
+  test('D6 a plain new type is extracted (and so missing from the name list)', () => {
+    const { decls } = extractDecls(ts('type NewSix = string'))
+    expect(decls.map((d) => d.name)).toEqual(['A', 'NewSix'])
+  })
+  test('D7 an interface in a ts block throws', () => {
+    expect(() => extractDecls(ts('interface NewSeven { a: string }'))).toThrow(/unrecognised top-level line/)
+  })
+  test('D9 D1\'s form alone in its block throws', () => {
+    expect(() => extractDecls(md('```ts\ntype NewNine<T = string> = { a: T }\n```\n'))).toThrow()
+  })
+  test('the illustrative block, json and bare fences are accepted', () => {
+    const { decls, skippedBlocks } = extractDecls(
+      ts('type B = {\n  a: 1\n}   // c\n\ntype C =\n  | 1\n  | 2') +
+        '```json\n{ "a": 1 }\n```\n\n```\nplain\n```\n\n```ts\n// t+0.0s example\noutcome: {}\n```\n',
+    )
+    expect(decls.map((d) => d.name)).toEqual(['A', 'B', 'C'])
+    expect(skippedBlocks).toBe(1)
+  })
+})
+
+describe('index.d.ts exports nothing else (ARCHITECTURE §3)', () => {
+  test('the exported names are exactly the extracted declarations', () => {
+    const names = [...pkgDts().matchAll(/^export\s+(?:declare\s+)?(?:type|interface|const|let|var|function|class|enum|namespace)\s+(\w+)/gm)].map((m) => m[1])
+    expect(names).toEqual(EXPECTED_NAMES)
+    expect(pkgDts()).not.toMatch(/^export\s+(?:default|\*|\{)/m)
+    expect(pkgDts()).not.toMatch(/^(?!export\b)(?:declare\s+)?(?:const|let|var|function|class|enum)\b/m)
+  })
+})

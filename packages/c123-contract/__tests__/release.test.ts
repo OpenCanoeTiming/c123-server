@@ -35,6 +35,10 @@ describe('release wiring (row 18)', () => {
     expect(pkg.component).toBe('c123-contract')
     expect(pkg['package-name']).toBe('@opencanoetiming/c123-contract')
     expect(pkg['bump-minor-pre-major']).toBe(true)
+    // a 0.0.0 manifest entry means "no release yet": without this the first release is 1.0.0
+    expect(pkg['initial-version']).toBe('0.1.0')
+    // a contract release must not become the repository's Latest release (the server's update check reads it)
+    expect(pkg.prerelease).toBe(true)
     // tag with component, so the contract and the server do not collide
     expect(pkg['include-component-in-tag']).not.toBe(false)
 

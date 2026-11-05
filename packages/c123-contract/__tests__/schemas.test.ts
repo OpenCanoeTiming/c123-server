@@ -1,10 +1,12 @@
 // Rows 9-13 (runtime half of 13). The schemas under docs/arch/schemas are the authority.
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { tmpdir } from 'node:os'
+import { basename, join } from 'node:path'
 import Ajv2020 from 'ajv/dist/2020.js'
 import { describe, expect, test } from 'vitest'
 import { known, knownNoEventTime, knownNull, notYet, unavailable } from './observed-samples.js'
-import { SCHEMAS_DIR, SCHEMA_FILES } from './paths.js'
+import { PKG_DIR, SCHEMAS_DIR, SCHEMA_FILES } from './paths.js'
 
 const load = (f: string) => JSON.parse(readFileSync(join(SCHEMAS_DIR, f), 'utf8')) as object
 
@@ -248,5 +250,71 @@ describe('row 13 types agree with schemas', () => {
     for (const [name, sample] of Object.entries({ known, knownNoEventTime, knownNull, notYet, unavailable })) {
       expect(validate(sample), `${name}: ${JSON.stringify(validate.errors)}`).toBe(true)
     }
+  })
+})
+
+// ---------------------------------------------------------------- row 20: a schema edit reaches the package
+describe('row 20 schemas.sha256', () => {
+  const LOCK = join(PKG_DIR, 'schemas.sha256')
+  const sha = (p: string) => createHash('sha256').update(readFileSync(p)).digest('hex')
+
+  /** Problems found comparing a lock text with the schema files in `dir`; empty = in sync. */
+  function problems(lockText: string, dir: string): string[] {
+    const found = new Map<string, string[]>()
+    const out: string[] = []
+    for (const line of lockText.split('\n').filter((l) => l.trim() !== '')) {
+      const m = /^([0-9a-f]{64})\s+\*?(.+?)\s*$/.exec(line)
+      if (!m) {
+        out.push(`unparseable line: ${line}`)
+        continue
+      }
+      const name = basename(m[2])
+      found.set(name, [...(found.get(name) ?? []), m[1]])
+    }
+    for (const f of SCHEMA_FILES) {
+      const hashes = found.get(f)
+      if (!hashes) out.push(`missing line for ${f}`)
+      else if (hashes.length > 1) out.push(`duplicate line for ${f}`)
+      else if (hashes[0] !== sha(join(dir, f))) out.push(`${f} differs`)
+    }
+    for (const name of found.keys()) if (!(SCHEMA_FILES as readonly string[]).includes(name)) out.push(`extra line for ${name}`)
+    return out
+  }
+
+  function withCopy(fn: (dir: string, lock: string) => void) {
+    const dir = mkdtempSync(join(tmpdir(), 'c123-lock-'))
+    try {
+      for (const f of SCHEMA_FILES) cpSync(join(SCHEMAS_DIR, f), join(dir, f))
+      expect(existsSync(LOCK), 'packages/c123-contract/schemas.sha256 exists').toBe(true)
+      fn(dir, readFileSync(LOCK, 'utf8'))
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+
+  test('schemas.sha256 matches docs/arch/schemas', () => {
+    expect(existsSync(LOCK), 'packages/c123-contract/schemas.sha256 exists').toBe(true)
+    expect(problems(readFileSync(LOCK, 'utf8'), SCHEMAS_DIR)).toEqual([])
+  })
+
+  test('schemas.sha256 fails when a schema file changed', () => {
+    withCopy((dir, lock) => {
+      expect(problems(lock, dir)).toEqual([])
+      writeFileSync(join(dir, 'error.schema.json'), readFileSync(join(dir, 'error.schema.json'), 'utf8') + '\n')
+      expect(problems(lock, dir)).toEqual(['error.schema.json differs'])
+    })
+  })
+
+  test('schemas.sha256 fails when a line is missing', () => {
+    withCopy((dir, lock) => {
+      const kept = lock.split('\n').filter((l) => !l.includes('observed.schema.json')).join('\n')
+      expect(problems(kept, dir)).toEqual(['missing line for observed.schema.json'])
+    })
+  })
+
+  test('schemas.sha256 fails when an extra line is present', () => {
+    withCopy((dir, lock) => {
+      expect(problems(lock + `${'0'.repeat(64)}  other.schema.json\n`, dir)).toEqual(['extra line for other.schema.json'])
+    })
   })
 })
