@@ -75,8 +75,14 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
   let epoch = 0; // bumped by stop/setPath so that in-flight work is discarded
   let timer: unknown;
   let timerSet = false;
-  let lastGood: { mtimeMs: number; size: number } | undefined;
-  let detectedAt: number | undefined; // first detection of a change not yet read whole
+  let retryTimer: unknown;
+  let retrySet = false;
+  let busy = false;
+  type Sig = { mtimeMs: number; size: number };
+  const same = (a: Sig, b: Sig): boolean => a.mtimeMs === b.mtimeMs && a.size === b.size;
+  let lastGood: Sig | undefined;
+  // First detection of the change not yet read whole, with the stat it was seen at (a different stat restarts it).
+  let pending: { sig: Sig; at: number } | undefined;
   let failedPolls = 0;
   let state: XmlSourceState = 'not-configured';
   let lastRewriteDetectedAt: string | null = null;
@@ -86,17 +92,24 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
   const report = (): void => { opts.onStatus({ state, lastRewriteDetectedAt, tornReads, abandonedReads }); };
   const setState = (s: XmlSourceState): void => { if (s !== state) { state = s; report(); } };
   const arm = (ms: number, fn: () => void): void => { timer = later(fn, ms); timerSet = true; };
-  const disarm = (): void => { if (timerSet) { cancel(timer); timerSet = false; } };
+  const disarm = (): void => {
+    if (timerSet) { cancel(timer); timerSet = false; }
+    if (retrySet) { cancel(retryTimer); retrySet = false; }
+  };
+  const wait = (ms: number): Promise<void> => new Promise<void>((resolve) => { retrySet = true; retryTimer = later(() => { retrySet = false; resolve(); }, ms); });
 
-  /** One read, validated. Returns the unit's parsed elements, or undefined for a torn read. */
-  async function readOnce(p: string, at: number): Promise<IngestElement[] | undefined> {
-    const text = await fs.read(p);
+  type Attempt = { kind: 'ok'; els: IngestElement[] } | { kind: 'torn' | 'rejected' | 'moved' };
+
+  /** One read, validated; a read that is not whole or not well-formed is torn, a rejected read is its own kind. */
+  async function readOnce(p: string, at: number): Promise<Attempt> {
+    let text: string;
+    try { text = await fs.read(p); } catch { return { kind: 'rejected' }; }
     if (text.includes(ROOT_CLOSE) && XMLValidator.validate(text) === true) {
       const els = parseXmlSnapshot(text, { ...ctx, observedAt: iso(at) });
-      if (!els.some((e) => 'unparseable' in e)) return els;
+      if (!els.some((e) => 'unparseable' in e)) return { kind: 'ok', els };
     }
     tornReads++;
-    return undefined;
+    return { kind: 'torn' };
   }
 
   function emit(els: IngestElement[], at: number): void {
@@ -108,53 +121,73 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
     report();
   }
 
-  async function poll(): Promise<void> {
-    timerSet = false;
-    const my = epoch;
-    const p = path;
-    if (p === undefined) return;
-    const polledAt = now();
-    try {
-      const st = await fs.stat(p);
-      if (my !== epoch) return;
-      failedPolls = 0;
-      setState('connected');
-      const changed = !lastGood || lastGood.mtimeMs !== st.mtimeMs || lastGood.size !== st.size;
-      if (changed) {
-        if (detectedAt === undefined) detectedAt = polledAt;
-        const at = detectedAt;
-        for (let attempt = 0; attempt <= XML_RETRY_EXTRA_READS; attempt++) {
-          if (attempt > 0) {
-            await new Promise<void>((resolve) => { arm(XML_RETRY_SPACING_MS, resolve); });
-            if (my !== epoch) return;
-          }
-          const els = await readOnce(p, at);
-          if (my !== epoch) return;
-          if (els) {
-            lastGood = st;
-            detectedAt = undefined;
-            emit(els, at);
-            break;
-          }
-          if (attempt === XML_RETRY_EXTRA_READS) abandonedReads++;
-          report();
-        }
-      }
-    } catch {
+  async function poll(my: number, p: string, polledAt: number): Promise<void> {
+    let st: Sig;
+    try { st = await fs.stat(p); } catch {
       if (my !== epoch) return;
       failedPolls++;
       setState(failedPolls >= XML_UNREACHABLE_AFTER_FAILED_POLLS ? 'unreachable' : 'reconnecting');
+      return;
     }
-    if (my === epoch && running) arm(intervalMs(), () => { void poll(); });
+    if (my !== epoch) return;
+    if (lastGood && same(lastGood, st)) { pending = undefined; failedPolls = 0; setState('connected'); return; }
+    if (!pending || !same(pending.sig, st)) pending = { sig: st, at: polledAt };
+    let ref: Sig = st;
+    let last: Attempt['kind'] = 'torn';
+    for (let attempt = 0; attempt <= XML_RETRY_EXTRA_READS; attempt++) {
+      if (attempt > 0) {
+        await wait(XML_RETRY_SPACING_MS);
+        if (my !== epoch) return;
+      }
+      const r = await readOnce(p, pending!.at);
+      if (my !== epoch) return;
+      last = r.kind;
+      if (r.kind === 'ok') {
+        // With a baseline to protect, a stat that moved across the read makes it a failed attempt.
+        if (lastGood) {
+          let after: Sig | undefined;
+          try { after = await fs.stat(p); } catch { after = undefined; }
+          if (my !== epoch) return;
+          if (!after || !same(after, ref)) { last = 'moved'; if (after) { ref = after; pending = { sig: after, at: now() }; } report(); continue; }
+        }
+        const at0 = pending!.at;
+        lastGood = ref;
+        pending = undefined;
+        failedPolls = 0;
+        setState('connected');
+        emit(r.els, at0);
+        return;
+      }
+      report();
+    }
+    abandonedReads++;
+    if (last === 'rejected') {
+      failedPolls++;
+      setState(failedPolls >= XML_UNREACHABLE_AFTER_FAILED_POLLS ? 'unreachable' : 'reconnecting');
+    } else { failedPolls = 0; setState('connected'); }
+    report();
+  }
+
+  /** A poll is anchored to the previous poll's start, not to the end of its work. */
+  function fire(): void {
+    timerSet = false;
+    const my = epoch;
+    const p = path;
+    if (p === undefined || !running) return;
+    arm(intervalMs(), fire);
+    if (busy) return;
+    busy = true;
+    void poll(my, p, now()).finally(() => { if (my === epoch) busy = false; });
   }
 
   function begin(): void {
     disarm();
+    busy = false;
     lastGood = undefined;
-    detectedAt = undefined;
+    pending = undefined;
     failedPolls = 0;
     if (path === undefined) { state = 'not-configured'; report(); return; }
-    arm(intervalMs(), () => { void poll(); });
+    arm(intervalMs(), fire);
   }
 
   return {
