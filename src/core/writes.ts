@@ -48,4 +48,15 @@ export function resolveEcho(s: CoreState, a: AttemptState, fs: FieldSlots, field
   s.dirtyWrites.add(w);
 }
 
+/** CQ5: a retraction displaces the operator slot of a field it retracts; a pending write resolves with no value to confirm (rule 4). */
+export function displaceOperator(s: CoreState, a: AttemptState, fs: FieldSlots, field: string, observedAt: string): void {
+  if (fs.operator === undefined) return;
+  delete fs.operator;
+  const w = s.writes.find((x) => x.attempt === a && x.fieldName === field && x.status === 'pending');
+  if (w === undefined) return;
+  w.status = 'mismatched';
+  w.confirmedAt = observedAt;
+  s.dirtyWrites.add(w);
+}
+
 export const wireWrite = ({ attempt: _attempt, fieldName: _field, ...wire }: CoreState['writes'][number]): unknown => wire;

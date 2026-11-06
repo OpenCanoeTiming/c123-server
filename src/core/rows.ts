@@ -2,20 +2,21 @@
  * One result row into the per-source slots. A row is a snapshot's, or a single field's observation in a vector (`rowOfField`),
  * so there is one path; an absent key is an omission (INV-1), `null` an explicit "no such value".
  */
-import { judgingComplete, gatesFromCells, faultsFromCells, usable, type Cells } from '../ingest/common.js';
+import { judgingComplete, gatesFromCells, faultsFromCells, type Cells } from '../ingest/common.js';
 import { isStaleMark, attribute, keepAsHistory, markOf, pendingFor, recordsGeneration, timeOf } from './generations.js';
-import { isMark, present, presentStatus, refusedByGuard } from './precedence.js';
-import { fmtFor } from './registry.js';
+import { isMark, markRefusedByGuard, present, presentStatus, refusedByGuard } from './precedence.js';
+import { boundSlots, fmtFor } from './registry.js';
 import { refuse } from './counters.js';
 import { carriesContradicted } from './retraction.js';
 import { fieldSlots, retain, slotOf } from './retention.js';
 import { resolveEcho } from './writes.js';
 import type { AttemptState, CoreState, Element, Row, Slot, Source } from './types.js';
-import type { CourseSlot } from '../ingest/index.js';
 
 const IDENTITY = ['entry', 'startOrder', 'scheduledStart', 'heat', 'startLane'] as const;
 const NOT_APPLICABLE = { state: 'unavailable', reason: 'not-applicable' } as const;
 const NOT_CONFIGURED = { state: 'unavailable', reason: 'not-configured' } as const;
+/** A second run's fields that come over from run 1 (§1.2). */
+export const CARRIED = ['placement', 'pairTotal', 'countingRun'] as const;
 
 /** Retains one row value and settles rule 4 against it. */
 function put(s: CoreState, a: AttemptState, source: Source, el: Element, field: string, value: unknown, seq: number, extra: Partial<Slot> = {}): void {
@@ -25,20 +26,11 @@ function put(s: CoreState, a: AttemptState, source: Source, el: Element, field: 
   const prior = fs[source];
   const shown = view(fs);
   const changed = retain(fs, source, slot, view);
-  if (changed || view(fs) !== shown) s.dirtyAttempts.add(a);
+  if (changed || view(fs) !== shown || (fs.tcp !== undefined && fs.xml !== undefined)) s.dirtyAttempts.add(a); // INV-2b is compared at a re-delivery too
   if (fs.operator !== undefined) resolveEcho(s, a, fs, field, slot, prior, changed);
   if (source !== 'xml' || !changed) return;
   if (fs.tcp !== undefined && refusedByGuard(fs.tcp, slot)) refuse(s, 'content-age');
   else if (field === 'status' && isMark(slot.value) && presentStatus(fs)?.value !== slot.value) refuse(s, 'xml-mark');
-}
-
-/** The course bound to a Phase, known only once a snapshot binds it (§4.6). */
-export function boundSlots(s: CoreState, phaseId: string): CourseSlot[] | undefined {
-  const courseId = s.phases.get(phaseId)?.fields.get('courseId')?.xml;
-  if (courseId?.state !== 'known') return undefined;
-  const fs = s.courses.get(String(courseId.value))?.fields.get('slots');
-  const slots = fs?.xml?.value as CourseSlot[] | undefined;
-  return usable(slots) ? slots : undefined;
 }
 
 /** §4.6: `not-configured` when nothing can bind; otherwise the Phase is waiting for its snapshot. */
@@ -84,11 +76,18 @@ export function floorStatus(s: CoreState, a: AttemptState, source: Source, el: E
   if (presentStatus(a.slots.get('status')) === undefined) put(s, a, source, el, 'status', 'not-started', seq);
 }
 
+/** §1.2: a run-2 row with no time and no mark restates run 1's values, and past the Attempt's first listing they stay carried. */
+function keepCarried(s: CoreState, a: AttemptState, row: Row): void {
+  if (!a.gen.started || fmtFor(s, a.phaseId).pair?.role !== 'second') return;
+  for (const f of CARRIED) if (f in row && present(a.slots.get(f))?.state === 'known') a.carried.add(f);
+}
+
 /** The row fields a paired second-run row states with no time of its own: `placement` and `pairTotal` follow the row (INV-7). */
 export function putStanding(s: CoreState, a: AttemptState, source: Source, el: Element, row: Row, seq: number): void {
   for (const f of ['placement', 'pairTotal', 'countingRun', 'underReview', 'qualified']) {
     if (f in row) put(s, a, source, el, f, row[f], seq);
   }
+  keepCarried(s, a, row);
 }
 
 function writeRow(s: CoreState, a: AttemptState, source: Source, el: Element, row: Row, stale: boolean, seq: number): void {
@@ -107,20 +106,24 @@ function writeRow(s: CoreState, a: AttemptState, source: Source, el: Element, ro
   } else if (source === 'xml' && time !== undefined) a.untimed = false;
 
   let outcome: unknown = row['outcome'];
-  if (stale && (outcome as { kind?: unknown } | undefined)?.kind === 'no-result') outcome = undefined;
-  if (mark !== undefined && mark !== 'non-ranked') outcome = { kind: 'no-result', status: mark };
-  else if (a.untimed && outcome !== undefined) outcome = NOT_APPLICABLE;
+  if (a.untimed && outcome !== undefined) outcome = NOT_APPLICABLE;
   else if (outcome === undefined && fmt.heats && placed) outcome = { kind: 'ordinal', order: (row['placement'] as { order: number }).order };
 
   const ranOrPlaced = time !== undefined || (fmt.heats && placed) || row['status'] === 'finished' || a.untimed;
   const status = mark ?? (ranOrPlaced ? 'finished' : undefined);
   if (status !== undefined) put(s, a, source, el, 'status', status, seq);
+  // §2.6: rule 2's guard refuses the observation, not one field of it; the next snapshot that restates the row presents it
+  if (source === 'xml' && mark !== undefined && markRefusedByGuard(fieldSlots(a.slots, 'status'))) {
+    keepAsHistory(a, source, row);
+    return;
+  }
   if (outcome !== undefined) put(s, a, source, el, 'outcome', outcome, seq, { ...extra, ...(row['finishTime'] !== undefined ? { eventTime: row['finishTime'] as string } : {}) });
   if ('cells' in row) putCells(s, a, source, row['cells'] as Cells, slotOf(s, el, source, 'row', [], seq, extra));
   for (const f of ['gates', 'faults', 'splits']) if (row[f] !== undefined) put(s, a, source, el, f, row[f], seq, extra);
   for (const f of ['placement', 'pairTotal', 'countingRun']) if (f in row) put(s, a, source, el, f, row[f], seq, extra);
   for (const f of ['underReview', 'qualified']) if (row[f] !== undefined) put(s, a, source, el, f, row[f], seq);
-  if (time !== undefined || mark !== undefined) for (const f of ['placement', 'pairTotal', 'countingRun']) if (f in row) a.carried.delete(f);
+  if (time === undefined && mark === undefined) keepCarried(s, a, row);
+  else for (const f of CARRIED) if (f in row) a.carried.delete(f);
 }
 
 /** The whole of one result row: contradiction, attribution, the stale mark, then the slots. */

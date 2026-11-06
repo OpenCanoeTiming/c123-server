@@ -2,11 +2,13 @@
  * What is taken back: a scope snapshot's stated absence (INV-7, DERIVATIONS §4.12) and a finish the on-course stream contradicts
  * (INV-2d). Both retain an explicit `not-yet`, with its own sequence, in place of the value: never an omission.
  */
-import { choose, newerContent, present, presentStatus, isMark } from './precedence.js';
+import { choose, newerContent, present, presentStatus, isMark, isNoResultMark } from './precedence.js';
+import { finishOf } from './presentation.js';
 import { fieldSlots, retain, slotOf } from './retention.js';
 import { isInstant } from './registry.js';
 import { refuse } from './counters.js';
 import { timeOf, markOf } from './generations.js';
+import { displaceOperator } from './writes.js';
 import type { AttemptState, Contradicted, CoreState, Element, Row, Slot, Source } from './types.js';
 
 export const FIRST_RUN_FIELDS = ['outcome', 'gates', 'faults', 'placement', 'underReview', 'qualified'] as const;
@@ -68,6 +70,7 @@ export function retract(s: CoreState, a: AttemptState, source: Source, el: Eleme
     }
     fs[source] = m;
     delete fs.inference;
+    displaceOperator(s, a, fs, f, el.observedAt);
     changed = true;
   }
   if (changed) {
@@ -92,15 +95,16 @@ const CONTRADICTED_FIELDS = ['outcome', 'placement', 'pairTotal', 'countingRun']
 
 /**
  * INV-2d: the stream lists the Attempt with the generation's start and no finish, after a finish was presented from a
- * results-table observation. Returns false when no such finish is presented.
+ * results-table observation: a row's `duration` in `outcome`, from either source and whatever `status` shows; a mark is no finish.
+ * Returns false when no such finish is presented.
  */
 export function contradict(s: CoreState, a: AttemptState, el: Element, seq: number): boolean {
   const shown = presentStatus(a.slots.get('status'));
   const outcome = present(a.slots.get('outcome'));
-  if (shown?.kind !== 'row' || shown.value !== 'finished' || outcome?.kind !== 'row') return false;
+  if (isNoResultMark(shown?.value) || outcome?.kind !== 'row') return false;
   const value = outcome.value as { kind?: string; runSeconds?: number } | undefined;
   if (value?.kind !== 'duration' || value.runSeconds === undefined) return false;
-  const eventTime = outcome.eventTime ?? (a.gen.finish?.runSeconds === value.runSeconds ? a.gen.finish.eventTime : undefined);
+  const eventTime = finishOf(a, outcome);
   const record: Contradicted = { finishTime: isInstant(eventTime) ? eventTime : null, runSeconds: value.runSeconds };
   for (const f of CONTRADICTED_FIELDS) {
     const fs = a.slots.get(f);

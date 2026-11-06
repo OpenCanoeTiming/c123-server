@@ -2,7 +2,7 @@
  * The flush after a unit (CONTRACTS §1.6, §7.2): at most one message per changed resource, carrying every field the unit changed;
  * the message that creates an id carries the whole resource. Per-unit diagnostics are recomputed here, for what the unit touched.
  */
-import { disagree } from './precedence.js';
+import { disagreement } from './precedence.js';
 import { oncourseView } from './oncourse.js';
 import { presentedFinish, settled, viewAttempt } from './presentation.js';
 import { viewResource } from './resources.js';
@@ -30,7 +30,7 @@ function attemptDiagnostics(a: AttemptState): Diagnostic[] {
   const out: Diagnostic[] = [];
   for (const field of COMPARED) {
     const fs = a.slots.get(field);
-    if (fs === undefined || !disagree(fs.tcp, fs.xml) || !settled(a, fs.tcp) || !settled(a, fs.xml)) continue;
+    if (fs === undefined || !disagreement(fs, settled(a, fs.tcp) && settled(a, fs.xml))) continue;
     out.push({ kind: 'source-disagreement', attemptId: a.id, field, sources: ['tcp', 'xml'] });
   }
   if (a.contradiction !== undefined) out.push({ kind: 'contradicted-finish', attemptId: a.id, ...a.contradiction });

@@ -1,5 +1,6 @@
 /** Where an element's resource lives: Attempts, Phases and the format a Phase reads its rows by. */
-import { fmtOf, splitRaceId, zonedDate, zonedInstant, type Fmt } from '../ingest/common.js';
+import { fmtOf, splitRaceId, usable, zonedDate, zonedInstant, type Fmt } from '../ingest/common.js';
+import type { CourseSlot } from '../ingest/index.js';
 import type { AttemptState, CoreState, ResourceState, Source } from './types.js';
 
 export function resource(map: Map<string, ResourceState>, id: string): ResourceState {
@@ -30,6 +31,15 @@ export function phaseResource(s: CoreState, phaseId: string, observedAt: string)
 export function fmtFor(s: CoreState, phaseId: string): Fmt {
   const stated = s.phases.get(phaseId)?.plain.get('format');
   return fmtOf(typeof stated === 'string' ? stated : splitRaceId(phaseId).token);
+}
+
+/** The course bound to a Phase, known only once a snapshot binds it (§4.6). */
+export function boundSlots(s: CoreState, phaseId: string): CourseSlot[] | undefined {
+  const courseId = s.phases.get(phaseId)?.fields.get('courseId')?.xml;
+  if (courseId?.state !== 'known') return undefined;
+  const fs = s.courses.get(String(courseId.value))?.fields.get('slots');
+  const slots = fs?.xml?.value as CourseSlot[] | undefined;
+  return usable(slots) ? slots : undefined;
 }
 
 const newAttempt = (id: string, phaseId: string, bib: string, observedAt: string, source: Source): AttemptState => ({
