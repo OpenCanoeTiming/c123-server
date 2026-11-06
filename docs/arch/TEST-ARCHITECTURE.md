@@ -270,10 +270,13 @@ the step index, the Attempt, the field and the property number.
    read from the raw stream at admission; "still in the latest `oncourse.updated`" is the **D**
    reading, for a re-run on the published fixture only), a judged cell (`0`, `2`, `50`) never becomes
    `null` at a results-table step — upstream's own withdrawal, the stream's listing blanking a cell
-   it judged, is presented only where the presented row's cell is blank too, `provisional`
-   recomputed; a row's judged cell stands against the stream blank (INV-2 rule 1; recorded:
+   it judged, is presented wherever no presented row of the generation holds that cell judged: the
+   presented row's cell blank, or no row of the generation yet (recorded: nkz-19so K1M_BR2_19:79,
+   cells 14–17 judged 25 s into the run and blank 11 s later, mid-run, no row; round 23),
+   `provisional` recomputed; a row's judged cell stands against the stream blank (INV-2 rule 1; recorded:
    jarni-so-odp C1M_BR1_18:26 cell 19 at 12:17:19.030, the row `0`) (D4; property 11's list;
-   recorded: nkz-19so C1W_BR1_19:40 cell 16 at 08:38:18.181, the presented TCP row blank while the
+   recorded: nkz-19so C1W_BR1_19:40 cell 16 at 08:38:18.181, the presented TCP row — the row rule 2
+   presents, not the latest row of either source — blank while the
    XML row still holds `0`; round 21, second pass); after it has left, and until a
    re-listing of the generation, cells change only at a results-table
    step. (c) A field presented from `tcp` flips to `xml` only: after a `tcp-disconnected` that
@@ -362,14 +365,21 @@ the step index, the Attempt, the field and the property number.
     `oncourse.updated` and absent from the latest, so an Attempt never listed is not closed by
     that — and no presented no-result mark, `non-ranked` closing nothing) and either a presented
     `gates` cell is `null`, a Kayak Cross Attempt's `faults` carries `judgingComplete: false` (the
-    parser reads it over the slot cells, `DERIVATIONS.md` §4.6(d)), or `gates`, in Cross `faults`, is
+    parser reads it over the slot cells and stamps the `faults` observation alone, and only a `known`
+    one — a `not-yet` `faults`, every slot blank, carries no stamp and is not under this clause,
+    `CONTRACTS.md` §1.2; the row's other observations carry no
+    judging stamp, `runClosed` at most, `DERIVATIONS.md` §4.4, §4.6(d); the Cross branch never reads
+    `gates`, which is `unavailable{not-applicable}` there; round 23), or `gates`, in Cross `faults`, is
     not `known` because no course is bound and the observation's `judgingComplete` is not `true` (the
     parser stamps `null`, or nothing, without a course, CONFORMANCE-VECTORS §1; a `true` stamp is its judgement
     against a course and settles the value; round 21) — this judging clause does not reach an Attempt
     with no run yet (`status` absent or `not-started`, its row carrying neither time nor mark: the values
-    are run 1's, settled there, until the carry below begins) nor a heat's `placement` and the ordinal
-    built from it, upstream's whole result asserted after the judging (`DERIVATIONS.md` §4.2, §4.7;
-    round 21); or it is a second run's `placement`,
+    are run 1's, settled there, until the carry below begins) nor what a heat's row asserts with its
+    `placement`: the placement, the ordinal built from it, and its `qualified` and `underReview` from
+    the step the placement is presented — upstream's whole result asserted after the judging
+    (`DERIVATIONS.md` §4.2, §4.7; round 21); before that step they are under the clause like any
+    value, and a heat's `faults` stays under it until the heat leaves the list (§4.2, §4.4's
+    closure; round 23); or it is a second run's `placement`,
     `pairTotal` or `countingRun` carried over from run 1, from the Attempt's first on-course listing
     in run 2, staged or started, until a
     row of run 2, carrying its time or its mark, restates that field — judged field by field, since
@@ -379,7 +389,8 @@ the step index, the Attempt, the field and the property number.
     C1W_BR2_19:35 staged at 10:28:09.809) or one that lists it while no course is bound (a
     cold start: the results push precedes the first snapshot), at a re-listing within the generation
     that undoes a leave (`DERIVATIONS.md` §4.4; round 21), at upstream's withdrawal of a judged cell
-    while it is listed — the stream's own listing blanking the cell, the presented row's cell blank too,
+    while it is listed — the stream's own listing blanking the cell, no presented row of the generation
+    holding it judged (its cell blank, or no row yet),
     a row's judged cell standing (INV-2 rule 1), property 6(b); D4 recomputes on the
     presented cells (recorded: nkz-19so C1W_BR1_19:40 cell 16, the row blank at 08:38:18.153, the stream
     at .181, back at .562; round 21, second pass) — or when a course binds — the first
