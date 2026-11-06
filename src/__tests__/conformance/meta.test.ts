@@ -125,14 +125,14 @@ describe('expected-red ledger and modes (issue #200 rows 3, 4, 5)', () => {
     for (const id of LIVE_INGEST) expect(listed).not.toContain(id);
   });
 
-  it('expected-red after #203 (merge core): the standing-assembly and workflow-state vectors, and the two merge vectors that need an assembled Standing', () => {
-    // The ratchet: ids leave as core issues land. #203 took the merge vectors; `standing-not-resent-on-running-tick` is merge-shaped
-    // but asserts `standing.updated`, which only the Standing assembly (#205) sends, so it stays with the 13 non-merge vectors. Round 20
-    // (#204) added `classification-emptied-keeps-last-standing`, which asserts the same counts for a classification table emptied after
-    // rows: it needs the assembled Standing too, so it is the second.
+  it('expected-red after #205 (Standing assembly): only the five workflow-state check vectors remain (#211)', () => {
+    // The ratchet: ids leave as core issues land. #203 took the merge vectors; #205 took the eight standing-assembly vectors,
+    // `standing-not-resent-on-running-tick` and `classification-emptied-keeps-last-standing` (round 20, item 22). The gate checks are #211's.
     const nonMerge = serverVectors().filter((v) => !Array.isArray(v.given)).map((v) => v.id);
     expect(nonMerge.length).toBe(13);
-    expect([...loadExpectedRed()].sort()).toEqual([...nonMerge, 'standing-not-resent-on-running-tick', 'classification-emptied-keeps-last-standing'].sort());
+    const checks = nonMerge.filter((id) => id.startsWith('check-'));
+    expect(checks.length).toBe(5);
+    expect([...loadExpectedRed()].sort()).toEqual([...checks].sort());
   });
 
   it('the ledger is read from the file it is given, not from a constant', () => {
