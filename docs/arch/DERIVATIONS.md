@@ -781,10 +781,11 @@ results push precedes the first snapshot" (`DECISIONS/ADR-017` D4); whole record
   assert a judging that has not happened. Once any cell is judged it is emitted whole, `provisional`
   under §4.4's rule read over the slot cells: the parser stamps `judgingComplete` on the `faults`
   observation — every slot cell judged — exactly as on `gates`, since the value itself carries no
-  blank (round 19). The stamp lives on the `faults` observation alone, a `not-yet` `faults` with a
-  course bound included (every slot blank: `judgingComplete: false`); a row's outcome observation
+  blank (round 19). The stamp lives on the `faults` observation alone, and only on a `known` one: a
+  `not-yet` `faults` (every slot blank) carries no key (`CONTRACTS.md` §1.2) and no stamp, so an
+  untimed row of a bound course is not under the judging clause; a row's outcome observation
   carries `runClosed`, never a judging stamp (§4.4), so no other stamp decides `provisional`
-  (round 23).
+  (round 23, review O1).
 - **`faults` is derived from the cells plus the captions, on TCP and in the XML alike:** `count` is
   the number of cells marked `2`; `gates` lists those slots' captions (`ST`, `1`…`6`, `RZ`, `7`);
   `lastCleanSlot` is upstream's 1-based **slot position** (not the gate number: `ST` and `RZ` count) of

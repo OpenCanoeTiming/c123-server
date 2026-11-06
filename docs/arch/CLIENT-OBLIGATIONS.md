@@ -69,7 +69,8 @@ a harness convention (CONTRACTS §5; CONFORMANCE-VECTORS §1); a client shows `b
 and expects the `pair` standing, on a real stream, once the stated `siblingPhaseId` is known as before.
 Round 23 (2026-11-06) moved none: the stream's withdrawal of a judged cell reaching an Attempt with no
 row of the generation, the Cross judging stamp being the `faults` observation's, and a heat row's
-`qualified` and `underReview` settling with its `placement`, are the core's and the checker's
+`qualified` and `underReview` settling with its `placement` (and, after review, a `not-yet` `faults`
+carrying no stamp, so an untimed Cross row stays settled), are the core's and the checker's
 (DERIVATIONS §4.6; TEST-ARCHITECTURE §3.2); a client already handles `provisional` moving either way.
 
 ---

@@ -365,8 +365,9 @@ the step index, the Attempt, the field and the property number.
     `oncourse.updated` and absent from the latest, so an Attempt never listed is not closed by
     that — and no presented no-result mark, `non-ranked` closing nothing) and either a presented
     `gates` cell is `null`, a Kayak Cross Attempt's `faults` carries `judgingComplete: false` (the
-    parser reads it over the slot cells and stamps the `faults` observation alone, a `not-yet`
-    `faults` with a course bound included — every slot blank; the row's other observations carry no
+    parser reads it over the slot cells and stamps the `faults` observation alone, and only a `known`
+    one — a `not-yet` `faults`, every slot blank, carries no stamp and is not under this clause,
+    `CONTRACTS.md` §1.2; the row's other observations carry no
     judging stamp, `runClosed` at most, `DERIVATIONS.md` §4.4, §4.6(d); the Cross branch never reads
     `gates`, which is `unavailable{not-applicable}` there; round 23), or `gates`, in Cross `faults`, is
     not `known` because no course is bound and the observation's `judgingComplete` is not `true` (the
