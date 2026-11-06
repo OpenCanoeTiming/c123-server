@@ -51,7 +51,7 @@ const categoryOf = (s: CoreState, entryId: string): string | null => {
 };
 
 /** §5 step 2-3: placed Attempts, and unplaced ones that show a result or a mark; start-list rows and athletes on course are not entries. */
-const isEntry = (f: StandingFacts): boolean => f.placement !== null || f.status === 'finished' || isMark(f.status);
+const isEntry = (f: StandingFacts): boolean => f.placement !== null || (f.result !== null && f.result.kind !== 'pending') || isMark(f.status);
 
 const keyOf = (kind: string, phaseId: string, heat: number | undefined, category: string | null): string =>
   `${kind}:${phaseId}${heat === undefined ? '' : `:${heat}`}/${category ?? 'all'}`;
@@ -103,7 +103,14 @@ function ofPhase(s: CoreState, phaseId: string, asOf: string): Standing[] {
     if (first !== undefined) scoped('pair', { kind: 'pair', firstPhaseId: first, secondPhaseId: phaseId });
   }
   if (fmt.heats) {
-    for (const heat of [...new Set(facts.flatMap((f) => (f.heat === null ? [] : [f.heat])))].sort((a, b) => a - b)) {
+    const heats = new Set(facts.flatMap((f) => (f.heat === null ? [] : [f.heat])));
+    const heatPrefix = `heat:${phaseId}:`;
+    for (const key of s.standingKeys.get(phaseId) ?? []) {
+      if (!key.startsWith(heatPrefix) || !key.endsWith('/all')) continue;
+      const n = Number(key.slice(heatPrefix.length, -'/all'.length));
+      if (Number.isInteger(n)) heats.add(n);
+    }
+    for (const heat of [...heats].sort((a, b) => a - b)) {
       const scope = { kind: 'heat', phaseId, heat } as const;
       const part = assembleStanding({ entries: inputs.filter((e) => e.heat === heat), durationScored: false, cross: fmt.cross }, scope);
       add({ standingKey: keyOf('heat', phaseId, heat, null), classId, scope, ageCategoryId: null, entries: part.standing, anomalies: part.anomalies });
