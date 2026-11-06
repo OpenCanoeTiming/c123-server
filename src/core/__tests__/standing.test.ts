@@ -41,6 +41,12 @@ function cls() {
       el({ ingestSeq: n(), event: 'xml-rewrite-detected', observedAt: at(t), changedAfter: changedAfter === null ? null : at(changedAfter) }),
       snap('xml', at(t), rows, mode),
     ],
+    /** The operator re-baseline as one ingest unit (CONTRACTS 4 steps 1-2; round 19 item 8): the event, the reader's rewrite event, the snapshot's elements. */
+    rebase: (t: number, changedAfter: number, rows: unknown[], mode: 'results' | 'start-list' = rows.length > 0 ? 'results' : 'start-list'): Unit => [
+      el({ ingestSeq: n(), event: 'rebaseline', observedAt: at(t), scope: { kind: 'phase', phaseId: CP } }),
+      el({ ingestSeq: n(), event: 'xml-rewrite-detected', observedAt: at(t), changedAfter: at(changedAfter) }),
+      snap('xml', at(t), rows, mode),
+    ],
   };
 }
 
@@ -142,7 +148,7 @@ describe('#205 row 5: item 22, the maintainer\'s decision: an emptied classifica
       c.applyUnit(source === 'tcp' ? s.tcp(200, []) : s.xml(200, 195, []));
       expect(sent(c, m), `${source}: nothing pushed for the empty table`).toHaveLength(0);
       const m2 = mark(c);
-      c.applyUnit([el({ ingestSeq: 99, event: 'rebaseline', observedAt: at(300), scope: { kind: 'phase', phaseId: CP } })]);
+      c.applyUnit(s.rebase(300, 295, [])); // the snapshot the re-baseline reads holds the emptied table (start-list mode): the unit is [rebaseline, xml-rewrite-detected, snapshot]
       const replaced = c.notifications().slice(m2).filter((x) => x.type === 'scope.replaced');
       expect(replaced, source).toHaveLength(1);
       const st = (replaced[0]!['standings'] as Std[]).find((x) => x.standingKey === CKEY);
@@ -228,10 +234,13 @@ function table(phaseId: string) {
   return {
     xml: (t: number, changedAfter: number, rows: unknown[], extra: unknown[] = []): Unit => [el({ ingestSeq: n(), event: 'xml-rewrite-detected', observedAt: at(t), changedAfter: at(changedAfter) }), ...extra.map(el), snap('xml', t, rows)],
     tcp: (t: number, rows: unknown[]): Unit => [snap('tcp', t, rows)],
-    category: (t: number, bib: string, value: string): unknown => ({ ingestSeq: n(), attemptId: `${phaseId}:${bib}`, field: 'ageCategoryId', source: 'xml', kind: 'result-row', observedAt: at(t), value, confidence: 'authoritative' }),
+    /** The Entry's ageCategoryId as the xml parser states it: addressed by `entryId`, not by an Attempt (CONTRACTS 2.5; src/ingest/xml.ts). */
+    category: (t: number, entryId: string, value: string): unknown => ({ ingestSeq: n(), entryId, field: 'ageCategoryId', source: 'xml', kind: 'result-row', observedAt: at(t), value, confidence: 'authoritative' }),
   };
 }
 const row = (bib: string, rank: number, order: number, total: number, extra: Record<string, unknown> = {}) => ({ bib, outcome: duration(total), placement: { rank, order }, judgingComplete: true, ...extra });
+/** The same row, its Attempt pointing at the Entry `E<bib>` as the parsers' rows do. */
+const erow = (bib: string, rank: number, order: number, total: number, extra: Record<string, unknown> = {}) => row(bib, rank, order, total, { entry: { entryId: `E${bib}` }, ...extra });
 
 /** A TCP Schedule message through parseTcp, as the stream delivers it: `races` are the RaceIds it names. */
 function scheduleUnit(races: string[]): Unit {
@@ -255,10 +264,11 @@ describe('#205 row 3: scopes (CONTRACTS 5 step 1 standingKey; property 15 first 
   it('property 15: the category standing\'s first publication is when an Entry\'s ageCategoryId becomes known; ranks are 1 + the same-category entries with a strictly smaller class rank, order the position in the filtered list', () => {
     const t = table(P1);
     const c = coreWith([]);
-    c.applyUnit(t.xml(10, 5, [row('1', 1, 1, 80), row('2', 2, 2, 85), row('3', 3, 3, 90)]));
+    const rows = (): unknown[] => [erow('1', 1, 1, 80), erow('2', 2, 2, 85), erow('3', 3, 3, 90)];
+    c.applyUnit(t.xml(10, 5, rows()));
     expect(keyed(c, `phase:${P1}/all`)).toHaveLength(1);
     expect(sent(c).filter((s) => s.standingKey !== `phase:${P1}/all`)).toHaveLength(0);
-    c.applyUnit([...t.xml(20, 15, [row('1', 1, 1, 80), row('2', 2, 2, 85), row('3', 3, 3, 90)], [t.category(20, '2', 'DM'), t.category(20, '3', 'DM')])]);
+    c.applyUnit(t.xml(20, 15, rows(), [t.category(20, 'E2', 'DM'), t.category(20, 'E3', 'DM')]));
     const cat = keyed(c, `phase:${P1}/DM`);
     expect(cat).toHaveLength(1);
     expect(cat[0]).toMatchObject({ ageCategoryId: 'DM', scope: { kind: 'phase', phaseId: P1 } });
@@ -281,6 +291,62 @@ describe('#205 row 3: scopes (CONTRACTS 5 step 1 standingKey; property 15 first 
     expect(pair[0]).toMatchObject({ scope: { kind: 'pair', firstPhaseId: P1, secondPhaseId: P2 }, ageCategoryId: null });
     expect(pair[0]!.entries[0]).toMatchObject({ bib: '9', pairTotalSeconds: 160 });
     expect(keyed(c, `phase:${P2}/all`)).toHaveLength(1); // the phase standing did not change
+  });
+});
+
+describe('#205 row 9 (round 22): step 7 compares the ranked value, pairTotal for a second-run Phase (CONTRACTS 5 steps 6-7, round 22; DERIVATIONS 4.7)', () => {
+  const ahead = (a: string, b: string) => ({ kind: 'order-disagreement', entryId: a, aheadOfEntryId: b });
+  /** A second run: `own` is the run's own total, `pair` the combined one; rank and order are the combined placement. */
+  const second = (rows: Array<[bib: string, own: number, pair: number]>): { c: Core } => {
+    const t = table(P2);
+    const c = coreWith([scheduleUnit([P1, P2])]);
+    c.applyUnit(t.xml(10, 5, rows.map(([bib, own, pair], i) => erow(bib, i + 1, i + 1, own, { pairTotal: pair }))));
+    return { c };
+  };
+
+  it('round 22 second-run-phase-standing-agreeing-order-no-anomaly: placement order agrees with pairTotal while run 2\'s own times are in the other order: the phase standing raises no order-disagreement, and behindSeconds is the combined gap', () => {
+    const { c } = second([['1', 90, 170], ['2', 80, 175]]);
+    const phase = keyed(c, `phase:${P2}/all`);
+    expect(phase).toHaveLength(1); // the standing was assembled (a core that assembles none cannot pass the next lines)
+    expect(phase[0]!.entries.map((e) => e['entryId'])).toEqual(['E1', 'E2']);
+    expect(phase[0]!.anomalies).toEqual([]);
+    expect(phase[0]!.entries.map((e) => e['behindSeconds'])).toEqual([0, 5]);
+  });
+
+  it('round 22 second-run-pair-standing-agreeing-order-no-anomaly: the pair standing of the same Phase compares pairTotal as before and raises none', () => {
+    const { c } = second([['1', 90, 170], ['2', 80, 175]]);
+    const pair = keyed(c, `pair:${P2}/all`);
+    expect(pair).toHaveLength(1);
+    expect(pair[0]!.anomalies).toEqual([]);
+    expect(pair[0]!.entries.map((e) => e['pairTotalSeconds'])).toEqual([170, 175]);
+  });
+
+  it('round 22 second-run-phase-standing-true-disagreement-raises: a combined order that puts the larger pairTotal ahead is flagged in the phase standing, run 2\'s own times being in agreement with that order (they must not hide it)', () => {
+    const { c } = second([['1', 80, 175], ['2', 90, 170]]);
+    const phase = keyed(c, `phase:${P2}/all`);
+    expect(phase).toHaveLength(1);
+    expect(phase[0]!.anomalies).toEqual([ahead('E1', 'E2')]);
+    expect(phase[0]!.entries.map((e) => e['entryId'])).toEqual(['E1', 'E2']); // the relayed order stands
+  });
+
+  it('round 22 second-run-pair-standing-true-disagreement-raises: the same disagreement is flagged in the pair standing', () => {
+    const { c } = second([['1', 80, 175], ['2', 90, 170]]);
+    const pair = keyed(c, `pair:${P2}/all`);
+    expect(pair).toHaveLength(1);
+    expect(pair[0]!.anomalies).toEqual([ahead('E1', 'E2')]);
+  });
+
+  it('round 22 first-run-phase-standing-unchanged: a first run (and so a single run) still compares result.totalSeconds (vector standing-order-disagreement-anomaly): worse ahead of better is flagged, agreeing order is not', () => {
+    const t = table(P1);
+    const c = coreWith([scheduleUnit([P1, P2])]);
+    c.applyUnit(t.xml(10, 5, [erow('1', 1, 1, 90), erow('2', 2, 2, 88)]));
+    const bad = keyed(c, `phase:${P1}/all`);
+    expect(bad).toHaveLength(1);
+    expect(bad[0]!.anomalies).toEqual([ahead('E1', 'E2')]);
+    c.applyUnit(t.xml(100, 95, [erow('1', 1, 1, 88), erow('2', 2, 2, 90)]));
+    const good = keyed(c, `phase:${P1}/all`);
+    expect(good).toHaveLength(2);
+    expect(good[1]!.anomalies).toEqual([]);
   });
 });
 

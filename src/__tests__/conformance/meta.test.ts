@@ -189,8 +189,8 @@ describe('harness can fail (issue #200 row 15)', () => {
 });
 
 describe('core-adapter contract (issue #200 row 13, "Seam")', () => {
-  it('until the Standing assembly and the gate checks exist their entry points throw CoreMissing (createMergePort is #203\'s: wired to src/core)', () => {
-    expect(() => corePort.assembleStanding({ entries: [] }, { kind: 'phase', phaseId: 'p' })).toThrow(CoreMissing);
+  it('until the gate checks exist (#211) their entry point throws CoreMissing; the Standing assembly (#205) and createMergePort (#203) are wired to src/core and do not', () => {
+    expect(() => corePort.assembleStanding({ entries: [] }, { kind: 'phase', phaseId: 'p' })).not.toThrow();
     expect(() => corePort.gateStatus({ checks: [], flags: [], presented: {} })).toThrow(CoreMissing);
   });
 });

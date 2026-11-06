@@ -563,8 +563,8 @@ const rec = (kind: 'tcp' | 'xml', time: string, race?: string): ClsRec => {
 
 describe('#205 row 8: cp3-cross XER hour, MX1_XER_26 and WX1J_XER_26_JUN: the published sequence of round 18 (DERIVATIONS 4.10; CONTRACTS 5 step 1; TEST-ARCHITECTURE property 15)', () => {
   const PUBLISHED: Record<string, string[]> = {
-    MX1_XER_26: ['10:26:02.742', '10:26:13.728', '10:27:42.823', '10:28:42.303'],
-    WX1J_XER_26_JUN: ['10:26:05.202', '10:26:13.728', '10:28:12.887', '10:29:03.919', '10:29:24.174'],
+    MX1_XER_26: ['10:26:02.742', '10:26:13.728', '10:28:42.303'],
+    WX1J_XER_26_JUN: ['10:26:05.202', '10:26:13.728', '10:29:24.174'],
   };
 
   it('real cp3-cross: the excerpt is what the test says, and the leads recorded in DERIVATIONS 4.10 (89 s, 119 s; 21 s, 44 s) hold between these records', () => {
@@ -579,6 +579,14 @@ describe('#205 row 8: cp3-cross XER hour, MX1_XER_26 and WX1J_XER_26_JUN: the pu
     expect(rawTcpRows(rec('tcp', '10:27:42.823', 'MX1_XER_26').data)).toHaveLength(52);
     // the two builds really differ in the order they state, at the moments the sequence below turns on
     expect(rawTcpRows(rec('tcp', '10:26:02.742', 'MX1_XER_26').data).map((r) => r.order)).not.toEqual(rawTcpRows(rec('tcp', '10:27:42.823', 'MX1_XER_26').data).map((r) => r.order));
+    // CONTRACTS 5 step 1 (serialised form: entries sort by order, step 2): TCP's rotation that catches up with the xml build (10:27:42, 10:28:12 and, for MX1, the xml of 10:29:03
+    // behind 10:28:42) states the same rank and order per entry as the build before it, in another array position. It is a lead of the xml over TCP, not a change.
+    const sortedRows = (rows: Array<{ entryId: string; rank: number | null; order: number }>) => rows.map((r) => ({ entryId: r.entryId, rank: r.rank, order: r.order })).sort((a, b) => a.order - b.order || a.entryId.localeCompare(b.entryId));
+    const xml1 = (race: string) => sortedRows(rawXmlRows(x1.data, race));
+    expect(sortedRows(rawTcpRows(rec('tcp', '10:27:42.823', 'MX1_XER_26').data))).toEqual(xml1('MX1_XER_26'));
+    expect(sortedRows(rawTcpRows(rec('tcp', '10:28:12.887', 'WX1J_XER_26_JUN').data))).toEqual(xml1('WX1J_XER_26_JUN'));
+    expect(sortedRows(rawXmlRows(rec('xml', '10:29:03.919').data, 'WX1J_XER_26_JUN'))).toEqual(xml1('WX1J_XER_26_JUN'));
+    expect(sortedRows(rawXmlRows(rec('xml', '10:29:03.919').data, 'MX1_XER_26'))).toEqual(sortedRows(rawTcpRows(rec('tcp', '10:28:42.303', 'MX1_XER_26').data)));
   });
 
   for (const race of Object.keys(PUBLISHED)) {
@@ -628,17 +636,26 @@ describe('#205 row 8: cp3-cross XER hour, MX1_XER_26 and WX1J_XER_26_JUN: the pu
 });
 
 describe('#205 row 8: cp3-cross finals: the Standing holds the recorded placements (CONTRACTS 5 steps 1-2; DERIVATIONS 4.7, 4.10; property 15)', () => {
-  it('real cp3-cross WX1_XF_26 final (heat 1): the heat and the phase standing carry the recorded Rank and RankOrder of the 8 bibs, sorted by order', () => {
+  it('real cp3-cross WX1_XF_26 final: HeatNr 1 and 2 hold four bibs each, RankOrder runs 1..4 within each heat; the heat standings carry their own four, the phase standing all 8 sorted by (heat, order) (CONTRACTS 5 steps 1-2)', () => {
     const core = coreWith([connected(R19.xfStartList.observedAt), tcpUnit(R19.xfStartList, XF_DAY), tcpUnit(R19.xfFinal, XF_DAY)]);
-    const recorded = [...R19.xfFinal.data.matchAll(/<Participant Bib="\s*(\d+)"[^>]*\/><Result [^>]*\bRank="(\d*)" RankOrder="(\d*)"/g)].map((m) => ({ bib: m[1]!, rank: Number(m[2]), order: Number(m[3]) }));
+    const recorded = [...R19.xfFinal.data.matchAll(/<Participant Bib="\s*(\d+)"[^>]*\/><Result [^>]*\bHeatNr="(\d+)"[^>]*\bRank="(\d*)" RankOrder="(\d*)"/g)].map((m) => ({ bib: m[1]!, heat: Number(m[2]), rank: Number(m[3]), order: Number(m[4]) }));
     expect(recorded).toHaveLength(8);
+    expect(recorded.map((r) => r.heat)).toEqual([1, 1, 1, 1, 2, 2, 2, 2]);
     const sent = standingsOf(core, 0);
-    for (const key of ['heat:WX1_XF_26:1/all', 'phase:WX1_XF_26/all']) {
+    const view = (xs: Array<{ bib: string; rank: number; order: number }>) => xs.map((r) => ({ bib: r.bib, rank: r.rank, order: r.order }));
+    const seen = (key: string) => {
       const s = sent.filter((x) => x.standingKey === key).at(-1);
       expect(s, key).toBeDefined();
-      expect(s!.entries.map((e) => ({ bib: String(e['bib']).trim(), rank: e['rank'], order: e['order'] })), key).toEqual(recorded.map((r) => ({ bib: r.bib, rank: r.rank, order: r.order })));
+      return s!.entries.map((e) => ({ bib: String(e['bib']).trim(), rank: e['rank'], order: e['order'] }));
+    };
+    for (const heat of [1, 2]) {
+      const mine = recorded.filter((r) => r.heat === heat).sort((a, b) => a.order - b.order);
+      expect(mine, `heat ${heat} in the recording`).toHaveLength(4);
+      expect(seen(`heat:WX1_XF_26:${heat}/all`), `heat ${heat}`).toEqual(view(mine));
     }
+    expect(seen('phase:WX1_XF_26/all'), 'phase').toEqual(view([...recorded].sort((a, b) => a.heat - b.heat || a.order - b.order)));
     expect(sent.filter((x) => x.standingKey === 'heat:WX1_XF_26:1/all').at(-1)!.scope).toEqual({ kind: 'heat', phaseId: 'WX1_XF_26', heat: 1 });
+    expect(sent.filter((x) => x.standingKey === 'heat:WX1_XF_26:2/all').at(-1)!.scope).toEqual({ kind: 'heat', phaseId: 'WX1_XF_26', heat: 2 });
     expect(sent.some((x) => /^classification:/.test(x.standingKey))).toBe(false); // a heat Phase feeds no classification
   });
 
