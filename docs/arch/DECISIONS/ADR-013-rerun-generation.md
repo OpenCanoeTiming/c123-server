@@ -135,8 +135,9 @@ decide, a re-run begun and finished inside a TCP outage, reads as a correction b
 the seven cases; `TEST-ARCHITECTURE.md` property 10 reads it from the raw stream.
 
 Second pass (same day, review of PR #256). "Recorded" is a results-table row only: a row with a time
-or a mark, attributed after the generation's recorded start, that stated something new for its
-source — kept through a retraction, cleared by a contradiction (INV-2d: the athlete is on course
+or a mark, attributed after the generation's recorded start, that stated something the table did
+not already hold on either source (third pass: a mark standing at the recorded start records
+nothing however it arrives afterwards; `DERIVATIONS.md` §4.11) — kept through a retraction, cleared by a contradiction (INV-2d: the athlete is on course
 with that start, so the row described no finish of this run), never given by the stream alone (a
 stream finish with no row behind it is withdrawn by the next listing without it, `ADR-015`
 Revision 4, so the two rules never claim one listing). The first start listed for a generation is

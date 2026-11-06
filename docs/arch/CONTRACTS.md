@@ -714,8 +714,9 @@ and the run is raced again. Meanwhile, it looks as if the athlete never did that
 - `run` increments on exactly one piece of upstream evidence: an on-course listing of the Attempt
   that carries a start different from the generation's recorded start **and no finish, for a
   generation that is recorded** — a results-table row carrying a time or a mark was attributed to
-  it after its recorded start was known and stated something its source did not already hold, a
-  retraction since notwithstanding; a contradiction (§4 INV-2d) un-records it until the next row,
+  it after its recorded start was known and stated something the table did not already hold on
+  either source (a mark standing at the recorded start records nothing however it arrives
+  afterwards), a retraction since notwithstanding; a contradiction (§4 INV-2d) un-records it until the next row,
   and the on-course stream records nothing by itself (`DERIVATIONS.md` §4.11 defines both terms;
   `DECISIONS/ADR-013` Revision 4). The recorded start is the first start listed for the generation:
   the listing that gives it changes nothing else, and a listing with no start leaves it. **Any other
@@ -879,7 +880,7 @@ stays blank until all three are judged. TCP carries only the sums; the per-membe
 snapshot at the next save, so `memberPenalties` is absent until then and present afterwards. A
 crew cell that is not the sum of its members is upstream's own crew-level edit, presented as
 upstream states it and surfaced as a `member-sum-mismatch` diagnostic. No team race has been
-recorded; the rules rest on the source and a static sample (691 judged cells, 8 such edits).
+recorded; the rules rest on verified upstream behaviour and a static sample (691 judged cells, 8 such edits).
 
 **On-course facts.**
 - **`courseOrder`** is upstream's on-course position: 1 is closest to the finish (#166).
@@ -1269,6 +1270,9 @@ reliable signal that a Phase's results changed is ordinary field-level change: a
   - `on-course → at-start`, when the start impulse is deleted: the listing carries no `dtStart` and
     no clock (observed twice, `DERIVATIONS.md` §4.1); the generation's recorded start is kept, and a
     start given again is a start correction (§2.6), not a new generation.
+  - `at-start → finished`, when the listing carries a `dtFinish` and no `dtStart`: a finish impulse
+    with no start (observed once, a Cross time trial, `DERIVATIONS.md` §4.1); the generation's
+    recorded start, if any, is kept.
 - **No-results:**
   - `not-started | at-start → dns`;
   - `on-course → dnf | dsq | dsq-r | dqb | cap | ral | other`.

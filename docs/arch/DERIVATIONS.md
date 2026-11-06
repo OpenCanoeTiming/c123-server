@@ -386,19 +386,25 @@ which may be a start-list row a day ahead.
   recording. Together they are about 8% of on-course traffic. In a Cross heat a listing is `on-course`
   (§4.2).
 - `on-course`: `dtStart` non-empty and `dtFinish` empty.
-- **A listing with `dtStart` empty is `at-start`, whatever preceded it in the generation** (round
-  19, second pass, E1): the ordinary staging; a start impulse deleted (recorded twice: nkz-20ne
+- **A listing with `dtStart` and `dtFinish` empty is `at-start`, outside a Cross heat (§4.2),
+  whatever preceded it in the generation** (round 19, second pass, E1; the finish clause and the
+  heat exception third pass, from the trace below and §4.2): the ordinary staging; a start impulse deleted (recorded twice: nkz-20ne
   K1M_BR1_20:115 at 07:16:19Z, the real start given 5 s later; cp3-cross WX1_XT_26:25 at 07:15:34Z
   after 199 s on the clock — both listings carry `Time` empty, so `on-course` would present a clock
-  upstream no longer shows); a stream finish withdrawn (next bullet). The `running` inference goes
+  upstream no longer shows); a stream finish withdrawn (next bullet). With `dtFinish` set and no
+  `dtStart` the listing is `finished` by the first rule above, a finish impulse with no start
+  (recorded once: cp3-cross WX1_XT_26:25 at 07:16:59Z, the trace below; `CONTRACTS.md` §3.2
+  `at-start → finished`). The `running` inference goes
   with the start it showed (§4.3). Two things such a listing does not do: it displaces no
   `finished` or mark presented from the table (INV-2 rule 1; INV-2d needs the generation's start),
   and it changes the generation's recorded start not at all (§4.11: a start given again after a
   deletion is a start correction, never a new generation).
 - **A finish the stream alone has stated is the stream's to withdraw** (round 19, E1). While no
   results-table row has recorded the generation (§4.11's sense: a row with a time or a mark,
-  attributed after the recorded start), the next listing of the Attempt without a `dtFinish`
-  withdraws it: `status` is what that listing shows (`at-start` with no `dtStart`, else
+  attributed after the recorded start), or after the row that recorded it has been retracted and
+  the stream still lists the finish (nothing from the table is presented; the generation stays
+  recorded, §4.11; third pass, rule, 0 in seven recordings), the next listing of the Attempt
+  without a `dtFinish` withdraws it: `status` is what that listing shows (`at-start` with no `dtStart`, else
   `on-course`), the generation's finish and the `duration` inference are forgotten, no diagnostic
   is raised (INV-2d is for a finish presented from the table). It applies wherever the stream lists
   finishes per competitor: slalom and the Cross time trial (`XT`, §4.4) alike; a Cross heat lists
@@ -568,7 +574,7 @@ penalties, `Pen` is ignored (§4.6(d)), and upstream's own rows agree (`Pen 0`, 
 **TCP, single run or the first run of a pair.** `runSeconds = Results.Result@Time`,
 `penaltySeconds = @Pen`, `totalSeconds = @Total`.
 
-**TCP, the second run of a pair.** The recipe was traced in the source and confirmed on recordings.
+**TCP, the second run of a pair.** The recipe is confirmed on recordings (E1).
 On the second-run row, `Time`, `Gates` and `IRM` are run 2's own. `Pen`, `Total` and `Rank` are the
 combined values.
 - `runSeconds`:
@@ -708,7 +714,7 @@ results push precedes the first snapshot" (`DECISIONS/ADR-017` D4); whole record
 - A crew cell that differs from the member sum (8 of 691 judged cells in the sample) is a
   crew-level edit made upstream; present the crew cell, raise `member-sum-mismatch`.
 
-**(d) Kayak Cross.** Settled against the source and the recorded Cross event (E1):
+**(d) Kayak Cross.** Settled on the recorded Cross event and verified upstream behaviour (E1):
 - The cells are **fault marks**, not penalty seconds: only `""`, `0` and `2` occur; any other text is
   `unparseable-cell` and `null`. `gates` is `unavailable{not-applicable}` for Cross Attempts.
 - `faults` is `not-yet` while no cell is judged: a `{ count: 0, gates: [], lastCleanSlot: 0 }` would
@@ -876,13 +882,21 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
     listing that gives it changes nothing else (eight recorded Attempts reached their first start
     with a `DNS` or `CAP` already on the table, seven of them cleared before the start; compared
     against an unset start they would have made nine increments of the recorded one). A listing
-    with `dtStart` empty leaves it as it is — a start deleted is given again, recorded twice —
-    and takes its `status` from §4.1.
+    with `dtStart` empty leaves it as it is — a start deleted is given again, recorded twice; a
+    finish impulse with no start, once — and takes its `status` from §4.1.
   - **Recorded** means a results-table row carrying a time or a mark was attributed to the
-    generation after its recorded start was known and stated something its source did not already
-    hold for it: a mark retained before the start and re-sent at a rotation after it is a
-    re-delivery (INV-5) and records nothing, so a mid-run correction for an athlete who raced after
-    a cleared or standing `DNS` keeps `run` 1. A retraction since does not un-record it (the run was
+    generation after its recorded start was known and stated something the table did not already
+    hold for it on either source. **A mark standing on either source at the recorded start records
+    nothing however it arrives afterwards:** re-sent by a rotation of its own source, it is INV-5's
+    re-delivery; first carried by the other source once a save catches up, it is the same mark
+    (third pass, E1: nkz-19so K1M_BR2_19:54, TCP `DNS` 09:46:35.827Z, the start 09:46:59.844, the
+    XML's first `DNS` 09:47:02.964, 3.1 s after the start; a save lags up to one cycle, so any mark
+    typed in the 35 s before a start arrives this way). So a mid-run correction for an athlete who
+    raced after a cleared or standing `DNS` keeps `run` 1, which is what the term is for: no false
+    increment on a first run. A mark no source held at the start, attributed after it, records (the
+    mid-run mark, §10 item 23). A mark here is one of §4.1's result marks that sets `status`; `*`
+    (`underReview`, §4.1) with no time states no outcome and records nothing (third pass, rule:
+    K1W_BR2_18:16's XML `*` 25 s after its start keeps `run` 1). A retraction since does not un-record it (the run was
     raced; its result was deleted, which is the re-run's first half). A contradiction does (INV-2d:
     the athlete is on course with that start, so the row described no finish of this run); the
     next row attributed records it again. The stream records nothing by itself: a finish it lists
@@ -930,7 +944,11 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   reads as a re-run — right when the mark ended the run and the jury granted another, wrong when
   the mark was a slip and the start was corrected afterwards. Neither shape is recorded; §10 item
   23 carries both to the maintainer. A row retained in the row-before-finish window records
-  nothing until attributed, so a correction inside that window is a correction. `OnCourse.Participant@Warning`
+  nothing until attributed, so a correction inside that window is a correction; rows are retained
+  that way only in a generation begun by a new start (attribution per source, below), while in the
+  first generation a row before the finish is attributed on arrival and records then, so a moved
+  start with no finish inside that window would increment (third pass, rule; not recorded: §4.4
+  finds no finishless listing in any of the 86 windows). `OnCourse.Participant@Warning`
   decides nothing: it was empty at the recorded re-run, the row having been wiped two hours before.
   A result row observed cleared is a **retraction** (§4.12), not a generation change
   (`DECISIONS/ADR-013` Revision). A re-run therefore appears as a retraction, often invisible on TCP
@@ -1164,7 +1182,7 @@ changes: a late correction, a retraction, a contradiction, a re-baseline. The di
     1 is the better run.
 13. **Result marks are not always pushed**, and `left-without-finish` is the honest interim state
     (§4.1).
-15. **#179 answered from the source** (2026-09-25): start ramp and roll zone as judging slots (§2.3,
+15. **#179 answered** (2026-09-25, E1): start ramp and roll zone as judging slots (§2.3,
     §4.6); Cross faults derived from the cells, `Pen` ignored (§4.6(d)); `SLER`/`WWER` as
     classifications with stated staleness (§4.10); super-final and legacy final as summed pairs,
     relayed (`CONTRACTS.md` §2.4); attribute sub-classes as ordinary classes (§2.1); the re-run
@@ -1259,7 +1277,7 @@ but no code path or recording ever filled it.
 
 ## 10. Open technical questions
 
-Items 1–7 and 13 were answered from the source on 2026-09-25 (#179; E1); item 8 was closed by INV-2c
+Items 1–7 and 13 were answered on 2026-09-25 (#179; E1, verified upstream behaviour); item 8 was closed by INV-2c
 on 2026-10-14; items 15 and 17 were answered by the spike and the exit-delay measurement. Items 9, 11,
 12, 16, 18, 19, 20, 21, 22 and 23 remain.
 
@@ -1294,14 +1312,14 @@ on 2026-10-14; items 15 and 17 were answered by the spike and the exit-delay mea
     noticed late. Both are corrections that §4.12 now models.
 11. Which operator action produced each recorded retraction cannot be read from the stream. The
     "stale row survives" behaviour matches the on-course grid edit path. No recorded instance of
-    "delete selected results" exists; its no-push behaviour is from the source only.
+    "delete selected results" exists; its no-push behaviour is verified but unrecorded (E1).
 12. Whether today's live-mini XML ingest overwrites results that were cleared on TCP (E4).
-14. ~~Whether upstream's terminal channel can set a result mark on a closed run.~~ **Answered from the
-    source (2026-09-25):** no. The only status command targets an on-course slot by position and
+14. ~~Whether upstream's terminal channel can set a result mark on a closed run.~~ **Answered (2026-09-25,
+    E1):** no. The only status command targets an on-course slot by position and
     ignores the bib; on a closed or never-started run there is no slot, and no command clears a mark.
     The status write has left the contract; marks are the operator's (`CONTRACTS.md` §7.3).
 13. ~~A no-reorder penalty correction after racing ends may never trigger an XML write.~~ **Answered:**
-    confirmed from the source; the conditions are stated in §5 and `CONTRACTS.md` §2.8. TCP carries
+    confirmed (E1); the conditions are stated in §5 and `CONTRACTS.md` §2.8. TCP carries
     it regardless, and the maintainer confirms the file is always saved at the end, so the gap is a
     transient window, never lasting.
 15. ~~Whether upstream's on-course message still carries `Position` for a finisher it keeps listed
@@ -1321,7 +1339,7 @@ on 2026-10-14; items 15 and 17 were answered by the spike and the exit-delay mea
 20. **`duplicate-finish` on TCP after D1.** The six recorded TCP instances were never replayed, and no
     replayed window raised one; M1 replays them.
 21. **`NHT2`'s first-run token.** `CONTRACTS.md` §2.4 pairs it "where upstream defines one"; which
-    schedule token it pairs with is unstated, so until the source answers an `NHT2` has `pair: null`
+    schedule token it pairs with is unstated, so until it is settled an `NHT2` has `pair: null`
     (§2.1). In no recording. (Round 17.)
 17. ~~The finish → on-course-exit interval per recording.~~ **Measured (E1, seven recordings, 1,995
     closures):** about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % in [18, 20) s), about

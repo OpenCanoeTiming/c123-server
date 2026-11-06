@@ -279,7 +279,8 @@ the step index, the Attempt, the field and the property number.
 7. **Contradiction (INV-2d).** `status` goes `finished → on-course` only at: an on-course listing of
    the Attempt with the generation's start and no finish, the finish having been presented from a
    results-table observation (this property); a listing without a finish while the presented
-   `finished` is a stream inference and no results-table row has recorded the generation
+   `finished` is a stream inference and no results-table finish is presented — no row has recorded
+   the generation, or the row that did has been retracted since, the generation staying recorded
    (`DERIVATIONS.md` §4.1, §4.11: the stream withdraws its own finish, in slalom and the Cross time
    trial alike; `at-start` where the listing has no start; no diagnostic; raw stream at admission);
    a listing that starts a new generation
@@ -310,21 +311,27 @@ the step index, the Attempt, the field and the property number.
     finish, while the generation is recorded** (`DERIVATIONS.md` §4.11's two terms, tracked by the
     checker from the raw stream and the rows: the recorded start is the generation's first listed
     start, so the listing that gives it is no change; recorded means a row with a time or a mark,
-    attributed after that start, that stated something new for its source — kept through a
-    retraction, cleared by a contradiction, never given by the stream alone). In that same delta
+    attributed after that start, that stated something the table did not already hold on either
+    source — a mark standing on either source at the recorded start records nothing however it
+    arrives afterwards — kept through a retraction, cleared by a contradiction, never given by the
+    stream alone). In that same delta
     every run-scoped field is explicitly `not-yet` — none omitted — and `status` is `at-start` or
     `on-course`. **A listing that changes the start otherwise is a start correction:** `run`, every
     presented results-table value and `placement` are unchanged at that step; `status` and the
     on-course inferences are the listing's, as at any listing (`DERIVATIONS.md` §4.1, §4.3:
     `running` takes its `Time`); and the generation's recorded start is the listing's from then
-    on. A listing with an empty start changes neither `run` nor the recorded start; its `status` is
-    `at-start` unless a table-presented `finished` or mark stands (`DERIVATIONS.md` §4.1). No
+    on. A listing with an empty start changes neither `run` nor the recorded start; with `dtFinish`
+    empty too its `status` is `at-start` outside a Cross heat (in a heat `on-course`,
+    `DERIVATIONS.md` §4.2), with a `dtFinish` it is `finished` (a finish impulse with no start,
+    recorded once: cp3-cross WX1_XT_26:25 at 07:16:59Z), in both cases unless a table-presented
+    `finished` or mark stands (`DERIVATIONS.md` §4.1). No
     results-table observation whose finish precedes the new generation's start is presented
     afterwards (`DERIVATIONS.md` §4.11). Mutation: a checker built on "a different start alone"
     must fail on the recorded post-finish corrections (jarni-so-odp C1M_BR2_18:56 and the two
     nkz-19so K1M_BR2_19 cases), and one built on "any start change in a recorded generation" on the
     eight Attempts that reached their first start with a mark on the table (`DERIVATIONS.md`
-    §4.11); the correct replay keeps `run` at 1 in all of them.
+    §4.11), K1M_BR2_19:54 included, whose XML copy of the standing `DNS` arrives 3.1 s after the
+    start; the correct replay keeps `run` at 1 in all of them.
 11. **Provisional (§1.2).** `status` is never provisional. Any other presented result value has
     `provisional: true` exactly when: it is an inference (`kind: inference`, or
     `outcome.kind: 'running'`); or the run is not closed (`DERIVATIONS.md` §4.4: no `Completed="Y"`

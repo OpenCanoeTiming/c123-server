@@ -171,9 +171,10 @@ is withdrawn by the next listing of the Attempt without it: `status` follows tha
 diagnostic; in slalom and the Cross time trial alike, a Cross heat listing no finish (recorded:
 cp3-cross WX1_XT_26:25, a time trial, a finish impulse with no start and no time, withdrawn four
 minutes later, the athlete then `DNS`; `DERIVATIONS.md` §4.1; `CONTRACTS.md` §3.2). A listing with
-`dtStart` empty is `at-start` whatever preceded it in the generation — a start impulse deleted
-included, recorded twice — and displaces no table-presented `finished` or mark (`DERIVATIONS.md`
-§4.1; `CONTRACTS.md` §3.2, second pass). An XML
+`dtStart` and `dtFinish` empty is `at-start`, outside a Cross heat, whatever preceded it in the
+generation — a start impulse deleted included, recorded twice; with `dtFinish` set and no start it
+is `finished`, the case above, recorded once — and displaces no table-presented `finished` or mark
+(`DERIVATIONS.md` §4.1; `CONTRACTS.md` §3.2, second and third pass). An XML
 retraction that passes the guard supersedes the `tcp` observation it retracts, which is no longer a
 candidate of its source; a TCP row restating the value afterwards is a new observation and is
 presented (`DERIVATIONS.md` §4.12). Steps 1 and 2 of the re-baseline reach the core as one ingest

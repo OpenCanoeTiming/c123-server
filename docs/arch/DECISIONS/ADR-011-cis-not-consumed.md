@@ -102,7 +102,7 @@ None of these facts is carried by the contract:
   was armed at any recorded event;
 - the CIS initialisation session id.
 
-**Scoring-terminal reset.** Answered from the source (2026-09-25, #179): the action resets only the
+**Scoring-terminal reset.** Answered (2026-09-25, #179; E1): the action resets only the
 hardware judge terminals on their own port and never touches the TCP command receiver the server
 writes through. Penalty-check keeps no direct terminal channel, and nothing needs to react to the
 reset (`CONTRACTS.md` §7.3).
