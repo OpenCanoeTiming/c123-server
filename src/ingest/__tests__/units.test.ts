@@ -63,7 +63,8 @@ describe('§0.1 units', () => {
   });
   it('§0.1 an empty attribute is absent: DNS row Time="" gives no time', () => {
     const r = rowOf(parseTcp(TCP.resultsBr1Marks, ctx()), 'K1M_BR1_19', '64');
-    expect(r.outcome).toMatchObject({ kind: 'no-result', status: 'dns' });
+    expect(r.status).toBe('dns'); // round 20 code item 18: the parser never emits no-result (CONTRACTS §2.6); a mark with no time states no outcome
+    expect(r.outcome).toBeUndefined();
     expect(JSON.stringify(r)).not.toContain('runSeconds');
   });
 });

@@ -12,5 +12,6 @@
   "check-null-vs-zero-distinct",
   "check-team-sum-compared",
   "check-not-carried-to-new-generation",
-  "check-stays-with-bib-when-result-moves"
+  "check-stays-with-bib-when-result-moves",
+  "classification-emptied-keeps-last-standing"
 ]

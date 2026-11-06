@@ -46,19 +46,19 @@ describe('§4.1 status and result marks', () => {
     const base = TCP.resultsBr1Marks; // bib 64 and 68, IRM="DNS"
     it.each([
       ['DNS', 'dns'], ['DNF', 'dnf'], ['CAP', 'cap'], ['RAL', 'ral'], ['DSQ', 'dsq'], ['DSQ-R', 'dsq-r'], ['DQB', 'dqb'],
-    ])('§4.1 IRM=%s -> outcome no-result %s, status %s', (irm, mark) => {
+    ])('§4.1 IRM=%s -> status %s and no outcome (round 20 code item 18: no-result is the core\'s presentation)', (irm, mark) => {
       const els = parseTcp(base.replace(/IRM="DNS"/g, `IRM="${irm}"`), ctx());
-      expect(rowOf(els, 'K1M_BR1_19', '64').outcome).toEqual({ kind: 'no-result', status: mark });
+      expect(rowOf(els, 'K1M_BR1_19', '64').outcome).toBeUndefined();
       expect(statusOf(els, 'K1M_BR1_19', '64')).toBe(mark);
     });
     it('§4.1 IRM=NON-RK -> non-ranked, a finished run excluded from ranking', () => {
       const els = parseTcp(base.replace(/IRM="DNS"/g, 'IRM="NON-RK"'), ctx());
       expect(statusOf(els, 'K1M_BR1_19', '64')).toBe('non-ranked');
     });
-    it('§4.1 any other IRM value maps to other (outcome no-result other)', () => {
+    it('§4.1 any other IRM value maps to other (status other, no outcome)', () => {
       const els = parseTcp(base.replace(/IRM="DNS"/g, 'IRM="XYZ"'), ctx());
       expect(statusOf(els, 'K1M_BR1_19', '64')).toBe('other');
-      expect(rowOf(els, 'K1M_BR1_19', '64').outcome).toEqual({ kind: 'no-result', status: 'other' });
+      expect(rowOf(els, 'K1M_BR1_19', '64').outcome).toBeUndefined();
     });
     it('§4.1 round 19 (code item 9): a row carrying a mark and a time emits the mark in status AND the time as outcome duration; no-result is the core\'s presentation (DNF on bib 55 which keeps Time="48.64")', () => {
       const msg = TCP.resultsBr1.replace('IRM=""', 'IRM="DNF"'); // bib 55 keeps Time="48.64" Rank="1"
@@ -96,10 +96,10 @@ describe('§4.1 status and result marks', () => {
   });
 
   describe('result marks, XML.Results.Status', () => {
-    it('§4.1 recorded <Status>DNS</Status> (K1M_BR2_19 bib 105) -> dns, no-result', () => {
+    it('§4.1 recorded <Status>DNS</Status> (K1M_BR2_19 bib 105) -> dns, no outcome (round 20 code item 18)', () => {
       const els = parseXmlSnapshot(xmlFixture('slalom.xml'), ctx());
       expect(statusOf(els, 'K1M_BR2_19', '105')).toBe('dns');
-      expect(rowOf(els, 'K1M_BR2_19', '105').outcome).toEqual({ kind: 'no-result', status: 'dns' });
+      expect(rowOf(els, 'K1M_BR2_19', '105').outcome).toBeUndefined();
     });
     it.each([['DNF', 'dnf'], ['CAP', 'cap'], ['RAL', 'ral'], ['DSQ', 'dsq'], ['DSQ-R', 'dsq-r'], ['DQB', 'dqb'], ['NON-RK', 'non-ranked'], ['QQQ', 'other']])(
       '§4.1 XML Status=%s -> %s (synthetic variant of the recorded DNS row)', (s, mark) => {

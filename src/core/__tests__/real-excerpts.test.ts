@@ -205,3 +205,320 @@ describe('jarni-ne-do: K1M_BR2_19 bib 22 across a TCP outage (CONTRACTS §4 INV-
     expect(core.presented(A).outcome).toMatchObject({ state: 'known', source: 'tcp', value: { totalSeconds: tcpTotal } });
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// #204 rows 4 to 8 and the round-20 cold start: real excerpts of every TCP record of a window (fixtures/leave-excerpts.ts, cut by script from the
+// recordings), each fed through parseTcp in recorded order. The recordings hold no connection records (TEST-ARCHITECTURE §9): `tcp-connected`
+// precedes the first record of a window. The leave rule is DERIVATIONS §4.1 (4 s, "or more", evaluated at every ingested TCP message, a message
+// arriving the constant or more after the previous one ends a silence and nothing leaves). The expected in-set / status at each step is that
+// rule applied to the RECORDED timestamps and texts below (`leaveModel`), never read from the core.
+// ---------------------------------------------------------------------------------------------------------------------------------------
+
+import { LEAVE, type LeaveRec } from './fixtures/leave-excerpts.js';
+import { derive } from './streams.js';
+
+const LEAVE_MS = 4000;
+const raceDates = (recs: readonly LeaveRec[]): Record<string, string> =>
+  Object.fromEntries([...new Set(recs.flatMap((r) => [...r.data.matchAll(/RaceId="([^"]+)"/g)].map((m) => m[1]!)))].map((id) => [id, recs[0]!.observedAt.slice(0, 10)]));
+const namesBib = (r: { data: string }, race: string, bib: string): boolean =>
+  r.data.includes('<OnCourse ') && r.data.includes(`RaceId="${race}"`) && new RegExp(`Bib="\\s*${bib}"`).test(r.data);
+const isCourseEmpty = (r: { data: string }): boolean => /<OnCourse Total="0" Position="0"\s*\/>/.test(r.data);
+
+/** DERIVATIONS §4.1 applied to the recorded records: after each record, is the Attempt on the set and what `status` does the stream state for it. */
+function leaveModel(recs: readonly { observedAt: string; data: string }[], race: string, bib: string): Array<{ listed: boolean; status: string | undefined }> {
+  let listed = false;
+  let last = 0;
+  let prev: number | undefined;
+  let status: string | undefined;
+  return recs.map((r) => {
+    const t = Date.parse(r.observedAt);
+    if (listed && prev !== undefined && t - prev >= LEAVE_MS) last = t; // the silence ended: every listed Attempt counts from this message
+    if (namesBib(r, race, bib)) {
+      listed = true;
+      last = t;
+      const c = /Type="C"[^>]*dtStart="([^"]*)"[^>]*dtFinish="([^"]*)"/.exec(r.data)!;
+      status = c[2] !== '' ? 'finished' : c[1] !== '' ? 'on-course' : 'at-start';
+    } else if (isCourseEmpty(r)) {
+      if (listed) status = status === 'on-course' ? 'left-without-finish' : status === 'at-start' ? 'not-started' : status;
+      listed = false;
+    } else if (listed && prev !== undefined && t - prev < LEAVE_MS && t - last >= LEAVE_MS) {
+      listed = false;
+      status = status === 'on-course' ? 'left-without-finish' : status === 'at-start' ? 'not-started' : status;
+    }
+    prev = t;
+    return { listed, status };
+  });
+}
+
+/** Feeds the window one record at a time and returns the core's view of one Attempt after each. */
+function replayAttempt(recs: readonly LeaveRec[], id: string, over: Record<string, unknown> = {}): Array<{ listed: boolean; status: unknown; set: string[]; core: ReturnType<typeof coreWith> }> {
+  const core = coreWith([connected(recs[0]!.observedAt)]);
+  const dates = raceDates(recs);
+  return recs.map((r) => {
+    core.applyUnit(tcpUnit(r, dates, over));
+    const set = core.oncourse().attemptIds.map(String);
+    return { listed: set.includes(id), status: (core.presented(id)['status'] as { value?: unknown } | undefined)?.value, set, core };
+  });
+}
+
+describe('#204 row 4: cp3-cross 09:18:38Z, the 10.7 s TCP stall with the Cross heat WX1J_XS_26_JUN on course (DERIVATIONS §4.1 "Stated as one evaluation")', () => {
+  const recs = LEAVE.stall10;
+  const heat = ['1', '4', '5', '8'].map((b) => `WX1J_XS_26_JUN:${b}`).sort();
+
+  it('the excerpt is what the test says: four heat Attempts listed every second, then 10.68 s with no TCP message at all, then TimeOfDay and the heat again', () => {
+    const times = recs.map((r) => Date.parse(r.observedAt));
+    const gaps = times.slice(1).map((t, i) => t - times[i]!);
+    expect(Math.max(...gaps)).toBeGreaterThan(10_000);
+    expect(Math.max(...gaps)).toBeLessThan(11_000);
+    expect(heat.every((id) => recs.some((r) => namesBib(r, 'WX1J_XS_26_JUN', id.split(':')[1]!)))).toBe(true);
+  });
+
+  it('real: from the first complete listing to the end of the window the on-course set is exactly the four heat Attempts at every record, across the stall (no oncourse-left)', () => {
+    const steps = replayAttempt(recs, heat[0]!);
+    const from = steps.findIndex((s) => [...s.set].sort().join() === heat.join());
+    expect(from).toBeGreaterThanOrEqual(0);
+    for (const s of steps.slice(from)) expect([...s.set].sort()).toEqual(heat);
+  });
+
+  it('real: no Attempt of the heat is anything but on-course at any record, and no record leaves a trace of a leave (no left-without-finish: a Cross heat never uses it)', () => {
+    const core = coreWith([connected(recs[0]!.observedAt)]);
+    for (const r of recs) {
+      core.applyUnit(tcpUnit(r, raceDates(recs)));
+      for (const id of core.attempts().map(String)) expect((core.presented(id)['status'] as { value?: unknown }).value, id).toBe('on-course');
+    }
+    expect(core.diagnostics()).toEqual([]);
+  });
+});
+
+describe('#204 row 5: nkz-20ne 11:53:51Z, the 21.5 s TCP stall with an empty course (DERIVATIONS §4.1)', () => {
+  const recs = LEAVE.stall21;
+
+  it('the excerpt is what the test says: Total 0 at 11:53:51.872, then 21.53 s with no TCP message, then RaceConfig', () => {
+    const i = recs.findIndex((r) => r.observedAt === '2026-09-20T11:53:51.872Z');
+    expect(isCourseEmpty(recs[i]!)).toBe(true);
+    expect(Date.parse(recs[i + 1]!.observedAt) - Date.parse(recs[i]!.observedAt)).toBeGreaterThan(21_000);
+  });
+
+  it('real: the course is empty at every record, no Attempt exists, nothing is on the set', () => {
+    const steps = replayAttempt(recs, 'FOR_BR2_20:5');
+    for (const s of steps) expect(s.set).toEqual([]);
+    expect(steps.at(-1)!.core.attempts()).toEqual([]);
+  });
+
+  it('(derived: one recorded listing, FOR_BR2_20 bib 5 of 11:58:29, re-timed to just after the last Total 0) the Attempt staged across the stall is still listed at the message that ends it and leaves only at upstream\'s own "course empty" 0.6 s later', () => {
+    const listing = LEAVE.forListing.find((r) => namesBib(r, 'FOR_BR2_20', '5'))!;
+    const staged = { ...listing, observedAt: '2026-09-20T11:53:51.900Z' };
+    const all = [...recs.filter((r) => r.observedAt <= '2026-09-20T11:53:51.872Z'), staged, ...recs.filter((r) => r.observedAt > '2026-09-20T11:53:51.872Z')];
+    const steps = replayAttempt(all, 'FOR_BR2_20:5');
+    const at = (iso: string): number => all.findIndex((r) => r.observedAt === iso);
+    expect(steps[at('2026-09-20T11:53:51.900Z')]!.listed).toBe(true);
+    for (const iso of ['2026-09-20T11:54:13.404Z', '2026-09-20T11:54:13.405Z', '2026-09-20T11:54:14.011Z']) {
+      expect(steps[at(iso)]!.listed, iso).toBe(true);
+      expect(steps[at(iso)]!.status, iso).toBe('at-start');
+    }
+    const empty = steps[at('2026-09-20T11:54:14.022Z')]!;
+    expect(isCourseEmpty(all[at('2026-09-20T11:54:14.022Z')]!)).toBe(true);
+    expect(empty.listed).toBe(false);
+    expect(empty.status).toBe('not-started');
+  });
+});
+
+describe('#204 row 6: the four real unstages of 3.04, 3.68, 3.86 and 4.29 s (DERIVATIONS §4.1 round 20: "A removal and a restage faster than the constant are not seen ... a slower one is a leave and a re-listing")', () => {
+  interface Gap { name: string; win: readonly LeaveRec[]; race: string; bib: string; seconds: number; leaves: boolean }
+  const gaps: Gap[] = [
+    { name: 'jarni-ne-do K1M_BR1_19:51 3.04 s', win: LEAVE.gap304, race: 'K1M_BR1_19', bib: '51', seconds: 3.04, leaves: false },
+    { name: 'cp3-cross WX1_XT_26:19 3.68 s', win: LEAVE.gap368, race: 'WX1_XT_26', bib: '19', seconds: 3.68, leaves: false },
+    { name: 'nkz-20ne K1W_BR1_20:46 3.86 s', win: LEAVE.gap386, race: 'K1W_BR1_20', bib: '46', seconds: 3.86, leaves: false },
+    { name: 'jarni-ne-do K1M_BR2_19:83 4.29 s', win: LEAVE.gap429, race: 'K1M_BR2_19', bib: '83', seconds: 4.29, leaves: true },
+  ];
+
+  for (const g of gaps) {
+    const id = `${g.race}:${g.bib}`;
+    const named = g.win.filter((r) => namesBib(r, g.race, g.bib));
+    const longest = Math.max(...named.slice(1).map((r, i) => Date.parse(r.observedAt) - Date.parse(named[i]!.observedAt))) / 1000;
+
+    it(`${g.name}: the excerpt holds the recorded gap, other TCP messages arriving throughout (no silence of ${LEAVE_MS / 1000} s)`, () => {
+      expect(longest).toBeCloseTo(g.seconds, 2);
+      const t = g.win.map((r) => Date.parse(r.observedAt));
+      expect(Math.max(...t.slice(1).map((x, i) => x - t[i]!))).toBeLessThan(LEAVE_MS);
+    });
+
+    it(`${g.name}: ${g.leaves ? 'a leave at the first message 4 s or more after the last naming, then a re-listing' : 'no leave: the Attempt is on the set at every record (the removal and restage are not seen)'}; the core follows the rule at every record`, () => {
+      const model = leaveModel(g.win, g.race, g.bib);
+      expect(model.some((m, i) => i > 0 && model[i - 1]!.listed && !m.listed)).toBe(g.leaves);
+      const steps = replayAttempt(g.win, id);
+      steps.forEach((s, i) => {
+        if (model[i]!.status === undefined) return; // not yet listed in the window
+        expect({ listed: s.listed, status: s.status }, `${g.win[i]!.observedAt}`).toEqual(model[i]);
+      });
+      if (g.leaves) {
+        const out = model.findIndex((m, i) => i > 0 && model[i - 1]!.listed && !m.listed);
+        const back = model.findIndex((m, i) => i > out && m.listed);
+        expect(steps[out]!.status).toBe('not-started'); // unstaged before any start (CONTRACTS §3.2)
+        expect(steps[back]!.status).toBe('at-start'); // not-started -> at-start, the generation untouched
+        expect((steps[back]!.core.presented(id)['run'] as { value: unknown }).value).toBe((steps[0]!.core.presented(id)['run'] as { value: unknown }).value);
+      }
+    });
+  }
+});
+
+describe('#204 row 8 (per-unit assert against the raw stream, stated as such; the gate-2 checker #249 is not in): no result value is provisional:false in the windows of rows 4 to 6 unless the raw stream closed its run (CONTRACTS §1.2, P11)', () => {
+  const closed = (r: { data: string }): boolean => /Completed="Y"/.test(r.data) && /dtFinish="[^"]+"/.test(r.data);
+  const windows: Array<[string, readonly LeaveRec[]]> = [['stall10', LEAVE.stall10], ['stall21', LEAVE.stall21], ['gap304', LEAVE.gap304], ['gap368', LEAVE.gap368], ['gap386', LEAVE.gap386], ['gap429', LEAVE.gap429]];
+  for (const [name, recs] of windows) {
+    it(`${name}: after every record every stream-derived outcome/gates/faults/placement is provisional while the raw stream has not closed its run`, () => {
+      const core = coreWith([connected(recs[0]!.observedAt)]);
+      const dates = raceDates(recs);
+      const closedBibs = new Set<string>(); // closed by the raw stream, or holding a results-table row (judged by its own cells: a complete row is final, P11)
+      for (const r of recs) {
+        core.applyUnit(tcpUnit(r, dates));
+        if (closed(r)) closedBibs.add(/Bib="\s*(\d+)"/.exec(r.data)![1]!);
+        if (r.data.includes('<Results ')) for (const m of r.data.matchAll(/<Participant Bib="\s*(\d+)"/g)) closedBibs.add(m[1]!);
+        for (const id of core.attempts().map(String)) {
+          if (closedBibs.has(id.split(':')[1]!)) continue;
+          for (const f of ['outcome', 'gates', 'faults', 'placement']) {
+            const v = core.presented(id)[f] as { state?: string; provisional?: boolean; source?: string } | undefined;
+            if (v?.state === 'known' && v.source !== undefined) expect(v.provisional, `${r.observedAt} ${id}.${f}`).toBe(true);
+          }
+        }
+      }
+    });
+  }
+});
+
+describe('#204 B3 (design-round20 second pass; DERIVATIONS §4.4): cp3-cross WX1_XT_26:19, a staged listing with Completed="Y" and no start closes nothing', () => {
+  const recs = LEAVE.gap368;
+  const id = 'WX1_XT_26:19';
+
+  it('the excerpt is what the test says: Y with no dtStart and no dtFinish at 07:35:54.193Z, the start 9:35:59.069 listed 07:35:59.476Z with Completed N', () => {
+    const y = recs.find((r) => namesBib(r, 'WX1_XT_26', '19') && /Completed="Y"/.test(r.data))!;
+    expect(y.observedAt).toBe('2026-04-26T07:35:54.193Z');
+    expect(attrOf(y.data, 'Result', 'dtStart')).toBe('');
+    expect(attrOf(y.data, 'Result', 'dtFinish')).toBe('');
+    expect(recs.some((r) => namesBib(r, 'WX1_XT_26', '19') && attrOf(r.data, 'Result', 'dtStart') === '9:35:59.069' && /Completed="N"/.test(r.data))).toBe(true);
+  });
+
+  it('real: from the Y listing to the end of the window (the athlete started and running, nothing finished) the run is not closed: every known result field of the Attempt stays provisional', () => {
+    const core = coreWith([connected(recs[0]!.observedAt)]);
+    const dates = raceDates(recs);
+    let seenY = false;
+    let checked = 0;
+    for (const r of recs) {
+      core.applyUnit(tcpUnit(r, dates));
+      if (namesBib(r, 'WX1_XT_26', '19') && /Completed="Y"/.test(r.data)) seenY = true;
+      if (!seenY) continue;
+      for (const f of ['outcome', 'gates', 'faults', 'placement']) {
+        const v = core.presented(id)[f] as { state?: string; provisional?: boolean } | undefined;
+        if (v?.state === 'known') {
+          checked++;
+          expect(v.provisional, `${r.observedAt} ${f}`).toBe(true);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(0); // the test looked at something
+  });
+});
+
+describe('#204 B3 recorded effect and O2 (design-round20 second pass; #258 O2; DERIVATIONS §4.4): cp3-cross WX1_XT_26:19 over the whole run, no course bound', () => {
+  const recs = LEAVE.b3;
+  const id = 'WX1_XT_26:19';
+  const closing = recs.findIndex((r) => r.observedAt === '2026-04-26T07:37:55.676Z');
+  const firstRow = recs.findIndex((r) => r.data.includes('<Results '));
+
+  it('the excerpt is what the test says: the result row at 07:37:10.099, the first Completed Y carrying a dtFinish at 07:37:55.676 (the staged Y of 07:35:54.193 earlier is not it)', () => {
+    expect(closing).toBeGreaterThan(firstRow);
+    expect(recs[firstRow]!.observedAt).toBe('2026-04-26T07:37:10.099Z');
+    expect(attrOf(recs[closing]!.data, 'Result', 'dtFinish')).not.toBe('');
+    expect(recs.filter((r) => /Completed="Y"/.test(r.data)).map((r) => r.observedAt)).toEqual(['2026-04-26T07:35:54.193Z', '2026-04-26T07:37:55.676Z']);
+  });
+
+  it('real: from the result row to the record before the real closure the run is not closed, the course unbound: the outcome is provisional (the 46 s a staged Y must not take away)', () => {
+    const core = coreWith([connected(recs[0]!.observedAt)]);
+    let looked = 0;
+    recs.forEach((r, i) => {
+      core.applyUnit(tcpUnit(r, raceDates(recs), { courses: {} }));
+      if (i < firstRow || i >= closing) return;
+      const o = core.presented(id)['outcome'] as { state?: string; provisional?: boolean };
+      expect(o.state, r.observedAt).toBe('known');
+      expect(o.provisional, r.observedAt).toBe(true);
+      looked++;
+    });
+    expect(looked).toBeGreaterThan(5);
+  });
+
+  it('real: the Completed Y with the finish closes the run (provisional false), and the change is pushed in that same step (#258 O2: the Attempt is marked dirty)', () => {
+    const core = coreWith([connected(recs[0]!.observedAt)]);
+    for (const r of recs.slice(0, closing)) core.applyUnit(tcpUnit(r, raceDates(recs), { courses: {} }));
+    const from = core.notifications().length;
+    core.applyUnit(tcpUnit(recs[closing]!, raceDates(recs), { courses: {} }));
+    expect(core.presented(id)['outcome']).toMatchObject({ state: 'known', provisional: false });
+    const sent = core.notifications().slice(from).filter((m) => m['type'] === 'attempt.updated' && m['attemptId'] === id) as Array<{ fields: Record<string, { provisional?: boolean }> }>;
+    expect(sent.some((m) => m.fields['outcome']?.provisional === false)).toBe(true);
+  });
+});
+
+describe('#258 cold start (design-round20 "Cold start", code items 2, 3, 15; CONTRACTS §1.2, P11): before any snapshot binds the course', () => {
+  it('real nkz-19so K1M_BR2_19:80, run 2 running since 09:28:59, the Results row at 09:30:05.265 (no Time, Rank 31, Total 91.42, Gates=""): the carried placement and pairTotal are provisional', () => {
+    const recs = LEAVE.cold80;
+    const row = recs.at(-1)!;
+    expect(row.observedAt).toBe('2026-09-19T09:30:05.265Z');
+    expect(attrOf(row.data, 'Result', 'Time')).toBe('');
+    const core = coreWith([connected(recs[0]!.observedAt)]);
+    for (const r of recs) core.applyUnit(tcpUnit(r, raceDates(recs), { courses: {} }));
+    const id = 'K1M_BR2_19:80';
+    expect(core.presented(id)['status']).toMatchObject({ value: 'on-course' });
+    expect(core.presented(id)['placement']).toMatchObject({ state: 'known', value: { rank: Number(attrOf(row.data, 'Result', 'Rank')) }, provisional: true });
+    expect(core.presented(id)['pairTotal']).toMatchObject({ state: 'known', value: Number(attrOf(row.data, 'Result', 'Total')), provisional: true });
+  });
+
+  it('real cp3-cross MX1_XT_26:8, the Results row with Time 62.09 at 08:45:00.903 and no course bound: the result is provisional (completeness cannot be judged), also after the finish listing 164 ms later', () => {
+    const recs = LEAVE.coldXt8;
+    const rowAt = recs.findIndex((r) => r.observedAt === '2026-04-26T08:45:00.903Z');
+    expect(rowAt).toBeGreaterThan(0);
+    expect(recs.at(-1)!.observedAt).toBe('2026-04-26T08:45:01.067Z');
+    const core = coreWith([connected(recs[0]!.observedAt)]);
+    const id = 'MX1_XT_26:8';
+    const time = Number(attrOf(recs[rowAt]!.data, 'Result', 'Time'));
+    recs.forEach((r, i) => {
+      core.applyUnit(tcpUnit(r, raceDates(recs), { courses: {} }));
+      if (i < rowAt) return;
+      expect(core.presented(id)['outcome'], r.observedAt).toMatchObject({ state: 'known', value: { kind: 'duration', runSeconds: time }, provisional: true });
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// #258 O1 / design-round20 CQ1, P12: the recorded Attempts at which a refused XML mark was presented through `outcome` (fixtures/nine-excerpts.ts,
+// cut by script). P12 (TEST-ARCHITECTURE; CONTRACTS §2.6, §4 rule 2): `outcome.kind === 'no-result'` iff the presented `status` is a result mark
+// other than `non-ranked`, and then the same status. The expected relation is the contract's; the stream is the recorded one.
+// ---------------------------------------------------------------------------------------------------------------------------------------
+
+import { NINE } from './fixtures/nine-excerpts.js';
+
+describe('#258 O1 recorded instances: P12 holds at every step of the stream around each (no-result is status\'s presentation)', () => {
+  const MARKS = new Set(['dns', 'dnf', 'cap', 'ral', 'dsq', 'dsq-r', 'dqb', 'other']);
+  for (const c of NINE) {
+    it(`real ${c.recording} ${c.id} at ${c.at.slice(11, 23)}Z: the xml row states a mark, and at every step outcome no-result iff status is that mark`, () => {
+      const [race, bib] = [c.id.split(':')[0]!, c.id.split(':')[1]!];
+      const xml = c.steps.find((s) => s.kind === 'xml')!;
+      const block = new RegExp(`<Results>\\s*<RaceId>${race}</RaceId>[\\s\\S]*?<Bib>\\s*${bib}</Bib>[\\s\\S]*?</Results>`).exec(xml.data)![0];
+      expect(/<Status>[A-Z-]+<\/Status>/.test(block), 'the recorded xml row states a mark').toBe(true);
+      const dates = Object.fromEntries([...new Set(c.steps.flatMap((s) => [...s.data.matchAll(/RaceId[=>"]+([A-Z0-9_]+)/g)].map((m) => m[1]!)))].map((r) => [r, c.at.slice(0, 10)]));
+      const core = coreWith([connected(c.steps[0]!.observedAt)]);
+      let steps = 0;
+      for (const s of c.steps) {
+        const rec = { recording: c.recording, chunk: s.chunk, ts: 0, observedAt: s.observedAt, data: s.data };
+        core.applyUnit(s.kind === 'xml' ? xmlUnit(rec, dates, s.changedAfter ?? null) : tcpUnit(rec, dates));
+        const p = core.presented(c.id) as Record<string, { state?: string; value?: any }>;
+        if (p['status']?.state !== 'known') continue;
+        const status = p['status']!.value as string;
+        const outcome = p['outcome'];
+        const nr = outcome?.state === 'known' && outcome.value?.kind === 'no-result';
+        expect(nr, `${s.observedAt} status ${status}`).toBe(MARKS.has(status));
+        if (nr) expect(outcome!.value.status, s.observedAt).toBe(status);
+        steps++;
+      }
+      expect(steps).toBeGreaterThan(3);
+    });
+  }
+});

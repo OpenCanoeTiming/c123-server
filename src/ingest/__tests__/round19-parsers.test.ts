@@ -27,10 +27,10 @@ describe('a row with a mark and a time (DERIVATIONS §4.1 "Result marks", code i
     expect(r.outcome).toMatchObject({ kind: 'duration', runSeconds: timed!.r.outcome.runSeconds });
   });
 
-  it('a mark with no time stays outcome no-result (a recorded DNS row, Time="") and its status is the mark', () => {
+  it('a mark with no time emits status only, no outcome (a recorded DNS row, Time=""; round 20 code item 18: no-result is the core\'s presentation of status)', () => {
     const els = parseTcp(TCP.resultsBr1Marks, ctx());
     expect(statusOf(els, 'K1M_BR1_19', '64')).toBe('dns');
-    expect(rowOf(els, 'K1M_BR1_19', '64').outcome).toEqual({ kind: 'no-result', status: 'dns' });
+    expect(rowOf(els, 'K1M_BR1_19', '64').outcome).toBeUndefined();
   });
 });
 
