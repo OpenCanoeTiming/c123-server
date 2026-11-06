@@ -648,7 +648,9 @@ combined values.
   first snapshot. `eventTime` is for display and diagnostics; it is never a merge key.
 - **`provisional`** is `true` while a presented, merged gate cell is blank (§4.6(e): the on-course `0`
   fills a cell the row still shows blank for about 20 s), or while completeness cannot be judged
-  because no course is bound yet, and the run is not closed. `status` is never provisional (§4.1). This is what marks a push that upstream sent before judging
+  because no course is bound yet — the observation's `judgingComplete` is that judgement where the
+  parser had a course: `true` settles the value, `null` or no stamp without one is this case (round
+  21) — and the run is not closed. `status` is never provisional (§4.1). This is what marks a push that upstream sent before judging
   finished: with "ranking with incomplete penalties" on, the first push precedes the last gate.
 - **Run closed** — the one definition; `CONTRACTS.md` §1.2, INV-2 and property 11 point here —
   means the first of: `Completed = "Y"` seen for the generation **on an on-course listing that
@@ -659,7 +661,9 @@ combined values.
   being no result to complete (recorded once in 1,142 first-`Y` listings: cp3-cross WX1_XT_26:19,
   `Completed="Y"` while staged at 07:35:54.193Z, its start 9:35:59, its finish
   9:37:09, its real `Y` at 07:37:55.676Z; round 20, second pass, E1); the Attempt leaving the
-  on-course list (§4.1); or a no-result mark presented — `Outcome`'s `no-result` set, so a refused
+  on-course list (§4.1; a re-listing within the generation undoes that leave and its closure alone —
+  the flag clears and `provisional` is recomputed, `false → true` included, property 11; 0 such flips
+  at 4 s on five traced recordings; round 21); or a no-result mark presented — `Outcome`'s `no-result` set, so a refused
   mark closes nothing and `non-ranked`, a finished run, closes nothing: its blank cell is judged
   like any finisher's (round 20, second pass). Leaving the list is the set's closure (`CONTRACTS.md` §7.1); `Completed`
   closes the run while it is still listed (round 20, settling §1.2 against this section;

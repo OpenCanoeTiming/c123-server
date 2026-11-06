@@ -350,12 +350,19 @@ the step index, the Attempt, the field and the property number.
     `provisional: true` exactly when: it is an inference (`kind: inference`, or
     `outcome.kind: 'running'`); or the run is not closed (`DERIVATIONS.md` §4.4, read from the
     raw stream at admission: no `Completed="Y"` listing of it carrying a `dtFinish`, no
-    `oncourse-left` for it in this generation — in a **D** re-run, listed in an earlier
+    `oncourse-left` for it in this generation that a later `oncourse.updated` of the generation has
+    not undone by listing it again (§4.1's false leave; round 21) — in a **D** re-run, listed in an earlier
     `oncourse.updated` and absent from the latest, so an Attempt never listed is not closed by
     that — and no presented no-result mark, `non-ranked` closing nothing) and either a presented
     `gates` cell is `null`, a Kayak Cross Attempt's `faults` carries `judgingComplete: false` (the
     parser reads it over the slot cells, `DERIVATIONS.md` §4.6(d)), or `gates`, in Cross `faults`, is
-    not `known` because no course is bound; or it is a second run's `placement`,
+    not `known` and the observation's `judgingComplete` is not `true` (no course is bound: the parser
+    stamps `null`, or nothing, without one, CONFORMANCE-VECTORS §1; a `true` stamp is its judgement
+    against a course and settles the value; round 21) — this judging clause does not reach an Attempt
+    with no run yet (`status` absent or `not-started`, its row carrying neither time nor mark: the values
+    are run 1's, settled there, until the carry below begins) nor a heat's `placement` and the ordinal
+    built from it, upstream's whole result asserted after the judging (`DERIVATIONS.md` §4.2, §4.7;
+    round 21); or it is a second run's `placement`,
     `pairTotal` or `countingRun` carried over from run 1, from the Attempt's first on-course listing
     in run 2, staged or started, until a
     row of run 2, carrying its time or its mark, restates that field — judged field by field, since
@@ -363,7 +370,8 @@ the step index, the Attempt, the field and the property number.
     `WriteRequest`. It goes `false → true` only through a regression first (property 4), at the
     Attempt's first on-course listing of a generation (staged or started; recorded: nkz-19so
     C1W_BR2_19:35 staged at 10:28:09.809) or one that lists it while no course is bound (a
-    cold start: the results push precedes the first snapshot), or when a course binds — the first
+    cold start: the results push precedes the first snapshot), at a re-listing within the generation
+    that undoes a leave (`DERIVATIONS.md` §4.4; round 21), or when a course binds — the first
     step after which the Attempt's Phase has a `known` `courseId` and that Course a `known` `gates`
     (`phase.updated`, `course.updated`; **D**) — and shows a blank cell. A `standing.updated` entry's `provisional` is the disjunction over its Attempt's `outcome`,
     `placement` and `pairTotal` (§5 step 5).
