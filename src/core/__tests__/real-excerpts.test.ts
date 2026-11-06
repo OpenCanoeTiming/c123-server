@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { REC } from './fixtures/real-excerpts.js';
+import { R19 } from './fixtures/round19-excerpts.js';
 import { attrOf, connected, coreWith, disconnected, instantOf, tcpUnit, xmlUnit, type Unit } from './streams.js';
 
 // Row 13 (#203), tier 2: real excerpts through parseTcp / parseXmlSnapshot and createMergeCore, no adapter in between.
@@ -11,8 +12,39 @@ import { attrOf, connected, coreWith, disconnected, instantOf, tcpUnit, xmlUnit,
 const SLALOM_DAY = { C1M_BR1_19: '2026-09-19' };
 const J_DAY = { K1M_BR2_19: '2026-04-19' };
 const X_DAY = { WX1_XER_26: '2026-04-26' };
+const XF_DAY = { WX1_XF_26: '2026-04-26' };
 
-describe('cp3-cross: a Kayak Cross final (vector inv1-*, CONTRACTS §4 INV-1; DERIVATIONS §4.7 placement)', () => {
+describe('cp3-cross: a Kayak Cross final heat WX1_XF_26 (vector inv1-*, CONTRACTS §4 INV-1; DERIVATIONS §4.2, §4.7 placement)', () => {
+  // A heat (CONTRACTS §2.4: format XF, a Phase with Attempts), not the classification Phase WX1_XER_26, which holds no Attempts (below).
+  const stream = (): Unit[] => [connected(R19.xfStartList.observedAt), tcpUnit(R19.xfStartList, XF_DAY), tcpUnit(R19.xfFinal, XF_DAY)];
+  const recorded = [...R19.xfFinal.data.matchAll(/<Participant Bib="\s*(\d+)"[^>]*\/><Result [^>]*\bRank="(\d*)" RankOrder="(\d*)"/g)].map((m) => ({ bib: m[1]!, rank: Number(m[2]), order: Number(m[3]) }));
+
+  it('real cp3-cross WX1_XF_26 final: the recorded rows carry ranks 1..8 and the start list holds the same 8 bibs (the excerpt is what the test says it is)', () => {
+    expect(recorded.map((r) => r.rank)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(attrOf(R19.xfFinal.data, 'Results', 'RaceId')).toBe('WX1_XF_26');
+    expect(attrOf(R19.xfStartList.data, 'Results', 'SubTitle')).toBe('Finals - Start List');
+    expect([...R19.xfStartList.data.matchAll(/<Participant Bib="\s*(\d+)"/g)].map((m) => m[1]).sort()).toEqual(recorded.map((r) => r.bib).sort());
+  });
+
+  it('real cp3-cross WX1_XF_26 final: every row\'s placement is the recorded Rank and RankOrder, for an Attempt of that bib (INV-7 snapshot of the race)', () => {
+    const core = coreWith(stream());
+    for (const r of recorded) {
+      expect(core.presented(`WX1_XF_26:${r.bib}`).placement, `bib ${r.bib}`).toMatchObject({ state: 'known', value: { rank: r.rank, order: r.order } });
+    }
+    expect(core.attempts().map(String)).toEqual(expect.arrayContaining(recorded.map((r) => `WX1_XF_26:${r.bib}`)));
+  });
+
+  it('real cp3-cross WX1_XF_26 final: the start-list message before it states no placement, the final creates no Attempt beyond the 8, and raises no stale-mark or contradiction', () => {
+    const afterList = coreWith(stream().slice(0, 2));
+    for (const r of recorded) expect(afterList.presented(`WX1_XF_26:${r.bib}`).placement, `bib ${r.bib}`).toEqual({ state: 'not-yet' });
+    const core = coreWith(stream());
+    expect(core.attempts()).toHaveLength(recorded.length);
+    expect(core.attempts().map(String).filter((a) => !a.startsWith('WX1_XF_26:'))).toEqual([]);
+    expect((core.diagnostics() as Array<{ kind: string }>).filter((d) => d.kind === 'stale-mark' || d.kind === 'contradiction')).toEqual([]);
+  });
+});
+
+describe('cp3-cross: the classification Phase WX1_XER_26 holds no Attempts (CONTRACTS §2.4, DERIVATIONS §4.10, CONFORMANCE-VECTORS §1 "creates no Attempt")', () => {
   const stream = (): Unit[] => [connected(REC.c1StartList.observedAt), tcpUnit(REC.c1StartList, X_DAY), tcpUnit(REC.c2Final, X_DAY)];
   const recorded = [...REC.c2Final.data.matchAll(/<Participant Bib="\s*(\d+)"[^>]*\/><Result [^>]*\bRank="(\d*)" RankOrder="(\d*)"/g)].map((m) => ({ bib: m[1]!, rank: Number(m[2]), order: Number(m[3]) }));
 
@@ -22,36 +54,25 @@ describe('cp3-cross: a Kayak Cross final (vector inv1-*, CONTRACTS §4 INV-1; DE
     expect(attrOf(REC.c1StartList.data, 'Results', 'SubTitle')).toBe('Final Result - Start List');
   });
 
-  it('real cp3-cross WX1_XER_26 final: every row\'s placement is the recorded Rank and RankOrder, for an Attempt of that bib (INV-7 snapshot of the race)', () => {
+  it('real cp3-cross WX1_XER_26 final: classification() holds the recorded Rank and RankOrder of each bib, and the core has no Attempt', () => {
     const core = coreWith(stream());
+    const rows = (core.classification('WX1_XER_26')?.rows ?? []) as unknown as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength((REC.c2Final.data.match(/<Row /g) ?? []).length); // every recorded row, ranked or not
     for (const r of recorded) {
-      expect(core.presented(`WX1_XER_26:${r.bib}`).placement, `bib ${r.bib}`).toMatchObject({ state: 'known', value: { rank: r.rank, order: r.order } });
+      const row = rows.find((x) => String(x['bib']).trim() === r.bib);
+      expect(row, `bib ${r.bib}`).toBeDefined();
+      expect({ rank: Number(row!['rank']), order: Number(row!['order']) }, `bib ${r.bib}`).toEqual({ rank: r.rank, order: r.order });
     }
-    expect(core.attempts().map(String)).toEqual(expect.arrayContaining(recorded.map((r) => `WX1_XER_26:${r.bib}`)));
-  });
-
-  it('real cp3-cross WX1_XER_26 final: the empty start-list message before it states nothing, and the final raises no stale-mark or contradiction', () => {
-    const core = coreWith(stream());
-    expect(core.attempts()).toHaveLength(recorded.length);
-    expect(core.attempts().map(String).filter((a) => !a.startsWith('WX1_XER_26:'))).toEqual([]);
-    expect((core.diagnostics() as Array<{ kind: string }>).filter((d) => d.kind === 'stale-mark' || d.kind === 'contradiction')).toEqual([]);
+    expect(core.attempts()).toEqual([]);
   });
 });
 
 describe('nkz-19so: C1M_BR1_19 bib 7, the recorded re-run (DERIVATIONS §4.11 "The recorded episode"; vectors rerun-*, retraction-*)', () => {
   const A = 'C1M_BR1_19:7';
-  const steps = (n: number): Unit[] =>
-    [
-      connected(REC.n1Start.observedAt),
-      tcpUnit(REC.n1Start, SLALOM_DAY),
-      tcpUnit(REC.n2Row, SLALOM_DAY),
-      tcpUnit(REC.n3Finish, SLALOM_DAY),
-      tcpUnit(REC.n4Wiped, SLALOM_DAY),
-      tcpUnit(REC.n5Gone, SLALOM_DAY),
-      tcpUnit(REC.n6Start, SLALOM_DAY),
-      tcpUnit(REC.n7Row, SLALOM_DAY),
-      tcpUnit(REC.n8Finish, SLALOM_DAY),
-    ].slice(0, n);
+  /** The stream up to and including the named record (the synthetic `connected` first), by name so no count can be off by one. */
+  const ORDER = ['n1Start', 'n2Row', 'n3Finish', 'n4Wiped', 'n5Gone', 'n6Start', 'n7Row', 'n8Finish'] as const;
+  type Key = (typeof ORDER)[number];
+  const through = (last: Key): Unit[] => [connected(REC.n1Start.observedAt), ...ORDER.slice(0, ORDER.indexOf(last) + 1).map((k) => tcpUnit(REC[k], SLALOM_DAY))];
   const row = (r: { data: string }) => ({
     runSeconds: Number(attrOf(r.data, 'Result', 'Time')),
     penaltySeconds: Number(attrOf(r.data, 'Result', 'Pen')),
@@ -64,7 +85,7 @@ describe('nkz-19so: C1M_BR1_19 bib 7, the recorded re-run (DERIVATIONS §4.11 "T
 
   it('real nkz-19so run 1: the row arrives 55 ms before the finish; after the finish the outcome is the recorded 96.69 + 6 = 102.69, finished at dtFinish, placed 1', () => {
     expect(row(REC.n2Row)).toMatchObject({ runSeconds: 96.69, penaltySeconds: 6, totalSeconds: 102.69, rank: 1 });
-    const p = coreWith(steps(4)).presented(A);
+    const p = coreWith(through('n3Finish')).presented(A);
     const want = row(REC.n2Row);
     expect(p.status).toMatchObject({ state: 'known', value: 'finished' });
     expect(p.outcome).toMatchObject({
@@ -78,9 +99,9 @@ describe('nkz-19so: C1M_BR1_19 bib 7, the recorded re-run (DERIVATIONS §4.11 "T
   it('real nkz-19so run 1 wiped in place (10:56:58, row present with no time, rank or penalty): outcome and placement are retracted to explicit not-yet (INV-7, DERIVATIONS §4.12)', () => {
     expect(attrOf(REC.n4Wiped.data, 'Result', 'Time')).toBe('');
     expect(attrOf(REC.n4Wiped.data, 'Result', 'Rank')).toBe('');
-    const core = coreWith(steps(4));
+    const core = coreWith(through('n3Finish'));
     const before = core.notifications().length;
-    core.applyUnit(steps(5)[4]!);
+    core.applyUnit(tcpUnit(REC.n4Wiped, SLALOM_DAY));
     const p = core.presented(A);
     expect(p.outcome).toEqual({ state: 'not-yet' });
     expect(p.placement).toEqual({ state: 'not-yet' });
@@ -91,7 +112,7 @@ describe('nkz-19so: C1M_BR1_19 bib 7, the recorded re-run (DERIVATIONS §4.11 "T
 
   it('real nkz-19so row gone at 12:02:04 (a TCP table without the row): a retraction again, a no-op: still not-yet, nothing sent for the Attempt', () => {
     expect(REC.n5Gone.data).not.toMatch(/Bib="\s*7"/);
-    const core = coreWith(steps(5));
+    const core = coreWith(through('n4Wiped'));
     const before = messagesFor(core).length;
     core.applyUnit(tcpUnit(REC.n5Gone, SLALOM_DAY));
     expect(core.presented(A).outcome).toEqual({ state: 'not-yet' });
@@ -101,14 +122,14 @@ describe('nkz-19so: C1M_BR1_19 bib 7, the recorded re-run (DERIVATIONS §4.11 "T
 
   it('real nkz-19so run 2 starts (dtStart differs): the generation changes, the Attempt is on-course again and the change is pushed (ADR-013, vector rerun-status-transition-legal-only-with-generation)', () => {
     expect(attrOf(REC.n6Start.data, 'Result', 'dtStart')).not.toBe(attrOf(REC.n1Start.data, 'Result', 'dtStart'));
-    const core = coreWith(steps(6));
+    const core = coreWith(through('n6Start'));
     expect(core.presented(A).status).toMatchObject({ state: 'known', value: 'on-course' });
     expect(core.presented(A).placement).toEqual({ state: 'not-yet' });
     expect(messagesFor(core).at(-1)).toMatchObject({ type: 'attempt.updated', fields: { status: { value: 'on-course' } } });
   });
 
   it('real nkz-19so run 2: the row 108 ms before the finish is retained, not presented as run 2\'s (vector rerun-tcp-row-before-new-finish-not-presented)', () => {
-    const p = coreWith(steps(7)).presented(A);
+    const p = coreWith(through('n7Row')).presented(A);
     const want = row(REC.n7Row);
     expect(want.totalSeconds).toBe(87.57);
     expect(p.status).toMatchObject({ state: 'known', value: 'on-course' });
@@ -117,7 +138,7 @@ describe('nkz-19so: C1M_BR1_19 bib 7, the recorded re-run (DERIVATIONS §4.11 "T
   });
 
   it('real nkz-19so run 2: when the finish arrives with the same Time the row is attributed: 83.57 + 4 = 87.57, finished at dtFinish, placed 9 (DERIVATIONS §4.11 "Attribution per source")', () => {
-    const p = coreWith(steps(8)).presented(A);
+    const p = coreWith(through('n8Finish')).presented(A);
     const want = row(REC.n7Row);
     expect(attrOf(REC.n8Finish.data, 'Result', 'Time')).toBe(attrOf(REC.n7Row.data, 'Result', 'Time'));
     expect(p.status).toMatchObject({ state: 'known', value: 'finished' });
@@ -130,7 +151,7 @@ describe('nkz-19so: C1M_BR1_19 bib 7, the recorded re-run (DERIVATIONS §4.11 "T
   });
 
   it('real nkz-19so whole episode: no exception, one Attempt for bib 7 of this Phase and no stale-mark withheld (the run 1 row was retracted, not a mark)', () => {
-    const core = coreWith(steps(9));
+    const core = coreWith(through('n8Finish'));
     expect(core.attempts().map(String).filter((a) => a === A)).toEqual([A]);
     expect(core.presented(A).status).toMatchObject({ state: 'known' });
     expect((core.diagnostics() as Array<{ kind: string }>).filter((d) => d.kind === 'stale-mark')).toEqual([]);

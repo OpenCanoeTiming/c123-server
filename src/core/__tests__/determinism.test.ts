@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { REC } from './fixtures/real-excerpts.js';
+import { R19 } from './fixtures/round19-excerpts.js';
 import { connected, coreWith, disconnected, tcpUnit, xmlUnit, type Unit } from './streams.js';
 
 // Row 11 (#203): CONTRACTS §4 determinism paragraph: given the same sequence of elements the core presents the same state, sends the same
 // notifications and records the same diagnostics. Two fresh cores, the same recorded streams, nothing shared between them.
 const SLALOM_DAY = { C1M_BR1_19: '2026-09-19' };
 const J_DAY = { K1M_BR2_19: '2026-04-19' };
-const X_DAY = { WX1_XER_26: '2026-04-26' };
+const X_DAY = { WX1_XF_26: '2026-04-26' };
 
 const streams: Record<string, { units: () => Unit[]; attemptIds: string[] }> = {
   'nkz-19so re-run of C1M_BR1_19 bib 7': {
@@ -16,9 +17,9 @@ const streams: Record<string, { units: () => Unit[]; attemptIds: string[] }> = {
     ],
     attemptIds: ['C1M_BR1_19:7', 'C1M_BR1_19:64'],
   },
-  'cp3-cross WX1_XER_26 final': {
-    units: () => [connected(REC.c1StartList.observedAt), tcpUnit(REC.c1StartList, X_DAY), tcpUnit(REC.c2Final, X_DAY)],
-    attemptIds: ['1', '2', '3', '4', '5', '6', '7', '8'].map((b) => `WX1_XER_26:${b}`),
+  'cp3-cross WX1_XF_26 final': {
+    units: () => [connected(R19.xfStartList.observedAt), tcpUnit(R19.xfStartList, X_DAY), tcpUnit(R19.xfFinal, X_DAY)],
+    attemptIds: ['1', '2', '3', '4', '5', '6', '7', '8'].map((b) => `WX1_XF_26:${b}`),
   },
   'jarni-ne-do outage and XML takeover': {
     units: () => [
@@ -48,7 +49,7 @@ describe('determinism (CONTRACTS §4 determinism paragraph)', () => {
   it('obligation §4 determinism: one core is not affected by another running beside it (no module state)', () => {
     const s = streams['nkz-19so re-run of C1M_BR1_19 bib 7']!;
     const alone = coreWith(s.units());
-    const other = coreWith(streams['cp3-cross WX1_XER_26 final']!.units());
+    const other = coreWith(streams['cp3-cross WX1_XF_26 final']!.units());
     const again = coreWith(s.units());
     expect(other.attempts().length).toBeGreaterThan(0);
     expect(again.presented('C1M_BR1_19:7')).toEqual(alone.presented('C1M_BR1_19:7'));

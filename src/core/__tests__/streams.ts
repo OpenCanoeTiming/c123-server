@@ -20,36 +20,48 @@ const deepFreeze = <T>(o: T): T => {
 };
 
 /** The ingest context of a recorded excerpt: its own receipt time, the venue's zone and the Phase dates the excerpt's phases have. */
-export const ctxFor = (rec: Rec, phaseDates: Record<string, string>): ReturnType<typeof ingestCtx> =>
-  ingestCtx({ observedAt: rec.observedAt, phaseDates: { ...ingestCtx().phaseDates, ...phaseDates } });
+export const ctxFor = (rec: Rec, phaseDates: Record<string, string>, over: Record<string, unknown> = {}): ReturnType<typeof ingestCtx> =>
+  ingestCtx({ observedAt: rec.observedAt, phaseDates: { ...ingestCtx().phaseDates, ...phaseDates }, ...over });
 
 export const connected = (observedAt: string): Unit => deepFreeze([{ ingestSeq: 0, event: 'tcp-connected', observedAt }]);
 export const disconnected = (observedAt: string): Unit => deepFreeze([{ ingestSeq: 0, event: 'tcp-disconnected', observedAt }]);
 
 /** One recorded TCP message through `parseTcp`: the unit as the parser emits it. */
-export const tcpUnit = (rec: Rec, phaseDates: Record<string, string>): Unit =>
-  deepFreeze(parseTcp(rec.data, ctxFor(rec, phaseDates)) as Unit);
+export const tcpUnit = (rec: Rec, phaseDates: Record<string, string>, over: Record<string, unknown> = {}): Unit =>
+  deepFreeze(parseTcp(rec.data, ctxFor(rec, phaseDates, over)) as Unit);
 
 /** One recorded XML snapshot as the reader delivers it: the rewrite event (with `changedAfter`), then `parseXmlSnapshot`'s elements. */
-export const xmlUnit = (rec: Rec, phaseDates: Record<string, string>, changedAfter: string | null): Unit =>
+export const xmlUnit = (rec: Rec, phaseDates: Record<string, string>, changedAfter: string | null, over: Record<string, unknown> = {}): Unit =>
   deepFreeze([
     { ingestSeq: 0, event: 'xml-rewrite-detected', observedAt: rec.observedAt, changedAfter },
-    ...(parseXmlSnapshot(rec.data, ctxFor(rec, phaseDates)) as Unit),
+    ...(parseXmlSnapshot(rec.data, ctxFor(rec, phaseDates, over)) as Unit),
   ]);
 
+/** A recorded message received at another moment, or with its text edited: the only way a derived (not recorded) case is built. */
+export const derive = (rec: Rec, over: { observedAt?: string; edit?: (data: string) => string }): Rec => ({
+  ...rec,
+  observedAt: over.observedAt ?? rec.observedAt,
+  data: over.edit ? over.edit(rec.data) : rec.data,
+});
+
+/** An operator-visible event the recordings do not hold (TEST-ARCHITECTURE §9): the closure of an Attempt's run. */
+export const left = (attemptId: string, observedAt: string): Unit => deepFreeze([{ ingestSeq: 0, event: 'oncourse-left', attemptId, observedAt }]);
+
 /** A fresh core with the units applied in order. */
-export function coreWith(units: Unit[]): MergePort {
-  const core = createMergeCore({}) as MergePort;
+export function coreWith(units: Unit[], options: Record<string, unknown> = {}): MergePort {
+  const core = createMergeCore(options) as MergePort;
   for (const u of units) core.applyUnit(u);
   return core;
 }
 
-/** An attribute of the first `<tag ...>` in recorded text, for expected values taken from the record, not from the parser. */
+/** An attribute of the first `<tag ...>` carrying it, in recorded text, for expected values taken from the record, not from the parser. */
 export function attrOf(data: string, tag: string, name: string): string {
-  const el = new RegExp(`<${tag}\\b[^>]*>`).exec(data)?.[0];
-  const v = el === undefined ? undefined : new RegExp(`\\b${name}="([^"]*)"`).exec(el)?.[1];
-  if (v === undefined) throw new Error(`no ${tag}@${name} in the recorded text`);
-  return v;
+  // The first <tag> that carries the attribute: an on-course message holds two <Result> elements (Type C has the dates, Type T the Time).
+  for (const el of data.matchAll(new RegExp(`<${tag}\\b[^>]*>`, 'g'))) {
+    const v = new RegExp(`\\b${name}="([^"]*)"`).exec(el[0])?.[1];
+    if (v !== undefined) return v;
+  }
+  throw new Error(`no ${tag}@${name} in the recorded text`);
 }
 
 /** `dtFinish="12:48:36.640"` is the venue's local time of day; `offset` is its UTC offset on that date (+02:00 in CEST). */

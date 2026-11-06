@@ -34,9 +34,14 @@ const loaded: { factory?: MergeCoreFactory; error?: unknown } = await import('..
 const absent = (e: unknown): boolean =>
   typeof e === 'object' && e !== null && ((e as { code?: string }).code === 'ERR_MODULE_NOT_FOUND' || /Cannot find (module|package)|Failed to load url|Failed to resolve import/i.test(String((e as Error).message)));
 
-/** The vector's `context` is the harness's (content age is resolved before `applyUnit`); the core takes no per-vector setting. */
-export function createMergePort(_context: VectorContext): MergePort {
-  if (loaded.factory) return loaded.factory({});
+/**
+ * What the vector's `context` gives the core (round 19, #203 F5). The harness keeps content age (resolved before `applyUnit`); the core is told
+ * `attemptId`, the Attempt a keyless observation addresses (CONFORMANCE-VECTORS §1; the harness has defaulted it, so it is always a string), and
+ * `xml` where the vector states it (`two-run-br1-unavailable-no-live-no-xml`: `'unreachable'`), verbatim. These two option names are fixed here
+ * (`MergeCoreOptions.attemptId`, `MergeCoreOptions.xml`); the core follows them and keeps no "unnamed Attempt" of its own.
+ */
+export function createMergePort(context: VectorContext): MergePort {
+  if (loaded.factory) return loaded.factory({ attemptId: context.attemptId, ...(context['xml'] !== undefined ? { xml: context['xml'] } : {}) });
   if (absent(loaded.error)) throw new CoreMissing('createMergePort (src/core)');
   throw loaded.error;
 }

@@ -39,15 +39,15 @@ describe('the real vectors.test.ts in a child vitest (issue #200 rows 1, 2, 5; r
   const ids = serverVectors().map((v) => `vector ${v.id}`);
   const suite = (strict: boolean) => child(resolve(here, 'fixtures/suite-vitest.config.ts'), root, strict);
 
-  it('normal run: exactly the 88 server vectors, each one reads passed, exit 0', () => {
+  it('normal run: exactly the 94 server vectors, each one reads passed, exit 0', () => {
     const { exit, results } = suite(false);
     expect(results.map((r) => r.title).sort()).toEqual([...ids].sort());
-    expect(results.length).toBe(88);
+    expect(results.length).toBe(94);
     expect(results.filter((r) => r.status !== 'passed').map((r) => r.title)).toEqual([]);
     expect(exit).toBe(0);
   }, 120_000);
 
-  it('VECTORS_STRICT=1: exactly the 88 titles again, the ledger is ignored, the 14 listed ids read failed and exit is 1', () => {
+  it('VECTORS_STRICT=1: exactly the 94 titles again, the ledger is ignored, the 14 listed ids read failed and exit is 1', () => {
     const { exit, results } = suite(true);
     expect(results.map((r) => r.title).sort()).toEqual([...ids].sort());
     // Strict mode shows the true state: the merge vectors (#203) are the core's to pass, so only the listed ids are pinned.

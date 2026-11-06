@@ -27,7 +27,7 @@ const LIVE_INGEST = [
 ];
 
 describe('vector count and ids (issue #200 rows 1, 2)', () => {
-  it('vector count and ids: the JSON, CONFORMANCE-VECTORS §1 and the server set agree (94 total, 88 server)', () => {
+  it('vector count and ids: the JSON, CONFORMANCE-VECTORS §1 and the server set agree (100 total, 94 server)', () => {
     const all = loadVectors();
     const doc = readFileSync(resolve(root, 'docs/arch/CONFORMANCE-VECTORS.md'), 'utf8');
     const total = /\*\*(\d+) vectors:/.exec(doc);
@@ -36,7 +36,7 @@ describe('vector count and ids (issue #200 rows 1, 2)', () => {
     expect(server, 'the document states the server count').not.toBeNull();
     expect(all.length).toBe(Number(total![1]));
     expect(serverVectors(all).length).toBe(Number(server![1]));
-    expect(serverVectors(all).length).toBe(88);
+    expect(serverVectors(all).length).toBe(94);
     expect(new Set(all.map((v) => v.id)).size).toBe(all.length);
   });
 
@@ -54,8 +54,8 @@ describe('vector count and ids (issue #200 rows 1, 2)', () => {
     const names: string[] = [];
     const collect: ItLike = Object.assign((name: string) => void names.push(name), { fails: (name: string) => void names.push(name) });
     registerVectorTests({ vectors: serverVectors(), port: corePort, expectedRed: loadExpectedRed(), strict: false, it: collect });
-    expect(names.length).toBe(88);
-    expect(new Set(names).size).toBe(88);
+    expect(names.length).toBe(94);
+    expect(new Set(names).size).toBe(94);
     expect(new Set(names)).toEqual(new Set(loadVectors().filter((v) => v.invariant !== 'live-ingest').map((v) => `vector ${v.id}`)));
     for (const id of LIVE_INGEST) expect(names).not.toContain(`vector ${id}`);
   });
@@ -153,7 +153,7 @@ describe('expected-red ledger and modes (issue #200 rows 3, 4, 5)', () => {
 });
 
 describe('harness can fail (issue #200 row 15)', () => {
-  it('a wrong port fails every vector: each of the 88 raises a wrong-answer mismatch, none passes vacuously', () => {
+  it('a wrong port fails every vector: each of the 94 raises a wrong-answer mismatch, none passes vacuously', () => {
     const port = wrongPort();
     const passed: string[] = [];
     const crashed: string[] = [];

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createMergeCore } from '../index.js';
 import { REC } from './fixtures/real-excerpts.js';
+import { R19 } from './fixtures/round19-excerpts.js';
 import { connected, tcpUnit } from './streams.js';
 import type { MergePort } from '../../__tests__/conformance/port.js';
 
@@ -52,11 +53,11 @@ describe('one notification per unit (CONTRACTS §1.6)', () => {
 
   it('obligation §1.6: a scope snapshot unit (a Results message of 8 rows) is one message per changed Attempt, not one per field', () => {
     const core = fresh();
-    core.applyUnit(connected(REC.c2Final.observedAt));
-    core.applyUnit(tcpUnit(REC.c2Final, { WX1_XER_26: '2026-04-26' }));
+    core.applyUnit(connected(R19.xfFinal.observedAt));
+    core.applyUnit(tcpUnit(R19.xfFinal, { WX1_XF_26: '2026-04-26' })); // a heat (8 Attempts); a classification Phase creates none (CONTRACTS §2.4)
     const per = new Map<string, number>();
     for (const m of core.notifications()) if (m.type === 'attempt.updated') per.set(String(m.attemptId), (per.get(String(m.attemptId)) ?? 0) + 1);
-    expect([...per.keys()].sort()).toEqual(['1', '2', '3', '4', '5', '6', '7', '8'].map((b) => `WX1_XER_26:${b}`));
+    expect([...per.keys()].sort()).toEqual(['1', '2', '3', '4', '5', '6', '7', '8'].map((b) => `WX1_XF_26:${b}`));
     expect([...per.values()]).toEqual(Array(8).fill(1));
   });
 

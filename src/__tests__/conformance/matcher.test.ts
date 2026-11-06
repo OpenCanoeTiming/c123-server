@@ -144,7 +144,7 @@ describe('expect semantics (CONFORMANCE-VECTORS §1 "expect is the presented sta
     expect(() => runVector(v, scriptedPort({}))).toThrow(/unresolved/);
   });
 
-  it('scope of a field (§1): every observation field and expect key in the 88 server vectors resolves', () => {
+  it('scope of a field (§1): every observation field and expect key in the 94 server vectors resolves', () => {
     const unresolved: string[] = [];
     const check = (id: string, name: string, scope: unknown) => { try { resolveResource(name, scope); } catch { unresolved.push(`${id}: ${name}`); } };
     for (const v of serverVectors().filter((x) => Array.isArray(x.given))) {
