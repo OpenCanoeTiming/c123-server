@@ -83,6 +83,12 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
   let lastGood: Sig | undefined;
   // First detection of the change not yet read whole, with the stat it was seen at (a different stat restarts it).
   let pending: { sig: Sig; at: number } | undefined;
+  // The last successful stat, and the time of the last one that showed a signature other than the current one
+  // (INV-2c content age, `changedAfter`). Stat times are taken before the call.
+  let prevStat: { sig: Sig; at: number } | undefined;
+  let changedAfter: number | undefined;
+  // The signature of a file whose last burst ended torn with the stat unchanged: one read per poll until it changes.
+  let stuckSig: Sig | undefined;
   let failedPolls = 0;
   let state: XmlSourceState = 'not-configured';
   let lastRewriteDetectedAt: string | null = null;
@@ -91,6 +97,15 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
 
   const report = (): void => { opts.onStatus({ state, lastRewriteDetectedAt, tornReads, abandonedReads }); };
   const setState = (s: XmlSourceState): void => { if (s !== state) { state = s; report(); } };
+  const observe = (sig: Sig, at: number): void => {
+    if (prevStat && !same(prevStat.sig, sig)) changedAfter = prevStat.at;
+    prevStat = { sig, at };
+  };
+  /** One failed poll: counts it and moves to reconnecting, or unreachable after the bound. */
+  const failPoll = (): void => {
+    failedPolls++;
+    setState(failedPolls >= XML_UNREACHABLE_AFTER_FAILED_POLLS ? 'unreachable' : 'reconnecting');
+  };
   const arm = (ms: number, fn: () => void): void => { timer = later(fn, ms); timerSet = true; };
   const disarm = (): void => {
     if (timerSet) { cancel(timer); timerSet = false; }
@@ -112,28 +127,31 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
     return { kind: 'torn' };
   }
 
-  function emit(els: IngestElement[], at: number): void {
+  function emit(my: number, els: IngestElement[], at: number): boolean {
     const stamp = iso(at);
-    const unit: IngestElement[] = [{ event: 'xml-rewrite-detected', ingestSeq: 0, observedAt: stamp }];
+    const unit: IngestElement[] = [{ event: 'xml-rewrite-detected', ingestSeq: 0, observedAt: stamp, changedAfter: changedAfter === undefined ? null : iso(changedAfter) }];
     els.forEach((e, i) => unit.push({ ...e, ingestSeq: i + 1, observedAt: stamp }));
     opts.onUnit(unit);
+    if (my !== epoch) return false; // onUnit re-entered setPath/stop (#251)
     lastRewriteDetectedAt = stamp;
+    return true;
   }
 
   async function poll(my: number, p: string, polledAt: number): Promise<void> {
     let st: Sig;
     try { st = await fs.stat(p); } catch {
       if (my !== epoch) return;
-      failedPolls++;
-      setState(failedPolls >= XML_UNREACHABLE_AFTER_FAILED_POLLS ? 'unreachable' : 'reconnecting');
+      failPoll();
       return;
     }
     if (my !== epoch) return;
+    observe(st, polledAt);
     if (lastGood && same(lastGood, st)) { pending = undefined; failedPolls = 0; setState('connected'); return; }
     if (!pending || !same(pending.sig, st)) pending = { sig: st, at: polledAt };
     let ref: Sig = st;
     let last: Attempt['kind'] = 'torn';
-    for (let attempt = 0; attempt <= XML_RETRY_EXTRA_READS; attempt++) {
+    const extraReads = stuckSig && same(stuckSig, st) ? 0 : XML_RETRY_EXTRA_READS;
+    for (let attempt = 0; attempt <= extraReads; attempt++) {
       if (attempt > 0) {
         await wait(XML_RETRY_SPACING_MS);
         if (my !== epoch) return;
@@ -144,13 +162,17 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
       if (r.kind === 'ok') {
         // A stat that moved across the read makes it a failed attempt.
         let after: Sig | undefined;
+        const closedAt = now();
         try { after = await fs.stat(p); } catch { after = undefined; }
         if (my !== epoch) return;
-        if (!after || !same(after, ref)) { last = 'moved'; if (after) { ref = after; pending = { sig: after, at: now() }; } report(); continue; }
+        if (!after) { failPoll(); report(); return; } // a closing stat that rejects is a failed poll (§2.8)
+        observe(after, closedAt);
+        if (!same(after, ref)) { last = 'moved'; ref = after; pending = { sig: after, at: closedAt }; report(); continue; }
         // Delivery first: a throwing onUnit leaves lastGood and pending as they were, so the next poll reads again.
-        emit(r.els, pending!.at);
+        if (!emit(my, r.els, pending!.at)) return;
         lastGood = ref;
         pending = undefined;
+        stuckSig = undefined;
         failedPolls = 0;
         setState('connected');
         report();
@@ -159,10 +181,21 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
       report();
     }
     abandonedReads++;
-    if (last === 'rejected') {
-      failedPolls++;
-      setState(failedPolls >= XML_UNREACHABLE_AFTER_FAILED_POLLS ? 'unreachable' : 'reconnecting');
-    } else { failedPolls = 0; setState('connected'); }
+    if (last === 'rejected') failPoll();
+    else if (last === 'moved') { failedPolls = 0; setState('connected'); }
+    else {
+      // Torn to the end: one more stat tells a file still being written from one that stays unreadable.
+      const checkedAt = now();
+      let again: Sig | undefined;
+      try { again = await fs.stat(p); } catch { again = undefined; }
+      if (my !== epoch) return;
+      if (!again) failPoll();
+      else {
+        observe(again, checkedAt);
+        if (same(again, pending!.sig)) { stuckSig = again; failPoll(); }
+        else { pending = { sig: again, at: checkedAt }; failedPolls = 0; setState('connected'); }
+      }
+    }
     report();
   }
 
@@ -179,8 +212,7 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
       .catch(() => {
         // A throw inside a poll is a failed poll; the handler itself must not throw (onStatus may be the thrower).
         if (my !== epoch) return;
-        failedPolls++;
-        try { setState(failedPolls >= XML_UNREACHABLE_AFTER_FAILED_POLLS ? 'unreachable' : 'reconnecting'); } catch { /* ignored */ }
+        try { failPoll(); } catch { /* ignored */ }
       })
       .finally(() => { if (my === epoch) busy = false; });
   }
@@ -190,8 +222,13 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
     busy = false;
     lastGood = undefined;
     pending = undefined;
+    prevStat = undefined;
+    stuckSig = undefined;
+    changedAfter = undefined;
     failedPolls = 0;
     if (path === undefined) { state = 'not-configured'; report(); return; }
+    state = 'reconnecting'; // until the first poll reports (§5)
+    report();
     arm(intervalMs(), fire);
   }
 

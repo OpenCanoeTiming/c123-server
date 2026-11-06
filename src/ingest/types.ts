@@ -9,7 +9,7 @@
  *   is a resolved observation; `{ field, <key>, source, kind, state: 'unavailable', reason }` states not-applicable /
  *   not-configured; `{ field, <key>, state: 'not-yet' }` is an explicit not-yet.
  * - `{ snapshot: { source, phaseId, mode, rows } }` is a scope snapshot (INV-7).
- * - `{ event }`, `{ push: 'classification', phaseId, body }`, `{ diagnostic }`, `{ sourceStatus }`,
+ * - `{ event }`, `{ diagnostic }`, `{ sourceStatus }`,
  *   `{ unparseable }` (a message that could not be read), `{ unknownType }` (a TCP message type nobody models).
  */
 export type IngestElement = { ingestSeq: number; observedAt: string; [key: string]: unknown };
@@ -28,7 +28,7 @@ export interface IngestContext {
   zone?: string | undefined;
   /** phaseId -> `YYYY-MM-DD`, the Phase.date known to the caller. */
   phaseDates?: Record<string, string> | undefined;
-  /** Accepted for the core's content-age rule; the parsers do not use it. */
+  /** Unused by the parsers and the core; the vector harness's setting (CONFORMANCE-VECTORS §1). */
   xmlPollIntervalSeconds?: number | undefined;
   /** phaseId -> the course bound to it (slots as in CONTRACTS §2.12). */
   courses?: Record<string, { courseId: string; slots: CourseSlot[] }> | undefined;
