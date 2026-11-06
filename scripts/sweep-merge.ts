@@ -15,7 +15,8 @@ import { createReadStream, existsSync, readdirSync, readFileSync, statSync } fro
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 import { parseTcp, parseXmlSnapshot } from '../src/ingest/index.js';
-import type { IngestContext, IngestElement, CourseSlot } from '../src/ingest/index.js';
+import type { IngestElement } from '../src/ingest/index.js';
+import { createContextTracker } from './lib/ingest-context.js';
 import { createMergeCore } from '../src/core/index.js';
 
 const POLL_MS = 5000;
@@ -56,18 +57,7 @@ for (const rec of readdirSync(dir).filter((d) => statSync(join(dir, d)).isDirect
   const recDir = join(dir, rec);
   const manifestPath = join(recDir, 'manifest.json');
   const eventDate: string | undefined = existsSync(manifestPath) ? (JSON.parse(readFileSync(manifestPath, 'utf8')) as { event?: { date?: string } }).event?.date : undefined;
-  const phaseDates: Record<string, string> = {};
-  const phaseCourse = new Map<string, string>();
-  const courseSlots = new Map<string, CourseSlot[]>();
-  const ctx: IngestContext = { observedAt: '', zone: ZONE, phaseDates, courses: {}, eventDate, externalIdScheme: 'sweep' };
-  const rebuild = (): void => {
-    const courses: Record<string, { courseId: string; slots: CourseSlot[] }> = {};
-    for (const [phaseId, courseId] of phaseCourse) {
-      const slots = courseSlots.get(courseId);
-      if (slots !== undefined) courses[phaseId] = { courseId, slots };
-    }
-    ctx.courses = courses;
-  };
+  const { ctx, learn } = createContextTracker(ZONE, eventDate, 'sweep');
 
   const core = createMergeCore({ zone: ZONE });
   const messages: Counter = new Map();
@@ -170,19 +160,11 @@ for (const rec of readdirSync(dir).filter((d) => statSync(join(dir, d)).isDirect
         els = parseTcp(text, ctx);
         apply(els, where);
       }
-      let refresh = false;
       for (const e of els) {
         const d = e['diagnostic'] as { kind: string } | undefined;
         if (d !== undefined && d.kind !== 'unparseable-cell' && d.kind !== 'member-sum-mismatch') bump(ingestOnly, d.kind);
-        const field = e['field'];
-        if (isXml && field === 'date' && typeof e['phaseId'] === 'string') phaseDates[e['phaseId']] = e['value'] as string;
-        else if (isXml && field === 'courseId' && typeof e['phaseId'] === 'string' && typeof e['value'] === 'string') { phaseCourse.set(e['phaseId'], e['value']); refresh = true; }
-        else if (field === 'slots' && typeof e['courseId'] === 'string' && Array.isArray(e['value'])) {
-          courseSlots.set(e['courseId'], e['value'] as CourseSlot[]);
-          refresh = true;
-        }
       }
-      if (refresh) rebuild();
+      learn(els, isXml);
     }
   }
 

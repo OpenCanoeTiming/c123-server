@@ -16,6 +16,7 @@
     "test": "vitest",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
+    "replay:direct": "tsx --max-old-space-size=3072 scripts/replay-direct.ts",
     "sweep:parse": "tsx scripts/sweep-parse.ts",
     "sweep:merge": "tsx --max-old-space-size=3072 scripts/sweep-merge.ts",
     "measure:gaps": "node scripts/measure-gaps.mjs",
