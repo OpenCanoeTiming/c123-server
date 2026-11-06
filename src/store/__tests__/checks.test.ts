@@ -112,7 +112,7 @@ describe('crash mid-write (TEST-ARCHITECTURE §3.5 "crash mid-write"; ADR-016; r
     const restarted = await open(f); // must not throw on the leftover, must not read it
     expect(restarted.list().checks.map((c) => c.gate)).toEqual([7]);
     await restarted.putCheck({ attemptId: A1, run: 1, gate: 10, valueAtCheck: 0 });
-    expect((await open(f)).list().checks.map((c) => c.gate).sort()).toEqual([7, 10]);
+    expect((await open(f)).list().checks.map((c) => c.gate).sort((a, b) => a - b)).toEqual([7, 10]);
   });
 
   it('§3.5 crash mid-write: a first write that fails leaves no state at all, and the next start is an empty store', async () => {
