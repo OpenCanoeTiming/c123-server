@@ -53,8 +53,8 @@ disqualifies it from outranking the other sources, and the previous merge table 
 
 ## Why
 
-The evidence is E1: observed upstream behaviour, from recordings, confirmed against the decompiled
-source.
+The evidence is E1: observed upstream behaviour, from recordings, verified; its provenance stays in
+the private protocol repository.
 
 1. **CIS serves nothing unique.** It serves Canoe123's own results table and on-course record,
    re-rendered. Where compared, values were byte-identical to the XML snapshot: times, penalties,

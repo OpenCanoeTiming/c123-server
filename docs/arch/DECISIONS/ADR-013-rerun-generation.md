@@ -119,17 +119,30 @@ running athlete's result. `DERIVATIONS.md` §4.11 carries the rule; vector
 
 The merge core's first sweep over all seven recordings (round 19) found seven listings that changed
 an Attempt's `dtStart`; one was the re-run of Revision 3's recorded episode (nkz-19so C1M_BR1_19:7).
-The other six were corrections of a start impulse inside the same run: three mid-run before any
+The other six were corrections of a start impulse inside the same run: two mid-run before any
 finish, one a false start deleted and given again, and three after the finish, where the listing
 carried the same `dtFinish` with a new `Time` and the row with the new time had been pushed
 0.1–0.2 s earlier. Trigger (a), "a start time that is not the current generation's start",
 incremented on all seven, wiped the row just pushed and reset writes and checks for a run that was
 never re-raced. The trigger now reads: a listing with a start different from the generation's
-recorded start **and no finish, while the generation is recorded** — the stream listed a finish for
-its start, or a results-table row with a time or a mark was attributed to it, a later retraction
-notwithstanding. Every other change of the listed start is a start correction inside the generation:
-the recorded start follows the listing, nothing presented changes at the listing, the moved time
-arrives as the next row (`CONTRACTS.md` §4 INV-2c, same source). The one case the stream cannot
+recorded start **and no finish, while the generation is recorded** — a results-table row with a time
+or a mark was attributed to it after its recorded start, a later retraction notwithstanding. Every
+other change of the listed start is a start correction inside the generation: the recorded start
+follows the listing, no results-table value, `run` or placement changes at the listing, the moved
+time arrives as the next row (`CONTRACTS.md` §4 INV-2c, same source). The one case the stream cannot
 decide, a re-run begun and finished inside a TCP outage, reads as a correction by default
 (`DERIVATIONS.md` §10 item 23). `CONTRACTS.md` §2.6 and `DERIVATIONS.md` §4.11 carry the rule and
 the seven cases; `TEST-ARCHITECTURE.md` property 10 reads it from the raw stream.
+
+Second pass (same day, review of PR #256). "Recorded" is a results-table row only: a row with a time
+or a mark, attributed after the generation's recorded start, that stated something new for its
+source — kept through a retraction, cleared by a contradiction (INV-2d: the athlete is on course
+with that start, so the row described no finish of this run), never given by the stream alone (a
+stream finish with no row behind it is withdrawn by the next listing without it, `ADR-015`
+Revision 4, so the two rules never claim one listing). The first start listed for a generation is
+no change, and a mark on the table before it records nothing (eight recorded Attempts reached their
+first start with a `DNS` or `CAP` on the table), so a mid-run correction on such a first run keeps
+`run` 1. At a correction `status` and the on-course inferences follow the listing; only
+results-table values, `run` and `placement` are untouched. A mark attributed mid-run does record,
+so a start change with no finish after it is a re-run; that shape joins the outage case in
+`DERIVATIONS.md` §10 item 23. `DERIVATIONS.md` §4.11 states both terms once.

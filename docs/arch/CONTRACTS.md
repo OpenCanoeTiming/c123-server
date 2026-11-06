@@ -713,13 +713,18 @@ turn out, even a week later, to have raced under the wrong bib.
 and the run is raced again. Meanwhile, it looks as if the athlete never did that run.
 - `run` increments on exactly one piece of upstream evidence: an on-course listing of the Attempt
   that carries a start different from the generation's recorded start **and no finish, for a
-  generation that is recorded** — the stream showed a finish for its start, or a results-table row
-  carrying a time or a mark was attributed to it, whether or not it was retracted since
-  (`DERIVATIONS.md` §4.11; `DECISIONS/ADR-013` Revision 4). **Any other change of the listed start is a
-  start correction inside the generation:** the listing itself changes nothing presented, the
-  generation's recorded start becomes the listing's, and a time the correction moved reaches the
-  Attempt as the next results-table row, which supersedes like any correction (§4 INV-2c, same
-  source); checks and writes stay with the generation. Recorded: seven start changes in four
+  generation that is recorded** — a results-table row carrying a time or a mark was attributed to
+  it after its recorded start was known and stated something its source did not already hold, a
+  retraction since notwithstanding; a contradiction (§4 INV-2d) un-records it until the next row,
+  and the on-course stream records nothing by itself (`DERIVATIONS.md` §4.11 defines both terms;
+  `DECISIONS/ADR-013` Revision 4). The recorded start is the first start listed for the generation:
+  the listing that gives it changes nothing else, and a listing with no start leaves it. **Any other
+  change of the listed start is a start correction inside the generation:** at the listing no
+  results-table value, `run` or placement changes; the on-course inferences and `status` follow the
+  listing as they follow any listing (§3.2; `DERIVATIONS.md` §4.1, §4.3); the generation's recorded
+  start becomes the listing's, and a time the correction moved reaches the Attempt as the next
+  results-table row, which supersedes like any correction (§4 INV-2c, same source); checks and
+  writes stay with the generation. Recorded: seven start changes in four
   recordings, six of them corrections — mid-run, before any finish; after the finish, the listing
   carrying the same `dtFinish` with a new time; a start deleted and given again — and one re-run
   (`DERIVATIONS.md` §4.11). A recorded result row
@@ -1187,12 +1192,12 @@ Settled against observed upstream behaviour, after three wrong readings of a rec
 - **Only the snapshot carries course numbers.** TCP describes only the currently selected course,
   without its number and without naming a race: the selected course need not be any running Phase's
   (recorded: the next day's course selected while today's results still rotated). **The core finds
-  it by its gate string:** the Course whose `layout` with the `S` markers removed equals it
-  (recorded: three courses in two recordings, every string equal to its course's stripped layout); a
-  string matching no snapshot course refreshes nothing. It is used only to refresh that course, and
-  for the captions, which only TCP sends. **The refresh is scoped:** TCP's string, which strips the `S` markers, refreshes `gates`,
-  `slots`, `splitsAfterGate` and `captions` of the bound course; `layout` and `sectorEndsAfterGate`
-  are the snapshot's alone and are never derived from TCP (`DERIVATIONS.md` §2.3).
+  it by its gate string:** every Course whose `layout` with the `S` markers removed equals it
+  (recorded: every string in all seven recordings equals a stripped layout of its snapshot); a
+  string matching no snapshot course refreshes nothing. **The refresh is scoped:** it refreshes
+  `captions`, which only TCP sends; `gates`, `slots` and `splitsAfterGate` are equal by construction,
+  and `layout` and `sectorEndsAfterGate` are the snapshot's alone and are never derived from TCP
+  (`DERIVATIONS.md` §2.3).
 - **`sectorEndsAfterGate` is strictly increasing.** A sector that ends after a non-gate slot (the
   Cross roll zone) ends after the last gate before it, and an end equal to its predecessor is not
   repeated; the slot itself is in `slots`.
@@ -1261,6 +1266,9 @@ reliable signal that a Phase's results changed is ordinary field-level change: a
   - `left-without-finish → at-start | on-course`, when upstream lists it again in the same
     generation; this is also what makes a false leave under `DERIVATIONS.md` §4.1's leave rule
     harmless.
+  - `on-course → at-start`, when the start impulse is deleted: the listing carries no `dtStart` and
+    no clock (observed twice, `DERIVATIONS.md` §4.1); the generation's recorded start is kept, and a
+    start given again is a start correction (§2.6), not a new generation.
 - **No-results:**
   - `not-started | at-start → dns`;
   - `on-course → dnf | dsq | dsq-r | dqb | cap | ral | other`.
@@ -1271,10 +1279,11 @@ reliable signal that a Phase's results changed is ordinary field-level change: a
   - `left-without-finish → finished`, when a finish is recorded afterwards (a manually entered
     finish).
   - `finished → at-start | on-course`, when the on-course stream withdraws a finish it alone had
-    stated and no results-table row has confirmed: the next listing of the Attempt carries no
-    `dtFinish` (`DERIVATIONS.md` §4.1; recorded: a finish impulse with no start and no time, the
-    listing without it four minutes later). No diagnostic: nothing presented came from the table. A
-    start correction (§2.6) changes no status.
+    stated and no results-table row has recorded (§2.6): the next listing of the Attempt carries no
+    `dtFinish` (`DERIVATIONS.md` §4.1; slalom and the Cross time trial alike; recorded: a finish
+    impulse with no start and no time, the listing without it four minutes later). No diagnostic:
+    nothing presented came from the table. A start correction (§2.6) is no transition of its own:
+    the listing's status is this section's.
 - **Post-finish decisions and corrections:**
   - `finished → non-ranked | dsq | dsq-r | dqb | ral | other`;
   - any no-result status `→ finished`, when a mark is withdrawn.
@@ -1447,7 +1456,9 @@ implementation must satisfy, not an algorithm.
 
   Evidence: taking a finish away on upstream's on-course grid does not clear the stored result, so
   later pushes keep carrying it. Seven recorded cases; two of them showed a false leader for 31 s and
-  71 s. Kayak Cross is exempt: its on-course stream never shows a finish (§2.6).
+  71 s. Kayak Cross heats are exempt: their on-course stream never shows a finish (§2.6;
+  `DERIVATIONS.md` §4.2); a Cross time trial's does (`DERIVATIONS.md` §4.4) and is treated as
+  slalom's, here and under the stream's own withdrawal (§3.2).
 - **INV-7 (a scope snapshot's stated absence is a retraction).** For an Attempt whose presented
   result fields came from results-table observations, a scope snapshot of its race that states no
   result is a retraction observation:
@@ -1492,7 +1503,9 @@ implementation must satisfy, not an algorithm.
   `tcp`, continuity since its own ingestion (rule 2: a push is upstream's table at the moment of
   sending), so a value TCP re-sends after a reconnect — the connect burst, a rotation — regains
   precedence over an `xml` value that displaced it during the outage; that is an envelope change and
-  is pushed. The retained observation's content age (INV-2c) is kept
+  is pushed, and the envelope presented is the re-delivery's, `observedAt` included (where the value
+  is already presented from that source nothing of the retained envelope changes). The retained
+  observation's content age (INV-2c) is kept
   where the re-delivery's is `null` or not later (a first read after `setPath` re-delivering a
   value the XML already stated keeps that value's `changedAfter`, so a standing
   `source-disagreement` neither clears nor re-raises), and advances to the re-delivery's where that

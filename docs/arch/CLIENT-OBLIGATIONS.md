@@ -30,7 +30,10 @@ stamps are the core's and the reader's (CONTRACTS §2.6, §2.12, §3.2, §4; DER
 §4.1, §4.4, §4.6, §4.11, §4.12, §5, §6; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §1, §2, §5;
 ADR-010; ADR-013; ADR-015); a client sees a start correction as the ordinary field-level change it
 already handles, and a withdrawn stream finish as `status` leaving `finished`, which it never treated as
-final.
+final. Its second pass (2026-11-06) changed none: "recorded" and the recorded start are the core's terms,
+and `on-course → at-start` for a deleted start impulse is `status` leaving `on-course`, on which a
+client's local clock already stops (CONTRACTS §2.6, §2.12, §3.2, §4; DERIVATIONS §2.1, §2.3, §4.1, §4.3,
+§4.11, §6, §10; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §1, §2, §5; ADR-011; ADR-013; ADR-015).
 
 ---
 
