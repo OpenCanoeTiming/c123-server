@@ -40,7 +40,7 @@ export function startGeneration(s: CoreState, a: AttemptState, el: Element, star
   const markAtStart = start !== undefined ? marksHeld(a) : [];
   forgetRunScoped(a);
   a.gen = {
-    n: a.gen.n + 1, recorded: false, markAtStart, correcting: false, needsAttribution: start !== undefined, completed: false, started: false,
+    n: a.gen.n + 1, recorded: false, markAtStart, correcting: false, needsAttribution: start !== undefined, completed: false, started: false, restated: new Set(),
     firstEnvelope: { observedAt: el.observedAt, source: 'tcp' },
     ...(start !== undefined ? { start, startText: start } : {}),
   };

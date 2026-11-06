@@ -76,10 +76,10 @@ export function floorStatus(s: CoreState, a: AttemptState, source: Source, el: E
   if (presentStatus(a.slots.get('status')) === undefined) put(s, a, source, el, 'status', 'not-started', seq);
 }
 
-/** §1.2: a run-2 row with no time and no mark restates run 1's values, and past the Attempt's first listing they stay carried. */
+/** §1.2: a run-2 row with no time and no mark restates run 1's values, and past the Attempt's first listing they stay carried, unless this run's row restated them. */
 function keepCarried(s: CoreState, a: AttemptState, row: Row): void {
   if (!a.gen.started || fmtFor(s, a.phaseId).pair?.role !== 'second') return;
-  for (const f of CARRIED) if (f in row && present(a.slots.get(f))?.state === 'known') a.carried.add(f);
+  for (const f of CARRIED) if (f in row && !a.gen.restated.has(f) && present(a.slots.get(f))?.state === 'known') a.carried.add(f);
 }
 
 /** The row fields a paired second-run row states with no time of its own: `placement` and `pairTotal` follow the row (INV-7). */
@@ -123,7 +123,13 @@ function writeRow(s: CoreState, a: AttemptState, source: Source, el: Element, ro
   for (const f of ['placement', 'pairTotal', 'countingRun']) if (f in row) put(s, a, source, el, f, row[f], seq, extra);
   for (const f of ['underReview', 'qualified']) if (row[f] !== undefined) put(s, a, source, el, f, row[f], seq);
   if (time === undefined && mark === undefined) keepCarried(s, a, row);
-  else for (const f of CARRIED) if (f in row) a.carried.delete(f);
+  else {
+    for (const f of CARRIED) {
+      if (!(f in row)) continue;
+      a.carried.delete(f);
+      a.gen.restated.add(f);
+    }
+  }
 }
 
 /** The whole of one result row: contradiction, attribution, the stale mark, then the slots. */

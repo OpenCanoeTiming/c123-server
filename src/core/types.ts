@@ -65,6 +65,8 @@ export interface Generation {
   finish?: { eventTime?: string; runSeconds?: number };
   /** The Attempt has been listed in this generation, staged or started (§1.2, the carried-over fields). */
   started: boolean;
+  /** Carried fields a row of this run, with its time or its mark, has restated: the carry does not start again on them (§1.2). */
+  restated: Set<string>;
   /** `Completed="Y"` was seen on a listing carrying its finish, or a result stated `runClosed` (§4.4). */
   completed: boolean;
   firstEnvelope: { observedAt: string; source: Source };

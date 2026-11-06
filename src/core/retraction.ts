@@ -77,6 +77,7 @@ export function retract(s: CoreState, a: AttemptState, source: Source, el: Eleme
     delete a.contradiction;
     delete a.withheld;
     a.pending = [];
+    a.gen.restated.clear();
     s.counters.retractions++;
     s.dirtyAttempts.add(a);
   }
@@ -118,6 +119,7 @@ export function contradict(s: CoreState, a: AttemptState, el: Element, seq: numb
   st.tcp = marker(s, el, 'tcp', seq, 'not-started');
   retain(st, 'inference', slotOf(s, el, 'tcp', 'inference', 'on-course', seq));
   delete a.gen.finish;
+  a.gen.restated.clear();
   a.gen.recorded = false; // the athlete is on course with that start: the row described no finish of this run (§4.11)
   a.held.push(record);
   a.contradiction = record;
