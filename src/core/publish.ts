@@ -82,7 +82,7 @@ function ofPhase(s: CoreState, phaseId: string, asOf: string): Standing[] {
   }));
   const duration = fmt.scoringKind === 'duration';
   const scoped = (kind: 'phase' | 'pair', scope: Standing['scope']): void => {
-    const common = { entries: inputs, durationScored: duration, cross: fmt.cross };
+    const common = { entries: inputs, durationScored: duration, cross: fmt.cross, combined: fmt.pair?.role === 'second' };
     const whole = assembleStanding(common, scope);
     add({ standingKey: keyOf(kind, phaseId, undefined, null), classId, scope, ageCategoryId: null, entries: whole.standing, anomalies: whole.anomalies });
     if (!duration) return;

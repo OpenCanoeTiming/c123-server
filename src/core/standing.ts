@@ -30,6 +30,8 @@ export interface StandingInput {
   durationScored?: boolean;
   /** A Cross scope is never checked mechanically (step 7). */
   cross?: boolean;
+  /** The entries' placement is based on `pairTotal` (an entry of a second-run Phase): it is the ranked value in every scope (steps 6-7). */
+  combined?: boolean;
 }
 
 export type StandingScopeInput = { kind: string; [k: string]: unknown };
@@ -66,7 +68,7 @@ export function assembleStanding(given: StandingInput, scope: StandingScopeInput
   const unplaced = given.entries.filter((e) => e.placement === null).sort((a, b) => statusIndex(a.status) - statusIndex(b.status) || byBib(a.bib, b.bib));
 
   const ranked = (e: EntryInput): number | null => {
-    if (pair) return typeof e.pairTotal === 'number' ? e.pairTotal : null;
+    if (pair || given.combined === true) return typeof e.pairTotal === 'number' ? e.pairTotal : null;
     return e.result?.kind === 'duration' ? e.result.totalSeconds : null;
   };
   const shape = (list: EntryInput[], rankOf: (e: EntryInput, i: number) => [number | null, number | null]): StandingEntry[] => {
