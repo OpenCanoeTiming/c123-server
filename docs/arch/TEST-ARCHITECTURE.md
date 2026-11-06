@@ -181,8 +181,12 @@ ingest unit (`CONTRACTS.md` §1.6) — its elements classified in `CONFORMANCE-V
 it produced, and a state hash — and the tool folds the cold-start portion into the hydration step, then
 writes every later delta with its producing element's recorded `observedAt`. **A replay begins at the
 first record of the stream the checker reads** — the recording's or the excerpt's — and a capture
-window inside it opens with a hydration step holding the core's state at that instant; a window is
-never a cold start at a later instant of a stream the checker reads from its beginning, since closure,
+window inside it opens with a hydration step holding the core's state at that instant; **the step
+log gate 2 reads begins where the raw stream begins, not at the hydration** — the checker's memory
+(the generation's recorded row, the carry, properties 5, 10 and 11) is built from the steps before
+the window, which the hydration's GET bodies do not hold — and the hydration step and the window
+bound the published fixture's steps and its `violations` and `exercised` counts (§4; round 24,
+second pass); a window is never a cold start at a later instant of a stream the checker reads from its beginning, since closure,
 content age and the carry (properties 5, 8, 11) would then be read over records the core never saw
 (round 24: 9,072 such violations in one window). A cold start at a chosen instant is an excerpt cut
 there, log and raw stream alike. The result is a
@@ -204,7 +208,10 @@ trivially. Where the recording lacks them (§9: the recorder wrote connection ch
 and no recording holds a re-baseline), a stated outage or re-baseline is declared in the fixture's
 `source` (`events`, each with its instant, scope and reason); the replay drops every TCP record
 inside a stated outage and plays a stated re-baseline as `CONTRACTS.md` §4's unit, the `rebaseline`
-event with the last snapshot read. Such a fixture is evidence for properties 8 and 13 (`exercised`)
+event with the last snapshot read; **the raw stream the gate-2 checker reads omits the same records**,
+the interval taken from the log's `tcp-disconnected`/`tcp-connected` pair, which `source.events`
+restates, so no property is read over records the core was told never arrived (round 24, second
+pass: a cp3-cross outage of 139 records otherwise raised property 8 on a snapshot inside it). Such a fixture is evidence for properties 8 and 13 (`exercised`)
 and gate 2 judges it like any other; it is a candidate with a declared input the recording lacked,
 not a synthetic fixture (§4), which carries no raw stream and so exercises only the **D** properties
 (round 24). A non-empty diff fails the candidate outright: a real non-determinism bug (uninitialised
@@ -214,8 +221,9 @@ only self-consistency.
 **Gate 2 — invariant conformance, checked as a property of the replay, not against a known answer.**
 
 *What the checker reads.* The admission replay, step by step. **A step is one ingest unit**
-(`CONTRACTS.md` §1.6; `CONFORMANCE-VECTORS.md` §1: one upstream message, one event, one scope
-snapshot, one re-baseline with its snapshot re-read) — its elements in ingest order, `elements`
+(`CONTRACTS.md` §1.6; `CONFORMANCE-VECTORS.md` §1: one upstream message, one event, one XML
+snapshot read — every race it carries, the rewrite event included, `DERIVATIONS.md` §0.3 — one
+re-baseline with its snapshot re-read) — its elements in ingest order, `elements`
 plural in the log, plus any `oncourse-left` the core derived at that message (`DERIVATIONS.md` §4.1,
 §4.8; listed after the message's own elements and verified against the raw stream, never trusted) —
 and the deltas (§7.2 shapes) the unit produced. Where a property names the step's element
@@ -409,7 +417,7 @@ the step index, the Attempt, the field and the property number.
     parser stamps `null`, or nothing, without a course, CONFORMANCE-VECTORS §1; a `true` stamp is its judgement
     against a course and settles the value; round 21) — this judging clause does not reach an Attempt
     with no run yet (`status` absent or `not-started`, its row carrying neither time nor mark: the values
-    are run 1's, settled there, until the carry below begins) nor what a heat's row asserts with its
+    are run 1's, settled there, until the carry below begins; `CONTRACTS.md` §1.2's first exemption) nor what a heat's row asserts with its
     `placement`: the placement, the ordinal built from it, and its `qualified` and `underReview` from
     the step the placement is presented — upstream's whole result asserted after the judging
     (`CONTRACTS.md` §1.2 states the exemption; `DERIVATIONS.md` §4.2, §4.7; round 21); before that step they are under the clause like any
@@ -440,8 +448,9 @@ the step index, the Attempt, the field and the property number.
     Attempt of the scope and the Standings §7.2 names. Across it, `entry`, `bib`, `run`,
     `startOrder`, `heat`, `startLane`, every check and flag, and every `WriteRequest` are unchanged;
     afterwards every presented value of a field §4 step 1 discards has `source` `tcp` or `xml`, and
-    none of those has `source: tcp` until a `tcp` observation of it follows (the on-course facts and
-    `status`'s lifecycle values survive the re-baseline with their `tcp` source; round 24).
+    none of those has `source: tcp` until a `tcp` observation of it follows (`courseOrder`, `timeToBeat`
+    and `status`'s lifecycle values survive the re-baseline with their `tcp` source; `splits` and a
+    `running` outcome are on step 1's list and do not; round 24).
 14. **On-course set (§7.1).** The set is upstream's list. An `attemptId` enters `oncourse.updated` only
     at an on-course listing of that Attempt and leaves only at an `oncourse-left` or `oncourse-empty`
     element — the `oncourse-left` being the one the core derived at that step's TCP message, checked
@@ -702,7 +711,9 @@ nothing; a public read of an unknown `eventId` is `404`, never another organiser
 directly from a `CONTRACTS.md` clause or an invariant, the same way tier 1's vectors are).
 `source.excerpt` is `<recording>#<chunk>` or `<recording>#<fromMs>-<toMs>` for a time window;
 `source.sha256` is the excerpt's `data.jsonl` checksum, which must not include free text such as a
-label (spike S2-3).
+label (spike S2-3). Where the replay began before the window (§3.2), `source.input` names the stream
+replayed, `<recording>#<fromMs>-<toMs>` from the recording's first record to the window's end, with
+its own `sha256`; like `events`, prose only until the schema names it (round 24, second pass).
 
 **`domainLayerVersion` has two axes** (`DECISIONS/ADR-017` D5). `contract` is the version of the §7/§8
 wire shapes: the server's wire-protocol `VERSION` once the new contract is implemented (it leaves
@@ -715,7 +726,8 @@ deliberately. A `generator` change is not a consumer's concern: it requires re-a
 logic did (spike S2-4).
 
 **The hydration step** holds every §7.1 (or §8.4) GET body of the event at one `asOfSeq`, taken at the
-step that completes the cold-start snapshot read; its `observedAt` is the recorded time of the last
+step that completes the cold-start snapshot read or, for a window inside a longer replay (§3.2), at
+the window's opening step; its `observedAt` is the recorded time of the last
 element those bodies reflect. The file-level `asOfSeq` is the counter when capture began, 0 for a cold
 replay. A delta step's `observedAt` is the recorded `observedAt` of the element that produced it
 (spike S2-1).

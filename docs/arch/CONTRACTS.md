@@ -158,8 +158,9 @@ The fields, precisely:
   - it is an on-course inference not yet superseded by a results-table observation of the same run
     (a `gates` cell merged in from the stream under §4 rule 1's exception does not make the row's
     vector an inference). **The stream's own gate cells — in Kayak Cross the `faults` built from
-    them — are such an inference while no row of the generation is presented:** `confidence:
-    'inferred'`, never retracted (INV-7). Once a row of the generation is presented, the merged
+    them — are such an inference while no row of the generation stating a result — a time or a mark,
+    INV-7's test; cells alone state none — is presented:** `confidence:
+    'inferred'`, never retracted (INV-7). Once such a row is presented, the merged
     vector is that row's observation: `confidence: 'authoritative'`, `source` the presented row's,
     `observedAt` the element's that last changed the presented cells, a listing's included; after
     the row's retraction the stream's vector is an inference again (round 24);
@@ -169,12 +170,14 @@ The fields, precisely:
     alone (round 20, second pass: no list here). **The clause reaches every field a row states
     for the run:** `outcome`, `gates` (in Kayak Cross `faults`), `placement`, `pairTotal`,
     `countingRun`, `underReview` and `qualified`; `status` is outside it (below), and the on-course
-    facts (`courseOrder`, `timeToBeat`, `splits`) are asserted, not judged. **One exemption, stated
-    here alone:** in a Kayak Cross heat the `placement`, the ordinal built from it, and the
+    facts (`courseOrder`, `timeToBeat`, `splits`) are asserted, not judged. **Two exemptions, stated
+    here:** an Attempt with no run yet — `status` absent or `not-started`, its row carrying neither
+    time nor mark — has no run to judge, its values being the previous run's, settled there, until
+    the carry below begins (round 21); and in a Kayak Cross heat the `placement`, the ordinal built from it, and the
     `qualified` and `underReview` the row states with it are upstream's whole result, asserted after
     the judging, and leave this clause at the step the placement is presented; the heat's `faults`
     stays under it until the heat leaves the list (`DERIVATIONS.md` §4.2, §4.7; round 21, placed
-    here in round 24);
+    here in round 24, both named in its second pass);
   - it is a second run's `placement`, `pairTotal` or `countingRun` carried over from run 1, from the
     Attempt's first on-course listing in run 2 — staged or started: the stream saying the run is
     about to happen — until a row of run 2 — one carrying its time or its mark — restates that

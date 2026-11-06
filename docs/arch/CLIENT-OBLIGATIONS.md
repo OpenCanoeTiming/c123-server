@@ -78,7 +78,11 @@ the judging clause naming its fields and the heat exemption stated in §1.2, a l
 rule 2's `tcp` side, the Phase's structural fields with its first message, the leave as the core's
 derivation, a window opening on a hydration step, and stated outages and re-baselines as declared
 inputs are the core's, the driver's and the checker's (CONTRACTS §1.2, §1.6, §4; DERIVATIONS §2.1,
-§4.6, §4.7, §4.8; TEST-ARCHITECTURE §3.2; ADR-017); a client already reads `confidence` and
+§4.6, §4.7, §4.8; TEST-ARCHITECTURE §3.2; ADR-017). Its second pass (2026-11-07, after review) moved
+none: the checker's raw stream omitting a stated outage's records, the step log read from the raw
+stream's start with the window bounding the counts, §1.2 naming both exemptions and "a row stating a
+result", and P13 naming `courseOrder` and `timeToBeat` are the checker's, the driver's and the
+test document's (CONTRACTS §1.2; TEST-ARCHITECTURE §3.2, §4); a client already reads `confidence` and
 `provisional` as two facts and receives a Phase whole on its first message.
 
 ---

@@ -378,3 +378,12 @@ judges it like any other, where a synthetic fixture (§4) can reach only the **D
 completed in `CONTRACTS.md` §1.2: the judging clause names its fields (`underReview` and `qualified`
 included) and carries the heat exemption round 21 left in the test document alone; the stream's gate
 cells are an inference, `confidence: 'inferred'`, until a row of the generation is presented.
+
+Second pass (review of PR #274): the checker's raw stream omits the records a stated outage dropped
+(a 139-record outage at cp3-cross otherwise raised property 8 on a snapshot inside it); the step log
+gate 2 reads begins where the raw stream begins and the hydration step bounds the published fixture
+and its counts (nkz-19so: 202 in-window violations either way, property 10's recorded row lying
+before the hydration); `CONTRACTS.md` §1.2 names both exemptions and "a row stating a result";
+property 13 names `courseOrder` and `timeToBeat`. The 193 property-6 rows the first run reported had
+no row before them: a stream cell taken through the no-course path stayed `authoritative` at the
+binding snapshot, a core defect, not the state §1.2 excluded.
