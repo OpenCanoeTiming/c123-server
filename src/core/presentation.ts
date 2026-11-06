@@ -3,7 +3,7 @@
  * DERIVATIONS §4.4, §4.6). Computed from retention alone; nothing here is stored.
  */
 import { splitRaceId, r3 } from '../ingest/common.js';
-import { isMark, present, presentStatus, choose } from './precedence.js';
+import { isMark, present, presentStatus } from './precedence.js';
 import { fmtFor, isInstant } from './registry.js';
 import type { AttemptState, CoreState, Gate, Slot } from './types.js';
 
@@ -69,6 +69,14 @@ function finishOf(a: AttemptState, slot: Slot): string | undefined {
   if (a.gen.finish?.runSeconds === time.runSeconds && a.gen.finish?.eventTime !== undefined) return a.gen.finish.eventTime;
   const xml = a.slots.get('outcome')?.xml;
   return (xml?.value as { runSeconds?: number } | undefined)?.runSeconds === time.runSeconds ? xml?.eventTime : undefined;
+}
+
+/** The finish `eventTime` an Attempt presents, for `duplicate-finish` (§2.6). */
+export function presentedFinish(a: AttemptState): string | undefined {
+  const slot = present(a.slots.get('outcome'));
+  if (slot?.state !== 'known' || (slot.value as { kind?: string } | undefined)?.kind !== 'duration') return undefined;
+  const finish = finishOf(a, slot);
+  return isInstant(finish) ? finish : undefined;
 }
 
 /** §4.5: run 1 unavailable once run 2 has been observed and neither path can supply it. */
@@ -137,5 +145,3 @@ export function settled(a: AttemptState, slot: Slot | undefined): boolean {
   if (slot === undefined || a.gen.completed || a.left) return slot !== undefined;
   return slot.judgingComplete === undefined || slot.judgingComplete === true;
 }
-
-export { choose };

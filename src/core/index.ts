@@ -14,7 +14,7 @@ import { applyRow, floorStatus, putCells, putIdentity, putStanding, rebindCells 
 import { applyClassification, observeResource, viewResource } from './resources.js';
 import { submitWrite, wireWrite } from './writes.js';
 import { viewAttempt, viewUnknownAttempt } from './presentation.js';
-import { timeOf, markOf, startGeneration } from './generations.js';
+import { markOf, startGeneration } from './generations.js';
 import type { AttemptState, ClassificationRow, ClassificationState, CoreState, Diagnostic, Element, MergeCoreOptions, Message, ResourceState, Row, Source } from './types.js';
 
 export type { MergeCoreOptions } from './types.js';
@@ -120,6 +120,7 @@ function rebaseline(s: CoreState, el: Element): void {
   }
   if (scope.kind === 'event') s.parserDiagnostics.clear();
   else for (const [k, d] of s.parserDiagnostics) if ('attemptId' in d && d.attemptId.startsWith(`${scope.phaseId}:`)) s.parserDiagnostics.delete(k);
+  s.diagnosticsDirty = true;
   s.pendingRebaseline = scope;
 }
 
@@ -127,7 +128,7 @@ const isBlank = (row: Row): boolean =>
   !('outcome' in row) && markOf(row) === undefined && row['status'] !== 'finished' && (row['placement'] === null || row['placement'] === undefined) &&
   !('underReview' in row) && !('finishTime' in row) && row['untimed'] !== true;
 
-function applySnapshot(s: CoreState, el: Element): void {
+function applySnapshot(s: CoreState, el: Element, inUnit: ReadonlySet<string>): void {
   const { source, phaseId, mode, rows } = el['snapshot'] as { source: Source; phaseId: string; mode: 'results' | 'start-list'; rows: Row[] };
   const fmt = fmtFor(s, phaseId);
   if (fmt.kind === 'classification') {
@@ -135,7 +136,7 @@ function applySnapshot(s: CoreState, el: Element): void {
     return;
   }
   const seq = tick(s);
-  const phase = phaseResource(s, phaseId);
+  const phase = phaseResource(s, phaseId, el.observedAt);
   const second = fmt.pair?.role === 'second';
   const named = new Set<AttemptState>();
   for (const row of rows) {
@@ -154,6 +155,7 @@ function applySnapshot(s: CoreState, el: Element): void {
     } else applyRow(s, a, source, el, row, seq);
     s.dirtyAttempts.add(a);
   }
+  clearRestated(s, source, named, inUnit);
   if (source !== 'tcp') return; // an absent XML row, and an XML table with no rows, state nothing (INV-7)
   const fields = second ? [...FIRST_RUN_FIELDS, ...PAIR_FIELDS] : FIRST_RUN_FIELDS;
   for (const a of phase.attempts ?? []) {
@@ -231,7 +233,7 @@ function observe(s: CoreState, el: Element): void {
     const r = resource(s.courses, courseId);
     if (observeResource(s, r, el, field, source, tick(s))) s.dirtyResources.add(dirty(s, 'course', r));
   } else if (phaseId !== undefined) {
-    const r = phaseResource(s, phaseId);
+    const r = phaseResource(s, phaseId, el.observedAt);
     if (observeResource(s, r, el, field, source, tick(s))) s.dirtyPhases.add(r);
   } else observeAttempt(s, unnamedAttempt(s, el.observedAt, source), el, field);
 }
@@ -248,19 +250,37 @@ function dirty(_s: CoreState, type: 'entry' | 'class' | 'course', r: ResourceSta
 }
 
 /** Parser diagnostics of the kinds `GET /api/diagnostics` serves; a restated row replaces its Attempt's. The ingest-only kinds reach the admin log, not this list. */
-function applyDiagnostic(s: CoreState, el: Element): void {
+function applyDiagnostic(s: CoreState, el: Element, inUnit: Set<string>): void {
   const d = el['diagnostic'] as Diagnostic | { kind: string; signatures?: string[] };
   if (d.kind === 'fabricated-course') {
-    if (s.currentPhaseId !== undefined) phaseResource(s, s.currentPhaseId).fabricated = true;
+    if (s.currentPhaseId !== undefined) phaseResource(s, s.currentPhaseId, el.observedAt).fabricated = true;
     return;
   }
-  if (d.kind === 'unparseable-cell' || d.kind === 'member-sum-mismatch') s.parserDiagnostics.set(JSON.stringify(d), d as Diagnostic);
+  if (d.kind === 'unparseable-cell' || d.kind === 'member-sum-mismatch') {
+    const key = JSON.stringify(d);
+    inUnit.add(key);
+    if (!s.parserDiagnostics.has(key)) s.diagnosticsDirty = true;
+    s.parserDiagnostics.set(key, d as Diagnostic);
+  }
 }
 
-function dispatch(s: CoreState, el: Element): void {
+/** A row restated without a cell problem it had: the diagnostic is no longer current. */
+function clearRestated(s: CoreState, source: Source, named: ReadonlySet<AttemptState>, inUnit: ReadonlySet<string>): void {
+  if (s.parserDiagnostics.size === 0) return;
+  const ids = new Set([...named].map((a) => a.id));
+  for (const [key, d] of s.parserDiagnostics) {
+    if (inUnit.has(key) || !('attemptId' in d) || !ids.has(d.attemptId)) continue;
+    if (d.kind === 'unparseable-cell' ? d.source === source : source === 'xml') {
+      s.parserDiagnostics.delete(key);
+      s.diagnosticsDirty = true;
+    }
+  }
+}
+
+function dispatch(s: CoreState, el: Element, inUnit: Set<string>): void {
   if ('event' in el) applyEvent(s, el);
-  else if ('snapshot' in el) applySnapshot(s, el);
-  else if ('diagnostic' in el) applyDiagnostic(s, el);
+  else if ('snapshot' in el) applySnapshot(s, el, inUnit);
+  else if ('diagnostic' in el) applyDiagnostic(s, el, inUnit);
   else if ('field' in el) observe(s, el);
   // `sourceStatus`, `unparseable` and `unknownType` state nothing the merge reads
 }
@@ -270,14 +290,15 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
     options, counter: options.initialSeq ?? 0, epoch: 0, tcpUp: undefined, rewrite: undefined, xmlRead: false, previousTcpAt: undefined,
     attempts: new Map(), unnamed: undefined, phases: new Map(), entries: new Map(), classes: new Map(), courses: new Map(), classifications: new Map(),
     listed: new Map(), oncourseAsOf: null, oncourseSent: '[[],null]', featured: null, writes: [], currentPhaseId: undefined,
-    parserDiagnostics: new Map(), phaseDiagnostics: new Map(), diagnosticsSent: '[]', log: [],
+    parserDiagnostics: new Map(), phaseDiagnostics: new Map(), diagnosticsSent: '[]', diagnosticsDirty: false, log: [],
     dirtyAttempts: new Set(), dirtyPhases: new Set(), dirtyResources: new Set(), dirtyWrites: new Set(), pendingRebaseline: undefined,
     counters: { generations: 0, retractions: 0, contradictions: 0, leaves: 0, refusals: {} },
   };
   return {
     applyUnit(elements) {
       validate(s, elements);
-      for (const el of elements) dispatch(s, el);
+      const inUnit = new Set<string>();
+      for (const el of elements) dispatch(s, el, inUnit);
       const tcp = elements.find((el) => el['source'] === 'tcp');
       if (tcp !== undefined) applyLeaveRule(s, tcp);
       const xml = elements.some(isXmlFact);
@@ -295,7 +316,10 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
       const r = s.entries.get(entryId) ?? [...s.entries.values()][0];
       return r === undefined ? {} : viewResource(r, 'entry');
     },
-    phase: (phaseId) => viewResource(phaseResource(s, phaseId), 'phase'),
+    phase: (phaseId) => {
+      const r = s.phases.get(phaseId);
+      return r === undefined ? { phaseId } : viewResource(r, 'phase');
+    },
     attempts: () => [...s.attempts.keys()],
     oncourse: () => oncourseView(s),
     diagnostics: () => currentDiagnostics(s),
@@ -309,5 +333,3 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
     counters: () => s.counters,
   };
 }
-
-export { timeOf };

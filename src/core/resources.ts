@@ -2,11 +2,10 @@
  * Phases, Entries, Classes and Courses (CONTRACTS §2.3-§2.5, §2.12) and the classification rows (DERIVATIONS §4.10). They have no
  * run generation: same source, later-ingested (INV-6); across sources rule 2. Classification rows create no Attempt.
  */
-import { choose, newerContent, present } from './precedence.js';
+import { present } from './precedence.js';
 import { envelope } from './presentation.js';
 import { fieldSlots, retain, slotOf } from './retention.js';
 import { refuse } from './counters.js';
-import { resource } from './registry.js';
 import type { ClassificationRow, CoreState, Element, ResourceState, Source } from './types.js';
 
 /** Fields that are not `Observed` on the wire (§2.3, §2.4). */
@@ -63,6 +62,3 @@ export function applyClassification(s: CoreState, phaseId: string, source: Sourc
   if (cur !== undefined && JSON.stringify(cur.rows) === JSON.stringify(next)) return;
   s.classifications.set(phaseId, { rows: next, asOf: el.observedAt, builtBy: source, at });
 }
-
-export const courseFor = (s: CoreState, id: string): ResourceState => resource(s.courses, id);
-export { choose, newerContent };

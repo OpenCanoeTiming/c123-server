@@ -11,10 +11,12 @@ export function resource(map: Map<string, ResourceState>, id: string): ResourceS
   return r;
 }
 
-export function phaseResource(s: CoreState, phaseId: string): ResourceState {
+/** A Phase exists from its first observation, dated by it until the snapshot states the date, once (DERIVATIONS §2.1, INV-5). */
+export function phaseResource(s: CoreState, phaseId: string, observedAt: string): ResourceState {
   const p = resource(s.phases, phaseId);
   if (p.attempts === undefined) {
     p.attempts = new Set();
+    p.plain.set('date', observedAt.slice(0, 10));
     s.dirtyPhases.add(p);
   }
   return p;
@@ -34,13 +36,13 @@ const newAttempt = (id: string, phaseId: string | undefined, bib: string, observ
   created: false, sent: new Map(), force: new Set(), diagnostics: [],
 });
 
-function name(s: CoreState, a: AttemptState, id: string): void {
+function name(s: CoreState, a: AttemptState, id: string, observedAt: string): void {
   const cut = id.lastIndexOf(':');
   a.id = id;
   a.phaseId = id.slice(0, cut);
   a.bib = id.slice(cut + 1);
   s.attempts.set(id, a);
-  phaseResource(s, a.phaseId).attempts?.add(a);
+  phaseResource(s, a.phaseId, observedAt).attempts?.add(a);
 }
 
 /** `attemptId` is `${phaseId}:${bib}` (CONTRACTS §2.6). The first name stated also names an Attempt so far unnamed. */
@@ -50,7 +52,7 @@ export function attemptFor(s: CoreState, id: string, observedAt: string, source:
   const a = s.unnamed ?? newAttempt(id, undefined, '', observedAt, source);
   s.unnamed = undefined;
   s.attempts.delete('');
-  name(s, a, id);
+  name(s, a, id, observedAt);
   return a;
 }
 

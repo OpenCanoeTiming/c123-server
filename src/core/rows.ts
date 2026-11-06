@@ -4,11 +4,11 @@
  */
 import { judgingComplete, gatesFromCells, faultsFromCells, usable, type Cells } from '../ingest/common.js';
 import { isStaleMark, attribute, keepAsHistory, markOf, pendingFor, timeOf } from './generations.js';
-import { presentStatus, refusedByGuard } from './precedence.js';
+import { isMark, presentStatus, refusedByGuard } from './precedence.js';
 import { fmtFor } from './registry.js';
 import { refuse } from './counters.js';
 import { carriesContradicted } from './retraction.js';
-import { fieldSlots, retain, slotOf, type Channel } from './retention.js';
+import { fieldSlots, retain, slotOf } from './retention.js';
 import { resolveEcho } from './writes.js';
 import type { AttemptState, CoreState, Element, Row, Slot, Source } from './types.js';
 import type { CourseSlot } from '../ingest/index.js';
@@ -24,7 +24,9 @@ function put(s: CoreState, a: AttemptState, source: Source, el: Element, field: 
   const changed = retain(fs, source, slot);
   if (changed) s.dirtyAttempts.add(a);
   if (fs.operator !== undefined) resolveEcho(s, a, fs, field, slot, changed);
-  if (source === 'xml' && changed && fs.tcp !== undefined && refusedByGuard(fs.tcp, slot)) refuse(s, 'content-age');
+  if (source !== 'xml' || !changed) return;
+  if (fs.tcp !== undefined && refusedByGuard(fs.tcp, slot)) refuse(s, 'content-age');
+  else if (field === 'status' && isMark(slot.value) && presentStatus(fs) !== slot) refuse(s, 'xml-mark');
 }
 
 /** The course bound to a Phase, known only once a snapshot binds it (§4.6). */
@@ -68,7 +70,7 @@ export function putCells(s: CoreState, a: AttemptState, channel: 'tcp' | 'xml' |
 export function rebindCells(s: CoreState, a: AttemptState): void {
   for (const channel of ['tcp', 'xml', 'inference'] as const) {
     const held = a.cells[channel];
-    if (held !== undefined) putCells(s, a, channel as Channel & typeof channel, held.cells, held.slot);
+    if (held !== undefined) putCells(s, a, channel, held.cells, held.slot);
   }
 }
 

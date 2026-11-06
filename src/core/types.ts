@@ -92,6 +92,8 @@ export interface AttemptState {
   /** Fields a generation change sends even when already `not-yet` (TEST-ARCHITECTURE property 10). */
   force: Set<string>;
   diagnostics: Diagnostic[];
+  /** The finish `eventTime` last presented, for `duplicate-finish`. */
+  finish?: string;
 }
 
 export interface ResourceState {
@@ -167,6 +169,7 @@ export interface CoreState {
   parserDiagnostics: Map<string, Diagnostic>;
   phaseDiagnostics: Map<string, Diagnostic[]>;
   diagnosticsSent: string;
+  diagnosticsDirty: boolean;
   log: Message[];
   dirtyAttempts: Set<AttemptState>;
   dirtyPhases: Set<ResourceState>;

@@ -2,9 +2,9 @@
  * The flush after a unit (CONTRACTS §1.6, §7.2): at most one message per changed resource, carrying every field the unit changed;
  * the message that creates an id carries the whole resource. Per-unit diagnostics are recomputed here, for what the unit touched.
  */
-import { disagree, present, presentStatus } from './precedence.js';
+import { disagree } from './precedence.js';
 import { oncourseView } from './oncourse.js';
-import { settled, viewAttempt } from './presentation.js';
+import { presentedFinish, settled, viewAttempt } from './presentation.js';
 import { viewResource } from './resources.js';
 import { wireWrite } from './writes.js';
 import type { AttemptState, CoreState, Diagnostic, Message, ResourceState } from './types.js';
@@ -42,22 +42,15 @@ function attemptDiagnostics(a: AttemptState): Diagnostic[] {
 function duplicateFinishes(s: CoreState, phase: ResourceState): void {
   const byFinish = new Map<string, string[]>();
   for (const a of phase.attempts ?? []) {
-    const o = viewOutcome(s, a);
-    if (o === undefined) continue;
-    const bibs = byFinish.get(o);
-    if (bibs === undefined) byFinish.set(o, [a.bib]);
+    if (a.finish === undefined) continue;
+    const bibs = byFinish.get(a.finish);
+    if (bibs === undefined) byFinish.set(a.finish, [a.bib]);
     else bibs.push(a.bib);
   }
   const found: Diagnostic[] = [];
   for (const [finishTime, bibs] of byFinish) if (bibs.length > 1) found.push({ kind: 'duplicate-finish', phaseId: phase.id, finishTime, bibs: bibs.sort() });
   if (found.length > 0) s.phaseDiagnostics.set(phase.id, found);
   else s.phaseDiagnostics.delete(phase.id);
-}
-
-function viewOutcome(s: CoreState, a: AttemptState): string | undefined {
-  if (present(a.slots.get('outcome'))?.state !== 'known') return undefined;
-  const o = viewAttempt(s, a)['outcome'] as { value?: { kind?: string }; eventTime?: string };
-  return o.value?.kind === 'duration' ? o.eventTime : undefined;
 }
 
 export function currentDiagnostics(s: CoreState): Diagnostic[] {
@@ -89,13 +82,24 @@ function flushRebaseline(s: CoreState): void {
 }
 
 export function flush(s: CoreState, xmlInUnit: boolean): void {
-  for (const a of [...s.dirtyAttempts]) a.diagnostics = attemptDiagnostics(a);
   const phases = new Set<ResourceState>();
   for (const a of s.dirtyAttempts) {
+    const raised = attemptDiagnostics(a);
+    if (JSON.stringify(raised) !== JSON.stringify(a.diagnostics)) {
+      a.diagnostics = raised;
+      s.diagnosticsDirty = true;
+    }
+    const finish = presentedFinish(a);
+    if (finish === a.finish) continue;
+    if (finish === undefined) delete a.finish;
+    else a.finish = finish;
     const p = a.phaseId === undefined ? undefined : s.phases.get(a.phaseId);
     if (p !== undefined) phases.add(p);
   }
-  for (const p of phases) duplicateFinishes(s, p);
+  for (const p of phases) {
+    duplicateFinishes(s, p);
+    s.diagnosticsDirty = true;
+  }
 
   for (const p of s.dirtyPhases) {
     const fields = diff(viewResource(p, 'phase'), p.sent, p.created);
@@ -137,6 +141,8 @@ export function flush(s: CoreState, xmlInUnit: boolean): void {
     s.oncourseSent = key;
     emit(s, { type: 'oncourse.updated', ...on });
   }
+  if (!s.diagnosticsDirty) return;
+  s.diagnosticsDirty = false;
   const diagnostics = currentDiagnostics(s);
   const text = JSON.stringify(diagnostics);
   if (text !== s.diagnosticsSent) {
@@ -144,5 +150,3 @@ export function flush(s: CoreState, xmlInUnit: boolean): void {
     emit(s, { type: 'diagnostics.updated', diagnostics });
   }
 }
-
-export { presentStatus };
