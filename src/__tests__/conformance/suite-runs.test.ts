@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { serverVectors } from './run-vector.js';
+import { loadExpectedRed, serverVectors } from './run-vector.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 // The repo root, or (for a scratch copy) wherever this directory sits.
@@ -47,15 +47,19 @@ describe('the real vectors.test.ts in a child vitest (issue #200 rows 1, 2, 5; r
     expect(exit).toBe(0);
   }, 120_000);
 
-  it('VECTORS_STRICT=1: exactly the 88 titles again, each one failed, exit 1 (the ledger is ignored by the real suite)', () => {
+  it('VECTORS_STRICT=1: exactly the 88 titles again, the ledger is ignored, the 14 listed ids read failed and exit is 1', () => {
     const { exit, results } = suite(true);
     expect(results.map((r) => r.title).sort()).toEqual([...ids].sort());
-    expect(results.filter((r) => r.status !== 'failed').map((r) => r.title)).toEqual([]);
+    // Strict mode shows the true state: the merge vectors (#203) are the core's to pass, so only the listed ids are pinned.
+    const listed = new Set(loadExpectedRed().map((id) => `vector ${id}`));
+    expect(listed.size).toBe(14);
+    expect(results.filter((r) => listed.has(r.title) && r.status !== 'failed').map((r) => r.title)).toEqual([]);
     expect(exit).toBe(1);
-    // THIS CLAUSE GOES WHEN THE CORE IS WIRED (M1): while `corePort` is unwired every vector fails for the one
-    // reason CoreMissing, which pins today's failure mode (a TypeError in the wiring would read as red too).
-    // Once vectors pass, strict mode shows the true state and this assertion is removed with the last listed id.
-    expect(results.filter((r) => !/CoreMissing/.test(r.message)).map((r) => r.title)).toEqual([]);
+    // The 13 non-merge vectors still fail for the one reason CoreMissing (a TypeError in the wiring would read as red too);
+    // `standing-not-resent-on-running-tick` is merge-shaped and fails on its `standing.updated` count until #205.
+    expect(
+      results.filter((r) => listed.has(r.title) && r.title !== 'vector standing-not-resent-on-running-tick' && !/CoreMissing/.test(r.message)).map((r) => r.title),
+    ).toEqual([]);
   }, 120_000);
 });
 

@@ -125,10 +125,12 @@ describe('expected-red ledger and modes (issue #200 rows 3, 4, 5)', () => {
     for (const id of LIVE_INGEST) expect(listed).not.toContain(id);
   });
 
-  it('expected-red at the start of M1: every id the server runs is listed (88), the core being absent', () => {
-    // This test is the ratchet's starting position; it is the one that changes (ids leave) as core issues land.
-    expect(loadExpectedRed().length).toBeLessThanOrEqual(88);
-    expect([...loadExpectedRed()].sort()).toEqual(serverVectors().map((v) => v.id).sort());
+  it('expected-red after #203 (merge core): the standing-assembly and workflow-state vectors, and the one merge vector that needs an assembled Standing', () => {
+    // The ratchet: ids leave as core issues land. #203 took the merge vectors; `standing-not-resent-on-running-tick` is merge-shaped
+    // but asserts `standing.updated`, which only the Standing assembly (#205) sends, so it stays with the 13 non-merge vectors.
+    const nonMerge = serverVectors().filter((v) => !Array.isArray(v.given)).map((v) => v.id);
+    expect(nonMerge.length).toBe(13);
+    expect([...loadExpectedRed()].sort()).toEqual([...nonMerge, 'standing-not-resent-on-running-tick'].sort());
   });
 
   it('the ledger is read from the file it is given, not from a constant', () => {
@@ -185,8 +187,7 @@ describe('harness can fail (issue #200 row 15)', () => {
 });
 
 describe('core-adapter contract (issue #200 row 13, "Seam")', () => {
-  it('until the core exists every entry point throws CoreMissing (the one reason every vector is red)', () => {
-    expect(() => corePort.createMergePort({ attemptId: 'x', xmlPollIntervalSeconds: 5 })).toThrow(CoreMissing);
+  it('until the Standing assembly and the gate checks exist their entry points throw CoreMissing (createMergePort is #203\'s: wired to src/core)', () => {
     expect(() => corePort.assembleStanding({ entries: [] }, { kind: 'phase', phaseId: 'p' })).toThrow(CoreMissing);
     expect(() => corePort.gateStatus({ checks: [], flags: [], presented: {} })).toThrow(CoreMissing);
   });
