@@ -356,3 +356,54 @@ describe('Windows (row 11; CONTRACTS §2.10 "temporary file then a rename")', ()
     expect(src).toMatch(/win32/);
   });
 });
+
+describe('a file the store cannot read is refused, never replaced (CONTRACTS §2.10 "validated on load ... never silently replaced"; ADR-016 D5)', () => {
+  const FILE = `${DIR}/checks-event-1.json`;
+  const goodCheck = { attemptId: A1, run: 1, gate: 7, checkedAt: iso(T0), valueAtCheck: 2 };
+  const goodFlag = { flagId: 'f1', attemptId: A2, run: 1, gate: 3, createdAt: iso(T0), comment: 'c' };
+  const file = (o: Record<string, unknown>): string => JSON.stringify({ version: 1, checks: [], flags: [], ...o });
+
+  const refused = async (text: string): Promise<void> => {
+    const f = fakeChecksFs({ [FILE]: text });
+    await expect(open(f)).rejects.toBeDefined();
+    expect(f.files.get(FILE)).toBe(text); // byte-identical
+    expect([...f.files.keys()]).toEqual([FILE]); // no temporary file, nothing written
+    expect(f.ops.filter((o) => o.startsWith('write ') || o.startsWith('rename '))).toEqual([]);
+  };
+
+  it('§2.10 / ADR-016 D5: a file of a newer version is refused and left unchanged on disk', async () => {
+    await refused(file({ version: 2, notes: 'written by a later server' }));
+  });
+  it('§2.10 / ADR-016 D5: a file with no version is refused and left unchanged', async () => {
+    await refused(JSON.stringify({ checks: [], flags: [] }));
+  });
+  it.each([
+    ['null entry', [null]],
+    ['number entry', [7]],
+    ['valueAtCheck a string', [{ ...goodCheck, valueAtCheck: '2' }]],
+    ['valueAtCheck absent', [{ attemptId: A1, run: 1, gate: 7, checkedAt: iso(T0) }]],
+    ['run a string', [{ ...goodCheck, run: '1' }]],
+    ['a stored status', [{ ...goodCheck, status: 'verified' }]],
+    ['duplicate key', [goodCheck, { ...goodCheck, valueAtCheck: 3 }]],
+  ])('§2.10 / ADR-016 D5: a checks entry of the wrong shape (%s) is refused and the file is left unchanged', async (_n, checks) => {
+    await refused(file({ checks }));
+  });
+  it.each([
+    ['null entry', [null]],
+    ['comment absent', [{ flagId: 'f1', attemptId: A2, run: 1, gate: 3, createdAt: iso(T0) }]],
+    ['resolution null', [{ ...goodFlag, resolution: null }]],
+    ['duplicate flagId', [goodFlag, { ...goodFlag, gate: 4 }]],
+  ])('§2.10 / ADR-016 D5: a flags entry of the wrong shape (%s) is refused and the file is left unchanged', async (_n, flags) => {
+    await refused(file({ flags }));
+  });
+  it('§2.10 C8: a corrupt (truncated) file is refused, not opened empty, and the file is left unchanged', async () => {
+    await refused('{"version":1,"checks":[{"attemptId"');
+  });
+  it('§2.10 / ADR-016 D5: a valid file loads, with an open flag and a resolved flag', async () => {
+    const resolved = { ...goodFlag, flagId: 'f2', gate: 4, resolution: { resolvedAt: iso(T0) } };
+    const f = fakeChecksFs({ [FILE]: file({ checks: [goodCheck, { ...goodCheck, gate: 8, valueAtCheck: null }], flags: [goodFlag, resolved] }) });
+    const s = await open(f);
+    expect(s.list().checks.map((c) => [c.gate, c.valueAtCheck])).toEqual([[7, 2], [8, null]]);
+    expect(s.list().flags.map((x) => x.flagId)).toEqual(['f1', 'f2']);
+  });
+});
