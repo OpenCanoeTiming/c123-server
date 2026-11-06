@@ -17,7 +17,7 @@ these corrections it does the opposite harm: it freezes a wrong value against up
 statement that the value is gone. A cleared DNS would stay DNS, and a deleted result would stay on
 the board.
 
-The evidence, all E1 from recordings and the decompiled source (behaviour only):
+The evidence, all E1 (recordings, and verified upstream behaviour stated without its provenance):
 - **A TCP `Results` message is always a complete statement of one race's results table** at build
   time. None of 17,496 recorded messages was partial. In a first-run or single-run race the message
   lists every row with a total or a mark. In a paired second run it lists every row with a combined
@@ -161,3 +161,21 @@ reader's `changedAfter` (`ADR-003` Revision 6; `CONTRACTS.md` §4 INV-2c), `null
 which never qualifies. The re-baseline's own read (decision 8, step 2) carries the same stamp.
 An absent XML row and an XML table with no rows are not retractions (INV-7, XML bullet); TCP's
 absent row and start-list table remain so.
+
+## Revision 4 — the stream withdraws a finish it alone stated; a retraction supersedes the `tcp` slot (2026-11-06)
+
+INV-2d is for a finish presented from a results-table observation. A finish the on-course stream
+alone has stated — `dtFinish` set, no row having recorded the generation (`ADR-013` Revision 4) —
+is withdrawn by the next listing of the Attempt without it: `status` follows that listing
+(`at-start` or `on-course`), the generation's finish and the `duration` inference are forgotten, no
+diagnostic; in slalom and the Cross time trial alike, a Cross heat listing no finish (recorded:
+cp3-cross WX1_XT_26:25, a time trial, a finish impulse with no start and no time, withdrawn four
+minutes later, the athlete then `DNS`; `DERIVATIONS.md` §4.1; `CONTRACTS.md` §3.2). A listing with
+`dtStart` and `dtFinish` empty is `at-start`, outside a Cross heat, whatever preceded it in the
+generation — a start impulse deleted included, recorded twice; with `dtFinish` set and no start it
+is `finished`, the case above, recorded once — and displaces no table-presented `finished` or mark
+(`DERIVATIONS.md` §4.1; `CONTRACTS.md` §3.2, second and third pass). An XML
+retraction that passes the guard supersedes the `tcp` observation it retracts, which is no longer a
+candidate of its source; a TCP row restating the value afterwards is a new observation and is
+presented (`DERIVATIONS.md` §4.12). Steps 1 and 2 of the re-baseline reach the core as one ingest
+unit after the read has succeeded (`CONTRACTS.md` §4).

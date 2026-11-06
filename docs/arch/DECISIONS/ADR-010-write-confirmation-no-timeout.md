@@ -89,3 +89,13 @@ first `oncourse.updated` without the Attempt as the tablet's retry trigger. `CON
 been dropping a finisher from that set at `finished`, 20 s before closure, so the trigger fired early
 (`ADR-009` addendum 2). §7.1 now keeps a finisher listed until upstream closes the run; the trigger
 fires at closure, as this ADR intended. No change to the write rule itself.
+
+## Revision 5 — what an echo is (2026-11-06)
+
+`CONTRACTS.md` §4 rule 4's "very next results-table observation of that field" is read with INV-5:
+an echo is an observation that changes its source's retained value of the target gate's cell or
+states the requested value. A rotation re-sending the old cells, or a row re-pushed because a start
+was corrected (`DERIVATIONS.md` §4.11), is a re-delivery and resolves nothing; a write whose
+correction upstream dropped stays `pending` until the cell changes, which is this ADR's lost echo.
+An `xml` observation echoes only with a content age later than `submittedAt`, so a save written
+before the correction cannot resolve the write `mismatched` (`DERIVATIONS.md` §6).
