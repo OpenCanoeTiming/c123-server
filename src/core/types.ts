@@ -2,7 +2,7 @@
  * Internal shapes of the merge core (#203). Wire shapes come from `@opencanoetiming/c123-contract`; what is here is retention,
  * which never leaves the core. Nothing here reads a clock: every time is taken from an element.
  */
-import type { ClassificationRow, Diagnostic, Faults, Gate, Placement, ResultMark, WriteRequest } from '@opencanoetiming/c123-contract';
+import type { ClassificationRow, Diagnostic, Faults, Gate, Outcome, Placement, ResultMark, WriteRequest } from '@opencanoetiming/c123-contract';
 import type { IngestElement } from '../ingest/index.js';
 
 export type { ClassificationRow, Diagnostic, Faults, Gate, Placement, ResultMark };
@@ -106,6 +106,22 @@ export interface AttemptState {
   diagnostics: Diagnostic[];
   /** The finish `eventTime` last presented, for `duplicate-finish`. */
   finish?: string;
+  /** What the Standing assembly reads of the presented Attempt, and its serialised form (#205): a change marks the Phase's scopes. */
+  facts?: StandingFacts;
+  factsText?: string;
+}
+
+/** The presented Attempt as a Standing entry sees it (CONTRACTS §5 steps 2, 3, 5). A running time is not in it, so a tick changes nothing. */
+export interface StandingFacts {
+  entryId: string;
+  bib: string;
+  status: string;
+  placement: { rank: number; order: number } | null;
+  result: Outcome | null;
+  pairTotal: number | null;
+  provisional: boolean;
+  underReview: boolean;
+  heat: number | null;
 }
 
 export interface ResourceState {
@@ -124,6 +140,7 @@ export interface ClassificationState {
   rows: ClassificationRow[];
   asOf: string;
   builtBy: Source;
+  /** Content age of the rows as last delivered by TCP, a re-send of equal rows included (INV-2c's guard); `asOf` dates the change. */
   at: number;
 }
 
@@ -187,6 +204,16 @@ export interface CoreState {
   dirtyPhases: Set<ResourceState>;
   dirtyResources: Set<{ type: 'entry' | 'class' | 'course'; resource: ResourceState }>;
   dirtyWrites: Set<WriteState>;
+  /** Phases whose Standings a unit may have changed (#205). */
+  dirtyScopes: Set<string>;
+  /** Ingest time of the unit in hand, for the `asOf` of the Standings it changes. */
+  unitAt: string;
+  /** Serialised entries and anomalies of each Standing as last sent, by `standingKey`. */
+  standingsSent: Map<string, string>;
+  /** The keys sent per Phase: an age category that empties is pushed empty. */
+  standingKeys: Map<string, Set<string>>;
+  /** The Phases an Entry's Attempts are in, for an Entry whose age category changed. */
+  entryPhases: Map<string, Set<string>>;
   pendingRebaseline: unknown;
   counters: Counters;
 }

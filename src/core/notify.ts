@@ -5,6 +5,7 @@
 import { disagreement } from './precedence.js';
 import { oncourseView } from './oncourse.js';
 import { presentedFinish, settled, viewAttempt } from './presentation.js';
+import { changedStandings, noteFacts, replacedStandings } from './publish.js';
 import { viewResource } from './resources.js';
 import { wireWrite } from './writes.js';
 import type { AttemptState, CoreState, Diagnostic, Message, ResourceState } from './types.js';
@@ -72,12 +73,13 @@ function flushRebaseline(s: CoreState): void {
   const views = attempts.map((a) => {
     const view = viewAttempt(s, a);
     diff(view, a.sent, true);
+    noteFacts(s, a, view);
     a.created = true;
     a.force.clear();
     s.dirtyAttempts.delete(a);
     return view;
   });
-  emit(s, { type: 'scope.replaced', scope, attempts: views, standings: [] }); // Standings are #205
+  emit(s, { type: 'scope.replaced', scope, attempts: views, standings: replacedStandings(s, scope as { kind?: string; phaseId?: string }) });
   s.pendingRebaseline = undefined;
 }
 
@@ -104,6 +106,7 @@ export function flush(s: CoreState, xmlInUnit: boolean): void {
   for (const p of s.dirtyPhases) {
     const fields = diff(viewResource(p, 'phase'), p.sent, p.created);
     p.created = true;
+    s.dirtyScopes.add(p.id);
     if (Object.keys(fields).length > 0) emit(s, { type: 'phase.updated', phaseId: p.id, fields });
   }
   s.dirtyPhases.clear();
@@ -115,6 +118,7 @@ export function flush(s: CoreState, xmlInUnit: boolean): void {
     }
     const fields = diff(viewResource(resource, type), resource.sent, resource.created);
     resource.created = true;
+    if (type === 'entry') for (const phaseId of s.entryPhases.get(resource.id) ?? []) s.dirtyScopes.add(phaseId);
     if (Object.keys(fields).length > 0) emit(s, { type: `${type}.updated`, [type === 'entry' ? 'entryId' : 'classId']: resource.id, fields });
   }
   s.dirtyResources.clear();
@@ -125,12 +129,14 @@ export function flush(s: CoreState, xmlInUnit: boolean): void {
   }
   for (const a of s.dirtyAttempts) {
     const view = viewAttempt(s, a);
+    noteFacts(s, a, view);
     const fields = diff(view, a.sent, a.created, a.force);
     a.created = true;
     a.force.clear();
     if (Object.keys(fields).length > 0) emit(s, { type: 'attempt.updated', attemptId: a.id, fields });
   }
   s.dirtyAttempts.clear();
+  for (const standing of changedStandings(s)) emit(s, { type: 'standing.updated', standing });
 
   for (const w of s.dirtyWrites) emit(s, { type: 'write.updated', write: wireWrite(w) });
   s.dirtyWrites.clear();
