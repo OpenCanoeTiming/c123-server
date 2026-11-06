@@ -167,7 +167,7 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
         if (my !== epoch) return;
         if (!after) { failPoll(); report(); return; } // a closing stat that rejects is a failed poll (§2.8)
         observe(after, closedAt);
-        if (!same(after, ref)) { last = 'moved'; ref = after; pending = { sig: after, at: closedAt }; report(); continue; }
+        if (!same(after, ref)) { last = 'moved'; ref = after; pending = { sig: after, at: closedAt }; report(); if (my !== epoch) return; continue; }
         // Delivery first: a throwing onUnit leaves lastGood and pending as they were, so the next poll reads again.
         if (!emit(my, r.els, pending!.at)) return;
         lastGood = ref;
@@ -179,6 +179,7 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
         return;
       }
       report();
+      if (my !== epoch) return;
     }
     abandonedReads++;
     if (last === 'rejected') failPoll();
@@ -196,6 +197,7 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
         else { pending = { sig: again, at: checkedAt }; failedPolls = 0; setState('connected'); }
       }
     }
+    if (my !== epoch) return; // onStatus re-entered setPath/stop from a state report above
     report();
   }
 
@@ -228,8 +230,8 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
     failedPolls = 0;
     if (path === undefined) { state = 'not-configured'; report(); return; }
     state = 'reconnecting'; // until the first poll reports (§5)
+    arm(intervalMs(), fire); // before the report: a throwing or re-entering onStatus must not leave polling unarmed
     report();
-    arm(intervalMs(), fire);
   }
 
   return {
