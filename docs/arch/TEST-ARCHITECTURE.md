@@ -254,8 +254,10 @@ the step index, the Attempt, the field and the property number.
    (`CONFORMANCE-VECTORS.md` §1: the latest `xml-rewrite-detected`'s `changedAfter`, `null` never
    qualifying; without the key, its time minus the poll interval) is later than that field's
    presented `tcp` observation's content age (INV-2c: the `observedAt` of its latest delivery, a
-   rotation's re-send included, read from the raw stream); otherwise the field is unchanged at that
-   step, and so is every other field that re-delivery carried. Where the replay log carries the snapshot's rows, as the vector format does, the
+   rotation's re-send included, read from the raw stream; for the stream's `status` inference, the
+   latest listing stating it, or the message at which the leave was evaluated); otherwise the field
+   is unchanged at that step, and so is every other field that re-delivery carried — a refused mark
+   holds back its row's time too (`CONTRACTS.md` §2.6). Where the replay log carries the snapshot's rows, as the vector format does, the
    checker also asserts completeness: every Attempt of R presenting results-table values whose row
    states no result is retracted in that step — for a `tcp` snapshot an absent row and a start-list
    table included; for an `xml` snapshot a present row only, since an absent XML row and an empty
@@ -272,7 +274,9 @@ the step index, the Attempt, the field and the property number.
    (`status` from `not-started`, `at-start` or `left-without-finish` to a no-result mark,
    `non-ranked` excluded); by an INV-7
    retraction from the snapshot (property 5); by rule 1, a snapshot result row superseding an on-course
-   inference; or at a `rebaseline` — the first three under property 8's content-age guard; rule 1
+   inference, `status` excepted (its stream inference is rule 2's `tcp` side, so its flip to an
+   `xml` mark is the exception case above, guarded); or at a `rebaseline` — the first three under
+   property 8's content-age guard; rule 1
    involves no content age (INV-2c), and the false leader it can admit is property 7's to catch. A
    `no-result` `outcome` never flips on its own: it is the presented `status`'s (property 12). (d) Each field's presented `source` lies in the
    set `CONTRACTS.md` §4 INV-2 rule 3 names: `courseOrder`, `timeToBeat`, a `running` outcome and
@@ -303,10 +307,13 @@ the step index, the Attempt, the field and the property number.
    only if the snapshot's content age, as property 5 reads it, is later than the presented
    `tcp` observation's content age — the `observedAt` of its latest delivery, from the raw stream,
    not the presented envelope's (property 5's guard is this rule applied to retraction); a flip from
-   an `inference` to an `xml` row is rule 1 and needs none; a
+   an `inference` to an `xml` row is rule 1 and needs none, except for `status`, whose stream
+   inference is rule 2's `tcp` side and is delivered by every listing that states it (property
+   6(c)); a
    `changedAfter: null` snapshot (`DERIVATIONS.md` §0.3: no stat since start or `setPath` showed
    another signature) therefore never flips one. A flip
-   from `xml` to `tcp` needs no such check: a `tcp` observation's content age is its `observedAt`.
+   from `xml` to `tcp` needs no such check: a `tcp` observation's content age, its latest
+   delivery's `observedAt`, is always later than a snapshot that preceded it.
    From the same source, a later-ingested observation may present any `eventTime`, an earlier one
    included; the checker never compares event times for precedence.
 9. **Idempotence (INV-5) D.** No delta carries a field whose envelope equals the presented one, or
@@ -341,10 +348,11 @@ the step index, the Attempt, the field and the property number.
     start; the correct replay keeps `run` at 1 in all of them.
 11. **Provisional (§1.2).** `status` is never provisional. Any other presented result value has
     `provisional: true` exactly when: it is an inference (`kind: inference`, or
-    `outcome.kind: 'running'`); or the run is not closed (`DERIVATIONS.md` §4.4: no `Completed="Y"`
-    listing of it, no `oncourse-left` for it in this generation — from the raw stream at admission;
-    in a **D** re-run, listed in an earlier `oncourse.updated` and absent from the latest, so an
-    Attempt never listed is not closed by that — and no mark) and either a presented
+    `outcome.kind: 'running'`); or the run is not closed (`DERIVATIONS.md` §4.4, read from the
+    raw stream at admission: no `Completed="Y"` listing of it carrying a `dtFinish`, no
+    `oncourse-left` for it in this generation — in a **D** re-run, listed in an earlier
+    `oncourse.updated` and absent from the latest, so an Attempt never listed is not closed by
+    that — and no presented no-result mark, `non-ranked` closing nothing) and either a presented
     `gates` cell is `null`, a Kayak Cross Attempt's `faults` carries `judgingComplete: false` (the
     parser reads it over the slot cells, `DERIVATIONS.md` §4.6(d)), or `gates`, in Cross `faults`, is
     not `known` because no course is bound; or it is a second run's `placement`,
@@ -388,7 +396,9 @@ the step index, the Attempt, the field and the property number.
     entry's `rank` and `order` equal its row's and its `decidedIn` its row's or, where a `tcp` row
     states `null`, the last admitted `xml` row's for that `entryId` (a refused snapshot moves
     nothing); its first publication is its first row
-    observation (a scope snapshot of the Phase with no rows before that publishes nothing); each
+    observation (a scope snapshot of the Phase with no rows before that publishes nothing, and one
+    with no rows after rows changes nothing: the Standing stays as last built, `asOf` included —
+    maintainer, 2026-11-06); each
     scope snapshot of the Phase that passes INV-2c's guard across sources (`DERIVATIONS.md` §4.10:
     an `xml` snapshot against `tcp`-built rows needs a later `changedAfter`, `null` never; a `tcp`
     snapshot always) replaces its rows whole, and it changes only at such a snapshot or

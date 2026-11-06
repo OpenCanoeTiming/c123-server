@@ -52,7 +52,8 @@ a different signature, and **`null` fails every content-age comparison** (INV-2c
 modification time is never an input. `xml.lastRewriteDetectedAt` and the `xml` states are defined
 for an invalid and for an empty file (§2.8). A table with no rows is a scope snapshot in start-list
 mode; an empty XML table or an absent XML row states nothing (§4 INV-7); a classification snapshot
-replaces rows whole under INV-2c's guard alone (`DERIVATIONS.md` §4.10); `sectorEndsAfterGate` is
+carrying rows replaces rows whole under INV-2c's guard alone, and one carrying none leaves the last
+built Standing as it is (`DERIVATIONS.md` §4.10; maintainer, 2026-11-06); `sectorEndsAfterGate` is
 strictly increasing (§2.12). No wire shape changed. (Second pass, 2026-11-06, after review.)
 
 ---
@@ -152,8 +153,8 @@ The fields, precisely:
     vector an inference);
   - it is a result whose judging is incomplete — a presented gate cell is still blank (§4 rule 1
     merges the cells) — or whose completeness cannot be judged yet because no course is bound, and
-    whose run is not yet closed; closed is `DERIVATIONS.md` §4.4's one definition: upstream's
-    `Completed`, the Attempt leaving its on-course list (§7.1), or a mark, whichever is first;
+    whose run is not yet closed; closed is `DERIVATIONS.md` §4.4's one definition, stated there
+    alone (round 20, second pass: no list here);
   - it is a second run's `placement`, `pairTotal` or `countingRun` carried over from run 1, from the
     Attempt's first on-course listing in run 2 — staged or started: the stream saying the run is
     about to happen — until a row of run 2 — one carrying its time or its mark — restates that
@@ -846,7 +847,11 @@ when the presented `status` is a result mark other than `non-ranked`, with that 
 the row's time, where it has one, is retained in the `outcome` slot and presented only where the
 mark is not (a withheld stale mark, below). A mark refused for `status` — §4 rule 2's guard, INV-2c
 — therefore shows in no field (round 20; recorded nine times as a `dns` or `dnf` beside
-`not-started` or `left-without-finish`).
+`not-started` or `left-without-finish`), **and nor does the rest of its row:** the guard refuses the
+observation, not one field of it, so the time such a row carries is retained with the mark and
+presented, if ever, by the next snapshot that restates it with a later content age; rule 1 does not
+reach a row whose mark rule 2 refused, and `left-without-finish` keeps `outcome: pending` (round 20,
+second pass; 0 such presentations in seven recordings).
 
 **Duplicate finishes are surfaced, never resolved by us.** Two Attempts of one Phase presenting the
 same finish `eventTime` raise a `duplicate-finish` diagnostic. A TCP row carries no finish time and
@@ -1392,7 +1397,11 @@ implementation must satisfy, not an algorithm.
      of `not-started`, `at-start` or `left-without-finish`. None of those is a mark, and none can be a
      finish. This is how the reason for `left-without-finish` arrives at the next save, not at TCP's
      next incidental push (§2.6). INV-2c's content-age guard applies: the snapshot's content must be
-     newer than the `tcp` observation it displaces. **Otherwise the later-ingested observation wins,
+     newer than the `tcp` observation it displaces — and that observation is delivered by every
+     listing that states it (INV-2c), so on an Attempt upstream still lists `at-start` the mark
+     waits for TCP's row or for the first rewrite whose content age postdates the last listing
+     (round 20, second pass, E1: on five recordings this costs 1.1 s once and removes a 2.6 s `dns`
+     flash and a 10 s cleared `dns`); a refused mark holds back its whole row (§2.6). **Otherwise the later-ingested observation wins,
      under the same guard,** decided at a step that ingests an observation of the field: a
      connection event presents nothing by itself (`TEST-ARCHITECTURE.md` §3.2 property 3), so a
      candidate refused while TCP was connected is presented at the first snapshot of its race after
@@ -1441,7 +1450,10 @@ implementation must satisfy, not an algorithm.
 - **INV-2b (disagreement is surfaced, never silently adopted).** A retained, non-presented observation
   can disagree with the presented one after both have settled: neither is provisional, and the
   snapshot's content age (INV-2c) is later than the `tcp` observation it disagrees with; without the
-  second condition every save in the seconds after a push would raise and clear a disagreement. Such
+  second condition every save in the seconds after a push would raise and clear a disagreement. The
+  comparison is made at a step that changes either source's retained value; an INV-5 re-delivery —
+  a rotation, a connect burst, a re-read file — neither raises nor clears one, so a standing
+  disagreement stands until a value changes (round 20, second pass). Such
   a disagreement is surfaced as an
   admin diagnostic, `source-disagreement`, served by
   `GET /api/diagnostics` (§7.1), the same audience as `SourceStatus`. Five further diagnostic kinds
@@ -1468,7 +1480,10 @@ implementation must satisfy, not an algorithm.
   value is already presented — since a push is upstream's table at the moment of sending. **Every
   guard compares content age, never the presented envelope's `observedAt`,** and every field a
   re-delivered row carries takes the re-delivery's age, so one snapshot cannot retract some of a
-  row's fields and keep others (round 20). A candidate whose content age is earlier than the
+  row's fields and keep others (round 20). The on-course stream's inference, rule 2's `tcp` side
+  for `status`, is delivered by every listing of the Attempt that states it; an inference drawn at
+  the leave (§3.2) is delivered once, at the TCP message where the leave is evaluated, since the
+  Attempt's absence from later messages states nothing (INV-1; round 20, second pass). A candidate whose content age is earlier than the
   presented observation's content age is
   retained and not presented, whatever rule 2 would otherwise allow; the next observation from that
   source settles it. It is a guard, never a grant: it lets nothing supersede that rule 2 refuses.
@@ -1633,7 +1648,8 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    only; the `pair` standing's first publication follows the resolution.
    **`asOf`** is the ingest time of the latest observation that changed the standing as serialised;
    for a classification, the latest scope snapshot that changed its rows (§2.4,
-   `DERIVATIONS.md` §4.10), not a snapshot re-sending the same rows. **A standing is pushed only when its
+   `DERIVATIONS.md` §4.10), not a snapshot re-sending the same rows and not an emptied table, which
+   leaves the Standing as last built (maintainer, 2026-11-06). **A standing is pushed only when its
    serialised form changes:** an entry added or removed, or an entry's `rank`, `order`, `result`,
    `pairTotalSeconds`, `behindSeconds`, `provisional`, `underReview` or `decidedIn`, or `anomalies`.
 2. **Whole-class entries.**
@@ -1897,7 +1913,10 @@ Clients **must** follow §1.6's subscribe-before-snapshot sequence.
 
 **There is one write: a gate penalty on a closed run.** It requires an `Idempotency-Key` (§1.5), may
 target a closed Phase (§2.9), targets the Attempt's run generation current at submission, and is
-accepted only once the Attempt has left upstream's on-course list (below).
+accepted only once the Attempt has left upstream's on-course list (below). "Closed" here, and in
+`reason: 'run-not-closed'`, is that test alone — the Attempt has left the on-course set (§7.1), the
+write's own precondition — and is narrower than `DERIVATIONS.md` §4.4's closure of a run, which
+`Completed` reaches while the Attempt is still listed (round 20, second pass).
 
 **There is no status write.** No inbound command can set or clear a result mark (DNS, DNF, DSQ, CAP)
 on a closed run (observed upstream behaviour, 2026-09-25): upstream's only status command targets an
@@ -1982,6 +2001,7 @@ same `WriteRequest` over time:
   "requestedValue": { "gate": 4, "value": 2 }, "submittedAt": "2026-09-15T14:02:11.000Z", "status": "pending" }
 { ..., "status": "confirmed", "confirmedValue": { "gate": 4, "value": 2 }, "confirmedAt": "2026-09-15T14:02:14.500Z" }
 { ..., "status": "mismatched", "confirmedValue": { "gate": 4, "value": 50 }, "confirmedAt": "2026-09-15T14:02:14.500Z" }
+{ ..., "status": "mismatched", "confirmedAt": "2026-09-15T14:02:14.500Z" }   // a retraction resolved it: upstream's table holds no result (§4 rule 4)
 { ..., "status": "superseded" }
 ```
 
@@ -2056,7 +2076,7 @@ setting applies to public reads and the stream, not to this response, so `EntryP
 | `PUT /ingest/v2/phases/{phaseId}` | `{ "classId": string, "kind": "race"\|"classification", "stage": Stage, "scoringKind": "duration"\|"ordinal", "pair": { "role": "first"\|"second", "siblingPhaseId": string \| null, "combination": "best"\|"sum" } \| null, "heats": boolean, "date": "YYYY-MM-DD", "courseId": string \| null, "scheduledStart": Timestamp \| null, "programmeOrder": number \| null, "title": string \| null, "status": PhaseStatus }` |
 | `PUT /ingest/v2/entries/{entryId}` | `{ "classId": string, "displayName": string, "isTeam": boolean, "club": string \| null, "nation": string \| null, "ageCategoryId": string \| null, "eventBib": string \| null, "members": [{ "givenName": string, "familyName": string, "birthDate"?: "YYYY-MM-DD", "externalId": { "scheme": string, "value": string } \| null }] }` |
 | `PUT /ingest/v2/attempts/{phaseId}/{bib}` | any non-empty subset of the `Observed` fields of §2.6, each wrapped per §1.2. **An explicit `{ "state": "not-yet" }` resets that field** |
-| `PUT /ingest/v2/phases/{phaseId}/classification` | `{ "rows": [ { "entryId": string, "bib": string, "rank": number \| null, "order": number, "decidedIn": string \| null } ], "asOf": Timestamp }`: **the rows of a classification Phase (§2.4), whole, replaced on every push**, as upstream last built them. The store assembles the `classification` Standing from them and emits `standing.updated`. The Phase must have `kind: 'classification'`, else `400 validation-failed` |
+| `PUT /ingest/v2/phases/{phaseId}/classification` | `{ "rows": [ { "entryId": string, "bib": string, "rank": number \| null, "order": number, "decidedIn": string \| null } ], "asOf": Timestamp }`: **the rows of a classification Phase (§2.4), whole, replaced on every push**, as upstream last built them. The store assembles the `classification` Standing from them and emits `standing.updated`. The Phase must have `kind: 'classification'` and `rows` must be non-empty, else `400 validation-failed` (§8.6; the bridge never sends an emptied classification: on site an emptied table leaves the last built Standing as it is, `DERIVATIONS.md` §4.10) |
 | `PUT /ingest/v2/oncourse` | `{ "attemptIds": string[], "featuredByUpstream": string \| null }`: **the whole on-course set, in course order**, replaced on every push. An `attemptId` not yet pushed is stubbed (forward reference). Emits `oncourse.updated` |
 | `DELETE /ingest/v2/attempts/{phaseId}/{bib}` | no body. `204` whether or not the Attempt existed; the Attempt and its standing entries are removed |
 | `PUT /ingest/v2/phases/{phaseId}/attempts` | `{ "attempts": [ { "bib": string, ...the Observed fields of §2.6 } ] }`: **replaces every Attempt of the Phase**; Attempts absent from the body are removed. This is what an on-site re-baseline (§4) emits |
@@ -2268,8 +2288,10 @@ This is also how a mis-bibbed run is corrected: `entry` is re-pointed (INV-4).
 ### 8.6 What this contract refuses
 
 - A raw vendor payload of any kind: `400 vendor-payload-rejected`.
-- A classification pushed as Attempts, or Attempts pushed to a classification Phase:
-  `400 validation-failed`. A classification carries placed rows and nothing else (§2.4, §8.3).
+- A classification pushed as Attempts, Attempts pushed to a classification Phase, or a
+  classification pushed with `rows: []`: `400 validation-failed`. A classification carries placed
+  rows and nothing else (§2.4, §8.3); an emptied one is never shown, on either tier (maintainer,
+  2026-11-06; `DERIVATIONS.md` §4.10).
 - A body that matches none of §8.3's shapes, including one missing a required identity key:
   `400 validation-failed`.
 - Any non-idempotent operation. There is no "append a result", only "assert the current value",

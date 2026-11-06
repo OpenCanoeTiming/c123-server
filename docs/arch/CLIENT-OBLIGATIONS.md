@@ -42,7 +42,18 @@ one definition, `not-started` from the first row, the carry from the first listi
 within-kind cell merge and a `Gates=""` row are the core's (CONTRACTS §1.2, §2.6, §3.2, §4;
 DERIVATIONS §4, §4.1, §4.4, §4.6, §4.11, §4.12, §8, §10; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §1,
 §2; ADR-017); a client already handles `not-started`, `no-result` beside its mark and `provisional`
-moving, and the on-course set's membership rule is unchanged.
+moving, and the on-course set's membership rule is unchanged — except one duty: a `WriteRequest`
+may now resolve `mismatched` **without** `confirmedValue`, when a retraction removed the result the
+write targeted (CONTRACTS §2.9, §4 rule 4, §7.3), so penalty-check renders that case (below). Its
+second pass (2026-11-06, after review) changed two more: live-mini-server refuses
+`PUT …/classification` with `rows: []` (CONTRACTS §8.3, §8.6; the maintainer's decision that an
+emptied classification keeps the last built Standing, DERIVATIONS §4.10), and the bridge never
+sends one; the rest — a listing as a delivery of the stream's `status`, INV-2b at value changes, a
+refused mark holding back its row, `Completed` closing only with a finish, `non-ranked` closing
+nothing, a `Gates=""` row stating a result by a time or a mark, the leave margin at the worst
+phase — is the core's and the checker's (CONTRACTS §1.2, §2.6, §4, §5, §7.3; DERIVATIONS §0.3,
+§4.1, §4.3, §4.4, §4.6, §4.10, §10; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §1, §2; ADR-017);
+§7.3's "closed run" is the on-course-set test the client already applies.
 
 ---
 
@@ -219,8 +230,8 @@ moving, and the on-course set's membership rule is unchanged.
 - [ ] Show no value of its own before the server's push; render the server's optimistic value (CONTRACTS §2.9; ARCHITECTURE §6.B).
 - [ ] Track each write through `write.updated`, which carries the whole `WriteRequest` under `write`, or `GET /api/writes/{writeId}` (CONTRACTS §7.2, §7.3).
 - [ ] Show a write as `pending`, distinctly, until it resolves; never show it as settled and never clear it on the client's own (CONTRACTS §2.9; ARCHITECTURE §2).
-- [ ] Render all four statuses: `pending`, `confirmed`, `mismatched` with `confirmedValue`, and `superseded` (CONTRACTS §2.9, §7.3; ADR-010).
-- [ ] On `mismatched`, show what upstream actually holds, as `Attempt.gates` presents it (ARCHITECTURE §6.B).
+- [ ] Render all four statuses: `pending`, `confirmed`, `mismatched` with `confirmedValue` or — when a retraction removed the result the write targeted — without one, and `superseded` (CONTRACTS §2.9, §4, §7.3; ADR-010).
+- [ ] On `mismatched`, show what upstream actually holds, as `Attempt.gates` presents it; after a retraction that is `not-yet`, so say the result is gone rather than show a value (CONTRACTS §4; ARCHITECTURE §6.B).
 - [ ] Read `confirmed` as describing the echo, not permanence; show the field's current presented value, and leave the write `confirmed` when a later change arrives (CONTRACTS §2.9; ADR-010).
 - [ ] Resolve nothing by elapsed time; show how long a write has been pending, from `submittedAt` (CONTRACTS §2.9, §7.3; ADR-010).
 - [ ] Treat a write that stays `pending` as failed and resolve it with the user: re-submit, or check Canoe123 by hand (CONTRACTS §2.9; ARCHITECTURE §6.B).
@@ -257,7 +268,7 @@ moving, and the on-course set's membership rule is unchanged.
 - [ ] Expect the bridge to re-push the current state of every changed resource after an outage, a cleared rejection or a restart, and treat each as the idempotent `PUT` it is (CONTRACTS §1.5, §2.8, §8.3).
 - [ ] Assemble standings as c123-server does, from the pushed `placement` and `ageCategoryId`, without the category-rank check and without the order-anomaly check; rank nothing; emit `standing.updated` only when the standing's serialised form changed, never for a running athlete's ticks (CONTRACTS §5, §8, §8.3; ADR-012; ADR-017).
 - [ ] Set each Standing's `asOf` to the ingest time of the latest observation behind any of its entries (CONTRACTS §5).
-- [ ] Accept `PUT /ingest/v2/phases/{phaseId}/classification` for a Phase of `kind: 'classification'`, replace its rows whole (`decidedIn: string | null`, relayed as pushed), assemble the `classification` Standing from them as delivered and emit `standing.updated`; refuse Attempts on a classification Phase and classifications pushed as Attempts (CONTRACTS §2.4, §5, §8.3, §8.6).
+- [ ] Accept `PUT /ingest/v2/phases/{phaseId}/classification` for a Phase of `kind: 'classification'`, replace its rows whole (`decidedIn: string | null`, relayed as pushed), assemble the `classification` Standing from them as delivered and emit `standing.updated`; refuse Attempts on a classification Phase, classifications pushed as Attempts, and `rows: []` (`400 validation-failed`: an emptied classification is never shown; the bridge keeps the last built Standing and never sends one) (CONTRACTS §2.4, §5, §8.3, §8.6; DERIVATIONS §4.10).
 - [ ] Recompute nothing else: retire `EventLifecycleService`'s independent judgement, the independent ranking and the second XML parser (ARCHITECTURE §3; CONTRACTS §8).
 - [ ] Store a second run's `outcome`, which is run 2's own, and its `pairTotal` and `countingRun` as pushed; never recombine the runs (CONTRACTS §2.6, §8).
 - [ ] Keep its own `seq` counter: one per server, strictly increasing, persisted, never regressing across a restart (CONTRACTS §1.6).

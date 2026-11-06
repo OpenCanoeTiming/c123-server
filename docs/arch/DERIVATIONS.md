@@ -89,7 +89,9 @@ results table, and only these two:
   Schedule race with no `Results` row). The parser emits it like any other (`RXER` excepted: a title
   that never carries rows, skipped by both parsers, §4.10). The core applies INV-7 to it as
   written: a TCP table with no rows retracts as its start-list case; an XML table with no rows, like
-  an absent XML row, states nothing (`CONTRACTS.md` §4 INV-7, XML bullet). Recorded (cp3-cross,
+  an absent XML row, states nothing (`CONTRACTS.md` §4 INV-7, XML bullet); a classification
+  Phase's table with no rows, from either source, changes its rows not at all (§4.10; maintainer,
+  2026-11-06). Recorded (cp3-cross,
   E1): 741 empty Cross heat and final tables (521 XML, 220 TCP) and 508 empty classification tables
   (354 XML, 154 TCP), every one before any row of that race existed, so none retracted anything; no
   table emptied after rows existed, in any recording (all seven scanned, either source; the six
@@ -429,14 +431,23 @@ which may be a start-list row a day ahead; its `status` is `not-started` from th
   under 1.5 s; the longest pause with the stream alive that was not a removal is **2.59 s** — eight
   Attempts in two whole-list pauses of 2.57–2.59 s (jarni-so-do K1M_BR2_18 bibs 125–130 at
   09:45:01Z, nkz-20ne C1W_BR2_20 bibs 27 and 29 at 10:34:21Z), `Total` constant throughout, a
-  listed finisher among them; every longer alive gap that resumed with the same listing — 3.04,
-  3.68, 3.86, 4.29 and 9.67 s, then 33.6 s and up — was a real unstage and restage: inside each,
-  upstream listed a full cycle of `Total` distinct other bibs with `Total` one lower, and the
-  Attempt returned with `Total` restored (at 4.29 s another bib took the vacated slot meanwhile).
-  So the "false leaves at 3 s" of the earlier measurement were true leaves. 4 s sits 1.41 s, about
-  one listing cycle, above the longest hiccup, so a pause one cycle longer than any recorded is
-  still not a leave; 3 s would sit 0.41 s above it, less than a cycle; the extra second of 5 s buys
-  margin against a shape never recorded and reports every real removal a second later. The cost of
+  listed finisher among them; every longer alive gap of an unchanged listing — 3.04, 3.68, 3.86,
+  4.29 and 9.67 s, then 83.8 s and up (3.05 s is upstream's own "course empty", 33.6 s a changed
+  listing) — was a real unstage and restage: inside each, upstream listed a full cycle of `Total`
+  distinct other bibs with `Total` one lower, and the Attempt was listed again afterwards (at
+  4.29 s another bib took the vacated slot meanwhile; at 9.67 and 83.8 s it returned to a shorter
+  list). So the "false leaves at 3 s" of the earlier measurement were true leaves. **The margin,
+  stated at the worst phase** (round 20, second pass, E1 from the review's replay): the 2.59 s
+  gap is one phase of a whole-list pause of 2.16 s (jarni-so-do, TCP silent 1.11 s) or 1.9 s
+  (nkz-20ne, TCP wholly silent); an Attempt named one listing cycle before such a pause (cycle p90
+  1.03–1.05 s, p99 1.15–1.35 s, up to 2.48 s at `Total` 11, where upstream's tick stopped at
+  position 10) reaches 3.2–3.5 s, so 4 s leaves 0.5–0.8 s at the recorded worst phase, and a pause
+  one cycle longer than any recorded would reach 4.2–4.9 s and be a leave for those Attempts; a
+  TCP silence of 2.7–3.9 s — under the constant, so not a stall by the rule below — would leave
+  every Attempt whose phase carries it past 4 s (recorded silences stop at 1.90 s and resume at
+  10.68 s). The figures are these seven recordings' machines; S5 re-measures on the venue laptop.
+  3 s would sit under the worst recorded phase; the extra second of 5 s buys margin against a shape
+  never recorded and reports every real removal a second later. The cost of
   each side: a leave too early flips `provisional` to `false` on values upstream still lists with
   blank cells (P11; a finisher was among the recorded hiccups), a leave too late shows a removed
   row for the constant. The spike's figure, "a maximum re-send gap of 2.48 s", was circular: its
@@ -553,7 +564,7 @@ withheld stale mark leaves the time presented (§4.12).
 - **Stop recomputing** at the first of:
   - (a) a results-table observation for this run generation, which supersedes the inference
     (INV-2, rule 1). In recordings this arrived a median of 0.14–0.41 s after the finish impulse;
-  - (b) `OnCourse.Result[C]@Completed = "Y"`;
+  - (b) `OnCourse.Result[C]@Completed = "Y"` on a listing carrying the finish (§4.4);
   - (c) the Attempt leaving the on-course list.
 - **A start correction carrying the generation's finish** (§4.11: a listing with a different
   `dtStart`, the same `dtFinish` and a new `Time`) restates `runSeconds` from its `Time` whether or
@@ -640,11 +651,17 @@ combined values.
   because no course is bound yet, and the run is not closed. `status` is never provisional (§4.1). This is what marks a push that upstream sent before judging
   finished: with "ranking with incomplete penalties" on, the first push precedes the last gate.
 - **Run closed** — the one definition; `CONTRACTS.md` §1.2, INV-2 and property 11 point here —
-  means the first of: `Completed = "Y"` seen for the generation, on an on-course listing or as a
-  row's `runClosed` (upstream's own "judging complete": §4.3, the auto-complete needs the penalties
+  means the first of: `Completed = "Y"` seen for the generation **on an on-course listing that
+  carries its `dtFinish`**, or as a row's `runClosed` (the parser stamps it on an outcome
+  observation only) — upstream's own "judging complete": §4.3, the auto-complete needs the penalties
   complete, a finish and the delay, and precedes the removal by the display delay; it coincided with
-  the leave in only 34–70 % of closures); the Attempt leaving the on-course list (§4.1); or a
-  no-result mark presented. Leaving the list is the set's closure (`CONTRACTS.md` §7.1); `Completed`
+  the leave in only 34–70 % of closures; a `Y` on a listing with no finish closes nothing, there
+  being no result to complete (recorded once in 1,142 first-`Y` listings: cp3-cross WX1_XT_26:19,
+  `Completed="Y"` while staged at 07:35:54.193Z and 07:35:57.132Z, its start 9:35:59, its finish
+  9:37:09, its real `Y` at 07:37:55.676Z; round 20, second pass, E1); the Attempt leaving the
+  on-course list (§4.1); or a no-result mark presented — `Outcome`'s `no-result` set, so a refused
+  mark closes nothing and `non-ranked`, a finished run, closes nothing: its blank cell is judged
+  like any finisher's (round 20, second pass). Leaving the list is the set's closure (`CONTRACTS.md` §7.1); `Completed`
   closes the run while it is still listed (round 20, settling §1.2 against this section;
   `DECISIONS/ADR-017` Revision 5). A closure that flips `provisional` is a change of presented state
   and is pushed (`CONTRACTS.md` §7.2). An Attempt never listed is not closed by that alone: a row with
@@ -704,9 +721,11 @@ slalom course every slot is a gate, so cell `i` is gate `i+1`.
   note in it (`"pozor !!!!!"`, `Pen="1"`). Keep the first `slotCount` cells; cells beyond it belong
   to no slot and raise nothing (a recorded 127-character `Gates` carried the remains of a note in
   cells 22–23 of an 18-slot course). **The empty string is thirty missing cells**, not no statement:
-  a row that states a result — a time, a mark or a placement (§4.1) — states its `gates` vector,
+  a row that states a result — a time or a mark, `CONTRACTS.md` §4 INV-7's own test; a placement
+  alone is no result of this run, a second-run row carrying the pair's placement with no time being
+  INV-7's retraction case (round 20, second pass) — states its `gates` vector,
   every cell `null` for `Gates=""`, `provisional` by §4.4 (a mark closes the run, so a `DNS` row's
-  all-null vector is settled); a row stating none of the three states nothing, its `Gates` included
+  all-null vector is settled); a row stating neither states nothing, its `Gates` included
   (round 20; recorded: `IRM="DNS" Gates=""` on second-run rows, nkz-19so K1M_BR2_19:107). Kayak
   Cross `faults` keeps its own rule, (d).
 - **Never split on whitespace.** That collapses blanks and shifts every later gate: `EVIDENCE.md`
@@ -897,8 +916,14 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   Standing's `asOf` by the `observedAt` of the latest snapshot that changed it (`CONTRACTS.md` §5;
   TCP re-sends the same rows on rotation, 10:27:12, 10:35:14, 10:43:16, which move nothing), and
   publishes the Standing first at its first row: an empty table before any row publishes nothing;
-  one after rows would publish it empty (no recorded instance, a default, §10 item 22). The gate-2
-  checker reads that shape (`TEST-ARCHITECTURE.md` §3.2 property 15).
+  **one after rows changes nothing: the last built Standing stays presented, `asOf` showing its
+  age** (maintainer decision, 2026-11-06, closing §10 item 22; no recorded instance; what rounds
+  18 and 19 said of whole replacement and of an empty table as a start-list snapshot holds for a
+  snapshot carrying rows, and a classification's empty table from either source is no retraction,
+  §0.3). The bridge therefore never pushes an emptied classification to live, and
+  `PUT …/classification` with `rows: []` is refused there (`CONTRACTS.md` §8.3, §8.6). The gate-2
+  checker reads that shape (`TEST-ARCHITECTURE.md` §3.2 property 15;
+  `classification-emptied-keeps-last-standing`, owed).
 - Upstream generates these rows from the rounds. They are relayed, never recomputed.
 
 ### 4.11 `run` (run generation)
@@ -1328,7 +1353,8 @@ but no code path or recording ever filled it.
 
 Items 1–7 and 13 were answered on 2026-09-25 (#179; E1, verified upstream behaviour); item 8 was closed by INV-2c
 on 2026-10-14; items 15 and 17 were answered by the spike and the exit-delay measurement; item 16 by
-the round-20 measurement. Items 9, 11, 12, 18, 19, 20, 21, 22 and 23 remain.
+the round-20 measurement; item 22 by the maintainer (2026-11-06). Items 9, 11, 12, 18, 19, 20, 21
+and 23 remain.
 
 1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
    hardware judge terminals on their own port and raises a flag on the scoring service for about
@@ -1355,7 +1381,9 @@ the round-20 measurement. Items 9, 11, 12, 18, 19, 20, 21, 22 and 23 remain.
 9. Rule 2's exception lets an XML mark supersede a TCP `at-start`. If a DNS is *cleared* in the grid,
    which pushes immediately, and the athlete is staged again within one snapshot interval, a
    snapshot written before the clearing can show DNS for up to about 35 s. This is rare, and accepted
-   as residual.
+   as residual. Narrowed (round 20, second pass): the restaging listing is a delivery of the
+   `at-start` (`CONTRACTS.md` §4 INV-2c), so a snapshot written before it is refused by the guard;
+   what remains is a snapshot written between the clearing and the restaging.
 10. ~~The cause of the 11–27 s late-finish outliers.~~ Answered (maintainer, round 2): the operator
     assigns a finish retroactively after a judge reports the passage, or swaps two athletes' finishes
     noticed late. Both are corrections that §4.12 now models.
@@ -1381,8 +1409,10 @@ the round-20 measurement. Items 9, 11, 12, 18, 19, 20, 21, 22 and 23 remain.
     decides whether it can be smaller.~~ **Answered (round 20, 2026-11-06, E1):** measured over all
     seven recordings; the four gaps and the 9.67 s one are real unstage/restage (a full cycle of
     `Total` distinct other bibs listed inside each), the longest hiccup is 2.59 s, the constant is
-    4 s (§4.1). Re-measure when a recording is added: a hiccup within one cycle of the constant
-    reopens it.
+    4 s (§4.1). Re-measure when a recording is added, and on the venue laptop (S5): a
+    non-removal gap above 3.0 s, a whole-list pause above 2.5 s, or a TCP silence between 2.0 s
+    and the constant reopens it (second pass: the trigger named in numbers; the recorded maxima
+    are 2.59, 2.16 and 1.90 s).
 19. **Two runs of one athlete with the same `Time` to 0.01 s.** A stale row from before a non-wizard
     re-run, re-sent by rotation during run 2 and carrying exactly run 2's finishing time, is attributed
     to run 2 and presents run 1's penalty and placement until upstream's next push (opponent review R17,
@@ -1404,10 +1434,12 @@ the round-20 measurement. Items 9, 11, 12, 18, 19, 20, 21, 22 and 23 remain.
     so the interval bounds only how late a change is seen; the vectors keep `xmlPollIntervalSeconds`
     for events written without `changedAfter`. The venue values come from
     S5's execution against Canoe123's real copy-over writer (maintainer).
-22. **A classification table emptied after it had rows.** The core would publish the Standing empty
+22. ~~**A classification table emptied after it had rows.** The core would publish the Standing empty
     (§4.10, whole replacement). No recording shows one (cp3-cross: all 508 empty classification
     tables precede the first row). A default; if upstream can clear a built classification, the
-    maintainer says whether an empty Standing or the last built one is wanted. (Round 18.)
+    maintainer says whether an empty Standing or the last built one is wanted. (Round 18.)~~
+    **Decided (maintainer, 2026-11-06):** the last built Standing is kept, `asOf` showing its age
+    (§4.10; `CONTRACTS.md` §5, §8.3, §8.6).
 23. **A re-run inside a TCP outage.** A re-run whose start and finish both fall in an outage arrives
     as one listing with a new start and a new finish, which §4.11 reads as a start correction:
     `run` stays, the newest row is presented, a pending write of the old run is resolved by the new
