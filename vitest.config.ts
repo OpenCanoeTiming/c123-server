@@ -11,6 +11,8 @@ const TOOLS = [
   'src/__tests__/conformance/suite-runs.test.ts',
   // a real child process rewriting a real file under the real XML reader (issue #202)
   'src/ingest/__tests__/xml-reader.real.test.ts',
+  // a real child process killed between the temporary file and the rename (issue #211)
+  'src/store/__tests__/checks.real.test.ts',
 ];
 const EXCLUDE = ['dist/**', 'node_modules/**'];
 
