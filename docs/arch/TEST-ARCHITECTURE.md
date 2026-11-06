@@ -265,10 +265,17 @@ the step index, the Attempt, the field and the property number.
 6. **Precedence (INV-2 rules 1–3).** (a) Once a result field presents a `result-row` observation, it
    never afterwards presents an `inference` for the same generation, except through a contradiction
    (property 7) or after a retraction (property 5). (b) `gates` is merged cell by cell: while
-   upstream still lists the Attempt (no `oncourse-left` for it yet in this generation, read from the
-   raw stream at admission; "still in the latest `oncourse.updated`" is the **D** reading, for a re-run
-   on the published fixture only), a judged cell (`0`, `2`, `50`) never becomes
-   `null`; after it has left, cells change only at a results-table
+   upstream still lists the Attempt (no `oncourse-left` for it in this generation that a later
+   `oncourse.updated` of the generation has not undone by listing it again, as property 11 reads it;
+   read from the raw stream at admission; "still in the latest `oncourse.updated`" is the **D**
+   reading, for a re-run on the published fixture only), a judged cell (`0`, `2`, `50`) never becomes
+   `null` at a results-table step — upstream's own withdrawal, the stream's listing blanking a cell
+   it judged, is presented only where the presented row's cell is blank too, `provisional`
+   recomputed; a row's judged cell stands against the stream blank (INV-2 rule 1; recorded:
+   jarni-so-odp C1M_BR1_18:26 cell 19 at 12:17:19.030, the row `0`) (D4; property 11's list;
+   recorded: nkz-19so C1W_BR1_19:40 cell 16 at 08:38:18.181, the presented TCP row blank while the
+   XML row still holds `0`; round 21, second pass); after it has left, and until a
+   re-listing of the generation, cells change only at a results-table
    step. (c) A field presented from `tcp` flips to `xml` only: after a `tcp-disconnected` that
    followed the step that ingested the presented `tcp` observation; by rule 2's mark exception
    (`status` from `not-started`, `at-start` or `left-without-finish` to a no-result mark,
@@ -350,12 +357,19 @@ the step index, the Attempt, the field and the property number.
     `provisional: true` exactly when: it is an inference (`kind: inference`, or
     `outcome.kind: 'running'`); or the run is not closed (`DERIVATIONS.md` §4.4, read from the
     raw stream at admission: no `Completed="Y"` listing of it carrying a `dtFinish`, no
-    `oncourse-left` for it in this generation — in a **D** re-run, listed in an earlier
+    `oncourse-left` for it in this generation that a later `oncourse.updated` of the generation has
+    not undone by listing it again (§4.1's false leave; round 21) — in a **D** re-run, listed in an earlier
     `oncourse.updated` and absent from the latest, so an Attempt never listed is not closed by
     that — and no presented no-result mark, `non-ranked` closing nothing) and either a presented
     `gates` cell is `null`, a Kayak Cross Attempt's `faults` carries `judgingComplete: false` (the
     parser reads it over the slot cells, `DERIVATIONS.md` §4.6(d)), or `gates`, in Cross `faults`, is
-    not `known` because no course is bound; or it is a second run's `placement`,
+    not `known` because no course is bound and the observation's `judgingComplete` is not `true` (the
+    parser stamps `null`, or nothing, without a course, CONFORMANCE-VECTORS §1; a `true` stamp is its judgement
+    against a course and settles the value; round 21) — this judging clause does not reach an Attempt
+    with no run yet (`status` absent or `not-started`, its row carrying neither time nor mark: the values
+    are run 1's, settled there, until the carry below begins) nor a heat's `placement` and the ordinal
+    built from it, upstream's whole result asserted after the judging (`DERIVATIONS.md` §4.2, §4.7;
+    round 21); or it is a second run's `placement`,
     `pairTotal` or `countingRun` carried over from run 1, from the Attempt's first on-course listing
     in run 2, staged or started, until a
     row of run 2, carrying its time or its mark, restates that field — judged field by field, since
@@ -363,7 +377,12 @@ the step index, the Attempt, the field and the property number.
     `WriteRequest`. It goes `false → true` only through a regression first (property 4), at the
     Attempt's first on-course listing of a generation (staged or started; recorded: nkz-19so
     C1W_BR2_19:35 staged at 10:28:09.809) or one that lists it while no course is bound (a
-    cold start: the results push precedes the first snapshot), or when a course binds — the first
+    cold start: the results push precedes the first snapshot), at a re-listing within the generation
+    that undoes a leave (`DERIVATIONS.md` §4.4; round 21), at upstream's withdrawal of a judged cell
+    while it is listed — the stream's own listing blanking the cell, the presented row's cell blank too,
+    a row's judged cell standing (INV-2 rule 1), property 6(b); D4 recomputes on the
+    presented cells (recorded: nkz-19so C1W_BR1_19:40 cell 16, the row blank at 08:38:18.153, the stream
+    at .181, back at .562; round 21, second pass) — or when a course binds — the first
     step after which the Attempt's Phase has a `known` `courseId` and that Course a `known` `gates`
     (`phase.updated`, `course.updated`; **D**) — and shows a blank cell. A `standing.updated` entry's `provisional` is the disjunction over its Attempt's `outcome`,
     `placement` and `pairTotal` (§5 step 5).
