@@ -781,7 +781,10 @@ results push precedes the first snapshot" (`DECISIONS/ADR-017` D4); whole record
   assert a judging that has not happened. Once any cell is judged it is emitted whole, `provisional`
   under §4.4's rule read over the slot cells: the parser stamps `judgingComplete` on the `faults`
   observation — every slot cell judged — exactly as on `gates`, since the value itself carries no
-  blank (round 19).
+  blank (round 19). The stamp lives on the `faults` observation alone, a `not-yet` `faults` with a
+  course bound included (every slot blank: `judgingComplete: false`); a row's outcome observation
+  carries `runClosed`, never a judging stamp (§4.4), so no other stamp decides `provisional`
+  (round 23).
 - **`faults` is derived from the cells plus the captions, on TCP and in the XML alike:** `count` is
   the number of cells marked `2`; `gates` lists those slots' captions (`ST`, `1`…`6`, `RZ`, `7`);
   `lastCleanSlot` is upstream's 1-based **slot position** (not the gate number: `ST` and `RZ` count) of
@@ -805,7 +808,8 @@ results push precedes the first snapshot" (`DECISIONS/ADR-017` D4); whole record
 - **Within one kind the later observation replaces the earlier whole** (`CONTRACTS.md` §4 INV-2c,
   the same-source sentence): a cell the stream judged and later shows blank is blank — upstream
   withdrew it (recorded: nkz-19so K1M_BR2_19:79, cells 14–17 shown judged 25 s into a 90 s run and
-  blank 11 s later) — while a row's judged cell stands against a stream blank. The merged vector is
+  blank 11 s later, with no row of the generation yet: nothing stood against the blank; round 23) —
+  while a row's judged cell stands against a stream blank. The merged vector is
   a results-table value with cells taken from the stream, not an inference: once the stream fills
   the last blank cell it is settled (`CONTRACTS.md` §1.2, round 20).
 

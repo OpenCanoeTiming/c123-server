@@ -67,6 +67,10 @@ withdrawal of a judged cell while listed named as admitted, and round 20's lande
 second-run Phase), and a Phase no element has described reading its `pair` from its id, are the core's and
 a harness convention (CONTRACTS §5; CONFORMANCE-VECTORS §1); a client shows `behindSeconds` as delivered
 and expects the `pair` standing, on a real stream, once the stated `siblingPhaseId` is known as before.
+Round 23 (2026-11-06) moved none: the stream's withdrawal of a judged cell reaching an Attempt with no
+row of the generation, the Cross judging stamp being the `faults` observation's, and a heat row's
+`qualified` and `underReview` settling with its `placement`, are the core's and the checker's
+(DERIVATIONS §4.6; TEST-ARCHITECTURE §3.2); a client already handles `provisional` moving either way.
 
 ---
 
