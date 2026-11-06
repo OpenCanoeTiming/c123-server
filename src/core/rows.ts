@@ -26,7 +26,7 @@ function put(s: CoreState, a: AttemptState, source: Source, el: Element, field: 
   if (fs.operator !== undefined) resolveEcho(s, a, fs, field, slot, changed);
   if (source !== 'xml' || !changed) return;
   if (fs.tcp !== undefined && refusedByGuard(fs.tcp, slot)) refuse(s, 'content-age');
-  else if (field === 'status' && isMark(slot.value) && presentStatus(fs) !== slot) refuse(s, 'xml-mark');
+  else if (field === 'status' && isMark(slot.value) && presentStatus(fs)?.value !== slot.value) refuse(s, 'xml-mark');
 }
 
 /** The course bound to a Phase, known only once a snapshot binds it (§4.6). */
@@ -99,8 +99,11 @@ function writeRow(s: CoreState, a: AttemptState, source: Source, el: Element, ro
   const placed = row['placement'] !== null && row['placement'] !== undefined;
 
   // §4.4 the untimed flag: read from the snapshot row, inherited by the Attempt's TCP rows
-  if (row['untimed'] === true) a.untimed = a.gen.finish === undefined;
-  else if (source === 'xml' && time !== undefined) a.untimed = false;
+  if (row['untimed'] === true) {
+    a.untimed = a.gen.finish === undefined;
+    const tcp = a.slots.get('outcome')?.tcp;
+    if (a.untimed && tcp?.state === 'known') put(s, a, 'tcp', { ingestSeq: 0, observedAt: tcp.observedAt }, 'outcome', NOT_APPLICABLE, tcp.seq);
+  } else if (source === 'xml' && time !== undefined) a.untimed = false;
 
   let outcome: unknown = row['outcome'];
   if (stale && (outcome as { kind?: unknown } | undefined)?.kind === 'no-result') outcome = undefined;

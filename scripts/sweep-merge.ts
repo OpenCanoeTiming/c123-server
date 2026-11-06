@@ -145,7 +145,10 @@ for (const rec of readdirSync(dir).filter((d) => statSync(join(dir, d)).isDirect
         else if (field === 'slots' && typeof e['courseId'] === 'string' && Array.isArray(e['value'])) {
           const have = courseSlots.get(e['courseId']);
           const next = e['value'] as CourseSlot[];
-          if (!(isXml && have !== undefined && have.length === next.length && have.every((s, i) => s.kind === next[i]?.kind))) courseSlots.set(e['courseId'], next);
+          const sameLayout = have !== undefined && have.length === next.length && have.every((s, i) => s.kind === next[i]?.kind);
+          // XML carries no captions: keep TCP's. TCP refreshes captions only: its RaceConfig names no course, and with two races
+          // alternating it describes the other one (jarni-so-odp 14:43-14:46, DERIVATIONS §2.3 "the currently running Phase")
+          if (isXml ? !sameLayout : sameLayout || have === undefined) courseSlots.set(e['courseId'], next);
           refresh = true;
         } else if (!isXml && typeof e['attemptId'] === 'string' && field === 'status') {
           const phaseId = e['attemptId'].slice(0, e['attemptId'].lastIndexOf(':'));
