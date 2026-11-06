@@ -177,9 +177,15 @@ still leaves available in test.
 
 **The one new tool this design requires**, living alongside the others in `c123-protocol-docs`: the
 **capture tool projects the direct-injection replay onto the §4 format**. The replay emits one step per
-ingested element — the element classified in `CONFORMANCE-VECTORS.md` §1's vocabulary, the §7.2 deltas
+ingest unit (`CONTRACTS.md` §1.6) — its elements classified in `CONFORMANCE-VECTORS.md` §1's vocabulary, the §7.2 deltas
 it produced, and a state hash — and the tool folds the cold-start portion into the hydration step, then
-writes every later delta with its producing element's recorded `observedAt`. The result is a
+writes every later delta with its producing element's recorded `observedAt`. **A replay begins at the
+first record of the stream the checker reads** — the recording's or the excerpt's — and a capture
+window inside it opens with a hydration step holding the core's state at that instant; a window is
+never a cold start at a later instant of a stream the checker reads from its beginning, since closure,
+content age and the carry (properties 5, 8, 11) would then be read over records the core never saw
+(round 24: 9,072 such violations in one window). A cold start at a chosen instant is an excerpt cut
+there, log and raw stream alike. The result is a
 **candidate** domain-state fixture: candidate, not golden, until it passes the three gates below. A
 `/ws` capture of a player-driven server is **not** a candidate (spike S2-6): its `observedAt` values are
 the server's clock during playback, two captures differ, and gate 1 could not diff them; it is a tier-4
@@ -194,14 +200,28 @@ carries everything `CONTRACTS.md` §4's determinism paragraph names:** every mes
 `observedAt`, the TCP connect and disconnect events, the detection time of every XML rewrite, and any
 re-baseline, in recorded order; the domain layer reads no clock of its own while replaying. Without
 the events, INV-2 rule 2 and INV-7's write-time guard are never exercised and gate 1 passes
-trivially. A non-empty diff fails the candidate outright: a real non-determinism bug (uninitialised
+trivially. Where the recording lacks them (§9: the recorder wrote connection changes to the console,
+and no recording holds a re-baseline), a stated outage or re-baseline is declared in the fixture's
+`source` (`events`, each with its instant, scope and reason); the replay drops every TCP record
+inside a stated outage and plays a stated re-baseline as `CONTRACTS.md` §4's unit, the `rebaseline`
+event with the last snapshot read. Such a fixture is evidence for properties 8 and 13 (`exercised`)
+and gate 2 judges it like any other; it is a candidate with a declared input the recording lacked,
+not a synthetic fixture (§4), which carries no raw stream and so exercises only the **D** properties
+(round 24). A non-empty diff fails the candidate outright: a real non-determinism bug (uninitialised
 state, a race condition) that would otherwise poison every downstream tier silently. Passing proves
 only self-consistency.
 
 **Gate 2 — invariant conformance, checked as a property of the replay, not against a known answer.**
 
-*What the checker reads.* The admission replay, step by step. A step is one ingested element and the
-deltas (§7.2 shapes) it produced. Elements are classified in `CONFORMANCE-VECTORS.md` §1's own
+*What the checker reads.* The admission replay, step by step. **A step is one ingest unit**
+(`CONTRACTS.md` §1.6; `CONFORMANCE-VECTORS.md` §1: one upstream message, one event, one scope
+snapshot, one re-baseline with its snapshot re-read) — its elements in ingest order, `elements`
+plural in the log, plus any `oncourse-left` the core derived at that message (`DERIVATIONS.md` §4.1,
+§4.8; listed after the message's own elements and verified against the raw stream, never trusted) —
+and the deltas (§7.2 shapes) the unit produced. Where a property names the step's element
+e<sub>i</sub>, the condition holds when one element of the unit satisfies it (round 24: the earlier
+"one ingested element" contradicted §1.6, and a unit's deltas cannot be attributed to one of its
+elements). Elements are classified in `CONFORMANCE-VECTORS.md` §1's own
 vocabulary, which the direct-injection path emits beside each step's deltas: an **observation**
 (`attemptId`, `source`, `kind: inference | result-row | operator | fragment`, the fields it carries,
 `run`, `observedAt`, optional `eventTime`); an **event** (`tcp-connected`, `tcp-disconnected`,
@@ -238,7 +258,9 @@ the step index, the Attempt, the field and the property number.
    `unavailable` appears only with a closed reason, and only at a step that carries the field for the
    Attempt (property 3) or at a scope snapshot of its race, never at a connection event, a `fragment`
    or by itself (INV-3): a `not-configured` decided from `SourceStatus` or the snapshot
-   (`DERIVATIONS.md` §4.6; a `RaceConfig` decides none) is presented at the Attempt's next such step.
+   (`DERIVATIONS.md` §4.6; a `RaceConfig` decides none), and the `not-applicable` a `RaceConfig`'s
+   `NrSplits` decides for `splits` (`DERIVATIONS.md` §4.8), are presented at the Attempt's next such
+   step.
 5. **Retraction is scoped and guarded (INV-7).** At a scope-snapshot step for race R, a regression
    of an Attempt of R touches only the fields INV-7 names for the case — first or single run:
    `outcome`, `gates` (in Kayak Cross `faults`), `placement`, `underReview`, `qualified` and a mark
@@ -261,14 +283,20 @@ the step index, the Attempt, the field and the property number.
    checker also asserts completeness: every Attempt of R presenting results-table values whose row
    states no result is retracted in that step — for a `tcp` snapshot an absent row and a start-list
    table included; for an `xml` snapshot a present row only, since an absent XML row and an empty
-   XML table state nothing (INV-7).
+   XML table state nothing (INV-7). A refusal holds the field's value and `source`; `provisional`,
+   recomputed when the course binds (property 11), and an `eventTime` the Phase date first lets
+   `DERIVATIONS.md` §0.2 build (§0.5, §4.4: from the on-course finish, never from the refused row)
+   may change at the snapshot step that supplies them, and "changes" and "flips" here, in 6(c) and
+   in property 8 mean a change of value or `source` (round 24).
 6. **Precedence (INV-2 rules 1–3).** (a) Once a result field presents a `result-row` observation, it
    never afterwards presents an `inference` for the same generation, except through a contradiction
    (property 7) or after a retraction (property 5). (b) `gates` is merged cell by cell: while
    upstream still lists the Attempt (no `oncourse-left` for it in this generation that a later
    `oncourse.updated` of the generation has not undone by listing it again, as property 11 reads it;
    read from the raw stream at admission; "still in the latest `oncourse.updated`" is the **D**
-   reading, for a re-run on the published fixture only), a judged cell (`0`, `2`, `50`) never becomes
+   reading, for a re-run on the published fixture only; before any row of the generation the
+   stream's vector is an inference, `confidence: 'inferred'`, and once a row is presented the merged
+   vector carries the row's envelope, `CONTRACTS.md` §1.2), a judged cell (`0`, `2`, `50`) never becomes
    `null` at a results-table step — upstream's own withdrawal, the stream's listing blanking a cell
    it judged, is presented wherever no presented row of the generation holds that cell judged: the
    presented row's cell blank, or no row of the generation yet (recorded: nkz-19so K1M_BR2_19:79,
@@ -339,7 +367,9 @@ the step index, the Attempt, the field and the property number.
     source — a mark standing on either source at the recorded start records nothing however it
     arrives afterwards — kept through a retraction, cleared by a contradiction, never given by the
     stream alone). In that same delta
-    every run-scoped field is explicitly `not-yet` — none omitted — and `status` is `at-start` or
+    every run-scoped field is named — none omitted — `not-yet`, or the value the same unit's listing
+    gives it (`courseOrder`, a `running` outcome, the stream's cells; `CONTRACTS.md` §1.6: one
+    message per unit; round 24), and `status` is `at-start` or
     `on-course`. **A listing that changes the start otherwise is a start correction:** `run`, every
     presented results-table value and `placement` are unchanged at that step; `status` and the
     on-course inferences are the listing's, as at any listing (`DERIVATIONS.md` §4.1, §4.3:
@@ -356,7 +386,9 @@ the step index, the Attempt, the field and the property number.
     eight Attempts that reached their first start with a mark on the table (`DERIVATIONS.md`
     §4.11), K1M_BR2_19:54 included, whose XML copy of the standing `DNS` arrives 3.1 s after the
     start; the correct replay keeps `run` at 1 in all of them.
-11. **Provisional (§1.2).** `status` is never provisional. Any other presented result value has
+11. **Provisional (§1.2).** `status` is never provisional. Every other presented result value — the
+    judging clause reaching the fields `CONTRACTS.md` §1.2 names, `underReview` and `qualified`
+    included — has
     `provisional: true` exactly when: it is an inference (`kind: inference`, or
     `outcome.kind: 'running'`); or the run is not closed (`DERIVATIONS.md` §4.4, read from the
     raw stream at admission: no `Completed="Y"` listing of it carrying a `dtFinish`, no
@@ -366,18 +398,21 @@ the step index, the Attempt, the field and the property number.
     that — and no presented no-result mark, `non-ranked` closing nothing) and either a presented
     `gates` cell is `null`, a Kayak Cross Attempt's `faults` carries `judgingComplete: false` (the
     parser reads it over the slot cells and stamps the `faults` observation alone, and only a `known`
-    one — a `not-yet` `faults`, every slot blank, carries no stamp and is not under this clause,
-    `CONTRACTS.md` §1.2; the row's other observations carry no
+    one — a `not-yet` `faults` with a course bound, every slot blank, carries no stamp and is not under
+    this clause, `CONTRACTS.md` §1.2; the row's other observations carry no
     judging stamp, `runClosed` at most, `DERIVATIONS.md` §4.4, §4.6(d); the Cross branch never reads
     `gates`, which is `unavailable{not-applicable}` there; round 23), or `gates`, in Cross `faults`, is
-    not `known` because no course is bound and the observation's `judgingComplete` is not `true` (the
+    not `known` because no course is bound — the Attempt's Phase has no `known` `courseId`, or that
+    Course no `known` `gates`, the binding the `false → true` sentence below names; `not-yet` is the
+    state of this case, `DERIVATIONS.md` §4.6, not only `unavailable{not-configured}` (round 24) —
+    and the observation's `judgingComplete` is not `true` (the
     parser stamps `null`, or nothing, without a course, CONFORMANCE-VECTORS §1; a `true` stamp is its judgement
     against a course and settles the value; round 21) — this judging clause does not reach an Attempt
     with no run yet (`status` absent or `not-started`, its row carrying neither time nor mark: the values
     are run 1's, settled there, until the carry below begins) nor what a heat's row asserts with its
     `placement`: the placement, the ordinal built from it, and its `qualified` and `underReview` from
     the step the placement is presented — upstream's whole result asserted after the judging
-    (`DERIVATIONS.md` §4.2, §4.7; round 21); before that step they are under the clause like any
+    (`CONTRACTS.md` §1.2 states the exemption; `DERIVATIONS.md` §4.2, §4.7; round 21); before that step they are under the clause like any
     value, and a heat's `faults` stays under it until the heat leaves the list (§4.2, §4.4's
     closure; round 23); or it is a second run's `placement`,
     `pairTotal` or `countingRun` carried over from run 1, from the Attempt's first on-course listing
@@ -404,11 +439,14 @@ the step index, the Attempt, the field and the property number.
 13. **Re-baseline (`ADR-015`).** `scope.replaced` appears only at a `rebaseline` step and carries every
     Attempt of the scope and the Standings §7.2 names. Across it, `entry`, `bib`, `run`,
     `startOrder`, `heat`, `startLane`, every check and flag, and every `WriteRequest` are unchanged;
-    afterwards every presented result value in scope has `source` `tcp` or `xml`, and none has
-    `source: tcp` until a `tcp` observation of it follows.
+    afterwards every presented value of a field §4 step 1 discards has `source` `tcp` or `xml`, and
+    none of those has `source: tcp` until a `tcp` observation of it follows (the on-course facts and
+    `status`'s lifecycle values survive the re-baseline with their `tcp` source; round 24).
 14. **On-course set (§7.1).** The set is upstream's list. An `attemptId` enters `oncourse.updated` only
     at an on-course listing of that Attempt and leaves only at an `oncourse-left` or `oncourse-empty`
-    element — never because its `status` became `finished` or a mark, which keep it listed until
+    element — the `oncourse-left` being the one the core derived at that step's TCP message, checked
+    against the raw stream by `DERIVATIONS.md` §4.1's rule (round 24) — never because its `status`
+    became `finished` or a mark, which keep it listed until
     closure. **D:** every listed Attempt has a presented status other than `not-started` and
     `left-without-finish`; the list is ordered by presented `courseOrder` ascending, Attempts without
     one last by `startOrder`.

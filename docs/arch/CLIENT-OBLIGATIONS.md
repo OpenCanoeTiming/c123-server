@@ -72,6 +72,14 @@ row of the generation, the Cross judging stamp being the `faults` observation's,
 `qualified` and `underReview` settling with its `placement` (and, after review, a `not-yet` `faults`
 carrying no stamp, so an untimed Cross row stays settled), are the core's and the checker's
 (DERIVATIONS §4.6; TEST-ARCHITECTURE §3.2); a client already handles `provisional` moving either way.
+Round 24 (2026-11-07, the first gate-2 run on real windows) moved none: a replay step being one ingest
+unit, the stream's gate cells `inferred` until a row is presented and the merged vector the row's,
+the judging clause naming its fields and the heat exemption stated in §1.2, a listing's `entry` as
+rule 2's `tcp` side, the Phase's structural fields with its first message, the leave as the core's
+derivation, a window opening on a hydration step, and stated outages and re-baselines as declared
+inputs are the core's, the driver's and the checker's (CONTRACTS §1.2, §1.6, §4; DERIVATIONS §2.1,
+§4.6, §4.7, §4.8; TEST-ARCHITECTURE §3.2; ADR-017); a client already reads `confidence` and
+`provisional` as two facts and receives a Phase whole on its first message.
 
 ---
 

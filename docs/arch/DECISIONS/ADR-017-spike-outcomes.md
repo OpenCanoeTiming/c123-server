@@ -360,3 +360,21 @@ those seconds; `CONTRACTS.md` §1.2 now points at §4.4 instead of stating a sec
 of a second run's pair fields begins at the Attempt's first listing in run 2, staged or started. "What
 M1 must still prove on data" item 2, the leave rule's constant, is settled: `onCourseLeaveAfterSeconds`
 = 4 s from the whole distribution over seven recordings (`DERIVATIONS.md` §4.1, §10 item 16).
+
+## Revision 6 — the step, the window and the stated input (2026-11-07, round 24)
+
+The first gate-2 run on real windows (c123-server #242) returned 526,428 violations; 91 % were one
+checker omission (`phase.updated` never applied) and one driver choice (a step per element). Three
+rulings move text. **A step is one ingest unit** (`CONTRACTS.md` §1.6 governs; `TEST-ARCHITECTURE.md`
+§3.2's "one ingested element" withdrawn): the log names the unit's elements, the leaves the core
+derived at that message among them, and property 10's reset delta names every run-scoped field with
+the value the same unit gives it. **A window opens on a hydration step**: the replay begins where the
+checker's raw stream begins, and a cold start at a chosen instant is an excerpt cut there; a window
+that starts the core cold at a later instant of a stream the checker reads from its beginning is no
+fixture (9,072 closure and carry violations from one such window). **A stated outage or re-baseline is
+a declared input** in the fixture's `source.events`, the replay dropping the TCP records inside the
+outage and playing the re-baseline as §4's unit; it is evidence for properties 8 and 13 and gate 2
+judges it like any other, where a synthetic fixture (§4) can reach only the **D** properties. D4 is
+completed in `CONTRACTS.md` §1.2: the judging clause names its fields (`underReview` and `qualified`
+included) and carries the heat exemption round 21 left in the test document alone; the stream's gate
+cells are an inference, `confidence: 'inferred'`, until a row of the generation is presented.
