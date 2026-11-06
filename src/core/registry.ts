@@ -33,6 +33,15 @@ export function fmtFor(s: CoreState, phaseId: string): Fmt {
   return fmtOf(typeof stated === 'string' ? stated : splitRaceId(phaseId).token);
 }
 
+/** The other run of a pair: the schedule's word where it was read, else the sibling format token on the same class and round (§4.5). */
+export function siblingPhaseId(s: CoreState, phaseId: string): string | undefined {
+  const fmt = fmtFor(s, phaseId);
+  if (fmt.pair === null) return undefined;
+  const stated = s.phases.get(phaseId)?.plain.get('pair') as { siblingPhaseId?: string | null } | undefined;
+  const { classKey, rest } = splitRaceId(phaseId);
+  return stated?.siblingPhaseId ?? `${classKey}_${fmt.pair.siblings[0] ?? ''}_${rest}`;
+}
+
 /** The course bound to a Phase, known only once a snapshot binds it (§4.6). */
 export function boundSlots(s: CoreState, phaseId: string): CourseSlot[] | undefined {
   const courseId = s.phases.get(phaseId)?.fields.get('courseId')?.xml;

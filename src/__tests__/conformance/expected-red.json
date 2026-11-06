@@ -1,17 +1,7 @@
 [
-  "standing-not-resent-on-running-tick",
-  "standing-relays-upstream-order",
-  "standing-combined-tie-broken-upstream-no-anomaly",
-  "standing-unplaced-listed-after-with-null-rank",
-  "standing-age-category-assembled",
-  "standing-category-rank-disagreement-recorded",
-  "standing-order-disagreement-anomaly",
-  "standing-cross-never-checked",
-  "standing-behind-and-flags",
   "check-stale-definition",
   "check-null-vs-zero-distinct",
   "check-team-sum-compared",
   "check-not-carried-to-new-generation",
-  "check-stays-with-bib-when-result-moves",
-  "classification-emptied-keeps-last-standing"
+  "check-stays-with-bib-when-result-moves"
 ]

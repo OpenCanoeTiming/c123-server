@@ -2,9 +2,9 @@
  * The presented Attempt: envelopes, `provisional`, the gate cell merge and the values built from others (CONTRACTS §1.2, §2.6;
  * DERIVATIONS §4.4, §4.6). Computed from retention alone; nothing here is stored.
  */
-import { splitRaceId, r3 } from '../ingest/common.js';
+import { r3 } from '../ingest/common.js';
 import { isNoResultMark, present, presentStatus } from './precedence.js';
-import { boundSlots, fmtFor, isInstant } from './registry.js';
+import { boundSlots, fmtFor, isInstant, siblingPhaseId } from './registry.js';
 import type { AttemptState, CoreState, Gate, Slot } from './types.js';
 
 const NOT_YET = { state: 'not-yet' } as const;
@@ -87,10 +87,7 @@ function firstRunUnavailable(s: CoreState, phaseId: string, bib: string): unknow
   if (reason === undefined || s.xmlRead) return undefined;
   const fmt = fmtFor(s, phaseId);
   if (fmt.pair?.role !== 'first') return undefined;
-  const stated = s.phases.get(phaseId)?.plain.get('pair') as { siblingPhaseId?: string | null } | undefined;
-  const { classKey, rest } = splitRaceId(phaseId);
-  const sibling = stated?.siblingPhaseId ?? `${classKey}_${fmt.pair.siblings[0] ?? ''}_${rest}`;
-  const second = s.attempts.get(`${sibling}:${bib}`);
+  const second = s.attempts.get(`${siblingPhaseId(s, phaseId)}:${bib}`);
   if (second === undefined) return undefined;
   if (present(second.slots.get('outcome'))?.state !== 'known' && !isNoResultMark(presentStatus(second.slots.get('status'))?.value)) return undefined;
   return { state: 'unavailable', reason };

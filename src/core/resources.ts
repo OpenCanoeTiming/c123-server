@@ -6,6 +6,7 @@ import { present } from './precedence.js';
 import { envelope } from './presentation.js';
 import { fieldSlots, retain, slotOf } from './retention.js';
 import { refuse } from './counters.js';
+import { inRelayedOrder } from './standing.js';
 import type { ClassificationRow, CoreState, Element, ResourceState, Source } from './types.js';
 
 /** Fields that are not `Observed` on the wire (§2.3, §2.4). */
@@ -72,11 +73,14 @@ export function viewResource(r: ResourceState, kind: 'phase' | 'entry' | 'class'
   return out;
 }
 
-/** §4.10: replaced whole, whichever source, under INV-2c's guard alone; a refused snapshot moves nothing, `decidedIn` included. */
+/**
+ * §4.10: replaced whole, whichever source, under INV-2c's guard alone; a refused snapshot moves nothing, `decidedIn` included. A table
+ * with no rows, from either source, moves nothing either (maintainer, 2026-11-06): the last built Standing stays, `asOf` showing its age.
+ */
 export function applyClassification(s: CoreState, phaseId: string, source: Source, el: Element, rows: ClassificationRow[]): void {
+  if (rows.length === 0) return;
   const cur = s.classifications.get(phaseId);
   const at = Date.parse(el.observedAt);
-  if (cur === undefined && rows.length === 0) return; // publishes first at its first row
   if (cur !== undefined && source === 'xml' && cur.builtBy === 'tcp') {
     const age = s.rewrite?.changedAfter ?? null;
     if (age === null || age <= cur.at) {
@@ -86,7 +90,11 @@ export function applyClassification(s: CoreState, phaseId: string, source: Sourc
   }
   const decided = new Map((cur?.rows ?? []).map((r) => [r.entryId, r.decidedIn]));
   const next = rows.map((r) => (source === 'tcp' && r.decidedIn === null ? { ...r, decidedIn: decided.get(r.entryId) ?? null } : r));
-  // TCP re-sends the same rows on rotation: those move nothing, `asOf` included
-  if (cur !== undefined && JSON.stringify(cur.rows) === JSON.stringify(next)) return;
+  // TCP re-sends the same rows on rotation: those move nothing, `asOf` included; the delivery still dates what the guard compares
+  if (cur !== undefined && JSON.stringify(inRelayedOrder(cur.rows)) === JSON.stringify(inRelayedOrder(next))) {
+    if (source === 'tcp' && cur.builtBy === 'tcp') cur.at = at;
+    return;
+  }
   s.classifications.set(phaseId, { rows: next, asOf: el.observedAt, builtBy: source, at });
+  s.dirtyScopes.add(phaseId);
 }

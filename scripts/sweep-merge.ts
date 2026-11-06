@@ -1,7 +1,8 @@
 /**
  * Whole-recording sweep of the merge core (#203, row 14): every `tcp` and XML record of every recording through the parsers and
  * `createMergeCore`, one unit at a time. Prints, per recording, Attempts, generations, retractions, contradictions, refusals,
- * leaves, messages and diagnostics by kind, with samples; stops on the first exception (exit 1).
+ * leaves, messages and diagnostics by kind, Standings by scope and by cause (what changed since the key's last push, CONTRACTS §5 step 1),
+ * anomalies by kind, with samples; stops on the first exception (exit 1).
  *
  *   npm run sweep:merge -- <recordings .cache dir> [recording name filter]
  *
@@ -32,6 +33,23 @@ const bump = (c: Counter, k: string, n = 1): void => void c.set(k, (c.get(k) ?? 
 const sorted = (c: Counter): string => [...c].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).map(([k, n]) => `${k} ${n}`).join(', ') || 'none';
 const out: string[] = [];
 
+type Pushed = { standingKey: string; scope: { kind: string }; entries: Record<string, unknown>[]; anomalies: { kind: string }[] };
+const CAUSED_BY = ['rank', 'order', 'result', 'pairTotalSeconds', 'behindSeconds', 'provisional', 'underReview', 'decidedIn'] as const;
+/** What differs between a Standing and the one last pushed under its key: the causes of §5 step 1, `first` when there is none. */
+function causes(prev: Pushed | undefined, now: Pushed): string[] {
+  if (prev === undefined) return ['first publication'];
+  const found = new Set<string>();
+  const before = new Map(prev.entries.map((e) => [String(e['entryId']), e]));
+  if (before.size !== now.entries.length || now.entries.some((e) => !before.has(String(e['entryId'])))) found.add('entries added or removed');
+  for (const e of now.entries) {
+    const was = before.get(String(e['entryId']));
+    if (was !== undefined) for (const f of CAUSED_BY) if (JSON.stringify(was[f]) !== JSON.stringify(e[f])) found.add(f);
+  }
+  if (JSON.stringify(prev.anomalies) !== JSON.stringify(now.anomalies)) found.add('anomalies');
+  if (found.size === 0) found.add('entry sequence');
+  return [...found];
+}
+
 
 for (const rec of readdirSync(dir).filter((d) => statSync(join(dir, d)).isDirectory() && (only === undefined || d.includes(only))).sort()) {
   const started = process.hrtime.bigint();
@@ -56,6 +74,11 @@ for (const rec of readdirSync(dir).filter((d) => statSync(join(dir, d)).isDirect
   const raised: Counter = new Map();
   const ingestOnly: Counter = new Map();
   const live = new Set<string>();
+  const lastPushed = new Map<string, Pushed>();
+  const byScope: Counter = new Map();
+  const byCause: Counter = new Map();
+  const anomalies: Counter = new Map(); // by kind and standingKey while running; by kind and scope at the end
+  const categories: Counter = new Map();
   const samples = new Map<string, string[]>();
   const sample = (k: string, s: string): void => {
     const list = samples.get(k) ?? [];
@@ -80,6 +103,18 @@ for (const rec of readdirSync(dir).filter((d) => statSync(join(dir, d)).isDirect
     const sent = core.drainNotifications();
     for (const m of sent) {
       bump(messages, m.type);
+      if (m.type === 'standing.updated') {
+        const st = m['standing'] as Pushed;
+        bump(byScope, st.scope.kind);
+        if (!st.standingKey.endsWith('/all')) bump(categories, st.scope.kind);
+        for (const c of causes(lastPushed.get(st.standingKey), st)) bump(byCause, c);
+        const had = new Set((lastPushed.get(st.standingKey)?.anomalies ?? []).map((a) => JSON.stringify(a)));
+        for (const a of st.anomalies) if (!had.has(JSON.stringify(a))) {
+          bump(anomalies, `${a.kind} ${st.standingKey}`);
+          sample(`anomaly ${a.kind}`, `${where} ${st.standingKey} ${JSON.stringify(a)}`);
+        }
+        lastPushed.set(st.standingKey, st);
+      } else if (m.type === 'scope.replaced') for (const st of m['standings'] as Pushed[]) lastPushed.set(st.standingKey, st);
       if (m.type === 'diagnostics.updated') {
         const now = new Set((m['diagnostics'] as Record<string, unknown>[]).map((d) => JSON.stringify(d)));
         for (const k of now) {
@@ -161,6 +196,17 @@ for (const rec of readdirSync(dir).filter((d) => statSync(join(dir, d)).isDirect
   out.push(`  diagnostics standing at end: ${sorted(standing)}`);
   out.push(`  ingest-only (admin log): ${sorted(ingestOnly)}`);
   out.push(`  messages: ${sorted(messages)}`);
+  out.push(`  standings pushed by scope: ${sorted(byScope)}`);
+  out.push(`  standings pushed by cause: ${sorted(byCause)}`);
+  const seconds = new Set([...lastPushed.keys()].filter((k) => k.startsWith('pair:')).map((k) => k.slice(5, k.indexOf('/'))));
+  const anomalyScopes: Counter = new Map();
+  for (const [k, n] of anomalies) {
+    const [kind, key = ''] = k.split(' ');
+    const scope = key.slice(0, key.indexOf(':'));
+    bump(anomalyScopes, `${kind} in ${scope === 'phase' && seconds.has(key.slice(6, key.indexOf('/'))) ? 'phase of a second run' : scope}${key.endsWith('/all') ? '' : ' (age category)'}`, n);
+  }
+  out.push(`  standings pushed for an age category, by scope: ${sorted(categories)}`);
+  out.push(`  anomalies raised, by kind and scope: ${sorted(anomalyScopes)}`);
   for (const [k, list] of [...samples].sort((a, b) => (a[0] < b[0] ? -1 : 1))) for (const s of list) out.push(`    ${k}: ${s}`);
   process.stderr.write(`${rec}: ${(Number(process.hrtime.bigint() - started) / 1e9).toFixed(1)} s\n`);
 }

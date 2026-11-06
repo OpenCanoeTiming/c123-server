@@ -1,6 +1,6 @@
 /**
  * Maps `port.ts` onto the real core. The merge side is wired to `createMergeCore` (#203, `src/core/index.ts`); the Standing
- * assembly and the gate checks are not built yet (#205, #211): `assembleStanding` and `gateStatus` throw `CoreMissing`.
+ * Standing assembly is wired to `src/core/standing.ts` (#205, lazy like the core); the gate checks are not built yet (#211): `gateStatus` throws `CoreMissing`.
  *
  * Thin by design. When a core issue lands, its test author wires the matching function here.
  *
@@ -46,8 +46,18 @@ export function createMergePort(context: VectorContext): MergePort {
   throw loaded.error;
 }
 
-export function assembleStanding(_given: StandingGiven, _scope: StandingScope): StandingResult {
-  throw new CoreMissing('assembleStanding');
+/** `src/core/standing.ts` (#205): `assembleStanding(given, scope)`, pure. Imported by a variable path so `tsc` does not need the file to exist yet. */
+type StandingFn = (given: StandingGiven, scope: StandingScope) => StandingResult;
+const STANDING_MODULE = '../../core/standing.js';
+const standing: { fn?: StandingFn; error?: unknown } = await import(/* @vite-ignore */ STANDING_MODULE).then(
+  (m: { assembleStanding: StandingFn }) => ({ fn: m.assembleStanding }),
+  (error: unknown) => ({ error }),
+);
+
+export function assembleStanding(given: StandingGiven, scope: StandingScope): StandingResult {
+  if (standing.fn) return standing.fn(given, scope);
+  if (absent(standing.error)) throw new CoreMissing('assembleStanding (src/core/standing)');
+  throw standing.error;
 }
 
 export function gateStatus(_given: WorkflowGiven): WorkflowResult {

@@ -47,12 +47,12 @@ describe('the real vectors.test.ts in a child vitest (issue #200 rows 1, 2, 5; r
     expect(exit).toBe(0);
   }, 120_000);
 
-  it('VECTORS_STRICT=1: exactly the 98 titles again, the ledger is ignored, the 15 listed ids read failed and exit is 1', () => {
+  it('VECTORS_STRICT=1: exactly the 98 titles again, the ledger is ignored, the 5 listed ids read failed and exit is 1', () => {
     const { exit, results } = suite(true);
     expect(results.map((r) => r.title).sort()).toEqual([...ids].sort());
     // Strict mode shows the true state: the merge vectors (#203) are the core's to pass, so only the listed ids are pinned.
     const listed = new Set(loadExpectedRed().map((id) => `vector ${id}`));
-    expect(listed.size).toBe(15);
+    expect(listed.size).toBe(5);
     expect(results.filter((r) => listed.has(r.title) && r.status !== 'failed').map((r) => r.title)).toEqual([]);
     expect(exit).toBe(1);
     // The 13 non-merge vectors still fail for the one reason CoreMissing (a TypeError in the wiring would read as red too);

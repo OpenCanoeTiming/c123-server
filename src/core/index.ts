@@ -284,11 +284,13 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
     listed: new Map(), oncourseAsOf: null, oncourseSent: '[[],null]', featured: null, writes: [], splitsArmed: undefined,
     parserDiagnostics: new Map(), phaseDiagnostics: new Map(), diagnosticsSent: '[]', diagnosticsDirty: false, log: [],
     dirtyAttempts: new Set(), dirtyPhases: new Set(), dirtyResources: new Set(), dirtyWrites: new Set(), pendingRebaseline: undefined,
+    dirtyScopes: new Set(), unitAt: '', standingsSent: new Map(), standingKeys: new Map(), entryPhases: new Map(),
     counters: { generations: 0, retractions: 0, contradictions: 0, leaves: 0, refusals: {} },
   };
   return {
     applyUnit(elements) {
       validate(s, elements);
+      s.unitAt = elements.at(-1)?.observedAt ?? s.unitAt;
       const inUnit = new Set<string>();
       for (const el of elements) dispatch(s, el, inUnit);
       const tcp = elements.find((el) => el['source'] === 'tcp');
