@@ -3,7 +3,18 @@
  * A gate is `flagged` if an open flag exists, else its check's `verified`/`stale`, else `plain`.
  * `verified` means `valueAtCheck` equals the presented penalty (`null` when gates are not known; null and 0 differ).
  */
-import type { WorkflowGiven, WorkflowResult } from '../__tests__/conformance/port.js';
+
+/** Input of a workflow-state evaluation: stored checks and flags, and what is presented now. */
+export interface WorkflowGiven {
+  checks: Array<Record<string, unknown>>;
+  flags: unknown[];
+  presented: Record<string, { run: number; gates: unknown[] | null }>;
+}
+
+export interface WorkflowResult {
+  gateStatus: Record<string, string>;
+  checks?: unknown[];
+}
 
 export type GateStatus = 'flagged' | 'verified' | 'stale' | 'plain';
 

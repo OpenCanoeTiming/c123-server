@@ -6,8 +6,7 @@
  * Memory changes only after the rename; a failed write leaves it at the previous state. Writes are serialised.
  * Status is derived by `core/workflow`, never stored.
  */
-import { gateStatus } from '../core/workflow.js';
-import type { WorkflowGiven } from '../__tests__/conformance/port.js';
+import { gateStatus, type WorkflowGiven } from '../core/workflow.js';
 
 export interface ChecksFs {
   mkdir(dir: string): Promise<void>;
@@ -56,11 +55,66 @@ export interface ChecksStore {
 const sameKey = (a: GateKey, b: GateKey): boolean => a.attemptId === b.attemptId && a.run === b.run && a.gate === b.gate;
 const isArray = (v: unknown): v is unknown[] => Array.isArray(v);
 
-function parse(text: string): ChecksState {
-  const raw: unknown = JSON.parse(text);
-  const rec = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
-  if (!isArray(rec['checks']) || !isArray(rec['flags'])) throw new Error('checks file is malformed');
-  return { checks: rec['checks'] as StoredCheck[], flags: rec['flags'] as GateFlag[] };
+/** Thrown by `openChecksStore` when the file exists but cannot be read as a version-1 store; the file is left as it is. */
+export class ChecksFileInvalidError extends Error {
+  readonly code = 'checks-file-invalid';
+  constructor(readonly path: string, readonly reason: string) {
+    super(`checks file invalid at ${path}: ${reason}`);
+  }
+}
+
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isStr = (v: unknown): v is string => typeof v === 'string';
+const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v);
+const optStr = (v: unknown): boolean => v === undefined || isStr(v);
+
+function checkReason(c: unknown): string | null {
+  if (!isObj(c)) return 'not an object';
+  if (!isStr(c['attemptId']) || !isInt(c['run']) || !isInt(c['gate'])) return 'attemptId, run or gate missing or mistyped';
+  if (!isStr(c['checkedAt']) || !optStr(c['checkedBy'])) return 'checkedAt or checkedBy mistyped';
+  if (!('valueAtCheck' in c) || (c['valueAtCheck'] !== null && typeof c['valueAtCheck'] !== 'number')) return 'valueAtCheck must be a number or null';
+  if ('status' in c) return 'status is derived, never stored';
+  return null;
+}
+
+function flagReason(f: unknown): string | null {
+  if (!isObj(f)) return 'not an object';
+  if (!isStr(f['flagId']) || !isStr(f['attemptId']) || !isInt(f['run']) || !isInt(f['gate'])) return 'flagId, attemptId, run or gate missing or mistyped';
+  if (!isStr(f['createdAt']) || !optStr(f['createdBy']) || !isStr(f['comment'])) return 'createdAt, createdBy or comment missing or mistyped';
+  if (f['suggestedValue'] !== undefined && typeof f['suggestedValue'] !== 'number') return 'suggestedValue mistyped';
+  const r = f['resolution'];
+  if ('resolution' in f && r !== undefined) {
+    if (!isObj(r) || !isStr(r['resolvedAt']) || !optStr(r['resolvedBy']) || !optStr(r['note'])) return 'resolution must be an object with resolvedAt';
+  }
+  return null;
+}
+
+function parse(text: string, path: string): ChecksState {
+  let raw: unknown;
+  try { raw = JSON.parse(text); } catch (e) { throw new ChecksFileInvalidError(path, `not JSON: ${(e as Error).message}`); }
+  if (!isObj(raw)) throw new ChecksFileInvalidError(path, 'not an object');
+  if (raw['version'] !== 1) throw new ChecksFileInvalidError(path, `unsupported version ${JSON.stringify(raw['version'])}`);
+  const checks = raw['checks'];
+  const flags = raw['flags'];
+  if (!isArray(checks) || !isArray(flags)) throw new ChecksFileInvalidError(path, 'checks and flags must be arrays');
+  const keys = new Set<string>();
+  checks.forEach((c, i) => {
+    const why = checkReason(c);
+    if (why) throw new ChecksFileInvalidError(`checks[${i}]`, why);
+    const k = c as StoredCheck;
+    const key = JSON.stringify([k.attemptId, k.run, k.gate]);
+    if (keys.has(key)) throw new ChecksFileInvalidError(`checks[${i}]`, 'duplicate attemptId, run and gate');
+    keys.add(key);
+  });
+  const ids = new Set<string>();
+  flags.forEach((f, i) => {
+    const why = flagReason(f);
+    if (why) throw new ChecksFileInvalidError(`flags[${i}]`, why);
+    const id = (f as GateFlag).flagId;
+    if (ids.has(id)) throw new ChecksFileInvalidError(`flags[${i}]`, 'duplicate flagId');
+    ids.add(id);
+  });
+  return { checks: checks as StoredCheck[], flags: flags as GateFlag[] };
 }
 
 export async function openChecksStore(opts: ChecksStoreOptions): Promise<ChecksStore> {
@@ -74,7 +128,7 @@ export async function openChecksStore(opts: ChecksStoreOptions): Promise<ChecksS
   await fs.mkdir(dir);
   let state: ChecksState = { checks: [], flags: [] };
   try {
-    state = parse(await fs.readFile(target));
+    state = parse(await fs.readFile(target), target);
   } catch (e) {
     if ((e as { code?: string }).code !== 'ENOENT') throw e;
   }
