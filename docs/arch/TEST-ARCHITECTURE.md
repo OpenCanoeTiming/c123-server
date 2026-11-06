@@ -256,8 +256,8 @@ the step index, the Attempt, the field and the property number.
    presented `tcp` observation's content age (INV-2c: the `observedAt` of its latest delivery, a
    rotation's re-send included, read from the raw stream; for the stream's `status` inference, the
    latest listing stating it, or the message at which the leave was evaluated); otherwise the field
-   is unchanged at that step, and so is every other field that re-delivery carried — a refused mark
-   holds back its row's time too (`CONTRACTS.md` §2.6). Where the replay log carries the snapshot's rows, as the vector format does, the
+   is unchanged at that step, and so is every other field that re-delivery carried — a mark the guard
+   refused holds back its row's time too (`CONTRACTS.md` §2.6). Where the replay log carries the snapshot's rows, as the vector format does, the
    checker also asserts completeness: every Attempt of R presenting results-table values whose row
    states no result is retracted in that step — for a `tcp` snapshot an absent row and a start-list
    table included; for an `xml` snapshot a present row only, since an absent XML row and an empty

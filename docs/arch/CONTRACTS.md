@@ -850,7 +850,7 @@ mark is not (a withheld stale mark, below). A mark refused for `status` — §4 
 `not-started` or `left-without-finish`), **and nor does the rest of its row:** the guard refuses the
 observation, not one field of it, so the time such a row carries is retained with the mark and
 presented, if ever, by the next snapshot that restates it with a later content age; rule 1 does not
-reach a row whose mark rule 2 refused, and `left-without-finish` keeps `outcome: pending` (round 20,
+reach a row whose mark rule 2's guard refused, and `left-without-finish` keeps `outcome: pending` (round 20,
 second pass; 0 such presentations in seven recordings).
 
 **Duplicate finishes are surfaced, never resolved by us.** Two Attempts of one Phase presenting the
@@ -1401,7 +1401,7 @@ implementation must satisfy, not an algorithm.
      listing that states it (INV-2c), so on an Attempt upstream still lists `at-start` the mark
      waits for TCP's row or for the first rewrite whose content age postdates the last listing
      (round 20, second pass, E1: on five recordings this costs 1.1 s once and removes a 2.6 s `dns`
-     flash and a 10 s cleared `dns`); a refused mark holds back its whole row (§2.6). **Otherwise the later-ingested observation wins,
+     flash and a 10 s cleared `dns`); a mark the guard refused holds back its whole row (§2.6). **Otherwise the later-ingested observation wins,
      under the same guard,** decided at a step that ingests an observation of the field: a
      connection event presents nothing by itself (`TEST-ARCHITECTURE.md` §3.2 property 3), so a
      candidate refused while TCP was connected is presented at the first snapshot of its race after
@@ -1451,9 +1451,11 @@ implementation must satisfy, not an algorithm.
   can disagree with the presented one after both have settled: neither is provisional, and the
   snapshot's content age (INV-2c) is later than the `tcp` observation it disagrees with; without the
   second condition every save in the seconds after a push would raise and clear a disagreement. The
-  comparison is made at a step that changes either source's retained value; an INV-5 re-delivery —
-  a rotation, a connect burst, a re-read file — neither raises nor clears one, so a standing
-  disagreement stands until a value changes (round 20, second pass). Such
+  comparison is made at every step that ingests either source's observation of the field, a
+  re-delivery included, since INV-5 advances the content age and can be what first meets the second
+  condition; an INV-5 re-delivery — a rotation, a connect burst, a re-read file — clears none, so a
+  standing disagreement stands until a value changes (round 20, second pass; third pass: raised at
+  any step, cleared only by a value change). Such
   a disagreement is surfaced as an
   admin diagnostic, `source-disagreement`, served by
   `GET /api/diagnostics` (§7.1), the same audience as `SourceStatus`. Five further diagnostic kinds

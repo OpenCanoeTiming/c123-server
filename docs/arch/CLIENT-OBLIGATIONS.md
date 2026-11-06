@@ -48,12 +48,14 @@ write targeted (CONTRACTS §2.9, §4 rule 4, §7.3), so penalty-check renders th
 second pass (2026-11-06, after review) changed two more: live-mini-server refuses
 `PUT …/classification` with `rows: []` (CONTRACTS §8.3, §8.6; the maintainer's decision that an
 emptied classification keeps the last built Standing, DERIVATIONS §4.10), and the bridge never
-sends one; the rest — a listing as a delivery of the stream's `status`, INV-2b at value changes, a
-refused mark holding back its row, `Completed` closing only with a finish, `non-ranked` closing
+sends one; the rest — a listing as a delivery of the stream's `status`, INV-2b raised at any step and
+cleared only by a value change (third pass), a mark rule 2's guard refused holding back its row,
+`Completed` closing only with a finish, `non-ranked` closing
 nothing, a `Gates=""` row stating a result by a time or a mark, the leave margin at the worst
 phase — is the core's and the checker's (CONTRACTS §1.2, §2.6, §4, §5, §7.3; DERIVATIONS §0.3,
 §4.1, §4.3, §4.4, §4.6, §4.10, §10; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §1, §2; ADR-017);
-§7.3's "closed run" is the on-course-set test the client already applies.
+§7.3's "closed run" is the on-course-set test the client already applies. Its third pass
+(2026-11-06, the closure review) moved no duty.
 
 ---
 

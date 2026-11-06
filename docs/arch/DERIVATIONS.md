@@ -657,7 +657,7 @@ combined values.
   complete, a finish and the delay, and precedes the removal by the display delay; it coincided with
   the leave in only 34–70 % of closures; a `Y` on a listing with no finish closes nothing, there
   being no result to complete (recorded once in 1,142 first-`Y` listings: cp3-cross WX1_XT_26:19,
-  `Completed="Y"` while staged at 07:35:54.193Z and 07:35:57.132Z, its start 9:35:59, its finish
+  `Completed="Y"` while staged at 07:35:54.193Z, its start 9:35:59, its finish
   9:37:09, its real `Y` at 07:37:55.676Z; round 20, second pass, E1); the Attempt leaving the
   on-course list (§4.1); or a no-result mark presented — `Outcome`'s `no-result` set, so a refused
   mark closes nothing and `non-ranked`, a finished run, closes nothing: its blank cell is judged

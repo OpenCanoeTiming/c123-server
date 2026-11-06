@@ -189,15 +189,24 @@ with prefixed keys, gets a start with no staging before it, `false → true` at 
 (`CONTRACTS.md` §3.2's direct path); a core that fills the carry only on a listing with no start
 fails bib 10. `description` reworded from "when run 2 starts" to "at the Attempt's first listing in
 run 2, staged or started". Both end states are the ones asserted today.
-(5) `classification-emptied-keeps-last-standing` (maintainer, 2026-11-06; `DERIVATIONS.md` §4.10):
-a `tcp` scope snapshot of a classification Phase with rows A, B at T1 → `standing` published, 1
-`standing.updated`; a `tcp` scope snapshot of the Phase with no rows at T2 → the same entries, no
-`standing.updated`, `asOf` T1; `then` a snapshot with rows B, A at T3 → replaced, `asOf` T3.
+(5) `classification-emptied-keeps-last-standing` (maintainer, 2026-11-06; `DERIVATIONS.md` §4.10;
+tag `standing-push`, which the live lists already place on site, so 91 merge and 23 live hold):
+three `tcp` scope snapshots of a classification Phase — rows A, B at T1; no rows at T2; rows B, A at
+T3 — with `expectSequence` after index 0 `notifications: { 'standing.updated': 1 }`, after index 1
+`notifications: { 'standing.updated': { count: 0, afterGivenIndex: 0 } }`, and `expect`
+`notifications: { 'standing.updated': 2 }`, `attempts: []`. It asserts through `notifications` and
+`attempts`, which the merge port serves (third pass): the kept entries and `asOf` T1 are not read
+directly — `standing` resolves on the live tier only (`matcher.ts`) — and follow from `CONTRACTS.md`
+§5's push rule, a standing being pushed exactly when its serialised form changes and `asOf` moving
+only with it, the way `standing-not-resent-on-running-tick` asserts the same rule.
 `live-classification-rows-replaced-whole` is unchanged: it asserts whole replacement by a push
 carrying rows, which stands. The counts move in the commit that lands them; the pinned places are
 `meta.test.ts` 30/39/57/58/156, `suite-runs.test.ts` 42/45/50, `matcher.test.ts` 147,
 `vectors.test.ts` 5, `expected-red.json` (each owed vector is red on `main` until its core change
-lands), this file's lines 55–56 and 321 and this note, and `TEST-ARCHITECTURE.md` line 121.
+lands), this file's "**100 vectors:**" and "c123-server runs 94" sentences in the round-19 paragraph
+(the two `meta.test.ts` 30–39 reads by regex), §1's "**c123-server runs 94: every vector not tagged
+`live-ingest`**" sentence and this note, and `TEST-ARCHITECTURE.md`'s "The count is 100 as of round
+19 … (94 and 23; 17 are in both)" sentence.
 
 ---
 
@@ -297,7 +306,8 @@ Each vector has:
   the Entry and `status` and `courseOrder` from the Attempt under one `scope: 'entry'`. Eight keys
   name no resource field and are defined by this section alone: `diagnostics`, `writeRequest`,
   `notifications` and `note` (below); `oncourse`, the on-course set as the array of `attemptId` in
-  the order `CONTRACTS.md` §7.1 `GET /api/oncourse` states (§8.4 on live); `attempts` (the set of
+  the order `CONTRACTS.md` §7.1 `GET /api/oncourse` states (§8.4 on live); `featuredByUpstream` (that
+  response's field); `attempts` (the set of
   `attemptId` the store holds, order not asserted; on either tier) and `standing`, a map from
   `standingKey` (`CONTRACTS.md` §5) to that Standing's
   entries in order, each entry asserting only the keys it lists. **The Phase is `context.phase`
