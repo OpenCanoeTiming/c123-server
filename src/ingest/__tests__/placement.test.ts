@@ -33,7 +33,8 @@ describe('§4.7 placement, pairTotal, countingRun, qualified, heats', () => {
     parts[2] = parts[2].replace('IRM=""', 'IRM="RAL"');
     const r = rowOf(parseTcp(parts.join('<Row '), ctx()), 'K1M_BR1_19', '83');
     expect(r.placement).toEqual({ rank: 2, order: 2 });
-    expect(r.outcome).toEqual({ kind: 'no-result', status: 'ral' });
+    expect(r.status).toBe('ral'); // round 19 (code item 9): a mark with a time emits the mark and the duration
+    expect(r.outcome.kind).toBe('duration');
   });
   it('§4.7 OnCourse.Result[T]@Rank is never a placement', () => {
     const els = parseTcp(withAttr(TCP.onCourseRunning, 'Rank', '', '7'), ctx());

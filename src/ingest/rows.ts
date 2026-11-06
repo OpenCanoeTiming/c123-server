@@ -119,12 +119,15 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
     }
     row['gates'] = gates;
   }
-  if (!fmt.cross && hasTime) row['judgingComplete'] = judgingComplete(cells, slots);
+  // §4.6(d): `faults` carries no blank of its own, so it is stamped over the slot cells exactly as `gates` is
+  if (fmt.cross ? row['faults'] !== undefined : hasTime) row['judgingComplete'] = judgingComplete(cells, slots);
 
   // §4.3-4.4 outcome
   const untimed = x !== undefined && fmt.scoringKind === 'duration' && hasTime && rank !== undefined && x.dtFinish.trim() === '';
+  // §0.5: a row states what it carries. A mark beside a time stays beside it; `no-result` over a time is the core's presentation (§4.1)
+  const noResult: Outcome | undefined = status !== undefined && status !== 'non-ranked' ? { kind: 'no-result', status } : undefined;
   let outcome: Outcome | typeof NA | undefined;
-  if (status !== undefined && status !== 'non-ranked') outcome = { kind: 'no-result', status };
+  if (noResult !== undefined && (r.time === undefined || untimed)) outcome = noResult;
   else if (fmt.heats) outcome = rank !== undefined && order !== undefined ? { kind: 'ordinal', order } : undefined;
   else if (r.time === undefined) outcome = undefined;
   else if (untimed) outcome = NA;
@@ -133,7 +136,7 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
     const pen = sumJudged(cells, slots);
     outcome = { kind: 'duration', runSeconds: r.time, penaltySeconds: pen, totalSeconds: r3(r.time + pen) };
   } else if (r.pen !== undefined && r.total !== undefined) outcome = { kind: 'duration', runSeconds: r.time, penaltySeconds: r.pen, totalSeconds: r.total };
-  else outcome = undefined; // an empty Pen or Total is absent, never zero (§0.1): no complete duration to state
+  else outcome = noResult; // an empty Pen or Total is absent, never zero (§0.1): no complete duration to state
   if (outcome !== undefined) row['outcome'] = outcome;
   if (untimed) {
     row['untimed'] = true;

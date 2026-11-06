@@ -108,6 +108,16 @@ export function zonedInstant(date: string | undefined, tod: string, zone: string
   }
 }
 
+/** The calendar date of an instant read in the venue's zone (§2.1); with no zone, or an unknown one, none. */
+export function zonedDate(instant: string, zone: string | undefined): string | undefined {
+  if (zone === undefined || zone === '') return undefined;
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(instant));
+  } catch {
+    return undefined;
+  }
+}
+
 // ---------------------------------------------------------------- §2.1 format vocabulary (CONTRACTS §2.4)
 
 export interface Fmt {

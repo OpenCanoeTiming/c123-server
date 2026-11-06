@@ -60,10 +60,12 @@ describe('§4.1 status and result marks', () => {
       expect(statusOf(els, 'K1M_BR1_19', '64')).toBe('other');
       expect(rowOf(els, 'K1M_BR1_19', '64').outcome).toEqual({ kind: 'no-result', status: 'other' });
     });
-    it('§4.1 a row with a mark presents no-result whatever time it carries (DNF on bib 55 which keeps Time="48.64")', () => {
+    it('§4.1 round 19 (code item 9): a row carrying a mark and a time emits the mark in status AND the time as outcome duration; no-result is the core\'s presentation (DNF on bib 55 which keeps Time="48.64")', () => {
       const msg = TCP.resultsBr1.replace('IRM=""', 'IRM="DNF"'); // bib 55 keeps Time="48.64" Rank="1"
       const r = rowOf(parseTcp(msg, ctx()), 'K1M_BR1_19', '55');
-      expect(r.outcome).toEqual({ kind: 'no-result', status: 'dnf' });
+      expect(r.status).toBe('dnf');
+      expect(r.outcome).toMatchObject({ kind: 'duration', runSeconds: 48.64 });
+      expect(r.outcome).not.toMatchObject({ kind: 'no-result' });
     });
     it('§4.1 empty IRM with a time means finished: no mark, outcome duration', () => {
       const r = rowOf(parseTcp(TCP.resultsBr1, ctx()), 'K1M_BR1_19', '83');
@@ -86,7 +88,8 @@ describe('§4.1 status and result marks', () => {
     it('§4.1 on a second-run row a mark describes run 2 only; placement and pairTotal still come from the row (bib 108, IRM="DNF")', () => {
       const els = parseTcp(withAttr(TCP.resultsBr2, 'IRM', '', 'DNF'), ctx());
       const r = rowOf(els, 'K1M_BR2_19', '108');
-      expect(r.outcome).toEqual({ kind: 'no-result', status: 'dnf' });
+      expect(r.status).toBe('dnf'); // round 19 (code item 9): the mark in status, the row's time beside it
+      expect(r.outcome.kind).toBe('duration');
       expect(r.placement).toEqual({ rank: 20, order: 20 });
       expect(r.pairTotal).toBe(88.38);
     });

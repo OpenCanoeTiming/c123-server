@@ -84,7 +84,7 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
   // First detection of the change not yet read whole, with the stat it was seen at (a different stat restarts it).
   let pending: { sig: Sig; at: number } | undefined;
   // The last successful stat, and the time of the last one that showed a signature other than the current one
-  // (INV-2c content age, `changedAfter`). Stat times are taken before the call.
+  // (INV-2c content age, `changedAfter`). These stat times are taken before the call; `observedAt` after it returns (§0.3).
   let prevStat: { sig: Sig; at: number } | undefined;
   let changedAfter: number | undefined;
   // The signature of a file whose last burst ended torn with the stat unchanged: one read per poll until it changes.
@@ -115,15 +115,15 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
 
   type Attempt = { kind: 'ok'; els: IngestElement[] } | { kind: 'torn' | 'rejected' | 'moved' };
 
-  /** One read, validated; a read that is not whole or not well-formed is torn, a rejected read is its own kind. */
-  async function readOnce(p: string, at: number): Promise<Attempt> {
+  /** One read, validated; a read that is not whole or not well-formed is torn, a rejected read is its own kind. A stuck file's re-read is a failed poll and counts nothing. */
+  async function readOnce(p: string, at: number, stuck: boolean): Promise<Attempt> {
     let text: string;
     try { text = await fs.read(p); } catch { return { kind: 'rejected' }; }
     if (text.includes(ROOT_CLOSE) && XMLValidator.validate(text) === true) {
       const els = parseXmlSnapshot(text, { ...ctx, observedAt: iso(at) });
       if (!els.some((e) => 'unparseable' in e)) return { kind: 'ok', els };
     }
-    tornReads++;
+    if (!stuck) tornReads++;
     return { kind: 'torn' };
   }
 
@@ -145,18 +145,20 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
       return;
     }
     if (my !== epoch) return;
+    const statReturnedAt = now(); // the earliest instant the new state is known: `observedAt` never precedes the write (§0.3)
     observe(st, polledAt);
     if (lastGood && same(lastGood, st)) { pending = undefined; failedPolls = 0; setState('connected'); return; }
-    if (!pending || !same(pending.sig, st)) pending = { sig: st, at: polledAt };
+    if (!pending || !same(pending.sig, st)) pending = { sig: st, at: statReturnedAt };
     let ref: Sig = st;
     let last: Attempt['kind'] = 'torn';
-    const extraReads = stuckSig && same(stuckSig, st) ? 0 : XML_RETRY_EXTRA_READS;
+    const stuck = stuckSig !== undefined && same(stuckSig, st);
+    const extraReads = stuck ? 0 : XML_RETRY_EXTRA_READS;
     for (let attempt = 0; attempt <= extraReads; attempt++) {
       if (attempt > 0) {
         await wait(XML_RETRY_SPACING_MS);
         if (my !== epoch) return;
       }
-      const r = await readOnce(p, pending!.at);
+      const r = await readOnce(p, pending!.at, stuck);
       if (my !== epoch) return;
       last = r.kind;
       if (r.kind === 'ok') {
@@ -167,7 +169,7 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
         if (my !== epoch) return;
         if (!after) { failPoll(); report(); return; } // a closing stat that rejects is a failed poll (§2.8)
         observe(after, closedAt);
-        if (!same(after, ref)) { last = 'moved'; ref = after; pending = { sig: after, at: closedAt }; report(); if (my !== epoch) return; continue; }
+        if (!same(after, ref)) { last = 'moved'; ref = after; pending = { sig: after, at: now() }; report(); if (my !== epoch) return; continue; }
         // Delivery first: a throwing onUnit leaves lastGood and pending as they were, so the next poll reads again.
         if (!emit(my, r.els, pending!.at)) return;
         lastGood = ref;
@@ -181,7 +183,7 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
       report();
       if (my !== epoch) return;
     }
-    abandonedReads++;
+    if (!stuck) abandonedReads++;
     if (last === 'rejected') failPoll();
     else if (last === 'moved') { failedPolls = 0; setState('connected'); }
     else {
@@ -194,7 +196,7 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
       else {
         observe(again, checkedAt);
         if (same(again, pending!.sig)) { stuckSig = again; failPoll(); }
-        else { pending = { sig: again, at: checkedAt }; failedPolls = 0; setState('connected'); }
+        else { pending = { sig: again, at: now() }; failedPolls = 0; setState('connected'); }
       }
     }
     if (my !== epoch) return; // onStatus re-entered setPath/stop from a state report above

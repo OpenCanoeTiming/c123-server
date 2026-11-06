@@ -29,9 +29,7 @@ describe('§4.8 on-course extras', () => {
   it('§4.8 timeToBeat is never a rank (Rank="" on the listing; no placement from it)', () => {
     expect(allObs(oc(TCP.onCourseFinished), 'placement')).toEqual([]);
   });
-  it('§4.8 splits are unavailable{not-applicable} when RaceConfig.NrSplits is 0', () => {
-    expect(obsOf(parseTcp(TCP.raceConfigCross, ctx()), 'splits')).toMatchObject({ state: 'unavailable', reason: 'not-applicable' });
-  });
+  // Round 19: a RaceConfig states splitsArmed in its course-refresh (course.test.ts); what `splits` presents is the core's (§4.8, session state).
   it('§4.8 featuredByUpstream inputs: TVS names Odd and Even bibs with their RaceIds (membership of the on-course list is the core\'s)', () => {
     const els = parseTcp(TCP.tvs, ctx());
     expect(JSON.stringify(els)).toContain('K1M_BR1_19:55');

@@ -3,6 +3,7 @@ dist/
 *.log
 .DS_Store
 core
+!src/core/
 
 # Test XML files (large, not needed in repo)
 *.xml

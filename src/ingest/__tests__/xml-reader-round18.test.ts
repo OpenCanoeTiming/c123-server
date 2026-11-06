@@ -223,9 +223,11 @@ describe('row 6-10 the burst endings (CONTRACTS §2.8, DERIVATIONS §0.3 "Valida
     expect(reads(t0, t0 + 5000)).toBe(4); // the first burst
     for (let k = 1; k < 6; k++) expect(reads(t0 + k * 5000, t0 + (k + 1) * 5000), `poll ${k}`).toBe(1);
     expect(s.units.length).toBe(0);
-    expect(s.last()?.abandonedReads).toBe(6); // one per exhausted burst, a one-read poll included (as today)
-    expect(s.last()?.tornReads).toBe(9); // 4 + 5 invalid reads
-    expect(s.last()?.tornReads).toBe(s.f.readLog.length);
+    // round 19 (#255b, code item 11): the per-poll re-read of a stuck file is a failed poll, not a burst: it counts in neither counter;
+    // the burst that found the file invalid counted once (4 invalid reads, 1 abandoned burst)
+    expect(s.last()?.abandonedReads).toBe(1);
+    expect(s.last()?.tornReads).toBe(4);
+    expect(s.f.readLog.length).toBe(9); // the reads still happen, one per poll
     // it validates (same stat, whole content): delivered, connected, stamped with the first detection
     s.f.files[P] = { mtimeMs: 1000, size: 10, content: whole('slalom.xml') };
     await s.until(t0 + 6 * 5000 + 2500);

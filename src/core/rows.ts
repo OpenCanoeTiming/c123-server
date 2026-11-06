@@ -1,0 +1,172 @@
+/**
+ * One result row into the per-source slots. A row is a snapshot's, or a single field's observation in a vector (`rowOfField`),
+ * so there is one path; an absent key is an omission (INV-1), `null` an explicit "no such value".
+ */
+import { judgingComplete, gatesFromCells, faultsFromCells, usable, type Cells } from '../ingest/common.js';
+import { isStaleMark, attribute, keepAsHistory, markOf, pendingFor, recordsGeneration, timeOf } from './generations.js';
+import { isMark, present, presentStatus, refusedByGuard } from './precedence.js';
+import { fmtFor } from './registry.js';
+import { refuse } from './counters.js';
+import { carriesContradicted } from './retraction.js';
+import { fieldSlots, retain, slotOf } from './retention.js';
+import { resolveEcho } from './writes.js';
+import type { AttemptState, CoreState, Element, Row, Slot, Source } from './types.js';
+import type { CourseSlot } from '../ingest/index.js';
+
+const IDENTITY = ['entry', 'startOrder', 'scheduledStart', 'heat', 'startLane'] as const;
+const NOT_APPLICABLE = { state: 'unavailable', reason: 'not-applicable' } as const;
+const NOT_CONFIGURED = { state: 'unavailable', reason: 'not-configured' } as const;
+
+/** Retains one row value and settles rule 4 against it. */
+function put(s: CoreState, a: AttemptState, source: Source, el: Element, field: string, value: unknown, seq: number, extra: Partial<Slot> = {}): void {
+  const fs = fieldSlots(a.slots, field);
+  const view = field === 'status' ? presentStatus : present;
+  const slot = slotOf(s, el, source, 'row', value, seq, extra);
+  const prior = fs[source];
+  const shown = view(fs);
+  const changed = retain(fs, source, slot, view);
+  if (changed || view(fs) !== shown) s.dirtyAttempts.add(a);
+  if (fs.operator !== undefined) resolveEcho(s, a, fs, field, slot, prior, changed);
+  if (source !== 'xml' || !changed) return;
+  if (fs.tcp !== undefined && refusedByGuard(fs.tcp, slot)) refuse(s, 'content-age');
+  else if (field === 'status' && isMark(slot.value) && presentStatus(fs)?.value !== slot.value) refuse(s, 'xml-mark');
+}
+
+/** The course bound to a Phase, known only once a snapshot binds it (§4.6). */
+export function boundSlots(s: CoreState, phaseId: string): CourseSlot[] | undefined {
+  const courseId = s.phases.get(phaseId)?.fields.get('courseId')?.xml;
+  if (courseId?.state !== 'known') return undefined;
+  const fs = s.courses.get(String(courseId.value))?.fields.get('slots');
+  const slots = fs?.xml?.value as CourseSlot[] | undefined;
+  return usable(slots) ? slots : undefined;
+}
+
+/** §4.6: `not-configured` when nothing can bind; otherwise the Phase is waiting for its snapshot. */
+function courseUnavailable(s: CoreState, phaseId: string): boolean {
+  return s.options.xmlConfigured === false || s.phases.get(phaseId)?.fields.get('courseId')?.xml?.state === 'not-yet';
+}
+
+/** Cells with no course in the parser's `ctx`: gates or faults once a course is bound, else retained until one is (§0.5). */
+export function putCells(s: CoreState, a: AttemptState, channel: 'tcp' | 'xml' | 'inference', cells: Cells, slot: Slot): void {
+  const fmt = fmtFor(s, a.phaseId);
+  const field = fmt.cross ? 'faults' : 'gates';
+  const slots = boundSlots(s, a.phaseId);
+  if (slots === undefined) {
+    a.cells[channel] = { cells, slot };
+    if (courseUnavailable(s, a.phaseId)) {
+      if (retain(fieldSlots(a.slots, field), channel, { ...slot, state: 'unavailable', reason: NOT_CONFIGURED.reason })) s.dirtyAttempts.add(a);
+    }
+    return;
+  }
+  delete a.cells[channel];
+  const value = fmt.cross ? (faultsFromCells(cells, slots) ?? null) : gatesFromCells(cells, slots);
+  if (value === null) return;
+  const bound: Slot = { ...slot, state: 'known', value, judgingComplete: judgingComplete(cells, slots) };
+  delete bound.reason;
+  if (retain(fieldSlots(a.slots, field), channel, bound)) s.dirtyAttempts.add(a);
+}
+
+/** "at a step that carries gate cells ... or at a scope snapshot of its race" (§4.6): retained cells meet the bound course. */
+export function rebindCells(s: CoreState, a: AttemptState): void {
+  for (const channel of ['tcp', 'xml', 'inference'] as const) {
+    const held = a.cells[channel];
+    if (held !== undefined) putCells(s, a, channel, held.cells, held.slot);
+  }
+}
+
+/** The fields a row states whatever its result: never retracted (INV-7). */
+export function putIdentity(s: CoreState, a: AttemptState, source: Source, el: Element, row: Row, seq: number): void {
+  for (const f of IDENTITY) if (row[f] !== undefined) put(s, a, source, el, f, row[f], seq);
+}
+
+/** A row's lifecycle floor: an Attempt exists from its first row, not yet started. */
+export function floorStatus(s: CoreState, a: AttemptState, source: Source, el: Element, seq: number): void {
+  if (presentStatus(a.slots.get('status')) === undefined) put(s, a, source, el, 'status', 'not-started', seq);
+}
+
+/** The row fields a paired second-run row states with no time of its own: `placement` and `pairTotal` follow the row (INV-7). */
+export function putStanding(s: CoreState, a: AttemptState, source: Source, el: Element, row: Row, seq: number): void {
+  for (const f of ['placement', 'pairTotal', 'countingRun', 'underReview', 'qualified']) {
+    if (f in row) put(s, a, source, el, f, row[f], seq);
+  }
+}
+
+function writeRow(s: CoreState, a: AttemptState, source: Source, el: Element, row: Row, stale: boolean, seq: number): void {
+  const fmt = fmtFor(s, a.phaseId);
+  const mark = stale ? undefined : markOf(row);
+  const time = timeOf(row);
+  const extra: Partial<Slot> = 'judgingComplete' in row ? { judgingComplete: row['judgingComplete'] as boolean | null } : {};
+  const placed = row['placement'] !== null && row['placement'] !== undefined;
+  if (recordsGeneration(a, mark, time)) a.gen.recorded = true;
+
+  // §4.4 the untimed flag: read from the snapshot row, inherited by the Attempt's TCP rows
+  if (row['untimed'] === true) {
+    a.untimed = a.gen.finish === undefined;
+    const tcp = a.slots.get('outcome')?.tcp;
+    if (a.untimed && tcp?.state === 'known') put(s, a, 'tcp', { ingestSeq: 0, observedAt: tcp.observedAt }, 'outcome', NOT_APPLICABLE, tcp.seq);
+  } else if (source === 'xml' && time !== undefined) a.untimed = false;
+
+  let outcome: unknown = row['outcome'];
+  if (stale && (outcome as { kind?: unknown } | undefined)?.kind === 'no-result') outcome = undefined;
+  if (mark !== undefined && mark !== 'non-ranked') outcome = { kind: 'no-result', status: mark };
+  else if (a.untimed && outcome !== undefined) outcome = NOT_APPLICABLE;
+  else if (outcome === undefined && fmt.heats && placed) outcome = { kind: 'ordinal', order: (row['placement'] as { order: number }).order };
+
+  const ranOrPlaced = time !== undefined || (fmt.heats && placed) || row['status'] === 'finished' || a.untimed;
+  const status = mark ?? (ranOrPlaced ? 'finished' : undefined);
+  if (status !== undefined) put(s, a, source, el, 'status', status, seq);
+  if (outcome !== undefined) put(s, a, source, el, 'outcome', outcome, seq, { ...extra, ...(row['finishTime'] !== undefined ? { eventTime: row['finishTime'] as string } : {}) });
+  if ('cells' in row) putCells(s, a, source, row['cells'] as Cells, slotOf(s, el, source, 'row', [], seq, extra));
+  for (const f of ['gates', 'faults', 'splits']) if (row[f] !== undefined) put(s, a, source, el, f, row[f], seq, extra);
+  for (const f of ['placement', 'pairTotal', 'countingRun']) if (f in row) put(s, a, source, el, f, row[f], seq, extra);
+  for (const f of ['underReview', 'qualified']) if (row[f] !== undefined) put(s, a, source, el, f, row[f], seq);
+  if (time !== undefined || mark !== undefined) for (const f of ['placement', 'pairTotal', 'countingRun']) if (f in row) a.carried.delete(f);
+}
+
+/** The whole of one result row: contradiction, attribution, the stale mark, then the slots. */
+export function applyRow(s: CoreState, a: AttemptState, source: Source, el: Element, row: Row, seq: number): void {
+  putIdentity(s, a, source, el, row, seq);
+  if (row['runClosed'] === true && !a.gen.completed) {
+    a.gen.completed = true;
+    s.dirtyAttempts.add(a);
+  }
+  if (carriesContradicted(a, row)) {
+    keepAsHistory(a, source, row);
+    refuse(s, 'contradicted-row');
+    return;
+  }
+  const mark = markOf(row);
+  if (a.contradiction !== undefined && (timeOf(row) !== undefined || mark !== undefined)) {
+    delete a.contradiction;
+    s.dirtyAttempts.add(a);
+  }
+  const stale = isStaleMark(a, mark);
+  if ('status' in row || 'outcome' in row) {
+    const withheld = a.withheld;
+    if (stale && mark !== undefined) a.withheld = mark;
+    else delete a.withheld;
+    if (withheld !== a.withheld) s.dirtyAttempts.add(a);
+  }
+  const verdict = attribute(a, row);
+  if (verdict === 'replaced') {
+    keepAsHistory(a, source, row);
+    refuse(s, 'replaced-run');
+    return;
+  }
+  if (verdict === 'pending' && (mark === undefined || stale)) {
+    a.pending.push({ row, source, observedAt: el.observedAt, seq, epoch: s.epoch, age: source === 'xml' ? (s.rewrite?.changedAfter ?? null) : Date.parse(el.observedAt) });
+    return;
+  }
+  writeRow(s, a, source, el, row, stale, seq);
+}
+
+/** §4.11: the finish arrived; a row retained for it is attributed, its `observedAt` its own, and gains the finish as `eventTime`. */
+export function settlePending(s: CoreState, a: AttemptState): void {
+  const time = a.gen.finish?.runSeconds;
+  if (time === undefined || a.pending.length === 0) return;
+  const count = a.pending.length;
+  const p = pendingFor(a, time);
+  if (count > (p === undefined ? 0 : 1)) refuse(s, 'replaced-run');
+  if (p === undefined) return;
+  writeRow(s, a, p.source, { ingestSeq: 0, observedAt: p.observedAt }, p.row, isStaleMark(a, markOf(p.row)), p.seq);
+}

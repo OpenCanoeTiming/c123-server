@@ -65,42 +65,60 @@ describe('§2.3 Course', () => {
       expect(JSON.stringify(els)).not.toContain('sectorEndsAfterGate');
     }
   });
-  it('§2.3 TCP RaceConfig refreshes gates, slots, splitsAfterGate and captions of the bound course: captions ST,1,2,3,4,5,6,RZ,7 at the same slot index', () => {
+  // Round 19 (code item 10, F6/F10a): a RaceConfig names no race and no course, so the parser emits ONE course-refresh element keyed by its gate
+  // string, whatever ctx.boundCourseId is; the core matches it to the Course whose stripped layout equals the string (DERIVATIONS §2.3).
+  // The ruling fixes the element's payload `{ gateString, captions, splitsArmed, fabricated }`; the text does not name the wrapper key, so the tests find
+  // the element by `gateString`, flat or nested one level.
+  const refreshOf = (els: unknown): El | undefined => {
+    for (const e of els as El[]) {
+      if (e.gateString !== undefined) return e;
+      for (const v of Object.values(e)) if (typeof v === 'object' && v !== null && (v as El).gateString !== undefined) return v as El;
+    }
+    return undefined;
+  };
+  it('§2.3 round 19: a recorded cp3-cross RaceConfig yields a course-refresh with the gate string verbatim and the captions ST,1,2,3,4,5,6,RZ,7, with no course bound', () => {
+    const r = refreshOf(parseTcp(TCP.raceConfigCross, ctx({ boundCourseId: undefined })));
+    expect(r).toMatchObject({ gateString: 'DNNRNNNER', captions: ['ST', '1', '2', '3', '4', '5', '6', 'RZ', '7'], splitsArmed: false, fabricated: false });
+  });
+  it('§2.3 round 19: the refresh does not depend on ctx.boundCourseId (bound to course 1, bound to nothing, bound to another course: the same payload)', () => {
+    const a = refreshOf(parseTcp(TCP.raceConfigSlalom, ctx()));
+    expect(a).toBeDefined();
+    expect(refreshOf(parseTcp(TCP.raceConfigSlalom, ctx({ boundCourseId: undefined })))).toEqual(a);
+    expect(refreshOf(parseTcp(TCP.raceConfigSlalom, ctx({ boundCourseId: '2' })))).toEqual(a);
+  });
+  it('§2.3 round 19: recorded slalom RaceConfig (23 gates, captions 1..23): the string RNNNNRNNRNNRNNNNRNNRNNN and 23 captions', () => {
+    expect(refreshOf(parseTcp(TCP.raceConfigSlalom, ctx()))).toMatchObject({ gateString: 'RNNNNRNNRNNRNNNNRNNRNNN', captions: Array.from({ length: 23 }, (_, i) => String(i + 1)), fabricated: false });
+  });
+  it('§2.3 round 19: NrSplits="0" -> splitsArmed false; NrSplits="2" -> splitsArmed true (what splits presents is the core\'s, §4.8)', () => {
+    expect(refreshOf(parseTcp(rc({ NrSplits: '0' }), ctx()))?.splitsArmed).toBe(false);
+    expect(refreshOf(parseTcp(rc({ NrSplits: '2' }), ctx()))?.splitsArmed).toBe(true);
+  });
+  it('§2.3 round 19: a refresh states no course number, no layout and no sector ends (the snapshot\'s alone)', () => {
     const els = parseTcp(TCP.raceConfigCross, ctx());
-    expect(course(els, 'captions', '1')?.value).toEqual(['ST', '1', '2', '3', '4', '5', '6', 'RZ', '7']);
-    expect(course(els, 'slots', '1')?.value).toEqual(CROSS_SLOTS);
+    const r = refreshOf(els)!;
+    expect(r.courseId).toBeUndefined();
+    expect(JSON.stringify(els)).not.toContain('sectorEndsAfterGate');
+    expect(els.filter((e: El) => e.field === 'layout')).toEqual([]);
   });
-  it('§2.3 RaceConfig gives no course number: it is used for ctx.boundCourseId only; with none bound it refreshes nothing', () => {
-    const els = parseTcp(TCP.raceConfigCross, ctx({ boundCourseId: undefined }));
-    expect(els.filter((e: El) => e.courseId !== undefined)).toEqual([]);
-  });
-  it('§2.3 recorded slalom RaceConfig (23 gates, captions 1..23): slots refresh with gate numbers and captions', () => {
-    const els = parseTcp(TCP.raceConfigSlalom, ctx());
-    expect(course(els, 'slots', '1')?.value).toEqual(slalomSlots(23));
-    expect(course(els, 'gates', '1')?.value).toHaveLength(23);
-  });
-  it('§2.3 NrSplits="0": splits are not armed, no split times will come (unavailable not-applicable)', () => {
-    expect(obsOf(parseTcp(TCP.raceConfigCross, ctx()), 'splits', { courseId: '1' })).toMatchObject({ state: 'unavailable', reason: 'not-applicable' });
-  });
-  it('§2.3 the transmitted gate count is ignored: a consistent layout with NrGates mismatching is fabricated, not trusted (NrGates="30", 23-gate string)', () => {
+  it('§2.3 round 19: the transmitted gate count is ignored; a count that disagrees with the string sets fabricated (NrGates="30", 23-gate string) and raises the ingest-only diagnostic, the string still carried', () => {
     const els = parseTcp(rc({ NrGates: '30' }), ctx());
-    expect(course(els, 'gates', '1')).toMatchObject({ state: 'unavailable', reason: 'not-configured' });
+    expect(refreshOf(els)).toMatchObject({ gateString: 'RNNNNRNNRNNRNNNNRNNRNNN', fabricated: true });
+    expect(els.some((e: El) => e.diagnostic?.kind === 'fabricated-course')).toBe(true);
   });
-  it('§2.3 fabricated course (a): empty gate string while the count is non-zero (NrGates="25", GateConfig="")', () => {
-    const els = parseTcp(rc({ NrGates: '25', GateConfig: '', GateCaptions: '' }), ctx());
-    expect(course(els, 'gates', '1')).toMatchObject({ state: 'unavailable', reason: 'not-configured' });
-    expect(course(els, 'layout', '1')).toBeUndefined(); // ruling 12: never emitted from RaceConfig
+  it.each([
+    ['(a) empty gate string while the count is non-zero', { NrGates: '25', GateConfig: '', GateCaptions: '' }],
+    ['(b) captions empty while the gate string is not', { GateCaptions: '' }],
+    ['(c) the string\'s gate count differs from the transmitted count', { GateConfig: 'RNNNNRNNRNNRNNNNRNNRNN' }],
+  ])('§2.3 round 19 fabricated course %s: fabricated true, the diagnostic raised, and the RaceConfig decides no not-configured (no gates/slots observation of any course)', (_n, over) => {
+    const els = parseTcp(rc(over), ctx());
+    expect(refreshOf(els)?.fabricated).toBe(true);
+    expect(els.some((e: El) => e.diagnostic?.kind === 'fabricated-course')).toBe(true);
+    expect(els.filter((e: El) => e.state === 'unavailable' && e.reason === 'not-configured')).toEqual([]);
   });
-  it('§2.3 fabricated course (b): captions empty while the gate string is not (NrGates="23" matching, GateCaptions="")', () => {
-    const els = parseTcp(rc({ GateCaptions: '' }), ctx());
-    expect(course(els, 'gates', '1')).toMatchObject({ state: 'unavailable', reason: 'not-configured' });
-  });
-  it('§2.3 fabricated course (c): the string\'s gate count differs from the transmitted count (22-char string, NrGates="23")', () => {
-    const els = parseTcp(rc({ GateConfig: 'RNNNNRNNRNNRNNNNRNNRNN' }), ctx());
-    expect(course(els, 'gates', '1')).toMatchObject({ state: 'unavailable', reason: 'not-configured' });
-  });
-  it('§2.3 a consistent recorded RaceConfig is not flagged fabricated', () => {
-    expect(course(parseTcp(TCP.raceConfigSlalom, ctx()), 'gates', '1')).not.toHaveProperty('state');
+  it('§2.3 a consistent recorded RaceConfig is not flagged fabricated and raises no diagnostic', () => {
+    const els = parseTcp(TCP.raceConfigSlalom, ctx());
+    expect(refreshOf(els)?.fabricated).toBe(false);
+    expect(els.some((e: El) => e.diagnostic)).toBe(false);
   });
   it('§2.3 failure mode: an empty layout in the snapshot gives gates unavailable{not-configured} (cp3-cross CourseNr 6 has <CourseConfig />; synthetic CourseData of that recorded shape)', () => {
     const x = xmlFixture('cross.xml').replace('</Canoe123Data>', '<CourseData><CourseNr>6</CourseNr><CourseConfig /></CourseData></Canoe123Data>');

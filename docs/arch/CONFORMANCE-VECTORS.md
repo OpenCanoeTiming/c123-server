@@ -52,8 +52,8 @@ as recorded), the INV-2d lift, placement only when ranked, no standing re-send o
 fields provisional while run 2 runs, `status` never provisional, an Attempt unstaged before its start,
 and a first-run row wiped in place (the recorded jury re-run).
 
-**94 vectors:** 81 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
-needed, not a target. **c123-server runs 88 of them, live-mini-server 23** (§1, "Which vectors each
+**100 vectors:** 87 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
+needed, not a target. **c123-server runs 94 of them, live-mini-server 23** (§1, "Which vectors each
 component runs"); 17 run in both suites.
 
 **Round 14** (2026-11-05, server#200) stated that split, made the two live lists total over every tag,
@@ -291,7 +291,7 @@ Each vector has:
 **Which vectors each component runs.** Each component feeds its own merge function through a thin
 adapter (`TEST-ARCHITECTURE.md` §3.1); the sets overlap, and each suite asserts its own count.
 
-**c123-server runs 88: every vector not tagged `live-ingest`.** The tag is the rule; apart from it,
+**c123-server runs 94: every vector not tagged `live-ingest`.** The tag is the rule; apart from it,
 every merge vector is on-site material (`tcp`, `xml` and `operator-write` observations, the
 source-less `unavailable` observation, connection and operator events, scope snapshots and
 on-course listings), and all 8 `standing-assembly` and all 5 `workflow-state` vectors are the
@@ -404,7 +404,7 @@ check, readable under its own `run`) is not asserted.
 |---|---|---|
 | INV-1 (monotonic knowledge) | `inv1-untouched-field-not-regressed`, `inv1-never-observed-stays-not-yet` | 2 |
 | INV-2 rule 1 (result row over inference) | `inv2-rule1-result-row-supersedes-inference`, `inv2-rule1-inference-never-supersedes-result-row` | 2 |
-| INV-2 rule 2 (TCP continuity) | `inv2-rule2-connected-tcp-beats-later-xml`, `-xml-takes-over-after-disconnect`, `-reconnect-does-not-restore-stale-tcp`, `-fresh-tcp-after-reconnect-wins`, `-xml-alone-at-cold-start`; owed (round 19): `-reconnect-redelivery-regains-precedence` | 5 (+1 owed) |
+| INV-2 rule 2 (TCP continuity) | `inv2-rule2-connected-tcp-beats-later-xml`, `-xml-takes-over-after-disconnect`, `-reconnect-does-not-restore-stale-tcp`, `-fresh-tcp-after-reconnect-wins`, `-xml-alone-at-cold-start`; round 19: `-reconnect-redelivery-regains-precedence` | 6 |
 | INV-2 rule 1, `gates` cell-wise | `gates-blank-result-cell-keeps-judged-oncourse-cell`, `gates-result-vector-authoritative-after-leaving` | 2 |
 | INV-2 rule 2 exception (marks on silent paths) | `left-without-finish-then-mark-from-xml`, `xml-mark-does-not-override-tcp-finish` | 2 |
 | `left-without-finish` | `left-without-finish-observed-not-dnf` | 1 |
@@ -426,7 +426,7 @@ check, readable under its own `run`) is not asserted.
 | INV-4, INV-5, INV-6 | one each | 3 |
 | `provisional` in both upstream modes; pair fields; `status` | `provisional-incomplete-judging-then-settles`, `-first-push-already-complete`, `-run-closed-without-course`, `-pair-fields-while-run-2-on-course`, `status-never-provisional` | 5 |
 | Ongoing recomputation before the result push | `ongoing-recomputation-provisional-total-revised-by-late-gate` | 1 |
-| Run generation (re-run) | `rerun-retracts-run-scoped-fields`, `rerun-old-generation-row-not-presented`, `rerun-tcp-row-before-new-finish-not-presented`, `rerun-status-transition-legal-only-with-generation`, `rerun-stale-mark-not-presented`; owed (round 19): `rerun-trigger-new-start-after-recorded-finish`, `start-correction-mid-run-keeps-generation`, `start-correction-after-finish-row-first`, `start-correction-after-finish-listing-first`, `start-correction-after-cleared-mark-keeps-generation` | 5 (+5 owed) |
+| Run generation (re-run) | `rerun-retracts-run-scoped-fields`, `rerun-old-generation-row-not-presented`, `rerun-tcp-row-before-new-finish-not-presented`, `rerun-status-transition-legal-only-with-generation`, `rerun-stale-mark-not-presented`; round 19: `rerun-trigger-new-start-after-recorded-finish`, `start-correction-mid-run-keeps-generation`, `start-correction-after-finish-row-first`, `start-correction-after-finish-listing-first`, `start-correction-after-cleared-mark-keeps-generation` | 10 |
 | Marks and review; untimed rows | `under-review-independent-of-provisional`, `second-run-dns-keeps-combined-placement`, `attemptstatus-finished-to-dsq-post-finish`, `untimed-row-outcome-not-applicable` | 4 |
 | Two-run | `two-run-br1-untouched-by-br2`, `-recovered-from-xml-cold`, `-unavailable-no-live-no-xml` | 3 |
 | Kayak Cross | `cross-outcome-not-yet-before-operator-entry`, `-from-placement-not-time`, `-corrected-after-next-heat-started` | 3 |

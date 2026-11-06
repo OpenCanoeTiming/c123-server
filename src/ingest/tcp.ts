@@ -3,11 +3,10 @@ import {
   type CellProblem, type Node, UNASSIGNED, Unit, asArray, at, classificationRow, commaCells, isNaRace, faultsFromCells, fmtOf, gatesFromCells, int, judgingComplete, num, r3, readDoc,
   splitRaceId, sumJudged, unparseableUnit, usable, zonedInstant,
 } from './common.js';
-import { type Candidates, emitCourse, emitPhase } from './phase.js';
+import { type Candidates, emitPhase } from './phase.js';
 import { type RowIn, buildRow, rowIsResult, splitsOf } from './rows.js';
 import type { IngestContext, IngestElement } from './types.js';
 
-const NA = 'not-applicable' as const;
 const tokenOf = (phaseId: string): string => splitRaceId(phaseId).token;
 
 /** Numeric attribute: an empty one is absent, an unreadable one is reported. */
@@ -123,7 +122,7 @@ function onCourse(u: Unit, ctx: IngestContext, oc: Node): void {
     else if (!usable(slots)) u.unavailable('inference', fmt.cross ? 'faults' : 'gates', key, 'not-configured');
     else if (fmt.cross) {
       const f = faultsFromCells(cells, slots);
-      if (f !== undefined) u.obs('inference', 'faults', key, f);
+      if (f !== undefined) u.obs('inference', 'faults', key, f, 'authoritative', { judgingComplete: complete });
     } else u.obs('inference', 'gates', key, gatesFromCells(cells, slots), 'authoritative', { judgingComplete: complete });
   }
 
@@ -183,7 +182,8 @@ function schedule(u: Unit, ctx: IngestContext, sc: Node): void {
   }
 }
 
-function raceConfig(u: Unit, ctx: IngestContext, rc: Node): void {
+/** §2.3: a `RaceConfig` names no race and no course. It is emitted keyed by its gate string; the Course it refreshes is the core's to find. */
+function raceConfig(u: Unit, rc: Node): void {
   const layout = at(rc, 'GateConfig');
   const captionsRaw = at(rc, 'GateCaptions');
   const nrGates = int(at(rc, 'NrGates'));
@@ -194,11 +194,14 @@ function raceConfig(u: Unit, ctx: IngestContext, rc: Node): void {
   if (captionsRaw === '' && layout.trim() !== '') signatures.push('empty-captions');
   if (layout.trim() !== '' && nrGates !== undefined && [...layout].filter((ch) => 'NRDE'.includes(ch)).length !== nrGates) signatures.push('count-mismatch');
   if (signatures.length > 0) u.diagnostic({ kind: 'fabricated-course', signatures });
-  const courseId = ctx.boundCourseId;
-  if (courseId === undefined) return;
-  emitCourse(u, 'fragment', 'tcp', courseId, layout, captionsRaw === '' ? [] : captionsRaw.split(','), signatures.length > 0);
-  if (nrSplits === 0) u.unavailable('fragment', 'splits', { courseId }, NA);
-  if (nrSplits !== undefined) u.obs('fragment', 'splitsArmed', { courseId }, nrSplits > 0);
+  u.add({
+    courseRefresh: {
+      gateString: layout,
+      captions: captionsRaw === '' ? [] : captionsRaw.split(','),
+      splitsArmed: nrSplits === undefined ? null : nrSplits > 0,
+      fabricated: signatures.length > 0,
+    },
+  });
 }
 
 function tvs(u: Unit, n: Node): void {
@@ -226,7 +229,7 @@ export function parseTcp(message: string, ctx: IngestContext): IngestElement[] {
         case 'Results': results(u, ctx, node); break;
         case 'OnCourse': onCourse(u, ctx, node); break;
         case 'Schedule': schedule(u, ctx, node); break;
-        case 'RaceConfig': raceConfig(u, ctx, node); break;
+        case 'RaceConfig': raceConfig(u, node); break;
         case 'TVS': tvs(u, node); break;
         case 'TimeOfDay': {
           const text = typeof n === 'string' ? n.trim() : '';
