@@ -459,9 +459,9 @@ check, readable under its own `run`) is not asserted.
 | INV-2 rule 1 (result row over inference) | `inv2-rule1-result-row-supersedes-inference`, `inv2-rule1-inference-never-supersedes-result-row` | 2 |
 | INV-2 rule 2 (TCP continuity) | `inv2-rule2-connected-tcp-beats-later-xml`, `-xml-takes-over-after-disconnect`, `-reconnect-does-not-restore-stale-tcp`, `-fresh-tcp-after-reconnect-wins`, `-xml-alone-at-cold-start`; round 19: `-reconnect-redelivery-regains-precedence` | 6 |
 | INV-2 rule 1, `gates` cell-wise | `gates-blank-result-cell-keeps-judged-oncourse-cell`, `gates-result-vector-authoritative-after-leaving` | 2 |
-| INV-2 rule 2 exception (marks on silent paths) | `left-without-finish-then-mark-from-xml`, `xml-mark-does-not-override-tcp-finish`; round 20 (owed): `inv2-rule2-refused-xml-mark-shows-no-outcome` | 3 |
+| INV-2 rule 2 exception (marks on silent paths) | `left-without-finish-then-mark-from-xml`, `xml-mark-does-not-override-tcp-finish`; round 20: `inv2-rule2-refused-xml-mark-shows-no-outcome` | 3 |
 | `left-without-finish` | `left-without-finish-observed-not-dnf` | 1 |
-| INV-7 (retraction) | `retraction-vanished-row-first-run`, `-dns-cleared-then-races`, `-start-list-mode-clears-all`, `-does-not-touch-inference`, `-second-run-time-empty-keeps-placement`, `-from-xml-row-cleared`, `-first-run-row-present-empty`; the guard: `retraction-xml-guard-rewrite-before-push`; round 20 (owed): `inv7-guard-against-redelivered-tcp-row` | 9 |
+| INV-7 (retraction) | `retraction-vanished-row-first-run`, `-dns-cleared-then-races`, `-start-list-mode-clears-all`, `-does-not-touch-inference`, `-second-run-time-empty-keeps-placement`, `-from-xml-row-cleared`, `-first-run-row-present-empty`; the guard: `retraction-xml-guard-rewrite-before-push`; round 20: `inv7-guard-against-redelivered-tcp-row` | 9 |
 | INV-1 against retraction (omission is not absence) | `retraction-not-from-fragment`, `retraction-not-in-other-race-snapshot` | 2 |
 | INV-2d (contradiction by the on-course stream; the lift) | `contradiction-oncourse-running-again`, `contradiction-lift-keeps-stale-rows-unpresented` | 2 |
 | Marks over time; half-corrections | `status-overrides-time`, `half-correction-snapshot-duplicate-finish` | 2 |
@@ -469,8 +469,8 @@ check, readable under its own `run`) is not asserted.
 | Live tier: explicit reset, bare values wrapped, deletion, on-course set and running state, classification rows | `live-explicit-not-yet-resets-field`, `live-bare-value-wrapped-as-bridge`, `live-attempt-deleted`, `live-oncourse-set-replaced-whole`, `live-running-then-finished-latest-wins`, `live-classification-rows-replaced-whole` | 6 |
 | The on-course set and `oncourse.updated` | `oncourse-set-order-and-push`, `oncourse-finisher-stays-listed-until-closure`, `oncourse-unstaged-before-start-returns-to-not-started` | 3 |
 | Placement known only when upstream ranks the row | `placement-not-yet-while-rank-empty` | 1 |
-| `status` from the first row (§3.2) | round 20 (owed): `status-not-started-from-start-list-row` | 1 |
-| Classification rows on site (`DERIVATIONS.md` §4.10): an emptied table keeps the last built Standing | round 20 (owed): `classification-emptied-keeps-last-standing` | 1 |
+| `status` from the first row (§3.2) | round 20: `status-not-started-from-start-list-row` | 1 |
+| Classification rows on site (`DERIVATIONS.md` §4.10): an emptied table keeps the last built Standing | round 20: `classification-emptied-keeps-last-standing` | 1 |
 | No standing re-send on a running tick | `standing-not-resent-on-running-tick` | 1 |
 | Workflow state (§2.10): what `stale` compares against (`null` vs `0`, team sums, `gates` not known), the re-run and re-bib interplay | `check-stale-definition`, `check-null-vs-zero-distinct`, `check-team-sum-compared`, `check-not-carried-to-new-generation`, `check-stays-with-bib-when-result-moves` | 5 |
 | INV-2 rule 3 (single-source fields) | `inv2-rule3-single-source-field` | 1 |

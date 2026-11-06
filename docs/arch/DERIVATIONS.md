@@ -662,8 +662,11 @@ combined values.
   `Completed="Y"` while staged at 07:35:54.193Z, its start 9:35:59, its finish
   9:37:09, its real `Y` at 07:37:55.676Z; round 20, second pass, E1); the Attempt leaving the
   on-course list (§4.1; a re-listing within the generation undoes that leave and its closure alone —
-  the flag clears and `provisional` is recomputed, `false → true` included, property 11; 0 such flips
-  at 4 s on five traced recordings; round 21); or a no-result mark presented — `Outcome`'s `no-result` set, so a refused
+  the flag clears and `provisional` is recomputed, `false → true` included, property 11; one such flip
+  at 4 s on five traced recordings, jarni-so-odp C1M_BR2_18:51, `countingRun` `false → true` at
+  13:54:16.854, re-listed 344 s after its leave with blank cells, its start 13:54:59, its finish
+  13:56:43, so the other reading would hold `provisional: false` through a run; round 21, second
+  pass, E1); or a no-result mark presented — `Outcome`'s `no-result` set, so a refused
   mark closes nothing and `non-ranked`, a finished run, closes nothing: its blank cell is judged
   like any finisher's (round 20, second pass). Leaving the list is the set's closure (`CONTRACTS.md` §7.1); `Completed`
   closes the run while it is still listed (round 20, settling §1.2 against this section;

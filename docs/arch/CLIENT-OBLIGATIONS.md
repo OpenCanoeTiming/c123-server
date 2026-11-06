@@ -58,7 +58,11 @@ phase — is the core's and the checker's (CONTRACTS §1.2, §2.6, §4, §5, §7
 (2026-11-06, the closure review) moved no duty. Round 21 (2026-11-06) moved none: a `judgingComplete:
 true` stamp settling a cold-start row, an Attempt with no run yet and a heat's placement outside the
 judging clause, and a false leave's closure undone by its re-listing are the core's and the checker's
-(DERIVATIONS §4.4; TEST-ARCHITECTURE §3.2); a client already handles `provisional` moving either way.
+(DERIVATIONS §4.4; TEST-ARCHITECTURE §3.2); a client already handles `provisional` moving either way. Its
+second pass (2026-11-06, after review) moved none: the re-listing's evidence corrected to one recorded
+flip, P11's judging clause back in its causal form, P6(b) brought to P11's re-listing reading, upstream's
+withdrawal of a judged cell while listed named as admitted, and round 20's landed vectors no longer
+"owed" — the core's and the checker's (DERIVATIONS §4.4; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §2).
 
 ---
 
