@@ -53,8 +53,8 @@ disqualifies it from outranking the other sources, and the previous merge table 
 
 ## Why
 
-The evidence is E1: observed upstream behaviour, from recordings, confirmed against the decompiled
-source.
+The evidence is E1: observed upstream behaviour, from recordings, verified; its provenance stays in
+the private protocol repository.
 
 1. **CIS serves nothing unique.** It serves Canoe123's own results table and on-course record,
    re-rendered. Where compared, values were byte-identical to the XML snapshot: times, penalties,
@@ -102,7 +102,7 @@ None of these facts is carried by the contract:
   was armed at any recorded event;
 - the CIS initialisation session id.
 
-**Scoring-terminal reset.** Answered from the source (2026-09-25, #179): the action resets only the
+**Scoring-terminal reset.** Answered (2026-09-25, #179; E1): the action resets only the
 hardware judge terminals on their own port and never touches the TCP command receiver the server
 writes through. Penalty-check keeps no direct terminal channel, and nothing needs to react to the
 reset (`CONTRACTS.md` §7.3).
