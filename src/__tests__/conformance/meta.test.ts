@@ -125,14 +125,11 @@ describe('expected-red ledger and modes (issue #200 rows 3, 4, 5)', () => {
     for (const id of LIVE_INGEST) expect(listed).not.toContain(id);
   });
 
-  it('expected-red after #205 (Standing assembly): only the five workflow-state check vectors remain (#211)', () => {
-    // The ratchet: ids leave as core issues land. #203 took the merge vectors; #205 took the eight standing-assembly vectors,
-    // `standing-not-resent-on-running-tick` and `classification-emptied-keeps-last-standing` (round 20, item 22). The gate checks are #211's.
+  it('expected-red after #211 (gate checks): the ledger is empty, every server vector is expected to pass', () => {
+    // The ratchet: ids leave as core issues land. #203 took the merge vectors, #205 the standing-assembly ones, #211 the five `check-*` workflow vectors.
     const nonMerge = serverVectors().filter((v) => !Array.isArray(v.given)).map((v) => v.id);
-    expect(nonMerge.length).toBe(13);
-    const checks = nonMerge.filter((id) => id.startsWith('check-'));
-    expect(checks.length).toBe(5);
-    expect([...loadExpectedRed()].sort()).toEqual([...checks].sort());
+    expect(nonMerge.filter((id) => id.startsWith('check-')).length).toBe(5);
+    expect(loadExpectedRed()).toEqual([]);
   });
 
   it('the ledger is read from the file it is given, not from a constant', () => {
@@ -189,8 +186,8 @@ describe('harness can fail (issue #200 row 15)', () => {
 });
 
 describe('core-adapter contract (issue #200 row 13, "Seam")', () => {
-  it('until the gate checks exist (#211) their entry point throws CoreMissing; the Standing assembly (#205) and createMergePort (#203) are wired to src/core and do not', () => {
+  it('the gate checks (#211), the Standing assembly (#205) and createMergePort (#203) are all wired to src/core: none throws CoreMissing', () => {
     expect(() => corePort.assembleStanding({ entries: [] }, { kind: 'phase', phaseId: 'p' })).not.toThrow();
-    expect(() => corePort.gateStatus({ checks: [], flags: [], presented: {} })).toThrow(CoreMissing);
+    expect(() => corePort.gateStatus({ checks: [], flags: [], presented: {} })).not.toThrow(CoreMissing);
   });
 });

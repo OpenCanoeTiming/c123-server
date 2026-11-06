@@ -47,22 +47,12 @@ describe('the real vectors.test.ts in a child vitest (issue #200 rows 1, 2, 5; r
     expect(exit).toBe(0);
   }, 120_000);
 
-  it('VECTORS_STRICT=1: exactly the 98 titles again, the ledger is ignored, the 5 listed ids read failed and exit is 1', () => {
+  it('VECTORS_STRICT=1: exactly the 98 titles again, the ledger is empty so nothing differs from a normal run: all passed, exit 0', () => {
+    expect(loadExpectedRed()).toEqual([]);
     const { exit, results } = suite(true);
     expect(results.map((r) => r.title).sort()).toEqual([...ids].sort());
-    // Strict mode shows the true state: the merge vectors (#203) are the core's to pass, so only the listed ids are pinned.
-    const listed = new Set(loadExpectedRed().map((id) => `vector ${id}`));
-    expect(listed.size).toBe(5);
-    expect(results.filter((r) => listed.has(r.title) && r.status !== 'failed').map((r) => r.title)).toEqual([]);
-    expect(exit).toBe(1);
-    // The 13 non-merge vectors still fail for the one reason CoreMissing (a TypeError in the wiring would read as red too);
-    // `standing-not-resent-on-running-tick` and `classification-emptied-keeps-last-standing` (round 20; #204) are merge-shaped and fail
-    // on their `standing.updated` counts until #205: the second asserts the Standing is not re-pushed after an emptied classification
-    // table, which needs the assembled Standing the core does not build yet.
-    const NEEDS_STANDING = new Set(['vector standing-not-resent-on-running-tick', 'vector classification-emptied-keeps-last-standing']);
-    expect(
-      results.filter((r) => listed.has(r.title) && !NEEDS_STANDING.has(r.title) && !/CoreMissing/.test(r.message)).map((r) => r.title),
-    ).toEqual([]);
+    expect(results.filter((r) => r.status !== 'passed').map((r) => r.title)).toEqual([]);
+    expect(exit).toBe(0);
   }, 120_000);
 });
 
