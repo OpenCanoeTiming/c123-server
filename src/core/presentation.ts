@@ -26,7 +26,8 @@ function presentGates(a: AttemptState): Slot | undefined {
   const inf = fs.inference;
   if (!a.listed || inf?.state !== 'known') return shown;
   const onCourse = new Map((inf.value as Gate[]).map((g) => [g.number, g.penalty]));
-  const newestIsOnCourse = inf.seq > shown.seq;
+  // by first ingestion: a re-delivered row is no newer judging (INV-5)
+  const newestIsOnCourse = inf.at > shown.at || (inf.at === shown.at && inf.seq > shown.seq);
   const value = (shown.value as Gate[]).map((g) => {
     const stream = onCourse.get(g.number) ?? null;
     return { ...g, penalty: newestIsOnCourse ? (stream ?? g.penalty) : (g.penalty ?? stream) };
@@ -80,8 +81,9 @@ export function presentedFinish(a: AttemptState): string | undefined {
 }
 
 /** §4.5: run 1 unavailable once run 2 has been observed and neither path can supply it. */
-function firstRunUnavailable(s: CoreState, phaseId: string | undefined, bib: string): unknown {
-  if (phaseId === undefined || s.xmlRead) return undefined;
+function firstRunUnavailable(s: CoreState, phaseId: string, bib: string): unknown {
+  const reason = s.options.xmlConfigured === false ? 'not-configured' : s.options.xml === 'unreachable' ? 'source-unreachable' : undefined;
+  if (reason === undefined || s.xmlRead) return undefined;
   const fmt = fmtFor(s, phaseId);
   if (fmt.pair?.role !== 'first') return undefined;
   const stated = s.phases.get(phaseId)?.plain.get('pair') as { siblingPhaseId?: string | null } | undefined;
@@ -89,7 +91,7 @@ function firstRunUnavailable(s: CoreState, phaseId: string | undefined, bib: str
   const sibling = stated?.siblingPhaseId ?? `${classKey}_${fmt.pair.siblings[0] ?? ''}_${rest}`;
   const second = s.attempts.get(`${sibling}:${bib}`);
   if (second === undefined || present(second.slots.get('outcome'))?.state !== 'known') return undefined;
-  return { state: 'unavailable', reason: s.options.xmlConfigured === false ? 'not-configured' : 'source-unreachable' };
+  return { state: 'unavailable', reason };
 }
 
 const PLAIN_ENVELOPED = ['startOrder', 'scheduledStart', 'heat', 'startLane', 'courseOrder', 'timeToBeat', 'underReview', 'qualified'] as const;
@@ -125,8 +127,7 @@ export function viewAttempt(s: CoreState, a: AttemptState): Record<string, unkno
     countingRun: field('countingRun'),
   };
   for (const f of PLAIN_ENVELOPED) out[f] = field(f);
-  const armed = s.courses.get(String(s.phases.get(a.phaseId ?? '')?.fields.get('courseId')?.xml?.value))?.plain.get('splitsArmed');
-  if (armed === false) out['splits'] = { state: 'unavailable', reason: 'not-applicable' };
+  if (s.splitsArmed === false) out['splits'] = { state: 'unavailable', reason: 'not-applicable' };
   return out;
 }
 

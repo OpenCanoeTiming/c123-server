@@ -7,15 +7,15 @@
  */
 import { applyListing, applyLeaveRule, leave, list, observeStreamOutcome, observeStreamStatus, oncourseView } from './oncourse.js';
 import { currentDiagnostics, flush } from './notify.js';
-import { phaseResource, attemptFor, fmtFor, resource, unnamedAttempt } from './registry.js';
+import { phaseResource, attemptFor, fmtFor, resource } from './registry.js';
 import { FIRST_RUN_FIELDS, PAIR_FIELDS, SECOND_RUN_EMPTY_FIELDS, hasResult, retract } from './retraction.js';
 import { retain, fieldSlots, slotOf, tick } from './retention.js';
 import { applyRow, floorStatus, putCells, putIdentity, putStanding, rebindCells } from './rows.js';
-import { applyClassification, observeResource, viewResource } from './resources.js';
+import { applyClassification, dirtyHandle, observeResource, refreshCourses, viewResource } from './resources.js';
 import { submitWrite, wireWrite } from './writes.js';
 import { viewAttempt, viewUnknownAttempt } from './presentation.js';
 import { markOf, startGeneration } from './generations.js';
-import type { AttemptState, ClassificationRow, ClassificationState, CoreState, Diagnostic, Element, MergeCoreOptions, Message, ResourceState, Row, Source } from './types.js';
+import type { AttemptState, ClassificationRow, ClassificationState, CoreState, Diagnostic, Element, MergeCoreOptions, Message, Row, Source } from './types.js';
 
 export type { MergeCoreOptions } from './types.js';
 
@@ -55,6 +55,12 @@ function validate(s: CoreState, elements: readonly Element[]): void {
   }
 }
 
+/** The parsers always name an Attempt; only a vector leaves it to `context.attemptId`. Anything else is a programming error. */
+function keylessAttempt(s: CoreState): string {
+  if (s.options.attemptId === undefined) throw new Error('an element that names no Attempt, with no attemptId option (CONFORMANCE-VECTORS §1)');
+  return s.options.attemptId;
+}
+
 function applyEvent(s: CoreState, el: Element): void {
   switch (el['event']) {
     case 'tcp-connected':
@@ -75,7 +81,7 @@ function applyEvent(s: CoreState, el: Element): void {
       return;
     case 'oncourse-left': {
       const id = el['attemptId'];
-      const a = typeof id === 'string' ? s.attempts.get(id) : s.unnamed;
+      const a = s.attempts.get(typeof id === 'string' ? id : keylessAttempt(s));
       if (a !== undefined) leave(s, a, el);
       return;
     }
@@ -188,7 +194,6 @@ function observeAttempt(s: CoreState, a: AttemptState, el: Element, field: strin
     return;
   }
   list(s, a, el);
-  s.currentPhaseId = a.phaseId;
   switch (field) {
     case 'onCourse':
       applyListing(s, a, el, el['value'] as { dtStart: string | null; dtFinish: string | null }, seq);
@@ -225,37 +230,22 @@ function observe(s: CoreState, el: Element): void {
   if (attemptId !== undefined) observeAttempt(s, attemptFor(s, attemptId, el.observedAt, source), el, field);
   else if (entryId !== undefined || el['resource'] === 'entry') {
     const r = resource(s.entries, entryId ?? '');
-    if (observeResource(s, r, el, field, source, tick(s))) s.dirtyResources.add(dirty(s, 'entry', r));
+    if (observeResource(s, r, el, field, source, tick(s))) s.dirtyResources.add(dirtyHandle('entry', r));
   } else if (classId !== undefined) {
     const r = resource(s.classes, classId);
-    if (observeResource(s, r, el, field, source, tick(s))) s.dirtyResources.add(dirty(s, 'class', r));
+    if (observeResource(s, r, el, field, source, tick(s))) s.dirtyResources.add(dirtyHandle('class', r));
   } else if (courseId !== undefined) {
     const r = resource(s.courses, courseId);
-    if (observeResource(s, r, el, field, source, tick(s))) s.dirtyResources.add(dirty(s, 'course', r));
+    if (observeResource(s, r, el, field, source, tick(s))) s.dirtyResources.add(dirtyHandle('course', r));
   } else if (phaseId !== undefined) {
     const r = phaseResource(s, phaseId, el.observedAt);
     if (observeResource(s, r, el, field, source, tick(s))) s.dirtyPhases.add(r);
-  } else observeAttempt(s, unnamedAttempt(s, el.observedAt, source), el, field);
-}
-
-const handles = new WeakMap<ResourceState, { type: 'entry' | 'class' | 'course'; resource: ResourceState }>();
-/** The dirty set holds one handle per resource. */
-function dirty(_s: CoreState, type: 'entry' | 'class' | 'course', r: ResourceState): { type: 'entry' | 'class' | 'course'; resource: ResourceState } {
-  let h = handles.get(r);
-  if (h === undefined) {
-    h = { type, resource: r };
-    handles.set(r, h);
-  }
-  return h;
+  } else observeAttempt(s, attemptFor(s, keylessAttempt(s), el.observedAt, source), el, field);
 }
 
 /** Parser diagnostics of the kinds `GET /api/diagnostics` serves; a restated row replaces its Attempt's. The ingest-only kinds reach the admin log, not this list. */
 function applyDiagnostic(s: CoreState, el: Element, inUnit: Set<string>): void {
   const d = el['diagnostic'] as Diagnostic | { kind: string; signatures?: string[] };
-  if (d.kind === 'fabricated-course') {
-    if (s.currentPhaseId !== undefined) phaseResource(s, s.currentPhaseId, el.observedAt).fabricated = true;
-    return;
-  }
   if (d.kind === 'unparseable-cell' || d.kind === 'member-sum-mismatch') {
     const key = JSON.stringify(d);
     inUnit.add(key);
@@ -281,6 +271,7 @@ function dispatch(s: CoreState, el: Element, inUnit: Set<string>): void {
   if ('event' in el) applyEvent(s, el);
   else if ('snapshot' in el) applySnapshot(s, el, inUnit);
   else if ('diagnostic' in el) applyDiagnostic(s, el, inUnit);
+  else if ('courseRefresh' in el) refreshCourses(s, el, tick(s));
   else if ('field' in el) observe(s, el);
   // `sourceStatus`, `unparseable` and `unknownType` state nothing the merge reads
 }
@@ -288,8 +279,8 @@ function dispatch(s: CoreState, el: Element, inUnit: Set<string>): void {
 export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
   const s: CoreState = {
     options, counter: options.initialSeq ?? 0, epoch: 0, tcpUp: undefined, rewrite: undefined, xmlRead: false, previousTcpAt: undefined,
-    attempts: new Map(), unnamed: undefined, phases: new Map(), entries: new Map(), classes: new Map(), courses: new Map(), classifications: new Map(),
-    listed: new Map(), oncourseAsOf: null, oncourseSent: '[[],null]', featured: null, writes: [], currentPhaseId: undefined,
+    attempts: new Map(), phases: new Map(), entries: new Map(), classes: new Map(), courses: new Map(), classifications: new Map(),
+    listed: new Map(), oncourseAsOf: null, oncourseSent: '[[],null]', featured: null, writes: [], splitsArmed: undefined,
     parserDiagnostics: new Map(), phaseDiagnostics: new Map(), diagnosticsSent: '[]', diagnosticsDirty: false, log: [],
     dirtyAttempts: new Set(), dirtyPhases: new Set(), dirtyResources: new Set(), dirtyWrites: new Set(), pendingRebaseline: undefined,
     counters: { generations: 0, retractions: 0, contradictions: 0, leaves: 0, refusals: {} },
@@ -309,7 +300,7 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
       flush(s, xml);
     },
     presented: (id) => {
-      const a = s.attempts.get(id) ?? s.unnamed;
+      const a = s.attempts.get(id);
       return a === undefined ? viewUnknownAttempt(s, id) : viewAttempt(s, a);
     },
     entry: (entryId = '') => {

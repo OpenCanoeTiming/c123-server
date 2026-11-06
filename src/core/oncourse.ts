@@ -4,8 +4,8 @@
  */
 import { fieldSlots, retain, slotOf, tick } from './retention.js';
 import { contradict } from './retraction.js';
-import { startGeneration } from './generations.js';
-import { present } from './precedence.js';
+import { marksHeld, startGeneration } from './generations.js';
+import { isMark, present, presentStatus } from './precedence.js';
 import { fmtFor, instant } from './registry.js';
 import { settlePending } from './rows.js';
 import type { AttemptState, CoreState, Element } from './types.js';
@@ -15,13 +15,16 @@ export const ON_COURSE_LEAVE_AFTER_SECONDS = 5;
 const LEAVE_AFTER_MS = ON_COURSE_LEAVE_AFTER_SECONDS * 1000;
 
 /**
- * THE leave rule, the one place #204 changes. Upstream has stopped listing an Attempt when no on-course message names it for the
- * constant "while other TCP messages keep arriving": a message that ends a silence longer than the constant is not evaluated,
- * because nothing was arriving. That is the least the sentence says, not the stall exemption (#204): the very next message
- * evaluates the same gap, so a stall still evicts, and re-learning the list after one is #204's.
+ * THE leave rule, the one place #204 changes. DERIVATIONS §4.1's one evaluation: at a TCP message arriving the constant or more after
+ * the previous one nothing leaves and the Attempt counts from that message (the gap spans a stall, "while other TCP messages keep
+ * arriving"); at every other message an Attempt not named for the constant has left.
  */
 function hasStoppedListing(a: AttemptState, now: number, previousTcpAt: number | undefined): boolean {
-  if (previousTcpAt === undefined || now - previousTcpAt >= LEAVE_AFTER_MS) return false;
+  if (previousTcpAt === undefined) return false;
+  if (now - previousTcpAt >= LEAVE_AFTER_MS) {
+    a.lastListedAt = now;
+    return false;
+  }
   return now - a.lastListedAt >= LEAVE_AFTER_MS;
 }
 
@@ -59,15 +62,43 @@ export function observeStreamStatus(s: CoreState, a: AttemptState, el: Element, 
 
 const CARRIED = ['placement', 'pairTotal', 'countingRun'] as const;
 
+/** A `finished` or a mark the table presents: no listing displaces it (INV-2 rule 1). */
+function tablePresentsResult(a: AttemptState): boolean {
+  const shown = presentStatus(a.slots.get('status'));
+  return shown?.kind === 'row' && (shown.value === 'finished' || isMark(shown.value));
+}
+
+/** §4.1: the stream's own finish, withdrawn by a listing without it. No diagnostic: INV-2d is for a finish the table presented. */
+function withdrawFinish(s: CoreState, a: AttemptState): void {
+  if (a.gen.finish === undefined && streamStatus(a) !== 'finished') return;
+  delete a.gen.finish;
+  delete fieldSlots(a.slots, 'outcome').inference;
+  s.dirtyAttempts.add(a);
+}
+
+/**
+ * §4.11: the first start is no change; a different start with no finish in a recorded generation is the re-run; every other
+ * different start is a correction inside the generation. No results-table value, `run` or placement moves at a correction.
+ */
+function observeStart(s: CoreState, a: AttemptState, el: Element, start: string, ended: boolean, seq: number): void {
+  if (a.gen.start === undefined) {
+    a.gen.start = start;
+    a.gen.markAtStart = marksHeld(a);
+  } else if (start === a.gen.start) return;
+  else if (!ended && a.gen.recorded) startGeneration(s, a, el, start, seq);
+  else {
+    a.gen.start = start;
+    a.gen.correcting = true;
+  }
+}
+
 /** `{ dtStart, dtFinish }` of one listing: a new start, a finish, or the absence of one the row states. */
 export function applyListing(s: CoreState, a: AttemptState, el: Element, value: { dtStart: string | null; dtFinish: string | null }, seq: number): void {
   const fmt = fmtFor(s, a.phaseId);
   const start = instant(s, a.phaseId, value.dtStart, el.observedAt);
   const finish = instant(s, a.phaseId, value.dtFinish, el.observedAt);
-  if (start !== undefined) {
-    if (a.gen.start === undefined) a.gen.start = start;
-    else if (start !== a.gen.start) startGeneration(s, a, el, start, seq);
-  }
+  a.gen.correcting = false;
+  if (start !== undefined) observeStart(s, a, el, start, finish !== undefined, seq);
   if (finish !== undefined) {
     if (a.contradiction !== undefined) {
       delete a.contradiction;
@@ -78,19 +109,16 @@ export function applyListing(s: CoreState, a: AttemptState, el: Element, value: 
     return;
   }
   if (start === undefined) {
-    if (fmt.heats) return;
-    const cur = streamStatus(a);
-    if (cur === undefined || cur === 'left-without-finish' || cur === 'not-started') setStream(s, a, el, 'at-start', seq);
+    // §4.1: `at-start` whatever preceded it (staging, a start deleted, a finish withdrawn); the recorded start stays
+    if (fmt.heats || tablePresentsResult(a)) return;
+    withdrawFinish(s, a);
+    delete fieldSlots(a.slots, 'outcome').inference;
+    setStream(s, a, el, 'at-start', seq);
     return;
   }
-  if (!fmt.cross) {
-    if (contradict(s, a, el, seq)) s.dirtyAttempts.add(a);
-    else if (streamStatus(a) === 'finished') {
-      // the finish was taken away before any row carried it
-      delete a.gen.finish;
-      delete fieldSlots(a.slots, 'outcome').inference;
-      s.dirtyAttempts.add(a);
-    }
+  if (!fmt.heats) {
+    if (!a.gen.correcting && contradict(s, a, el, seq)) s.dirtyAttempts.add(a);
+    else withdrawFinish(s, a);
   }
   setStream(s, a, el, 'on-course', seq);
   if (!a.gen.started) {
@@ -104,7 +132,7 @@ export function observeStreamOutcome(s: CoreState, a: AttemptState, el: Element,
   const finishing = value.kind === 'duration';
   const fs = fieldSlots(a.slots, 'outcome');
   if (!finishing && a.gen.finish !== undefined) return;
-  if (finishing && a.gen.completed && fs.inference !== undefined) return;
+  if (finishing && a.gen.completed && !a.gen.correcting && fs.inference !== undefined) return; // §4.3: a correcting listing restates the time past the stops
   const eventTime = instant(s, a.phaseId, el['eventTime'] as string | undefined, el.observedAt);
   const extra = {
     confidence: el['confidence'] === 'inferred' ? ('inferred' as const) : ('authoritative' as const),

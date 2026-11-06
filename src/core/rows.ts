@@ -3,8 +3,8 @@
  * so there is one path; an absent key is an omission (INV-1), `null` an explicit "no such value".
  */
 import { judgingComplete, gatesFromCells, faultsFromCells, usable, type Cells } from '../ingest/common.js';
-import { isStaleMark, attribute, keepAsHistory, markOf, pendingFor, timeOf } from './generations.js';
-import { isMark, presentStatus, refusedByGuard } from './precedence.js';
+import { isStaleMark, attribute, keepAsHistory, markOf, pendingFor, recordsGeneration, timeOf } from './generations.js';
+import { isMark, present, presentStatus, refusedByGuard } from './precedence.js';
 import { fmtFor } from './registry.js';
 import { refuse } from './counters.js';
 import { carriesContradicted } from './retraction.js';
@@ -20,30 +20,30 @@ const NOT_CONFIGURED = { state: 'unavailable', reason: 'not-configured' } as con
 /** Retains one row value and settles rule 4 against it. */
 function put(s: CoreState, a: AttemptState, source: Source, el: Element, field: string, value: unknown, seq: number, extra: Partial<Slot> = {}): void {
   const fs = fieldSlots(a.slots, field);
+  const view = field === 'status' ? presentStatus : present;
   const slot = slotOf(s, el, source, 'row', value, seq, extra);
-  const changed = retain(fs, source, slot);
-  if (changed) s.dirtyAttempts.add(a);
-  if (fs.operator !== undefined) resolveEcho(s, a, fs, field, slot, changed);
+  const prior = fs[source];
+  const shown = view(fs);
+  const changed = retain(fs, source, slot, view);
+  if (changed || view(fs) !== shown) s.dirtyAttempts.add(a);
+  if (fs.operator !== undefined) resolveEcho(s, a, fs, field, slot, prior, changed);
   if (source !== 'xml' || !changed) return;
   if (fs.tcp !== undefined && refusedByGuard(fs.tcp, slot)) refuse(s, 'content-age');
   else if (field === 'status' && isMark(slot.value) && presentStatus(fs)?.value !== slot.value) refuse(s, 'xml-mark');
 }
 
 /** The course bound to a Phase, known only once a snapshot binds it (§4.6). */
-export function boundSlots(s: CoreState, phaseId: string | undefined): CourseSlot[] | undefined {
-  if (phaseId === undefined) return undefined;
+export function boundSlots(s: CoreState, phaseId: string): CourseSlot[] | undefined {
   const courseId = s.phases.get(phaseId)?.fields.get('courseId')?.xml;
   if (courseId?.state !== 'known') return undefined;
   const fs = s.courses.get(String(courseId.value))?.fields.get('slots');
-  const slots = (fs?.xml ?? fs?.tcp)?.value as CourseSlot[] | undefined;
+  const slots = fs?.xml?.value as CourseSlot[] | undefined;
   return usable(slots) ? slots : undefined;
 }
 
 /** §4.6: `not-configured` when nothing can bind; otherwise the Phase is waiting for its snapshot. */
-function courseUnavailable(s: CoreState, phaseId: string | undefined): boolean {
-  if (s.options.xmlConfigured === false || phaseId === undefined) return s.options.xmlConfigured === false;
-  const p = s.phases.get(phaseId);
-  return p?.fabricated === true || p?.fields.get('courseId')?.xml?.state === 'not-yet';
+function courseUnavailable(s: CoreState, phaseId: string): boolean {
+  return s.options.xmlConfigured === false || s.phases.get(phaseId)?.fields.get('courseId')?.xml?.state === 'not-yet';
 }
 
 /** Cells with no course in the parser's `ctx`: gates or faults once a course is bound, else retained until one is (§0.5). */
@@ -97,6 +97,7 @@ function writeRow(s: CoreState, a: AttemptState, source: Source, el: Element, ro
   const time = timeOf(row);
   const extra: Partial<Slot> = 'judgingComplete' in row ? { judgingComplete: row['judgingComplete'] as boolean | null } : {};
   const placed = row['placement'] !== null && row['placement'] !== undefined;
+  if (recordsGeneration(a, mark, time)) a.gen.recorded = true;
 
   // §4.4 the untimed flag: read from the snapshot row, inherited by the Attempt's TCP rows
   if (row['untimed'] === true) {

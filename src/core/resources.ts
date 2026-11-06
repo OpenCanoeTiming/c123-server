@@ -9,7 +9,7 @@ import { refuse } from './counters.js';
 import type { ClassificationRow, CoreState, Element, ResourceState, Source } from './types.js';
 
 /** Fields that are not `Observed` on the wire (§2.3, §2.4). */
-const PLAIN: ReadonlySet<string> = new Set(['classId', 'format', 'kind', 'scoringKind', 'pair', 'heats', 'stage', 'date', 'code', 'discipline', 'splitsArmed']);
+const PLAIN: ReadonlySet<string> = new Set(['classId', 'format', 'kind', 'scoringKind', 'pair', 'heats', 'stage', 'date', 'code', 'discipline']);
 
 const PHASE_FIELDS = ['courseId', 'scheduledStart', 'programmeOrder', 'title', 'status'];
 const ENTRY_FIELDS = ['displayName', 'members', 'club', 'nation', 'ageCategoryId', 'eventBib', 'isTeam'];
@@ -32,14 +32,42 @@ export function observeResource(s: CoreState, r: ResourceState, el: Element, fie
   }
   const stated = el['state'] === 'unavailable' || el['state'] === 'not-yet' ? { state: el['state'], reason: el['reason'] } : el['value'];
   const slot = slotOf(s, el, source, 'row', stated, seq, el['confidence'] === 'inferred' ? { confidence: 'inferred' } : {});
-  return retain(fieldSlots(r.fields, field), source, slot);
+  const fs = fieldSlots(r.fields, field);
+  const shown = present(fs);
+  return retain(fs, source, slot) || present(fs) !== shown;
+}
+
+/**
+ * §2.3: a `RaceConfig` names no course. Every Course whose layout, with the `S` markers TCP strips removed, equals its gate string
+ * takes its `captions`, and nothing else; a string matching none refreshes nothing. A fabricated one decides nothing (§4.6).
+ */
+export function refreshCourses(s: CoreState, el: Element, seq: number): void {
+  const { gateString, captions, splitsArmed, fabricated } = el['courseRefresh'] as { gateString: string; captions: string[]; splitsArmed: boolean | null; fabricated: boolean };
+  if (fabricated) return;
+  if (splitsArmed !== null) s.splitsArmed = splitsArmed;
+  for (const course of s.courses.values()) {
+    const layout = course.fields.get('layout')?.xml;
+    if (layout?.state !== 'known' || String(layout.value).replaceAll('S', '') !== gateString) continue;
+    if (retain(fieldSlots(course.fields, 'captions'), 'tcp', slotOf(s, el, 'tcp', 'row', captions, seq))) s.dirtyResources.add(dirtyHandle('course', course));
+  }
+}
+
+const handles = new WeakMap<ResourceState, { type: 'entry' | 'class' | 'course'; resource: ResourceState }>();
+/** The dirty set holds one handle per resource. */
+export function dirtyHandle(type: 'entry' | 'class' | 'course', r: ResourceState): { type: 'entry' | 'class' | 'course'; resource: ResourceState } {
+  let h = handles.get(r);
+  if (h === undefined) {
+    h = { type, resource: r };
+    handles.set(r, h);
+  }
+  return h;
 }
 
 export function viewResource(r: ResourceState, kind: 'phase' | 'entry' | 'class' | 'course'): Record<string, unknown> {
   const names = kind === 'phase' ? PHASE_FIELDS : kind === 'entry' ? ENTRY_FIELDS : kind === 'class' ? CLASS_FIELDS : COURSE_FIELDS;
   const key = kind === 'phase' ? 'phaseId' : kind === 'entry' ? 'entryId' : kind === 'class' ? 'classId' : 'courseId';
   const out: Record<string, unknown> = { [key]: r.id };
-  for (const [k, v] of r.plain) if (k !== 'splitsArmed') out[k] = v;
+  for (const [k, v] of r.plain) out[k] = v;
   for (const f of new Set([...names, ...r.fields.keys()])) out[f] = envelope(present(r.fields.get(f)), false);
   return out;
 }

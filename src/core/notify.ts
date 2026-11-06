@@ -93,7 +93,7 @@ export function flush(s: CoreState, xmlInUnit: boolean): void {
     if (finish === a.finish) continue;
     if (finish === undefined) delete a.finish;
     else a.finish = finish;
-    const p = a.phaseId === undefined ? undefined : s.phases.get(a.phaseId);
+    const p = s.phases.get(a.phaseId);
     if (p !== undefined) phases.add(p);
   }
   for (const p of phases) {

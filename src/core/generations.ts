@@ -14,14 +14,34 @@ export const timeOf = (row: Row): number | undefined => {
 const finishOf = (row: Row): string | undefined => row['finishTime'] as string | undefined;
 export const markOf = (row: Row): ResultMark | undefined => (isMark(row['status']) ? row['status'] : undefined);
 
-/** A generation increments on a new start, and on that alone. */
+/** The marks standing on the table as either source holds it. */
+export function marksHeld(a: AttemptState): ResultMark[] {
+  const fs = a.slots.get('status');
+  return [fs?.tcp?.value, fs?.xml?.value].filter(isMark);
+}
+
+/**
+ * DERIVATIONS §4.11 "Recorded": a row with a time or a mark, attributed after the recorded start, that states something the table
+ * did not already hold on either source. A mark standing at the start records nothing however it arrives afterwards; `*` is no mark.
+ */
+export function recordsGeneration(a: AttemptState, mark: ResultMark | undefined, time: number | undefined): boolean {
+  if (a.gen.start === undefined) return false;
+  if (mark !== undefined) return !a.gen.markAtStart.includes(mark) && !marksHeld(a).includes(mark);
+  if (time === undefined) return false;
+  const outcome = a.slots.get('outcome');
+  return ![outcome?.tcp, outcome?.xml].some((slot) => (slot?.value as { runSeconds?: number } | undefined)?.runSeconds === time);
+}
+
+/** A generation increments on a new start at a listing with no finish, in a recorded generation, and on that alone (§4.11). */
 export function startGeneration(s: CoreState, a: AttemptState, el: Element, start: string | undefined, seq: number): void {
   const presented = presentStatus(a.slots.get('status'));
   if (isMark(presented?.value)) a.remembered = presented.value;
   else delete a.remembered;
+  const markAtStart = start !== undefined ? marksHeld(a) : [];
   forgetRunScoped(a);
   a.gen = {
-    n: a.gen.n + 1, needsAttribution: start !== undefined, completed: false, started: false, firstEnvelope: a.gen.firstEnvelope,
+    n: a.gen.n + 1, recorded: false, markAtStart, correcting: false, needsAttribution: start !== undefined, completed: false, started: false,
+    firstEnvelope: a.gen.firstEnvelope,
     ...(start !== undefined ? { start } : {}),
   };
   a.held = [];

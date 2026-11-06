@@ -2,6 +2,7 @@
  * Per-source retention (INV-2, INV-2c, INV-5): the latest observation per source of each field. Refused candidates live
  * here too, with their content age; which of them is presented is `precedence.ts`'s question, never this module's.
  */
+import { present } from './precedence.js';
 import type { AttemptState, CoreState, Element, FieldSlots, Slot, Source } from './types.js';
 
 export const tick = (s: CoreState): number => ++s.counter;
@@ -39,19 +40,34 @@ export function slotOf(
 const same = (a: Slot, b: Slot): boolean =>
   a.state === b.state && a.reason === b.reason && a.eventTime === b.eventTime && a.marker === b.marker && JSON.stringify(a.value) === JSON.stringify(b.value);
 
+const laterAge = (a: number | null, b: number | null): number | null => (b !== null && (a === null || b > a) ? b : a);
+
 /**
- * INV-5: an identical re-delivery changes nothing retained, except that the content age only rises (round 18): a later
- * rewrite restating a refused candidate advances its age, and INV-2c then settles it. Returns whether the value changed.
+ * INV-5 and rule 2. A row re-delivered equal to what its source holds is an observation in its own right where that changes what is
+ * presented: not presented from that source (the other source displaced it across an outage), it replaces the slot whole, `at` and
+ * `observedAt` included. Presented, it is a no-op for the envelope and only renews the slot's continuity and sequence, `at` kept
+ * (P9). The content age only rises (round 18): a later rewrite restating a refused candidate advances it, and INV-2c then settles
+ * it. On-course inferences carry no such continuity: they stay as first seen. Returns whether the source's value changed.
  */
-export function retain(fs: FieldSlots, channel: Channel, slot: Slot): boolean {
+export function retain(fs: FieldSlots, channel: Channel, slot: Slot, view: (fs: FieldSlots) => Slot | undefined = present): boolean {
   const cur = fs[channel];
-  if (cur !== undefined && same(cur, slot)) {
-    if (slot.age !== null && (cur.age === null || slot.age > cur.age)) cur.age = slot.age;
-    if (slot.judgingComplete !== undefined) cur.judgingComplete = slot.judgingComplete;
-    return false;
+  if (cur === undefined || !same(cur, slot)) {
+    fs[channel] = slot;
+    return true;
   }
-  fs[channel] = slot;
-  return true;
+  const age = laterAge(cur.age, slot.age);
+  if (channel === 'tcp' || channel === 'xml') {
+    const other = fs[channel === 'tcp' ? 'xml' : 'tcp'];
+    if (other !== undefined && view(fs) === other) {
+      fs[channel] = { ...slot, age };
+      return false;
+    }
+    cur.seq = slot.seq;
+    cur.epoch = slot.epoch;
+  }
+  cur.age = age;
+  if (slot.judgingComplete !== undefined) cur.judgingComplete = slot.judgingComplete;
+  return false;
 }
 
 /** The fields a new generation clears (CONTRACTS §2.6). */

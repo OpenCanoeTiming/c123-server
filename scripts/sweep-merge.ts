@@ -41,7 +41,7 @@ for (const rec of readdirSync(dir).filter((d) => statSync(join(dir, d)).isDirect
   const phaseDates: Record<string, string> = {};
   const phaseCourse = new Map<string, string>();
   const courseSlots = new Map<string, CourseSlot[]>();
-  const ctx: IngestContext = { observedAt: '', zone: ZONE, phaseDates, courses: {}, boundCourseId: undefined, eventDate, externalIdScheme: 'sweep' };
+  const ctx: IngestContext = { observedAt: '', zone: ZONE, phaseDates, courses: {}, eventDate, externalIdScheme: 'sweep' };
   const rebuild = (): void => {
     const courses: Record<string, { courseId: string; slots: CourseSlot[] }> = {};
     for (const [phaseId, courseId] of phaseCourse) {
@@ -143,16 +143,8 @@ for (const rec of readdirSync(dir).filter((d) => statSync(join(dir, d)).isDirect
         if (isXml && field === 'date' && typeof e['phaseId'] === 'string') phaseDates[e['phaseId']] = e['value'] as string;
         else if (isXml && field === 'courseId' && typeof e['phaseId'] === 'string' && typeof e['value'] === 'string') { phaseCourse.set(e['phaseId'], e['value']); refresh = true; }
         else if (field === 'slots' && typeof e['courseId'] === 'string' && Array.isArray(e['value'])) {
-          const have = courseSlots.get(e['courseId']);
-          const next = e['value'] as CourseSlot[];
-          const sameLayout = have !== undefined && have.length === next.length && have.every((s, i) => s.kind === next[i]?.kind);
-          // XML carries no captions: keep TCP's. TCP refreshes captions only: its RaceConfig names no course, and with two races
-          // alternating it describes the other one (jarni-so-odp 14:43-14:46, DERIVATIONS §2.3 "the currently running Phase")
-          if (isXml ? !sameLayout : sameLayout || have === undefined) courseSlots.set(e['courseId'], next);
+          courseSlots.set(e['courseId'], e['value'] as CourseSlot[]);
           refresh = true;
-        } else if (!isXml && typeof e['attemptId'] === 'string' && field === 'status') {
-          const phaseId = e['attemptId'].slice(0, e['attemptId'].lastIndexOf(':'));
-          ctx.boundCourseId = phaseCourse.get(phaseId) ?? ctx.boundCourseId;
         }
       }
       if (refresh) rebuild();
