@@ -270,8 +270,11 @@ the step index, the Attempt, the field and the property number.
    read from the raw stream at admission; "still in the latest `oncourse.updated`" is the **D**
    reading, for a re-run on the published fixture only), a judged cell (`0`, `2`, `50`) never becomes
    `null` at a results-table step — upstream's own withdrawal, the stream's listing blanking a cell
-   it judged, is presented, `provisional` recomputed (D4; property 11's list; recorded: nkz-19so
-   C1W_BR1_19:40 cell 16 at 08:38:18.181; round 21, second pass); after it has left, and until a
+   it judged, is presented only where the presented row's cell is blank too, `provisional`
+   recomputed; a row's judged cell stands against the stream blank (INV-2 rule 1; recorded:
+   jarni-so-odp C1M_BR1_18:26 cell 19 at 12:17:19.030, the row `0`) (D4; property 11's list;
+   recorded: nkz-19so C1W_BR1_19:40 cell 16 at 08:38:18.181, the presented TCP row blank while the
+   XML row still holds `0`; round 21, second pass); after it has left, and until a
    re-listing of the generation, cells change only at a results-table
    step. (c) A field presented from `tcp` flips to `xml` only: after a `tcp-disconnected` that
    followed the step that ingested the presented `tcp` observation; by rule 2's mark exception
@@ -376,7 +379,8 @@ the step index, the Attempt, the field and the property number.
     C1W_BR2_19:35 staged at 10:28:09.809) or one that lists it while no course is bound (a
     cold start: the results push precedes the first snapshot), at a re-listing within the generation
     that undoes a leave (`DERIVATIONS.md` §4.4; round 21), at upstream's withdrawal of a judged cell
-    while it is listed — the stream's own listing blanking the cell, property 6(b); D4 recomputes on the
+    while it is listed — the stream's own listing blanking the cell, the presented row's cell blank too,
+    a row's judged cell standing (INV-2 rule 1), property 6(b); D4 recomputes on the
     presented cells (recorded: nkz-19so C1W_BR1_19:40 cell 16, the row blank at 08:38:18.153, the stream
     at .181, back at .562; round 21, second pass) — or when a course binds — the first
     step after which the Attempt's Phase has a `known` `courseId` and that Course a `known` `gates`
