@@ -348,3 +348,15 @@ projection are worth porting as tooling, each re-reviewed against §3.2 by someo
 **Not adopted:** a rule comparing a row's cells with the on-course stream's before attributing (R17's
 remedy). The case needs an equal `Time` to 0.01 s, the finish-first order and a rotation inside run 2,
 and lasts under a second; recorded as residual (DERIVATIONS §10 item 19) until M1's data shows it.
+
+## Revision 5 — closure and the leave constant (2026-11-06, round 20)
+
+D4's "while the Attempt is still on upstream's list" is read as `DERIVATIONS.md` §4.4's one definition
+of a closed run: the first of upstream's `Completed = "Y"` on a listing carrying the finish (second
+pass: a `Y` on a staged listing, recorded once, closes nothing), the Attempt leaving the on-course
+list, or a no-result mark presented. `Completed` closes the run while it is still listed (it precedes the leave by the display delay
+and coincided with it in only 34–70 % of closures), so a complete result is not held provisional for
+those seconds; `CONTRACTS.md` §1.2 now points at §4.4 instead of stating a second definition. The carry
+of a second run's pair fields begins at the Attempt's first listing in run 2, staged or started. "What
+M1 must still prove on data" item 2, the leave rule's constant, is settled: `onCourseLeaveAfterSeconds`
+= 4 s from the whole distribution over seven recordings (`DERIVATIONS.md` §4.1, §10 item 16).

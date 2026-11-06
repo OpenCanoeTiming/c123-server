@@ -158,6 +158,56 @@ row present and empty (retraction; `status: at-start`, as the stream shows), lis
 `run` 1, `status: on-course`, no `attempt.updated` carrying `run`; `then` the finish and the row
 presented as usual.
 
+**Round 20** (2026-11-06, the merge core's review, server#260, #258) ruled `no-result` the presentation
+of the presented `status` (`CONTRACTS.md` §2.6), the `tcp` content age the latest delivery's
+`observedAt` (INV-2c), `not-started` from the first row (§3.2), the carry of a second run's pair
+fields from the Attempt's first listing in run 2 (§1.2), and closure by `DERIVATIONS.md` §4.4's one
+definition. No existing vector asserts anything different: `retraction-start-list-mode-clears-all`
+already expects `not-started` for a never-run row, `left-without-finish-then-mark-from-xml` and
+`xml-mark-does-not-override-tcp-finish` present or refuse the mark in `status` alone. **Four
+vectors are owed and one is reshaped** (100/94 → 104/98; 87 → 91 merge; live stays 23), all on
+site:
+(1) `inv2-rule2-refused-xml-mark-shows-no-outcome`: `tcp` `status: left-without-finish` inference at
+T; a rewrite with `changedAfter` before T whose `xml` row carries `dns` → `status` unchanged from
+`tcp`, `outcome: not-yet`, no `attempt.updated`; `then` a rewrite with `changedAfter` after T
+restating `dns` → `status: dns`/`xml` and `outcome: { kind: 'no-result', status: 'dns' }`/`xml` in
+one `attempt.updated`.
+(2) `inv7-guard-against-redelivered-tcp-row`: `tcp` snapshot row with a time, a `gates` vector and
+a placement at 100; the same row re-delivered at 200 (a rotation; no `attempt.updated`);
+`tcp-disconnected`; a rewrite with `changedAfter` 150 whose `xml` row is empty → every field
+unchanged, `source: tcp`; `then` a rewrite with `changedAfter` 250, the row still empty →
+`outcome`, `gates`, `placement` `not-yet`, `status` `not-started` (the row carries `gates` so that
+the partial retraction is pinned, not vacuous).
+(3) `status-not-started-from-start-list-row`: an `xml` snapshot in `start-list` mode naming bib 9 and
+nothing else → `status: { known, 'not-started', source: 'xml', provisional: false }`, every result
+field `not-yet`, the Attempt in `attempts`, not in `oncourse` (`attempts` is a set-level key on
+either tier, §1).
+(4) `provisional-pair-fields-while-run-2-on-course`, reshaped without losing its direct path: bib 9
+gets a listing with `dtStart: null` before its start, `placement` and `pairTotal` already
+`provisional: true` at that step (`status: at-start`), then the start; bib 10, in the same vector
+with prefixed keys, gets a start with no staging before it, `false → true` at that listing
+(`CONTRACTS.md` §3.2's direct path); a core that fills the carry only on a listing with no start
+fails bib 10. `description` reworded from "when run 2 starts" to "at the Attempt's first listing in
+run 2, staged or started". Both end states are the ones asserted today.
+(5) `classification-emptied-keeps-last-standing` (maintainer, 2026-11-06; `DERIVATIONS.md` §4.10;
+tag `standing-push`, which the live lists already place on site, so 91 merge and 23 live hold):
+three `tcp` scope snapshots of a classification Phase — rows A, B at T1; no rows at T2; rows B, A at
+T3 — with `expectSequence` after index 0 `notifications: { 'standing.updated': 1 }`, after index 1
+`notifications: { 'standing.updated': { count: 0, afterGivenIndex: 0 } }`, and `expect`
+`notifications: { 'standing.updated': 2 }`, `attempts: []`. It asserts through `notifications` and
+`attempts`, which the merge port serves (third pass): the kept entries and `asOf` T1 are not read
+directly — `standing` resolves on the live tier only (`matcher.ts`) — and follow from `CONTRACTS.md`
+§5's push rule, a standing being pushed exactly when its serialised form changes and `asOf` moving
+only with it, the way `standing-not-resent-on-running-tick` asserts the same rule.
+`live-classification-rows-replaced-whole` is unchanged: it asserts whole replacement by a push
+carrying rows, which stands. The counts move in the commit that lands them; the pinned places are
+`meta.test.ts` 30/39/57/58/156, `suite-runs.test.ts` 42/45/50, `matcher.test.ts` 147,
+`vectors.test.ts` 5, `expected-red.json` (each owed vector is red on `main` until its core change
+lands), this file's "**100 vectors:**" and "c123-server runs 94" sentences in the round-19 paragraph
+(the two `meta.test.ts` 30–39 reads by regex), §1's "**c123-server runs 94: every vector not tagged
+`live-ingest`**" sentence and this note, and `TEST-ARCHITECTURE.md`'s "The count is 100 as of round
+19 … (94 and 23; 17 are in both)" sentence.
+
 ---
 
 ## 1. Format
@@ -209,7 +259,8 @@ Each vector has:
   `afterGivenIndex` and `ingestSeq` are unchanged). The core reads content age from the event's
   `changedAfter` alone — absence as a key is a programming error, never `null` and never the
   interval — and `context.xmlPollIntervalSeconds` is the harness's. A `tcp`
-  observation's content age is its `observedAt`.
+  observation's content age is the `observedAt` of its latest delivery: a re-delivered equal row
+  advances it (INV-5, INV-2c; round 20).
 - **Scope snapshots** (INV-7). `{ ingestSeq, snapshot: { source, phaseId, mode, rows }, observedAt }`.
   `mode` is `results` or `start-list`; each row carries `bib` and the resolved fields the row states
   (`outcome`, `placement`, `pairTotal`, `status` for a mark, `judgingComplete`, `timeEmpty` for a
@@ -225,6 +276,7 @@ Each vector has:
   classification Phase** (`CONTRACTS.md` §2.4) carries `CONTRACTS.md` §8.3 `ClassificationRow`s
   instead — `entryId`, `bib`, `rank`, `order`, `decidedIn`, the last `null` where only TCP has stated
   the row — creates no Attempt, and replaces the Phase's rows whole under INV-2c's guard alone
+  when it carries rows; one carrying none changes nothing, the Standing staying as last built
   (`DERIVATIONS.md` §4.10, which also keeps `decidedIn` across a TCP row's `null`); on site it is
   the only element that carries classification rows, the `push: 'classification'` element being
   the live tier's.
@@ -254,9 +306,10 @@ Each vector has:
   the Entry and `status` and `courseOrder` from the Attempt under one `scope: 'entry'`. Eight keys
   name no resource field and are defined by this section alone: `diagnostics`, `writeRequest`,
   `notifications` and `note` (below); `oncourse`, the on-course set as the array of `attemptId` in
-  the order `CONTRACTS.md` §7.1 `GET /api/oncourse` states (§8.4 on live); and, in the live vectors,
-  `featuredByUpstream` (that response's field), `attempts` (the set of `attemptId` the store holds,
-  order not asserted) and `standing`, a map from `standingKey` (`CONTRACTS.md` §5) to that Standing's
+  the order `CONTRACTS.md` §7.1 `GET /api/oncourse` states (§8.4 on live); `featuredByUpstream` (that
+  response's field); `attempts` (the set of
+  `attemptId` the store holds, order not asserted; on either tier) and `standing`, a map from
+  `standingKey` (`CONTRACTS.md` §5) to that Standing's
   entries in order, each entry asserting only the keys it lists. **The Phase is `context.phase`
   where present, else the one `context.attemptId` belongs to;** a vector states an `attemptId` as
   `${phaseId}:${bib}` (§2.6), and where both are present they agree. Reading the Phase off the id is
@@ -406,9 +459,9 @@ check, readable under its own `run`) is not asserted.
 | INV-2 rule 1 (result row over inference) | `inv2-rule1-result-row-supersedes-inference`, `inv2-rule1-inference-never-supersedes-result-row` | 2 |
 | INV-2 rule 2 (TCP continuity) | `inv2-rule2-connected-tcp-beats-later-xml`, `-xml-takes-over-after-disconnect`, `-reconnect-does-not-restore-stale-tcp`, `-fresh-tcp-after-reconnect-wins`, `-xml-alone-at-cold-start`; round 19: `-reconnect-redelivery-regains-precedence` | 6 |
 | INV-2 rule 1, `gates` cell-wise | `gates-blank-result-cell-keeps-judged-oncourse-cell`, `gates-result-vector-authoritative-after-leaving` | 2 |
-| INV-2 rule 2 exception (marks on silent paths) | `left-without-finish-then-mark-from-xml`, `xml-mark-does-not-override-tcp-finish` | 2 |
+| INV-2 rule 2 exception (marks on silent paths) | `left-without-finish-then-mark-from-xml`, `xml-mark-does-not-override-tcp-finish`; round 20 (owed): `inv2-rule2-refused-xml-mark-shows-no-outcome` | 3 |
 | `left-without-finish` | `left-without-finish-observed-not-dnf` | 1 |
-| INV-7 (retraction) | `retraction-vanished-row-first-run`, `-dns-cleared-then-races`, `-start-list-mode-clears-all`, `-does-not-touch-inference`, `-second-run-time-empty-keeps-placement`, `-from-xml-row-cleared`, `-first-run-row-present-empty`; the guard: `retraction-xml-guard-rewrite-before-push` | 8 |
+| INV-7 (retraction) | `retraction-vanished-row-first-run`, `-dns-cleared-then-races`, `-start-list-mode-clears-all`, `-does-not-touch-inference`, `-second-run-time-empty-keeps-placement`, `-from-xml-row-cleared`, `-first-run-row-present-empty`; the guard: `retraction-xml-guard-rewrite-before-push`; round 20 (owed): `inv7-guard-against-redelivered-tcp-row` | 9 |
 | INV-1 against retraction (omission is not absence) | `retraction-not-from-fragment`, `retraction-not-in-other-race-snapshot` | 2 |
 | INV-2d (contradiction by the on-course stream; the lift) | `contradiction-oncourse-running-again`, `contradiction-lift-keeps-stale-rows-unpresented` | 2 |
 | Marks over time; half-corrections | `status-overrides-time`, `half-correction-snapshot-duplicate-finish` | 2 |
@@ -416,6 +469,8 @@ check, readable under its own `run`) is not asserted.
 | Live tier: explicit reset, bare values wrapped, deletion, on-course set and running state, classification rows | `live-explicit-not-yet-resets-field`, `live-bare-value-wrapped-as-bridge`, `live-attempt-deleted`, `live-oncourse-set-replaced-whole`, `live-running-then-finished-latest-wins`, `live-classification-rows-replaced-whole` | 6 |
 | The on-course set and `oncourse.updated` | `oncourse-set-order-and-push`, `oncourse-finisher-stays-listed-until-closure`, `oncourse-unstaged-before-start-returns-to-not-started` | 3 |
 | Placement known only when upstream ranks the row | `placement-not-yet-while-rank-empty` | 1 |
+| `status` from the first row (§3.2) | round 20 (owed): `status-not-started-from-start-list-row` | 1 |
+| Classification rows on site (`DERIVATIONS.md` §4.10): an emptied table keeps the last built Standing | round 20 (owed): `classification-emptied-keeps-last-standing` | 1 |
 | No standing re-send on a running tick | `standing-not-resent-on-running-tick` | 1 |
 | Workflow state (§2.10): what `stale` compares against (`null` vs `0`, team sums, `gates` not known), the re-run and re-bib interplay | `check-stale-definition`, `check-null-vs-zero-distinct`, `check-team-sum-compared`, `check-not-carried-to-new-generation`, `check-stays-with-bib-when-result-moves` | 5 |
 | INV-2 rule 3 (single-source fields) | `inv2-rule3-single-source-field` | 1 |
