@@ -1,6 +1,6 @@
 /**
  * Maps `port.ts` onto the real core. The merge side is wired to `createMergeCore` (#203, `src/core/index.ts`); the Standing
- * Standing assembly is wired to `src/core/standing.ts` (#205, lazy like the core); the gate checks are not built yet (#211): `gateStatus` throws `CoreMissing`.
+ * Standing assembly is wired to `src/core/standing.ts` (#205, lazy like the core); the gate checks are wired to `src/core/workflow.ts` (#211, lazy like the others).
  *
  * Thin by design. When a core issue lands, its test author wires the matching function here.
  *
@@ -60,8 +60,18 @@ export function assembleStanding(given: StandingGiven, scope: StandingScope): St
   throw standing.error;
 }
 
-export function gateStatus(_given: WorkflowGiven): WorkflowResult {
-  throw new CoreMissing('gateStatus');
+/** `src/core/workflow.ts` (#211): `gateStatus(given)`, pure. Imported by a variable path so `tsc` does not need the file to exist yet. */
+type GateStatusFn = (given: WorkflowGiven) => WorkflowResult;
+const WORKFLOW_MODULE = '../../core/workflow.js';
+const workflow: { fn?: GateStatusFn; error?: unknown } = await import(/* @vite-ignore */ WORKFLOW_MODULE).then(
+  (m: { gateStatus: GateStatusFn }) => ({ fn: m.gateStatus }),
+  (error: unknown) => ({ error }),
+);
+
+export function gateStatus(given: WorkflowGiven): WorkflowResult {
+  if (workflow.fn) return workflow.fn(given);
+  if (absent(workflow.error)) throw new CoreMissing('gateStatus (src/core/workflow)');
+  throw workflow.error;
 }
 
 export const corePort: ConformancePort = { createMergePort, assembleStanding, gateStatus };
