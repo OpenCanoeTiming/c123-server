@@ -237,7 +237,9 @@ cannot read is absent, not invented.
   `confidence: 'authoritative'`, a lookup.
 - **`kind`, `scoringKind`, `pair`, `heats`.**
   - These come from `CONTRACTS.md` §2.4's token table, a lookup with no uncertainty, so
-    `confidence: 'authoritative'`.
+    `confidence: 'authoritative'`. They are presented with the Phase's first message, from the first
+    observation of the `RaceId` on either channel (`CONTRACTS.md` §1.6: the first message for a new
+    id carries the whole resource), never deferred to the snapshot (round 24).
   - `pair.siblingPhaseId` is the Phase with the same `classId` and the first-run token. When several
     exist, take the one with the same schedule date. This mirrors upstream's own pairing behaviour.
     Until the schedule names it, `siblingPhaseId` is `null`; `role` and `combination` are the token's
@@ -812,7 +814,10 @@ results push precedes the first snapshot" (`DECISIONS/ADR-017` D4); whole record
   blank 11 s later, with no row of the generation yet: nothing stood against the blank; round 23) —
   while a row's judged cell stands against a stream blank. The merged vector is
   a results-table value with cells taken from the stream, not an inference: once the stream fills
-  the last blank cell it is settled (`CONTRACTS.md` §1.2, round 20).
+  the last blank cell it is settled (`CONTRACTS.md` §1.2, round 20). Before any row of the
+  generation the stream's vector is an on-course inference, `confidence: 'inferred'`; the merged
+  vector carries the row's envelope, `observedAt` the element's that last changed its cells
+  (`CONTRACTS.md` §1.2; round 24).
 
 All encodings produce `Gate[]` with exactly the course's gate count. The encoding is recorded only in
 `source`.
@@ -843,7 +848,10 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
 - **Category ranks are read only from rows whose `CatId` is set** (`CONTRACTS.md` §5 step 4). On a
   second-run row with an empty `CatId`, `TotalCatRnk` repeats the class rank and `PrevCatRnk` holds
   the category rank; up to 196,621 such row-instances per recording.
-- **Envelope.** `confidence: 'authoritative'`. `provisional` follows §4.4.
+- **Envelope.** `confidence: 'authoritative'`. `provisional` follows §4.4; in a Kayak Cross heat the
+  placement, the ordinal built from it and the `qualified` and `underReview` stated with it leave the
+  judging clause at the step the placement is presented (`CONTRACTS.md` §1.2 states the exemption;
+  §4.2).
 
 **Other fields from the result row.**
 - **`ordinal.order`, Kayak Cross.** It is `placement.order`, never derived from `Time`. TCP's `Time`
@@ -870,7 +878,10 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   message, which carries one participant. Slalom showed up to 12 simultaneous positions.
 - **The on-course set** (`CONTRACTS.md` §7.1) is upstream's list as the stream shows it. An Attempt
   enters at its first on-course message and leaves at `oncourse-left` (§4.1: upstream stopped listing
-  it) or at the explicit course-empty message. A finish transition changes `status`, not membership:
+  it) or at the explicit course-empty message. The leave is the core's own evaluation at a TCP
+  message (§0.5), never an input: a vector supplies `oncourse-left` by hand because it has no stream
+  to evaluate, and a replay step records the leaves the core derived at its message as elements the
+  checker verifies against the raw stream (`TEST-ARCHITECTURE.md` §3.2; round 24). A finish transition changes `status`, not membership:
   upstream keeps the finisher listed until it closes the run, about 20 s later (`Completed="Y"` where
   auto-complete is on, else removal). The set is ordered by each listed Attempt's `courseOrder`; an
   Attempt whose message carries no `Position` sorts last by `startOrder`.
@@ -889,7 +900,9 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   - Source: `OnCourse.Result[C]@dtSplit1/2`, or `XML.Results.dtSplit1..3`, minus `dtStart`.
   - Only when splits are armed (`RaceConfig.NrSplits > 0`); `unavailable{not-applicable}` otherwise.
     The armed state is the core's, from the parser's `splitsArmed` (§2.3); the parser emits `splits`
-    whenever a split time is present.
+    whenever a split time is present. The `unavailable` is presented at the Attempt's next step that
+    carries it or at a scope snapshot of its race, never at the `RaceConfig` step itself (as §4.6's
+    `not-configured`; `TEST-ARCHITECTURE.md` §3.2 properties 3 and 4; round 24).
   - No recorded event armed splits, so this derivation is source-verified only.
 
 ### 4.9 `entry` (the mutable pointer)

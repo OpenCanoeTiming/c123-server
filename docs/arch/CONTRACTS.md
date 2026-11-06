@@ -157,11 +157,27 @@ The fields, precisely:
   holds:
   - it is an on-course inference not yet superseded by a results-table observation of the same run
     (a `gates` cell merged in from the stream under §4 rule 1's exception does not make the row's
-    vector an inference);
+    vector an inference). **The stream's own gate cells — in Kayak Cross the `faults` built from
+    them — are such an inference while no row of the generation stating a result — a time or a mark,
+    INV-7's test; cells alone state none — is presented:** `confidence:
+    'inferred'`, never retracted (INV-7). Once such a row is presented, the merged
+    vector is that row's observation: `confidence: 'authoritative'`, `source` the presented row's,
+    `observedAt` the element's that last changed the presented cells, a listing's included; after
+    the row's retraction the stream's vector is an inference again (round 24);
   - it is a result whose judging is incomplete — a presented gate cell is still blank (§4 rule 1
     merges the cells) — or whose completeness cannot be judged yet because no course is bound, and
     whose run is not yet closed; closed is `DERIVATIONS.md` §4.4's one definition, stated there
-    alone (round 20, second pass: no list here);
+    alone (round 20, second pass: no list here). **The clause reaches every field a row states
+    for the run:** `outcome`, `gates` (in Kayak Cross `faults`), `placement`, `pairTotal`,
+    `countingRun`, `underReview` and `qualified`; `status` is outside it (below), and the on-course
+    facts (`courseOrder`, `timeToBeat`, `splits`) are asserted, not judged. **Two exemptions, stated
+    here:** an Attempt with no run yet — `status` absent or `not-started`, its row carrying neither
+    time nor mark — has no run to judge, its values being the previous run's, settled there, until
+    the carry below begins (round 21); and in a Kayak Cross heat the `placement`, the ordinal built from it, and the
+    `qualified` and `underReview` the row states with it are upstream's whole result, asserted after
+    the judging, and leave this clause at the step the placement is presented; the heat's `faults`
+    stays under it until the heat leaves the list (`DERIVATIONS.md` §4.2, §4.7; round 21, placed
+    here in round 24, both named in its second pass);
   - it is a second run's `placement`, `pairTotal` or `countingRun` carried over from run 1, from the
     Attempt's first on-course listing in run 2 — staged or started: the stream saying the run is
     about to happen — until a row of run 2 — one carrying its time or its mark — restates that
@@ -329,11 +345,11 @@ stamps each outbound message with `seq`. Each outbound message takes the next va
 an element's ingest sequence (INV-6, §4) is the value the counter had when it was ingested, so one
 element may produce many messages, each with its own `seq`. **The unit of ingest is one upstream
 message:** one TCP message, one XML snapshot, one operator write, one connection event, one
-re-baseline; on the live tier, one §8.3 request. Every observation that unit yields is merged before
+re-baseline with the snapshot it re-reads (§4); on the live tier, one §8.3 request. Every observation that unit yields is merged before
 anything is emitted, and then at most one message per changed resource is sent: §7.2's
 `attempt.updated` carries every field that unit changed, never one message per field. A core may
 apply observations one at a time, but it notifies per unit (`CONFORMANCE-VECTORS.md` §1, "Ingest
-units"). **The one message without `seq` is
+units"), and a replay step is one unit (`TEST-ARCHITECTURE.md` §3.2; round 24). **The one message without `seq` is
 §8.4's `heartbeat`:** it carries `asOfSeq` instead, since it carries no state; a client neither buffers
 nor applies it, and steps 2 and 4 below concern only messages that carry `seq`. On site the heartbeat is
 `sources.updated`, which does carry `seq` (§7.2). It is the same number on every connection and in every `asOfSeq` a REST response
@@ -1392,7 +1408,9 @@ implementation must satisfy, not an algorithm.
      stream's inference is the `tcp` side of this rule:** an `xml` row's `status` displaces a stream
      `on-course` or `finished` only by the exception below or after a disconnect, never while TCP is
      connected (`xml-mark-does-not-override-tcp-finish`); the row's other fields follow rule 1
-     (`no-result` is none of them: it is `status`'s presentation, §2.6).
+     (`no-result` is none of them: it is `status`'s presentation, §2.6). **A listing's `entry` is
+     likewise rule 2's `tcp` side:** an `xml` row restating it changes nothing presented, its
+     `source` included (round 24).
 
      **The one exception is a result mark set on a silent path.** Upstream sends no TCP push for:
      - a DNS entered from the start judge's terminal;
