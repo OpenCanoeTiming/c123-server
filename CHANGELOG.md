@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.13.0](https://github.com/OpenCanoeTiming/c123-server/compare/v0.12.2...v0.13.0) (2026-11-06)
+
+
+### Features
+
+* **contract:** add the @opencanoetiming/c123-contract package ([#226](https://github.com/OpenCanoeTiming/c123-server/issues/226)) ([95b15fa](https://github.com/OpenCanoeTiming/c123-server/commit/95b15fa244798a6c38f43c90c601bec38a93f0de))
+* **core:** leave constant and round 20 rulings ([#264](https://github.com/OpenCanoeTiming/c123-server/issues/264)) ([5984795](https://github.com/OpenCanoeTiming/c123-server/commit/59847955740e5081389f7db5bcca3cb7eb757152))
+* **core:** merge core ([#257](https://github.com/OpenCanoeTiming/c123-server/issues/257)) ([22e39fa](https://github.com/OpenCanoeTiming/c123-server/commit/22e39fa67865fdb57665f36e26bed7d384f42cb3))
+* **core:** Standing assembly ([#269](https://github.com/OpenCanoeTiming/c123-server/issues/269)) ([dfbec28](https://github.com/OpenCanoeTiming/c123-server/commit/dfbec28ac166d3afaa2d275a8d52c2634565a28e))
+* **dev-env:** one-command player + server environment ([#219](https://github.com/OpenCanoeTiming/c123-server/issues/219)) ([8f464f0](https://github.com/OpenCanoeTiming/c123-server/commit/8f464f0a2591beb846c8e00ee2fe60d0ba812a7f))
+* **ingest:** content age, xml states, classification snapshot per round 18 ([#254](https://github.com/OpenCanoeTiming/c123-server/issues/254)) ([71c22b4](https://github.com/OpenCanoeTiming/c123-server/commit/71c22b4be9b7b120683e3e2b0b744e25a65d7ac0))
+* **ingest:** TCP and XML parsers per DERIVATIONS ([#246](https://github.com/OpenCanoeTiming/c123-server/issues/246)) ([893ec70](https://github.com/OpenCanoeTiming/c123-server/commit/893ec70f08a34419855f20bec19d732e415e7a22))
+* **ingest:** XML snapshot reader ([#250](https://github.com/OpenCanoeTiming/c123-server/issues/250)) ([b1897e5](https://github.com/OpenCanoeTiming/c123-server/commit/b1897e5e15e9d682ba96b9c80de036aa6c32f669))
+* **store:** durable gate checks and flags ([#272](https://github.com/OpenCanoeTiming/c123-server/issues/272)) ([0cdd197](https://github.com/OpenCanoeTiming/c123-server/commit/0cdd19785b6a882a37a1a692bf1212f0ec9e1a39))
+
 ## [0.12.2](https://github.com/OpenCanoeTiming/c123-server/compare/v0.12.1...v0.12.2) (2026-10-17)
 
 
