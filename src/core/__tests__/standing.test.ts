@@ -431,6 +431,107 @@ describe('#205 row 2: a Standing is pushed only when its serialised form changes
   });
 });
 
+// ------------------------------------------------------------------------------------- review B1 and B2 (#269): emptied heats, entries by outcome
+
+/** The latest pushed Standing of each key, folded as a client folds standing.updated (a later push replaces the earlier). */
+const latest = (c: Core, from = 0): Map<string, Std> => new Map(sent(c, from).map((s) => [s.standingKey, s]));
+const bibsOf = (s: Std | undefined): string[] => (s ? s.entries.map((e) => String(e['bib'])) : []);
+const hrow = (bib: string, heat: number, rank: number) => ({ bib, entry: { entryId: `E${bib}` }, outcome: { kind: 'ordinal', order: rank }, placement: { rank, order: rank }, heat });
+
+describe('#205 review B1: a Standing that loses all its entries is pushed empty (CONTRACTS 5 step 1 "an entry added or removed"; property 15)', () => {
+  const XF = 'WX1_XF_26';
+  const day = { [XF]: '2026-04-26' };
+
+  it('property 15 / CONTRACTS 5 step 1, real xfFinal then the recorded xfStartList re-sent 60 s later: the phase and both heat Standings are pushed empty, none left stale', () => {
+    const later = { ...R19.xfStartList, observedAt: new Date(Date.parse(R19.xfFinal.observedAt) + 60_000).toISOString() };
+    const c = coreWith([connected(R19.xfFinal.observedAt), tcpUnit(R19.xfFinal, day)]);
+    const before = latest(c);
+    expect([...before.keys()].sort()).toEqual([`heat:${XF}:1/all`, `heat:${XF}:2/all`, `phase:${XF}/all`]);
+    expect(before.get(`phase:${XF}/all`)!.entries).toHaveLength(8);
+    c.applyUnit(tcpUnit(later, day));
+    for (const b of ['1', '2', '3', '4', '5', '6', '7', '8']) expect(c.presented(`${XF}:${b}`)['placement'], `bib ${b}`).toMatchObject({ state: 'not-yet' }); // the start list holds no ranked row
+    const now = latest(c);
+    for (const key of [`phase:${XF}/all`, `heat:${XF}:1/all`, `heat:${XF}:2/all`]) expect(now.get(key)!.entries, key).toEqual([]);
+  });
+
+  it('property 15 / CONTRACTS 5 step 1: a tcp table that drops one heat\'s rows pushes that heat empty and leaves the other heat as it was', () => {
+    const t = table(XF);
+    const c = coreWith([]);
+    c.applyUnit(t.tcp(10, [hrow('1', 1, 1), hrow('2', 1, 2), hrow('3', 2, 3), hrow('4', 2, 4)]));
+    expect(bibsOf(latest(c).get(`heat:${XF}:1/all`))).toEqual(['1', '2']);
+    expect(bibsOf(latest(c).get(`heat:${XF}:2/all`))).toEqual(['3', '4']);
+    const m = mark(c);
+    c.applyUnit(t.tcp(20, [hrow('1', 1, 1), hrow('2', 1, 2)]));
+    const now = latest(c);
+    expect(bibsOf(now.get(`heat:${XF}:2/all`)), 'the dropped heat is pushed empty').toEqual([]);
+    expect(bibsOf(now.get(`heat:${XF}:1/all`))).toEqual(['1', '2']);
+    expect(keyed(c, `heat:${XF}:1/all`, m)).toHaveLength(0); // unchanged heat pushes nothing
+  });
+
+  it('property 15 / CONTRACTS 5 step 1: a bib moving out of a one-entry heat is in one heat Standing only, the heat it left pushed empty', () => {
+    const t = table(XF);
+    const c = coreWith([]);
+    c.applyUnit(t.tcp(10, [hrow('1', 1, 1), hrow('2', 2, 2)]));
+    expect(bibsOf(latest(c).get(`heat:${XF}:1/all`))).toEqual(['1']);
+    c.applyUnit(t.tcp(20, [hrow('1', 2, 1), hrow('2', 2, 2)]));
+    const now = latest(c);
+    expect(bibsOf(now.get(`heat:${XF}:2/all`)).sort()).toEqual(['1', '2']);
+    expect(bibsOf(now.get(`heat:${XF}:1/all`)), 'bib 1 is not still shown in the heat it left').toEqual([]);
+    const shown = [...now.entries()].filter(([k]) => k.startsWith('heat:')).flatMap(([, s]) => bibsOf(s)).filter((b) => b === '1');
+    expect(shown).toHaveLength(1);
+  });
+});
+
+describe('#205 review B2: which Attempts are entries (CONTRACTS 5 steps 2-3: placed, or presenting an outcome other than pending/running, or a mark; property 15)', () => {
+  const XT = 'WX1_XT_26';
+  const day = { [XT]: '2026-04-26' };
+  const keyXT = `phase:${XT}/all`;
+
+  it('real cp3-cross WX1_XT_26 bib 25, 07:16:59 to 07:20:57: status finished (a finish impulse with no Time) with outcome not-yet is not an entry; its later DNS row makes it a mark entry', () => {
+    const c = coreWith([connected(R19.xt1.observedAt), ...[R19.xt1, R19.xt2, R19.xt3].map((r) => tcpUnit(r, day))]);
+    expect(c.presented(`${XT}:25`)['status']).toMatchObject({ state: 'known', value: 'finished' }); // the drift the test is about
+    expect(c.presented(`${XT}:25`)['outcome']).toEqual({ state: 'not-yet' });
+    const shown = sent(c).filter((s) => s.standingKey === keyXT).flatMap((s) => bibsOf(s));
+    expect(shown).not.toContain('25');
+    c.applyUnit(tcpUnit(R19.xt4, day));
+    expect(sent(c).filter((s) => s.standingKey === keyXT).flatMap((s) => bibsOf(s))).not.toContain('25'); // withdrawn finish: still none
+    c.applyUnit(tcpUnit(R19.xtRow, day));
+    const withMark = latest(c).get(keyXT);
+    expect(withMark, 'the DNS row publishes the mark entry').toBeDefined();
+    const e = withMark!.entries.find((x) => x['bib'] === '25');
+    expect(e).toMatchObject({ result: { kind: 'no-result', status: 'dns' } }); // the DNS row is a mark; upstream may place it, so rank is not asserted
+  });
+
+  it('CONTRACTS 5 step 3: a mark with no time is an entry, unplaced: rank null, order null, result the no-result mark', () => {
+    const t = table(P1);
+    const c = coreWith([]);
+    c.applyUnit(t.xml(10, 5, [erow('1', 1, 1, 80), { bib: '2', entry: { entryId: 'E2' }, status: 'dns' }]));
+    const s = keyed(c, `phase:${P1}/all`).at(-1)!;
+    expect(s.entries.map((e) => e['bib'])).toEqual(['1', '2']);
+    expect(s.entries[1]).toMatchObject({ rank: null, order: null, result: { kind: 'no-result', status: 'dns' } });
+  });
+
+  it('CONTRACTS 5 step 3: a finished Attempt with a result and no placement is an entry, listed after the placed ones', () => {
+    const t = table(P1);
+    const c = coreWith([]);
+    c.applyUnit(t.xml(10, 5, [{ bib: '2', entry: { entryId: 'E2' }, outcome: duration(85), judgingComplete: true }, erow('1', 1, 1, 80)]));
+    const s = keyed(c, `phase:${P1}/all`).at(-1)!;
+    expect(s.entries.map((e) => e['bib'])).toEqual(['1', '2']);
+    expect(s.entries[1]).toMatchObject({ rank: null, order: null, result: { kind: 'duration', totalSeconds: 85 } });
+  });
+
+  it('CONTRACTS 5 step 3, the converse: an Attempt presenting an outcome is an entry whatever its status says (status at-start asserted after a duration outcome, no placement)', () => {
+    const t = table(P1);
+    const c = coreWith([]);
+    c.applyUnit(t.xml(10, 5, [erow('1', 1, 1, 80), { bib: '2', entry: { entryId: 'E2' }, outcome: duration(85) }]));
+    c.applyUnit([el({ ingestSeq: 90, attemptId: `${P1}:2`, field: 'status', source: 'tcp', kind: 'inference', observedAt: at(20), value: 'at-start', confidence: 'authoritative' })]);
+    expect(c.presented(`${P1}:2`)['outcome']).toMatchObject({ state: 'known', value: { kind: 'duration' } }); // the setup holds: the outcome is presented
+    expect(c.presented(`${P1}:2`)['status']).toMatchObject({ value: 'at-start' });
+    const s = latest(c).get(`phase:${P1}/all`)!;
+    expect(s.entries.map((e) => e['bib'])).toEqual(['1', '2']);
+  });
+});
+
 // ------------------------------------------------------------------------------------------------------------- purity and determinism
 
 describe('#205 row 7: purity and determinism (TEST-ARCHITECTURE section 5; CONTRACTS 4 determinism paragraph)', () => {
