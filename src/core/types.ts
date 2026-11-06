@@ -42,14 +42,18 @@ export interface FieldSlots {
   xml?: Slot;
   inference?: Slot;
   operator?: Slot;
+  /** The two sources' values at which a `source-disagreement` was raised; it stands until one of them changes (INV-2b). */
+  disagreement?: string;
 }
 
 export type Contradicted = { finishTime: string | null; runSeconds: number };
 
 export interface Generation {
   n: number;
-  /** The generation's recorded start, as the stream states it; undefined until one is observed. */
+  /** The generation's recorded start, as an instant; undefined until one is observed. */
   start?: string;
+  /** The same start as listed: what a listing is compared by (§4.11), the instant depending on the Phase date known at the time. */
+  startText?: string;
   /** A row with a time or a mark has recorded this run (DERIVATIONS §4.11 "Recorded"); kept through a retraction, cleared by a contradiction. */
   recorded: boolean;
   /** The marks either source held when the start was recorded: a row carrying one records nothing (§4.11, K1M_BR2_19:54). */
@@ -59,9 +63,11 @@ export interface Generation {
   /** The generation began with an observed new start (DERIVATIONS §4.11): rows need attributing. */
   needsAttribution: boolean;
   finish?: { eventTime?: string; runSeconds?: number };
-  /** The listing that starts this run has been seen (§1.2, the carried-over fields). */
+  /** The Attempt has been listed in this generation, staged or started (§1.2, the carried-over fields). */
   started: boolean;
-  /** `Completed="Y"` was seen, or a result stated `runClosed`. */
+  /** Carried fields a row of this run, with its time or its mark, has restated: the carry does not start again on them (§1.2). */
+  restated: Set<string>;
+  /** `Completed="Y"` was seen on a listing carrying its finish, or a result stated `runClosed` (§4.4). */
   completed: boolean;
   firstEnvelope: { observedAt: string; source: Source };
 }

@@ -18,6 +18,7 @@
     "typecheck": "tsc --noEmit",
     "sweep:parse": "tsx scripts/sweep-parse.ts",
     "sweep:merge": "tsx --max-old-space-size=3072 scripts/sweep-merge.ts",
+    "measure:gaps": "node scripts/measure-gaps.mjs",
     "dev:env": "node scripts/dev-env.mjs",
     "postinstall": "node scripts/sync-design-system.js",
     "prebuild": "node scripts/sync-design-system.js"

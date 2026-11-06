@@ -772,7 +772,7 @@
     {
       "id": "provisional-pair-fields-while-run-2-on-course",
       "invariant": "provisional",
-      "description": "A second run's placement, pairTotal and countingRun carried over from run 1 become provisional when run 2 starts, without a regression (ADR-017 D4, S1-12).",
+      "description": "A second run's placement, pairTotal and countingRun carried over from run 1 become provisional at the Attempt's first listing in run 2, staged or started, without a regression (ADR-017 D4, S1-12; CONTRACTS §1.2, §3.2 round 20). Bib 9 is staged (`at-start`) and then started; bib 10 is started with no staging, `false -> true` at that listing.",
       "context": {
         "attemptId": "K1M_BR2_19:9",
         "phase": "K1M_BR2_19",
@@ -794,10 +794,45 @@
                 },
                 "pairTotal": 82.36,
                 "timeEmpty": true
+              },
+              {
+                "bib": "10",
+                "placement": {
+                  "rank": 4,
+                  "order": 4
+                },
+                "pairTotal": 83.1,
+                "timeEmpty": true
               }
             ]
           },
           "observedAt": "2026-09-15T10:00:00.000Z"
+        },
+        {
+          "ingestSeq": 2,
+          "attemptId": "K1M_BR2_19:9",
+          "field": "onCourse",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:09:00.000Z",
+          "value": {
+            "dtStart": null,
+            "dtFinish": null
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 3,
+          "attemptId": "K1M_BR2_19:10",
+          "field": "onCourse",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:10:00.000Z",
+          "value": {
+            "dtStart": "2026-09-15T10:09:59.000Z",
+            "dtFinish": null
+          },
+          "confidence": "authoritative"
         }
       ],
       "expectSequence": [
@@ -806,25 +841,113 @@
           "expect": {
             "K1M_BR2_19:9.placement": {
               "state": "known",
+              "value": {
+                "rank": 3,
+                "order": 3
+              },
               "provisional": false
             },
             "K1M_BR2_19:9.pairTotal": {
               "state": "known",
+              "value": 82.36,
               "provisional": false
+            },
+            "K1M_BR2_19:10.placement": {
+              "state": "known",
+              "value": {
+                "rank": 4,
+                "order": 4
+              },
+              "provisional": false
+            },
+            "K1M_BR2_19:10.pairTotal": {
+              "state": "known",
+              "value": 83.1,
+              "provisional": false
+            }
+          }
+        },
+        {
+          "afterGivenIndex": 1,
+          "expect": {
+            "K1M_BR2_19:9.placement": {
+              "state": "known",
+              "value": {
+                "rank": 3,
+                "order": 3
+              },
+              "provisional": true
+            },
+            "K1M_BR2_19:9.pairTotal": {
+              "state": "known",
+              "value": 82.36,
+              "provisional": true
+            },
+            "K1M_BR2_19:9.status": {
+              "state": "known",
+              "value": "at-start"
+            },
+            "K1M_BR2_19:10.placement": {
+              "state": "known",
+              "value": {
+                "rank": 4,
+                "order": 4
+              },
+              "provisional": false
+            },
+            "K1M_BR2_19:10.pairTotal": {
+              "state": "known",
+              "value": 83.1,
+              "provisional": false
+            }
+          }
+        },
+        {
+          "afterGivenIndex": 2,
+          "expect": {
+            "K1M_BR2_19:9.placement": {
+              "state": "known",
+              "value": {
+                "rank": 3,
+                "order": 3
+              },
+              "provisional": true
+            },
+            "K1M_BR2_19:9.pairTotal": {
+              "state": "known",
+              "value": 82.36,
+              "provisional": true
+            },
+            "K1M_BR2_19:10.placement": {
+              "state": "known",
+              "value": {
+                "rank": 4,
+                "order": 4
+              },
+              "provisional": true
+            },
+            "K1M_BR2_19:10.pairTotal": {
+              "state": "known",
+              "value": 83.1,
+              "provisional": true
+            },
+            "K1M_BR2_19:10.status": {
+              "state": "known",
+              "value": "on-course"
             }
           }
         }
       ],
       "then": [
         {
-          "ingestSeq": 2,
+          "ingestSeq": 4,
           "attemptId": "K1M_BR2_19:9",
           "field": "onCourse",
           "source": "tcp",
           "kind": "inference",
-          "observedAt": "2026-09-15T10:10:00.000Z",
+          "observedAt": "2026-09-15T10:11:00.000Z",
           "value": {
-            "dtStart": "2026-09-15T10:09:59.000Z",
+            "dtStart": "2026-09-15T10:10:59.000Z",
             "dtFinish": null
           },
           "confidence": "authoritative"
@@ -844,7 +967,24 @@
           "value": 82.36,
           "provisional": true
         },
+        "K1M_BR2_19:10.placement": {
+          "state": "known",
+          "value": {
+            "rank": 4,
+            "order": 4
+          },
+          "provisional": true
+        },
+        "K1M_BR2_19:10.pairTotal": {
+          "state": "known",
+          "value": 83.1,
+          "provisional": true
+        },
         "K1M_BR2_19:9.status": {
+          "state": "known",
+          "value": "on-course"
+        },
+        "K1M_BR2_19:10.status": {
           "state": "known",
           "value": "on-course"
         }
@@ -8131,6 +8271,496 @@
             "order": 3
           }
         }
+      }
+    },
+    {
+      "id": "inv2-rule2-refused-xml-mark-shows-no-outcome",
+      "invariant": "INV-2 rule 2 exception",
+      "description": "A mark rule 2's content-age guard refuses shows nowhere: `no-result` is the presentation of the presented `status`, never a field of the row (CONTRACTS §2.6, round 20). The xml row's mark is retained with its whole row; the next rewrite whose content age postdates the tcp observation presents `status` and `outcome` together, in one `attempt.updated`.",
+      "context": {
+        "discipline": "slalom",
+        "tcpConnectedThroughout": true,
+        "attemptId": "K1M_BR1_6:9"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "attemptId": "K1M_BR1_6:9",
+          "field": "status",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:00:40.000Z",
+          "value": "left-without-finish",
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 2,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:01:10.000Z",
+          "changedAfter": "2026-09-15T10:00:30.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "9",
+                "status": "dns"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:01:10.000Z"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 2,
+          "expect": {
+            "status": {
+              "state": "known",
+              "value": "left-without-finish",
+              "source": "tcp"
+            },
+            "outcome": {
+              "state": "not-yet"
+            },
+            "notifications": {
+              "attempt.updated": {
+                "count": 0,
+                "afterGivenIndex": 0,
+                "attemptId": "K1M_BR1_6:9"
+              }
+            }
+          }
+        }
+      ],
+      "then": [
+        {
+          "ingestSeq": 4,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:02:10.000Z",
+          "changedAfter": "2026-09-15T10:01:40.000Z"
+        },
+        {
+          "ingestSeq": 5,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "9",
+                "status": "dns"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:02:10.000Z"
+        }
+      ],
+      "expect": {
+        "status": {
+          "state": "known",
+          "value": "dns",
+          "source": "xml"
+        },
+        "outcome": {
+          "state": "known",
+          "value": {
+            "kind": "no-result",
+            "status": "dns"
+          },
+          "source": "xml"
+        },
+        "notifications": {
+          "attempt.updated": {
+            "count": 1,
+            "afterGivenIndex": 2,
+            "attemptId": "K1M_BR1_6:9",
+            "fields": [
+              "status",
+              "outcome"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "inv7-guard-against-redelivered-tcp-row",
+      "invariant": "INV-7 guard",
+      "description": "The guard compares content age, and a `tcp` row's content age is the observedAt of its latest delivery (INV-2c, INV-5; round 20): a rotation re-sending the identical row advances it, so an xml retraction whose content (150) predates the re-delivery (200) is ignored for every field the row carried, none of them retracted and the others kept. A later rewrite (250) retracts all three.",
+      "context": {
+        "tcpConnectedThroughout": false,
+        "attemptId": "K1M_BR1_6:9"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR1_6",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "9",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 82.36,
+                  "penaltySeconds": 2,
+                  "totalSeconds": 84.36
+                },
+                "gates": [
+                  {
+                    "number": 3,
+                    "penalty": 0
+                  },
+                  {
+                    "number": 4,
+                    "penalty": 2
+                  }
+                ],
+                "placement": {
+                  "rank": 5,
+                  "order": 5
+                },
+                "judgingComplete": true
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:01:40.000Z"
+        },
+        {
+          "ingestSeq": 2,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR1_6",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "9",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 82.36,
+                  "penaltySeconds": 2,
+                  "totalSeconds": 84.36
+                },
+                "gates": [
+                  {
+                    "number": 3,
+                    "penalty": 0
+                  },
+                  {
+                    "number": 4,
+                    "penalty": 2
+                  }
+                ],
+                "placement": {
+                  "rank": 5,
+                  "order": 5
+                },
+                "judgingComplete": true
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:03:20.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "event": "tcp-disconnected",
+          "observedAt": "2026-09-15T10:03:30.000Z"
+        },
+        {
+          "ingestSeq": 4,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:03:40.000Z",
+          "changedAfter": "2026-09-15T10:02:30.000Z"
+        },
+        {
+          "ingestSeq": 5,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "9"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:03:40.000Z"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 1,
+          "expect": {
+            "status": {
+              "state": "known",
+              "value": "finished",
+              "source": "tcp"
+            },
+            "outcome": {
+              "state": "known",
+              "value": {
+                "kind": "duration",
+                "totalSeconds": 84.36
+              },
+              "source": "tcp"
+            },
+            "gates": {
+              "state": "known",
+              "value": [
+                {
+                  "number": 3,
+                  "penalty": 0
+                },
+                {
+                  "number": 4,
+                  "penalty": 2
+                }
+              ],
+              "source": "tcp"
+            },
+            "placement": {
+              "state": "known",
+              "value": {
+                "rank": 5,
+                "order": 5
+              },
+              "source": "tcp"
+            },
+            "notifications": {
+              "attempt.updated": {
+                "count": 0,
+                "afterGivenIndex": 0,
+                "attemptId": "K1M_BR1_6:9"
+              }
+            }
+          }
+        },
+        {
+          "afterGivenIndex": 4,
+          "expect": {
+            "status": {
+              "state": "known",
+              "value": "finished",
+              "source": "tcp"
+            },
+            "outcome": {
+              "state": "known",
+              "value": {
+                "kind": "duration",
+                "totalSeconds": 84.36
+              },
+              "source": "tcp"
+            },
+            "gates": {
+              "state": "known",
+              "value": [
+                {
+                  "number": 3,
+                  "penalty": 0
+                },
+                {
+                  "number": 4,
+                  "penalty": 2
+                }
+              ],
+              "source": "tcp"
+            },
+            "placement": {
+              "state": "known",
+              "value": {
+                "rank": 5,
+                "order": 5
+              },
+              "source": "tcp"
+            }
+          }
+        }
+      ],
+      "then": [
+        {
+          "ingestSeq": 6,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:05:00.000Z",
+          "changedAfter": "2026-09-15T10:04:10.000Z"
+        },
+        {
+          "ingestSeq": 7,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "9"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:05:00.000Z"
+        }
+      ],
+      "expect": {
+        "outcome": {
+          "state": "not-yet"
+        },
+        "gates": {
+          "state": "not-yet"
+        },
+        "placement": {
+          "state": "not-yet"
+        },
+        "status": {
+          "state": "known",
+          "value": "not-started"
+        }
+      }
+    },
+    {
+      "id": "status-not-started-from-start-list-row",
+      "invariant": "attempt-status-transition",
+      "description": "`not-started` is presented from the first results-table row that names the Attempt, a start-list row included, with that row's envelope (CONTRACTS §3.2, DERIVATIONS §4): `status` is `not-yet` only for an Attempt no row and no listing has named. A start list names the Attempt; it is not on course.",
+      "context": {
+        "phase": "K1M_BR1_6",
+        "attemptId": "K1M_BR1_6:9"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "start-list",
+            "rows": [
+              {
+                "bib": "9"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T09:00:00.000Z"
+        }
+      ],
+      "expect": {
+        "status": {
+          "state": "known",
+          "value": "not-started",
+          "source": "xml",
+          "provisional": false
+        },
+        "outcome": {
+          "state": "not-yet"
+        },
+        "gates": {
+          "state": "not-yet"
+        },
+        "placement": {
+          "state": "not-yet"
+        },
+        "attempts": [
+          "K1M_BR1_6:9"
+        ],
+        "oncourse": []
+      }
+    },
+    {
+      "id": "classification-emptied-keeps-last-standing",
+      "invariant": "standing-push",
+      "description": "A classification table emptied upstream is no retraction: a snapshot with no rows, from either source, changes nothing, so the Standing stays as last built and nothing is pushed (DERIVATIONS §4.10; maintainer, 2026-11-06). Rows arriving again replace it whole.",
+      "context": {
+        "attemptId": "K1M_BR1_6:9",
+        "note": "no Attempt exists for a classification Phase; asOf is not read directly, a Standing being pushed exactly when its serialised form changes (CONTRACTS §5)."
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "MX1_XER_26",
+            "mode": "results",
+            "rows": [
+              {
+                "entryId": "A",
+                "bib": "4",
+                "rank": 1,
+                "order": 1,
+                "decidedIn": null
+              },
+              {
+                "entryId": "B",
+                "bib": "7",
+                "rank": 2,
+                "order": 2,
+                "decidedIn": null
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T12:00:00.000Z"
+        },
+        {
+          "ingestSeq": 2,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "MX1_XER_26",
+            "mode": "start-list",
+            "rows": []
+          },
+          "observedAt": "2026-09-15T12:30:00.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "MX1_XER_26",
+            "mode": "results",
+            "rows": [
+              {
+                "entryId": "B",
+                "bib": "7",
+                "rank": 1,
+                "order": 1,
+                "decidedIn": null
+              },
+              {
+                "entryId": "A",
+                "bib": "4",
+                "rank": 2,
+                "order": 2,
+                "decidedIn": null
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T13:00:00.000Z"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 0,
+          "expect": {
+            "notifications": {
+              "standing.updated": 1
+            }
+          }
+        },
+        {
+          "afterGivenIndex": 1,
+          "expect": {
+            "notifications": {
+              "standing.updated": {
+                "count": 0,
+                "afterGivenIndex": 0
+              }
+            }
+          }
+        }
+      ],
+      "expect": {
+        "notifications": {
+          "standing.updated": 2
+        },
+        "attempts": []
       }
     }
   ]

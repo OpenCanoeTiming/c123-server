@@ -3,8 +3,8 @@
  * DERIVATIONS §4.4, §4.6). Computed from retention alone; nothing here is stored.
  */
 import { splitRaceId, r3 } from '../ingest/common.js';
-import { isMark, present, presentStatus } from './precedence.js';
-import { fmtFor, isInstant } from './registry.js';
+import { isNoResultMark, present, presentStatus } from './precedence.js';
+import { boundSlots, fmtFor, isInstant } from './registry.js';
 import type { AttemptState, CoreState, Gate, Slot } from './types.js';
 
 const NOT_YET = { state: 'not-yet' } as const;
@@ -43,14 +43,14 @@ const judgedCells = (gates: Slot | undefined): boolean | undefined =>
 const JUDGED: ReadonlySet<string> = new Set(['outcome', 'gates', 'faults', 'placement', 'pairTotal', 'countingRun']);
 
 /** §1.2, §4.4. `status` is never provisional, and neither is what no judging can move. */
-function isProvisional(a: AttemptState, field: string, slot: Slot, gates: Slot | undefined, closed: boolean): boolean {
+function isProvisional(a: AttemptState, field: string, slot: Slot, gates: Slot | undefined, closed: boolean, unjudgeable: boolean): boolean {
   if (slot.kind === 'operator') return slot.provisional === true;
   if (slot.kind === 'inference') return JUDGED.has(field);
   if (!JUDGED.has(field)) return false;
   if (a.carried.has(field)) return true;
   if (closed) return false;
   const complete = judgedCells(gates) ?? slot.judgingComplete;
-  return complete === false || complete === null;
+  return complete === false || complete === null || (complete === undefined && unjudgeable);
 }
 
 function outcomeValue(s: CoreState, a: AttemptState, slot: Slot, gates: Slot | undefined): unknown {
@@ -63,7 +63,7 @@ function outcomeValue(s: CoreState, a: AttemptState, slot: Slot, gates: Slot | u
 }
 
 /** `eventTime` of a presented outcome: its own, else the finish with the same `Time`, whichever arrived first (§4.4). */
-function finishOf(a: AttemptState, slot: Slot): string | undefined {
+export function finishOf(a: AttemptState, slot: Slot): string | undefined {
   if (slot.eventTime !== undefined) return slot.eventTime;
   const time = (slot.value as { kind?: string; runSeconds?: number } | undefined);
   if (time?.kind !== 'duration') return undefined;
@@ -74,6 +74,7 @@ function finishOf(a: AttemptState, slot: Slot): string | undefined {
 
 /** The finish `eventTime` an Attempt presents, for `duplicate-finish` (§2.6). */
 export function presentedFinish(a: AttemptState): string | undefined {
+  if (isNoResultMark(presentStatus(a.slots.get('status'))?.value)) return undefined;
   const slot = present(a.slots.get('outcome'));
   if (slot?.state !== 'known' || (slot.value as { kind?: string } | undefined)?.kind !== 'duration') return undefined;
   const finish = finishOf(a, slot);
@@ -90,7 +91,8 @@ function firstRunUnavailable(s: CoreState, phaseId: string, bib: string): unknow
   const { classKey, rest } = splitRaceId(phaseId);
   const sibling = stated?.siblingPhaseId ?? `${classKey}_${fmt.pair.siblings[0] ?? ''}_${rest}`;
   const second = s.attempts.get(`${sibling}:${bib}`);
-  if (second === undefined || present(second.slots.get('outcome'))?.state !== 'known') return undefined;
+  if (second === undefined) return undefined;
+  if (present(second.slots.get('outcome'))?.state !== 'known' && !isNoResultMark(presentStatus(second.slots.get('status'))?.value)) return undefined;
   return { state: 'unavailable', reason };
 }
 
@@ -99,18 +101,25 @@ const PLAIN_ENVELOPED = ['startOrder', 'scheduledStart', 'heat', 'startLane', 'c
 export function viewAttempt(s: CoreState, a: AttemptState): Record<string, unknown> {
   const fmt = fmtFor(s, a.phaseId);
   const statusSlot = presentStatus(a.slots.get('status'));
-  const closed = a.gen.completed || a.left || isMark(statusSlot?.value);
+  const closed = a.gen.completed || a.left || isNoResultMark(statusSlot?.value);
   const gates = presentGates(a);
+  // §1.2: not `known` because no course is bound. A parser stamps a row only against a course (null without one), so an unstamped result
+  // is this case; an Attempt with no run yet has nothing to judge, and a heat's placement is upstream's whole result
+  const judging = fmt.cross ? present(a.slots.get('faults')) : gates;
+  const hasRun = statusSlot !== undefined && statusSlot.value !== 'not-started';
+  const unjudgeable = hasRun && !fmt.heats && boundSlots(s, a.phaseId) === undefined && judging?.state !== 'known' && judging?.state !== 'unavailable';
   const field = (name: string, slot: Slot | undefined = present(a.slots.get(name))): unknown =>
-    envelope(slot, slot !== undefined && isProvisional(a, name, slot, gates, closed));
+    envelope(slot, slot !== undefined && isProvisional(a, name, slot, gates, closed, unjudgeable));
 
   const outcomeSlot = present(a.slots.get('outcome'));
   let outcome: unknown;
-  if (outcomeSlot === undefined || outcomeSlot.state !== 'known') {
+  if (statusSlot !== undefined && isNoResultMark(statusSlot.value)) {
+    outcome = envelope({ ...statusSlot, value: { kind: 'no-result', status: statusSlot.value } }, false); // §2.6: the presentation of `status`
+  } else if (outcomeSlot === undefined || outcomeSlot.state !== 'known') {
     outcome = (outcomeSlot === undefined ? firstRunUnavailable(s, a.phaseId, a.bib) : undefined) ?? field('outcome', outcomeSlot);
   } else {
     const value = outcomeValue(s, a, outcomeSlot, gates);
-    outcome = envelope({ ...outcomeSlot, value }, isProvisional(a, 'outcome', outcomeSlot, gates, closed), finishOf(a, outcomeSlot));
+    outcome = envelope({ ...outcomeSlot, value }, isProvisional(a, 'outcome', outcomeSlot, gates, closed, unjudgeable), finishOf(a, outcomeSlot));
   }
 
   const out: Record<string, unknown> = {

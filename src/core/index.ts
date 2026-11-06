@@ -119,6 +119,7 @@ function rebaseline(s: CoreState, el: Element): void {
     a.pending = [];
     a.history = {};
     a.carried.clear();
+    a.gen.restated.clear();
     delete a.contradiction;
     delete a.withheld;
     s.dirtyAttempts.add(a);

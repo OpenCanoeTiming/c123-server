@@ -108,7 +108,7 @@ function onCourse(u: Unit, ctx: IngestContext, oc: Node): void {
   else u.obs('inference', 'status', key, dtStart !== '' ? 'on-course' : 'at-start');
   // §4.11 what the stream lists, for the core's generation and contradiction rules
   const stamp = (s: string): string | null => (s === '' ? null : (inst(s) ?? s));
-  u.obs('inference', 'onCourse', key, { dtStart: stamp(dtStart), dtFinish: stamp(dtFinish) });
+  u.obs('inference', 'onCourse', key, { dtStart: stamp(dtStart), dtFinish: stamp(dtFinish) }, 'authoritative', dtStart !== '' ? { listedStart: dtStart } : {});
 
   // §4.6(a) gate cells
   const hasGates = c['@Gates'] !== undefined;

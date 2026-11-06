@@ -7,15 +7,15 @@ import { contradict } from './retraction.js';
 import { marksHeld, startGeneration } from './generations.js';
 import { isMark, present, presentStatus } from './precedence.js';
 import { fmtFor, instant } from './registry.js';
-import { settlePending } from './rows.js';
+import { CARRIED, settlePending } from './rows.js';
 import type { AttemptState, CoreState, Element } from './types.js';
 
-/** `onCourseLeaveAfterSeconds`, provisional (DERIVATIONS §4.1); M1 sets it from the measured distribution (#204). */
-export const ON_COURSE_LEAVE_AFTER_SECONDS = 5;
+/** `onCourseLeaveAfterSeconds` (DERIVATIONS §4.1, round 20): one listing cycle above the longest recorded hiccup, 2.59 s. */
+export const ON_COURSE_LEAVE_AFTER_SECONDS = 4;
 const LEAVE_AFTER_MS = ON_COURSE_LEAVE_AFTER_SECONDS * 1000;
 
 /**
- * THE leave rule, the one place #204 changes. DERIVATIONS §4.1's one evaluation: at a TCP message arriving the constant or more after
+ * THE leave rule, DERIVATIONS §4.1's one evaluation: at a TCP message arriving the constant or more after
  * the previous one nothing leaves and the Attempt counts from that message (the gap spans a stall, "while other TCP messages keep
  * arriving"); at every other message an Attempt not named for the constant has left.
  */
@@ -42,7 +42,9 @@ export function list(s: CoreState, a: AttemptState, el: Element): void {
 
 const setStream = (s: CoreState, a: AttemptState, el: Element, value: string, seq: number, eventTime?: string): void => {
   const slot = slotOf(s, el, 'tcp', 'inference', value, seq, eventTime !== undefined ? { eventTime } : {});
-  if (retain(fieldSlots(a.slots, 'status'), 'inference', slot)) s.dirtyAttempts.add(a);
+  const fs = fieldSlots(a.slots, 'status');
+  const shown = presentStatus(fs);
+  if (retain(fs, 'inference', slot, presentStatus) || presentStatus(fs) !== shown) s.dirtyAttempts.add(a);
 };
 
 export const streamStatus = (a: AttemptState): unknown => a.slots.get('status')?.inference?.value;
@@ -59,8 +61,6 @@ export function observeStreamStatus(s: CoreState, a: AttemptState, el: Element, 
   if (cur === 'finished' || (cur === 'on-course' && value === 'at-start')) return;
   setStream(s, a, el, String(value), seq);
 }
-
-const CARRIED = ['placement', 'pairTotal', 'countingRun'] as const;
 
 /** A `finished` or a mark the table presents: no listing displaces it (INV-2 rule 1). */
 function tablePresentsResult(a: AttemptState): boolean {
@@ -80,16 +80,20 @@ function withdrawFinish(s: CoreState, a: AttemptState): void {
  * §4.11: the first start is no change; a different start with no finish in a recorded generation is the re-run; every other
  * different start is a correction inside the generation. No results-table value, `run` or placement moves at a correction.
  */
-function observeStart(s: CoreState, a: AttemptState, el: Element, start: string, ended: boolean, seq: number): void {
-  if (a.gen.start === undefined) {
-    a.gen.start = start;
-    a.gen.markAtStart = marksHeld(a);
-  } else if (start === a.gen.start) return;
+function observeStart(s: CoreState, a: AttemptState, el: Element, start: string, listed: string, ended: boolean, seq: number): void {
+  if (a.gen.start === undefined) a.gen.markAtStart = marksHeld(a);
+  else if (listed === a.gen.startText) return;
   else if (!ended && a.gen.recorded) startGeneration(s, a, el, start, seq);
-  else {
-    a.gen.start = start;
-    a.gen.correcting = true;
-  }
+  else a.gen.correcting = true;
+  a.gen.start = start;
+  a.gen.startText = listed;
+}
+
+/** §1.2: the carry begins at the first listing of the generation, staged or started; a result of this run already restated the fields. */
+function beginCarry(s: CoreState, a: AttemptState): void {
+  if (a.gen.started) return;
+  a.gen.started = true;
+  if (fmtFor(s, a.phaseId).pair?.role === 'second' && !tablePresentsResult(a)) for (const f of CARRIED) if (present(a.slots.get(f))?.state === 'known') a.carried.add(f);
 }
 
 /** `{ dtStart, dtFinish }` of one listing: a new start, a finish, or the absence of one the row states. */
@@ -98,7 +102,8 @@ export function applyListing(s: CoreState, a: AttemptState, el: Element, value: 
   const start = instant(s, a.phaseId, value.dtStart, el.observedAt);
   const finish = instant(s, a.phaseId, value.dtFinish, el.observedAt);
   a.gen.correcting = false;
-  if (start !== undefined) observeStart(s, a, el, start, finish !== undefined, seq);
+  if (start !== undefined) observeStart(s, a, el, start, typeof el['listedStart'] === 'string' ? el['listedStart'] : start, finish !== undefined, seq);
+  beginCarry(s, a);
   if (finish !== undefined) {
     if (a.contradiction !== undefined) {
       delete a.contradiction;
@@ -121,10 +126,6 @@ export function applyListing(s: CoreState, a: AttemptState, el: Element, value: 
     else withdrawFinish(s, a);
   }
   setStream(s, a, el, 'on-course', seq);
-  if (!a.gen.started) {
-    a.gen.started = true;
-    if (fmt.pair?.role === 'second') for (const f of CARRIED) if (present(a.slots.get(f))?.state === 'known') a.carried.add(f);
-  }
 }
 
 /** An on-course outcome. A result row stops the recomputation by precedence; `Completed` and the leave stop it here (§4.3). */
@@ -140,7 +141,11 @@ export function observeStreamOutcome(s: CoreState, a: AttemptState, el: Element,
     ...('judgingComplete' in el ? { judgingComplete: el['judgingComplete'] as boolean | null } : {}),
   };
   if (retain(fs, 'inference', slotOf(s, el, 'tcp', 'inference', value, seq, extra))) s.dirtyAttempts.add(a);
-  if (el['runClosed'] === true) a.gen.completed = true;
+  // §4.4: a `Y` on a listing with no finish closes nothing; a closure that flips `provisional` is pushed
+  if (el['runClosed'] === true && (finishing || a.gen.finish?.eventTime !== undefined)) {
+    a.gen.completed = true;
+    s.dirtyAttempts.add(a);
+  }
   if (!finishing) return;
   a.gen.finish = { ...a.gen.finish, runSeconds: value.runSeconds as number, ...(eventTime !== undefined ? { eventTime } : {}) };
   if (eventTime !== undefined && streamStatus(a) !== 'finished') setStream(s, a, el, 'finished', seq, eventTime);

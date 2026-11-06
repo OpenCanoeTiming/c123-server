@@ -26,7 +26,7 @@ export function marksHeld(a: AttemptState): ResultMark[] {
  */
 export function recordsGeneration(a: AttemptState, mark: ResultMark | undefined, time: number | undefined): boolean {
   if (a.gen.start === undefined) return false;
-  if (mark !== undefined) return !a.gen.markAtStart.includes(mark) && !marksHeld(a).includes(mark);
+  if (mark !== undefined && !a.gen.markAtStart.includes(mark) && !marksHeld(a).includes(mark)) return true;
   if (time === undefined) return false;
   const outcome = a.slots.get('outcome');
   return ![outcome?.tcp, outcome?.xml].some((slot) => (slot?.value as { runSeconds?: number } | undefined)?.runSeconds === time);
@@ -40,9 +40,9 @@ export function startGeneration(s: CoreState, a: AttemptState, el: Element, star
   const markAtStart = start !== undefined ? marksHeld(a) : [];
   forgetRunScoped(a);
   a.gen = {
-    n: a.gen.n + 1, recorded: false, markAtStart, correcting: false, needsAttribution: start !== undefined, completed: false, started: false,
-    firstEnvelope: a.gen.firstEnvelope,
-    ...(start !== undefined ? { start } : {}),
+    n: a.gen.n + 1, recorded: false, markAtStart, correcting: false, needsAttribution: start !== undefined, completed: false, started: false, restated: new Set(),
+    firstEnvelope: { observedAt: el.observedAt, source: 'tcp' },
+    ...(start !== undefined ? { start, startText: start } : {}),
   };
   a.held = [];
   a.pending = [];

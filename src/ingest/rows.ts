@@ -96,13 +96,15 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
   const cells = fixedCells(r.gates, usable(slots) ? slots.length : 0, bad, fmt.cross);
   for (const b of bad) u.diagnostic({ kind: 'unparseable-cell', attemptId, source, slot: b.slot, text: b.text });
   const hasTime = r.time !== undefined;
-  if (slots === undefined) row['cells'] = cells;
-  else if (!usable(slots)) row[fmt.cross ? 'faults' : 'gates'] = NOT_CONFIGURED; // a bound course with an empty layout: the snapshot's determination
-  else if (fmt.cross) {
+  // §4.6(b): blank is thirty missing cells where the row states a result, by a time or a mark; a row stating neither states nothing, `Gates` included
+  const statesCells = r.gates.trim() !== '' || hasTime || m !== undefined;
+  if (statesCells && slots === undefined) row['cells'] = cells;
+  else if (statesCells && !usable(slots)) row[fmt.cross ? 'faults' : 'gates'] = NOT_CONFIGURED; // a bound course with an empty layout: the snapshot's determination
+  else if (statesCells && slots !== undefined && fmt.cross) {
     row['gates'] = NA;
     const f = faultsFromCells(cells, slots);
     if (f !== undefined) row['faults'] = f satisfies Faults;
-  } else {
+  } else if (statesCells && slots !== undefined) {
     const gates: Gate[] = gatesFromCells(cells, slots);
     if (x !== undefined && x.memberGates.length > 0) {
       const memberBad: CellProblem[] = [];
@@ -124,11 +126,9 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
 
   // §4.3-4.4 outcome
   const untimed = x !== undefined && fmt.scoringKind === 'duration' && hasTime && rank !== undefined && x.dtFinish.trim() === '';
-  // §0.5: a row states what it carries. A mark beside a time stays beside it; `no-result` over a time is the core's presentation (§4.1)
-  const noResult: Outcome | undefined = status !== undefined && status !== 'non-ranked' ? { kind: 'no-result', status } : undefined;
+  // §0.5: a row states what it carries. A mark beside a time stays beside it; `no-result` is the core's presentation (§4.1)
   let outcome: Outcome | typeof NA | undefined;
-  if (noResult !== undefined && (r.time === undefined || untimed)) outcome = noResult;
-  else if (fmt.heats) outcome = rank !== undefined && order !== undefined ? { kind: 'ordinal', order } : undefined;
+  if (fmt.heats) outcome = rank !== undefined && order !== undefined ? { kind: 'ordinal', order } : undefined;
   else if (r.time === undefined) outcome = undefined;
   else if (untimed) outcome = NA;
   else if (fmt.cross) outcome = { kind: 'duration', runSeconds: r.time, penaltySeconds: 0, totalSeconds: r.time }; // §4.4: no time penalties in Cross
@@ -136,7 +136,7 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
     const pen = sumJudged(cells, slots);
     outcome = { kind: 'duration', runSeconds: r.time, penaltySeconds: pen, totalSeconds: r3(r.time + pen) };
   } else if (r.pen !== undefined && r.total !== undefined) outcome = { kind: 'duration', runSeconds: r.time, penaltySeconds: r.pen, totalSeconds: r.total };
-  else outcome = noResult; // an empty Pen or Total is absent, never zero (§0.1): no complete duration to state
+  // an empty Pen or Total is absent, never zero (§0.1): no complete duration to state
   if (outcome !== undefined) row['outcome'] = outcome;
   if (untimed) {
     row['untimed'] = true;
