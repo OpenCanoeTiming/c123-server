@@ -62,7 +62,11 @@ judging clause, and a false leave's closure undone by its re-listing are the cor
 second pass (2026-11-06, after review) moved none: the re-listing's evidence corrected to one recorded
 flip, P11's judging clause back in its causal form, P6(b) brought to P11's re-listing reading, upstream's
 withdrawal of a judged cell while listed named as admitted, and round 20's landed vectors no longer
-"owed" — the core's and the checker's (DERIVATIONS §4.4; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §2).
+"owed" — the core's and the checker's (DERIVATIONS §4.4; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §2). Round 22 (2026-11-06) moved none: the ranked value behind `behindSeconds` and the
+`order-disagreement` check being the value the placement is based on (`pairTotal` in both standings of a
+second-run Phase), and a Phase no element has described reading its `pair` from its id, are the core's and
+a harness convention (CONTRACTS §5; CONFORMANCE-VECTORS §1); a client shows `behindSeconds` as delivered
+and expects the `pair` standing, on a real stream, once the stated `siblingPhaseId` is known as before.
 
 ---
 

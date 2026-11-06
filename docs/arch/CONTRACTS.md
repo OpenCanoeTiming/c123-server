@@ -56,6 +56,13 @@ carrying rows replaces rows whole under INV-2c's guard alone, and one carrying n
 built Standing as it is (`DERIVATIONS.md` §4.10; maintainer, 2026-11-06); `sectorEndsAfterGate` is
 strictly increasing (§2.12). No wire shape changed. (Second pass, 2026-11-06, after review.)
 
+**Revision, 2026-11-06 (contract round 22, from implementing the Standing, server#205).** Two
+rulings in §5. The ranked value an entry is compared on, in `behindSeconds` and in the
+`order-disagreement` check, is the value its placement is based on: `pairTotal` in both standings of
+a second-run Phase, `result.totalSeconds` otherwise (steps 6, 7). A `pair` standing's "known"
+first run is the Phase's stated `pair`; a Phase no element has described reads from its id, a
+harness convention of `CONFORMANCE-VECTORS.md` §1 (step 1). No wire shape changed.
+
 ---
 
 ## 0. How to read this document
@@ -1647,7 +1654,11 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    second Phase for a pair. **A `pair` standing exists once the second Phase's `pair.siblingPhaseId`
    is known** (§2.4): its scope names both Phases. Until the schedule names the first run (a TCP-first
    cold start), the combined placement is on the Attempts and in the second Phase's `phase` standing
-   only; the `pair` standing's first publication follows the resolution.
+   only; the `pair` standing's first publication follows the resolution. Known means stated on the
+   Phase: a parser states `pair` with the `format`, `siblingPhaseId: null` until the schedule names
+   the first run (`DERIVATIONS.md` §2.1), and the `pair` standing waits. A Phase no element has
+   described — a stream of Attempt observations alone, as the conformance vectors are — reads from
+   its id, `format` and first run alike (`CONFORMANCE-VECTORS.md` §1, a harness convention; round 22).
    **`asOf`** is the ingest time of the latest observation that changed the standing as serialised;
    for a classification, the latest scope snapshot that changed its rows (§2.4,
    `DERIVATIONS.md` §4.10), not a snapshot re-sending the same rows and not an emptied table, which
@@ -1693,12 +1704,17 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
 5. **`provisional` and `underReview`** are copied from the entry's own Attempt. They are `true` if any
    of `outcome`, `placement` or `pairTotal` is provisional.
 6. **`behindSeconds`** is the entry's ranked value minus the first-ordered entry's, for duration
-   scopes. The ranked value is `pairTotalSeconds` for a pair, and `result.totalSeconds` otherwise. It
-   is `null` otherwise, and `null` for entries without a numeric ranked value.
+   scopes. **The ranked value is the value the entry's placement is based on:** `pairTotal` for an
+   entry of a second-run Phase, in its `phase` standing and in the `pair` standing alike (its placement
+   is the combined one, step 2, `DERIVATIONS.md` §4.7), and `result.totalSeconds` otherwise. It is
+   `null` otherwise, and `null` for entries without a numeric ranked value. Compared on `result`, a
+   second-run Phase's `phase` standing sets a combined order against run 2's own times: negative
+   `behindSeconds`, and 118–285 false step-7 anomalies per recording, every one of them there
+   (round 22).
 7. **Anomaly check, the one mechanical comparison** (`order-disagreement`). It applies in a
-   duration-scored `phase` or `pair` standing, among placed entries with a numeric result and no
-   no-result mark. An anomaly is recorded when an entry is ordered ahead of another whose result is
-   strictly smaller. Ties are never flagged, because upstream breaks them legitimately: a combined tie
+   duration-scored `phase` or `pair` standing, among placed entries with a numeric ranked value
+   (step 6) and no no-result mark. An anomaly is recorded when an entry is ordered ahead of another
+   whose ranked value is strictly smaller. Ties are never flagged, because upstream breaks them legitimately: a combined tie
    by the run that did not count, and a single-run tie by its own order field. Cross scopes are never
    checked. Anomalies go to the admin audience only. They never reorder anything. **The live tier
    assembles standings without step 7 and without step 4's check**: it has no results-table
