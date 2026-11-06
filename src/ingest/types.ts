@@ -32,8 +32,6 @@ export interface IngestContext {
   xmlPollIntervalSeconds?: number | undefined;
   /** phaseId -> the course bound to it (slots as in CONTRACTS §2.12). */
   courses?: Record<string, { courseId: string; slots: CourseSlot[] }> | undefined;
-  /** Course of the currently running Phase: the only course a TCP `RaceConfig` may refresh (§2.3). */
-  boundCourseId?: string | undefined;
   /** Date of Canoe123's timing clock, for `TimeOfDay` (§5). */
   eventDate?: string | undefined;
   /** Registry scheme, supplied by bridge configuration (§3). */

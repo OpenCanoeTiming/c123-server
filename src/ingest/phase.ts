@@ -80,26 +80,19 @@ export function emitPhase(u: Unit, kind: 'fragment' | 'result-row', p: PhaseIn, 
   else u.notYet(kind, 'courseId', key);
 }
 
-/**
- * §2.3: a course's gates, slots, splits and captions; unavailable{not-configured} when empty or fabricated. `layout` and
- * `sectorEndsAfterGate` come from the snapshot alone: TCP strips the `S` markers (CONTRACTS §2.12).
- */
-export function emitCourse(
-  u: Unit, kind: 'fragment' | 'result-row', source: 'tcp' | 'xml', courseId: string, layout: string, captions: string[] | undefined, fabricated: boolean,
-): void {
+/** §2.3: a snapshot course's layout, gates, slots, sector ends and splits; unavailable{not-configured} when its layout is empty. */
+export function emitCourse(u: Unit, courseId: string, layout: string): void {
   const key = { courseId };
-  const xml = source === 'xml';
-  if (fabricated || layout.trim() === '') {
-    for (const f of xml ? ['layout', 'gates', 'slots', 'sectorEndsAfterGate', 'splitsAfterGate'] : ['gates', 'slots', 'splitsAfterGate']) u.unavailable(kind, f, key, NC);
-    if (captions !== undefined) u.unavailable(kind, 'captions', key, NC);
+  const kind = 'result-row';
+  if (layout.trim() === '') {
+    for (const f of ['layout', 'gates', 'slots', 'sectorEndsAfterGate', 'splitsAfterGate']) u.unavailable(kind, f, key, NC);
     return;
   }
-  const l = parseLayout(layout, captions);
+  const l = parseLayout(layout);
   if (l.unknownChars.length > 0) u.diagnostic({ kind: 'unknown-layout-char', courseId, chars: [...new Set(l.unknownChars)].sort() });
-  if (xml) u.obs(kind, 'layout', key, layout);
+  u.obs(kind, 'layout', key, layout);
   u.obs(kind, 'gates', key, l.gates);
   u.obs(kind, 'slots', key, l.slots);
-  if (xml) u.obs(kind, 'sectorEndsAfterGate', key, l.sectorEndsAfterGate);
+  u.obs(kind, 'sectorEndsAfterGate', key, l.sectorEndsAfterGate);
   u.obs(kind, 'splitsAfterGate', key, l.splitsAfterGate);
-  if (captions !== undefined) u.obs(kind, 'captions', key, captions);
 }

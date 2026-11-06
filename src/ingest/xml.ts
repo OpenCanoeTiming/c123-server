@@ -123,7 +123,7 @@ export function parseXmlSnapshot(xml: string, ctx: IngestContext): IngestElement
   }
 
   // §2.3 Course
-  for (const [courseId, layout] of layouts) emitCourse(u, 'result-row', 'xml', courseId, layout, undefined, false);
+  for (const [courseId, layout] of layouts) emitCourse(u, courseId, layout);
 
   // §2.1 Phase
   for (const s of schedule) {
