@@ -1,0 +1,162 @@
+/**
+ * The on-course stream: the list as upstream shows it, the leave rule, and what a listing says about the Attempt's lifecycle
+ * (DERIVATIONS §4.1, §4.8, §4.11; INV-2d). Evaluated at every TCP message, never on a timer, so replay is deterministic.
+ */
+import { fieldSlots, retain, slotOf, tick } from './retention.js';
+import { contradict } from './retraction.js';
+import { startGeneration } from './generations.js';
+import { present } from './precedence.js';
+import { fmtFor, instant } from './registry.js';
+import { settlePending } from './rows.js';
+import type { AttemptState, CoreState, Element } from './types.js';
+
+/** `onCourseLeaveAfterSeconds`, provisional (DERIVATIONS §4.1); M1 sets it from the measured distribution (#204). */
+export const ON_COURSE_LEAVE_AFTER_SECONDS = 5;
+const LEAVE_AFTER_MS = ON_COURSE_LEAVE_AFTER_SECONDS * 1000;
+
+/**
+ * THE leave rule, the one place #204 changes. Upstream has stopped listing an Attempt when no on-course message names it for the
+ * constant "while other TCP messages keep arriving": a message that ends a silence longer than the constant is not evaluated,
+ * because nothing was arriving. That is the least the sentence says, not the stall exemption (#204): the very next message
+ * evaluates the same gap, so a stall still evicts, and re-learning the list after one is #204's.
+ */
+function hasStoppedListing(a: AttemptState, now: number, previousTcpAt: number | undefined): boolean {
+  if (previousTcpAt === undefined || now - previousTcpAt >= LEAVE_AFTER_MS) return false;
+  return now - a.lastListedAt >= LEAVE_AFTER_MS;
+}
+
+/** Any on-course observation lists its Attempt; a re-listing clears the leave flag. */
+export function list(s: CoreState, a: AttemptState, el: Element): void {
+  a.lastListedAt = Date.parse(el.observedAt);
+  a.left = false;
+  s.oncourseAsOf = el.observedAt;
+  if (!a.listed) {
+    a.listed = true;
+    s.listed.set(a.id, a);
+    s.dirtyAttempts.add(a);
+  }
+}
+
+const setStream = (s: CoreState, a: AttemptState, el: Element, value: string, seq: number, eventTime?: string): void => {
+  const slot = slotOf(s, el, 'tcp', 'inference', value, seq, eventTime !== undefined ? { eventTime } : {});
+  if (retain(fieldSlots(a.slots, 'status'), 'inference', slot)) s.dirtyAttempts.add(a);
+};
+
+export const streamStatus = (a: AttemptState): unknown => a.slots.get('status')?.inference?.value;
+
+/** A status the stream states. Monotonic within a generation: going back takes a listing's evidence, not a bare `status`. */
+export function observeStreamStatus(s: CoreState, a: AttemptState, el: Element, value: unknown, seq: number): void {
+  const cur = streamStatus(a);
+  if (value === 'finished') {
+    const eventTime = instant(s, a.phaseId, el['eventTime'] as string | undefined, el.observedAt);
+    a.gen.finish = { ...a.gen.finish, ...(eventTime !== undefined ? { eventTime } : {}) };
+    setStream(s, a, el, 'finished', seq, eventTime);
+    return;
+  }
+  if (cur === 'finished' || (cur === 'on-course' && value === 'at-start')) return;
+  setStream(s, a, el, String(value), seq);
+}
+
+const CARRIED = ['placement', 'pairTotal', 'countingRun'] as const;
+
+/** `{ dtStart, dtFinish }` of one listing: a new start, a finish, or the absence of one the row states. */
+export function applyListing(s: CoreState, a: AttemptState, el: Element, value: { dtStart: string | null; dtFinish: string | null }, seq: number): void {
+  const fmt = fmtFor(s, a.phaseId);
+  const start = instant(s, a.phaseId, value.dtStart, el.observedAt);
+  const finish = instant(s, a.phaseId, value.dtFinish, el.observedAt);
+  if (start !== undefined) {
+    if (a.gen.start === undefined) a.gen.start = start;
+    else if (start !== a.gen.start) startGeneration(s, a, el, start, seq);
+  }
+  if (finish !== undefined) {
+    if (a.contradiction !== undefined) {
+      delete a.contradiction;
+      s.dirtyAttempts.add(a);
+    }
+    a.gen.finish = { ...a.gen.finish, eventTime: finish };
+    setStream(s, a, el, 'finished', seq, finish);
+    return;
+  }
+  if (start === undefined) {
+    if (fmt.heats) return;
+    const cur = streamStatus(a);
+    if (cur === undefined || cur === 'left-without-finish' || cur === 'not-started') setStream(s, a, el, 'at-start', seq);
+    return;
+  }
+  if (!fmt.cross) {
+    if (contradict(s, a, el, seq)) s.dirtyAttempts.add(a);
+    else if (streamStatus(a) === 'finished') {
+      // the finish was taken away before any row carried it
+      delete a.gen.finish;
+      delete fieldSlots(a.slots, 'outcome').inference;
+      s.dirtyAttempts.add(a);
+    }
+  }
+  setStream(s, a, el, 'on-course', seq);
+  if (!a.gen.started) {
+    a.gen.started = true;
+    if (fmt.pair?.role === 'second') for (const f of CARRIED) if (present(a.slots.get(f))?.state === 'known') a.carried.add(f);
+  }
+}
+
+/** An on-course outcome. A result row stops the recomputation by precedence; `Completed` and the leave stop it here (§4.3). */
+export function observeStreamOutcome(s: CoreState, a: AttemptState, el: Element, value: { kind: string; runSeconds?: number }, seq: number): void {
+  const finishing = value.kind === 'duration';
+  const fs = fieldSlots(a.slots, 'outcome');
+  if (!finishing && a.gen.finish !== undefined) return;
+  if (finishing && a.gen.completed && fs.inference !== undefined) return;
+  const eventTime = instant(s, a.phaseId, el['eventTime'] as string | undefined, el.observedAt);
+  const extra = {
+    confidence: el['confidence'] === 'inferred' ? ('inferred' as const) : ('authoritative' as const),
+    ...(eventTime !== undefined ? { eventTime } : {}),
+    ...('judgingComplete' in el ? { judgingComplete: el['judgingComplete'] as boolean | null } : {}),
+  };
+  if (retain(fs, 'inference', slotOf(s, el, 'tcp', 'inference', value, seq, extra))) s.dirtyAttempts.add(a);
+  if (el['runClosed'] === true) a.gen.completed = true;
+  if (!finishing) return;
+  a.gen.finish = { ...a.gen.finish, runSeconds: value.runSeconds as number, ...(eventTime !== undefined ? { eventTime } : {}) };
+  if (eventTime !== undefined && streamStatus(a) !== 'finished') setStream(s, a, el, 'finished', seq, eventTime);
+  settlePending(s, a);
+}
+
+/** The Attempt left upstream's list: `left-without-finish`, or back to `not-started` if it never started. Slalom only (§4.1). */
+export function leave(s: CoreState, a: AttemptState, el: Element): void {
+  a.listed = false;
+  a.left = true;
+  s.listed.delete(a.id);
+  s.counters.leaves++;
+  s.dirtyAttempts.add(a);
+  if (fmtFor(s, a.phaseId).cross) return;
+  const cur = streamStatus(a);
+  if (cur === 'finished' || a.gen.finish !== undefined) return;
+  const seq = tick(s);
+  if (cur === 'on-course' || a.gen.start !== undefined) {
+    setStream(s, a, el, 'left-without-finish', seq);
+    delete fieldSlots(a.slots, 'outcome').inference;
+  } else if (cur === 'at-start') setStream(s, a, el, 'not-started', seq);
+}
+
+/** The rule's one evaluation, after a TCP unit is merged, so the unit's own listings count. */
+export function applyLeaveRule(s: CoreState, el: Element): void {
+  const now = Date.parse(el.observedAt);
+  const previous = s.previousTcpAt;
+  s.previousTcpAt = now;
+  for (const a of [...s.listed.values()]) if (hasStoppedListing(a, now, previous)) leave(s, a, el);
+}
+
+/** `oncourse.updated`'s body (§7.2): ordered by `courseOrder`, an Attempt without one last by `startOrder` (§4.8). */
+export function oncourseView(s: CoreState): { attemptIds: string[]; featuredByUpstream: string | null; asOf: string | null } {
+  const order = (a: AttemptState, f: string): number => {
+    const v = present(a.slots.get(f))?.value;
+    return typeof v === 'number' ? v : Number.MAX_SAFE_INTEGER;
+  };
+  const listed = [...s.listed.values()].sort(
+    (a, b) => order(a, 'courseOrder') - order(b, 'courseOrder') || order(a, 'startOrder') - order(b, 'startOrder') || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
+  const named = (side: { attemptId: string } | null | undefined): string | undefined => (side !== null && side !== undefined && s.listed.has(side.attemptId) ? side.attemptId : undefined);
+  return {
+    attemptIds: listed.map((a) => a.id),
+    featuredByUpstream: named(s.featured?.odd) ?? named(s.featured?.even) ?? null,
+    asOf: s.oncourseAsOf,
+  };
+}
