@@ -314,7 +314,12 @@ Each vector has:
   where present, else the one `context.attemptId` belongs to;** a vector states an `attemptId` as
   `${phaseId}:${bib}` (§2.6), and where both are present they agree. Reading the Phase off the id is
   a convention of this file alone, for a harness: a deployable finds a Phase through `Attempt.phaseId`
-  and parses no identifier (`CONTRACTS.md` §1.1). The Entry is that Attempt's; where no element sets
+  and parses no identifier (`CONTRACTS.md` §1.1). The same convention describes a Phase no element
+  has described: its `format` is the id's token, and so its `pair`, with the first run named by
+  `CONTRACTS.md` §2.4's pairing by class and token — `standing-not-resent-on-running-tick` has its
+  `pair` standing from its first snapshot (`CONTRACTS.md` §5 step 1; round 22). A parser states
+  `pair` with the format, `siblingPhaseId: null` until the schedule names the first run, and that
+  stated `null` makes the `pair` standing wait. The Entry is that Attempt's; where no element sets
   the Attempt's `entry` pointer, every Entry field in the vector is one Entry's. Neither needs a
   creation element: like the Attempt, each exists once observed. A merge port therefore exposes three
   presented resources, the Attempt, its Entry and its Phase (a `phase(phaseId)` beside `entry()`),
