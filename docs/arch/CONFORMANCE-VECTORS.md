@@ -112,6 +112,32 @@ value, source and generation: INV-5 advances the retained candidate's content ag
 it), A's new value presented. It lands with
 the harness change that reads the key, since the suite counts are pinned in code (93/87 → 94/88).
 
+**Round 19** (2026-11-06, the merge core's first sweep over all seven recordings, server#203)
+restated the generation trigger (`CONTRACTS.md` §2.6; `DERIVATIONS.md` §4.11): a listing that
+changes the start increments `run` only with no finish and a recorded generation; every other start
+change is a correction inside the generation. No existing vector changes: the `run-generation`
+vectors state the generation through a `run` observation (below), and no vector lists a changed
+start. **Five vectors are owed**, all merge, all on site (94/88 → 99/93), their `given` from the
+recordings' shapes: `start-correction-mid-run-keeps-generation` (K1M_BR1_18:138 and K1M_BR1_20:115
+in one: listing start S1, listing with `dtStart: null`, listing start S0 earlier than S1 and no
+finish, nothing recorded → `run` 1, `status: on-course`, no `attempt.updated` carrying `run`; then
+the finish and the row presented as usual); `start-correction-after-finish-row-first`
+(C1M_BR2_18:56 as recorded: row 81.62 rank 11, finish listing with `Time` 81.62, row 120.98 rank 60,
+listing with start S0 and the same `dtFinish` → `run` 1, `status: finished`, `outcome` 120.98 from
+`tcp` with the unchanged finish as `eventTime`, placement rank 60, `diagnostics: []`);
+`start-correction-after-finish-listing-first` (the same with the listing before the 120.98 row:
+after the listing `outcome` still 81.62, no `contradicted-finish`; after the row 120.98);
+`rerun-trigger-new-start-after-recorded-finish` (C1M_BR1_19:7 by listings: start, finish listing
+with `Time` 96.69, row 96.69 rank 1, a `tcp` start-list snapshot retracting it, a listing with
+`dtStart: null`, a listing with the new start and no finish → `run` 2 with every run-scoped field
+`not-yet` in that delta; `then` the row 83.57 before the finish, the finish with 83.57 → attributed
+and presented); and `inv2-rule2-reconnect-redelivery-regains-precedence` (`tcp` 84.36;
+`tcp-disconnected`; a rewrite whose `changedAfter` follows the disconnect with `xml` 134.36,
+presented; `tcp-connected`; `tcp` re-sends 84.36 → presented from `tcp`, one `attempt.updated`
+for the source change; INV-5 as restated in `CONTRACTS.md` §4). The `then` of the fourth is the
+recorded order (`rerun-tcp-row-before-new-finish-not-presented` already asserts attribution; the
+new vector asserts the trigger).
+
 ---
 
 ## 1. Format
@@ -183,7 +209,13 @@ Each vector has:
   the only element that carries classification rows, the `push: 'classification'` element being
   the live tier's.
 - **On-course listing.** An observation with `field: 'onCourse'` and
-  `value: { dtStart, dtFinish }` states what the on-course stream lists for the Attempt (INV-2d).
+  `value: { dtStart, dtFinish }` states what the on-course stream lists for the Attempt (INV-2d,
+  `DERIVATIONS.md` §4.11: a changed `dtStart` is the generation trigger or a start correction by
+  that section's rule). **A `run` observation** (`field: 'run'`, `kind: inference`) is the file's
+  shorthand for the trigger already decided: it states the generation; its `eventTime`, where
+  present, is the generation's recorded start, and rows are attributed against it; without one
+  the generation has no recorded start and attribution raises no question
+  (`rebaseline-keeps-writes-and-generation` presents its XML row for that reason).
 - A `kind: 'fragment'` observation stands for any single-row, non-snapshot message.
 - **Live-tier elements.** `{ ingestSeq, push: 'entry' | 'class' | 'phase' | 'course' | 'oncourse' |
   'classification', body }` is a bare §8.3 push; the event `delete` with `attemptId` is a `DELETE`. `expect.notifications` may be a map of
@@ -350,7 +382,7 @@ check, readable under its own `run`) is not asserted.
 |---|---|---|
 | INV-1 (monotonic knowledge) | `inv1-untouched-field-not-regressed`, `inv1-never-observed-stays-not-yet` | 2 |
 | INV-2 rule 1 (result row over inference) | `inv2-rule1-result-row-supersedes-inference`, `inv2-rule1-inference-never-supersedes-result-row` | 2 |
-| INV-2 rule 2 (TCP continuity) | `inv2-rule2-connected-tcp-beats-later-xml`, `-xml-takes-over-after-disconnect`, `-reconnect-does-not-restore-stale-tcp`, `-fresh-tcp-after-reconnect-wins`, `-xml-alone-at-cold-start` | 5 |
+| INV-2 rule 2 (TCP continuity) | `inv2-rule2-connected-tcp-beats-later-xml`, `-xml-takes-over-after-disconnect`, `-reconnect-does-not-restore-stale-tcp`, `-fresh-tcp-after-reconnect-wins`, `-xml-alone-at-cold-start`; owed (round 19): `-reconnect-redelivery-regains-precedence` | 5 (+1 owed) |
 | INV-2 rule 1, `gates` cell-wise | `gates-blank-result-cell-keeps-judged-oncourse-cell`, `gates-result-vector-authoritative-after-leaving` | 2 |
 | INV-2 rule 2 exception (marks on silent paths) | `left-without-finish-then-mark-from-xml`, `xml-mark-does-not-override-tcp-finish` | 2 |
 | `left-without-finish` | `left-without-finish-observed-not-dnf` | 1 |
@@ -372,7 +404,7 @@ check, readable under its own `run`) is not asserted.
 | INV-4, INV-5, INV-6 | one each | 3 |
 | `provisional` in both upstream modes; pair fields; `status` | `provisional-incomplete-judging-then-settles`, `-first-push-already-complete`, `-run-closed-without-course`, `-pair-fields-while-run-2-on-course`, `status-never-provisional` | 5 |
 | Ongoing recomputation before the result push | `ongoing-recomputation-provisional-total-revised-by-late-gate` | 1 |
-| Run generation (re-run) | `rerun-retracts-run-scoped-fields`, `rerun-old-generation-row-not-presented`, `rerun-tcp-row-before-new-finish-not-presented`, `rerun-status-transition-legal-only-with-generation`, `rerun-stale-mark-not-presented` | 5 |
+| Run generation (re-run) | `rerun-retracts-run-scoped-fields`, `rerun-old-generation-row-not-presented`, `rerun-tcp-row-before-new-finish-not-presented`, `rerun-status-transition-legal-only-with-generation`, `rerun-stale-mark-not-presented`; owed (round 19): `rerun-trigger-new-start-after-recorded-finish`, `start-correction-mid-run-keeps-generation`, `start-correction-after-finish-row-first`, `start-correction-after-finish-listing-first` | 5 (+4 owed) |
 | Marks and review; untimed rows | `under-review-independent-of-provisional`, `second-run-dns-keeps-combined-placement`, `attemptstatus-finished-to-dsq-post-finish`, `untimed-row-outcome-not-applicable` | 4 |
 | Two-run | `two-run-br1-untouched-by-br2`, `-recovered-from-xml-cold`, `-unavailable-no-live-no-xml` | 3 |
 | Kayak Cross | `cross-outcome-not-yet-before-operator-entry`, `-from-placement-not-time`, `-corrected-after-next-heat-started` | 3 |
@@ -452,3 +484,8 @@ presented-state fact, covered by `inv2b-disagreement-surfaced-not-adopted`.
     whatever the file's age, and a delayed poll's read as earlier than it could be; `changedAfter`
     states what the reader knows, `null` included. Decision 6's interval stays as the reading of an
     event written without the key, so every existing vector asserts what it did.
+16. **The generation trigger is a listing, and a changed start is not always one** (round 19,
+    server#203 sweep). Seven start changes in the recordings, one re-run: a vector that states
+    `run: 2` through a `run` observation tests what follows a generation change, not what makes
+    one, and no vector listed a changed start. The owed vectors give the trigger and the three
+    correction shapes as listings; the `run` observation stays as the shorthand §1 defines.

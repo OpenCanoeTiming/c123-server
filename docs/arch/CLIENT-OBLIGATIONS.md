@@ -23,7 +23,14 @@ precedence and INV-5's no-op are the core's (CONTRACTS §4; DERIVATIONS §0.3, �
 classification `Standing.asOf` is now worded as the latest snapshot that changed its rows
 (CONTRACTS §2.4, §5), which is what a client already compared. Its third pass (2026-11-06) changed
 none: INV-5's content age on a later re-delivery and `decidedIn` from an admitted XML row are the
-core's (CONTRACTS §4; DERIVATIONS §4.10; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §1).
+core's (CONTRACTS §4; DERIVATIONS §4.10; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §1). Round 19
+(2026-11-06) changed none: the generation trigger and the start correction, the stream withdrawing its
+own finish, the `RaceConfig` match by layout, the echo rule, INV-5 on a reconnect burst and the reader's
+stamps are the core's and the reader's (CONTRACTS §2.6, §2.12, §3.2, §4; DERIVATIONS §0.3, §2.1, §2.3,
+§4.1, §4.4, §4.6, §4.11, §4.12, §5, §6; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §1, §2, §5;
+ADR-010; ADR-013; ADR-015); a client sees a start correction as the ordinary field-level change it
+already handles, and a withdrawn stream finish as `status` leaving `finished`, which it never treated as
+final.
 
 ---
 

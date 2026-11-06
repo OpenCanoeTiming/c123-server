@@ -711,8 +711,18 @@ turn out, even a week later, to have raced under the wrong bib.
 
 **Run generation** (`DECISIONS/ADR-013`, maintainer answer Q2). A re-run deletes the recorded result,
 and the run is raced again. Meanwhile, it looks as if the athlete never did that run.
-- `run` increments on exactly one piece of upstream evidence: a new start observed on the on-course
-  stream for a bib whose run was already recorded (`DERIVATIONS.md` §4.11). A recorded result row
+- `run` increments on exactly one piece of upstream evidence: an on-course listing of the Attempt
+  that carries a start different from the generation's recorded start **and no finish, for a
+  generation that is recorded** — the stream showed a finish for its start, or a results-table row
+  carrying a time or a mark was attributed to it, whether or not it was retracted since
+  (`DERIVATIONS.md` §4.11; `DECISIONS/ADR-013` Revision 4). **Any other change of the listed start is a
+  start correction inside the generation:** the listing itself changes nothing presented, the
+  generation's recorded start becomes the listing's, and a time the correction moved reaches the
+  Attempt as the next results-table row, which supersedes like any correction (§4 INV-2c, same
+  source); checks and writes stay with the generation. Recorded: seven start changes in four
+  recordings, six of them corrections — mid-run, before any finish; after the finish, the listing
+  carrying the same `dtFinish` with a new time; a start deleted and given again — and one re-run
+  (`DERIVATIONS.md` §4.11). A recorded result row
   observed cleared is a retraction (§4 INV-7), not a generation change (`DECISIONS/ADR-013`
   Revision); a re-run appears as that retraction followed by the new start.
 - On increment, every run-scoped field becomes `not-yet`, and the change is pushed:
@@ -1175,8 +1185,12 @@ Settled against observed upstream behaviour, after three wrong readings of a rec
 - A Phase whose course has an empty layout has `Course.gates` as `unavailable{not-configured}`, and so
   does its Attempts' `gates` (§2.6).
 - **Only the snapshot carries course numbers.** TCP describes only the currently selected course,
-  without its number. It is used only to refresh that course, and for the captions, which only TCP
-  sends. **The refresh is scoped:** TCP's string, which strips the `S` markers, refreshes `gates`,
+  without its number and without naming a race: the selected course need not be any running Phase's
+  (recorded: the next day's course selected while today's results still rotated). **The core finds
+  it by its gate string:** the Course whose `layout` with the `S` markers removed equals it
+  (recorded: three courses in two recordings, every string equal to its course's stripped layout); a
+  string matching no snapshot course refreshes nothing. It is used only to refresh that course, and
+  for the captions, which only TCP sends. **The refresh is scoped:** TCP's string, which strips the `S` markers, refreshes `gates`,
   `slots`, `splitsAfterGate` and `captions` of the bound course; `layout` and `sectorEndsAfterGate`
   are the snapshot's alone and are never derived from TCP (`DERIVATIONS.md` §2.3).
 - **`sectorEndsAfterGate` is strictly increasing.** A sector that ends after a non-gate slot (the
@@ -1256,6 +1270,11 @@ reliable signal that a Phase's results changed is ordinary field-level change: a
   - `left-without-finish → dns | dnf | dsq | dsq-r | dqb | cap | other`, when the mark arrives;
   - `left-without-finish → finished`, when a finish is recorded afterwards (a manually entered
     finish).
+  - `finished → at-start | on-course`, when the on-course stream withdraws a finish it alone had
+    stated and no results-table row has confirmed: the next listing of the Attempt carries no
+    `dtFinish` (`DERIVATIONS.md` §4.1; recorded: a finish impulse with no start and no time, the
+    listing without it four minutes later). No diagnostic: nothing presented came from the table. A
+    start correction (§2.6) changes no status.
 - **Post-finish decisions and corrections:**
   - `finished → non-ranked | dsq | dsq-r | dqb | ral | other`;
   - any no-result status `→ finished`, when a mark is withdrawn.
@@ -1324,7 +1343,10 @@ implementation must satisfy, not an algorithm.
      - the paired second race whenever the first changes;
      - result marks typed in the results grid or set by the online-scoring session.
 
-     For all of these, a connected TCP is never behind the snapshot.
+     For all of these, a connected TCP is never behind the snapshot. **For `status`, the on-course
+     stream's inference is the `tcp` side of this rule:** an `xml` row's `status` displaces a stream
+     `on-course` or `finished` only by the exception below or after a disconnect, never while TCP is
+     connected (`xml-mark-does-not-override-tcp-finish`); the row's other fields follow rule 1.
 
      **The one exception is a result mark set on a silent path.** Upstream sends no TCP push for:
      - a DNS entered from the start judge's terminal;
@@ -1357,7 +1379,12 @@ implementation must satisfy, not an algorithm.
   4. **`operator-write` sits outside rules 1–3.**
      - **`provisional: true`** is an optimistic write awaiting one specific echo (§2.9). It is
        presented the instant it is submitted. The very next results-table observation of that field,
-       for that run generation, supersedes it.
+       for that run generation, supersedes it. **An echo is an observation that changes its source's
+       retained value of the field or states the requested value;** a re-delivery of what the source
+       already held is none (INV-5), so a rotation, or a row re-pushed for another field's sake,
+       leaves the write `pending`. From `xml` it must also pass INV-2c's guard against the write's
+       `submittedAt`, or a save written before the correction would resolve it `mismatched`. The
+       comparison is the target gate's cell (`DERIVATIONS.md` §6).
      - **`provisional: false`** is an assertion with no echo expected. Examples are a direct
        correction against the cloud store after the on-site session ended (§8.5). A later assertion of the same kind supersedes it. So does a
        results-table observation that **changes** its own source's retained value after the
@@ -1427,7 +1454,8 @@ implementation must satisfy, not an algorithm.
   - **TCP, first-run or single-run race:** the row is absent, **or present with no time and no mark**
     (recorded: a jury-invalidated run wiped in place at 10:56:58, the row gone an hour later), or the
     message is in start-list mode (no row carries a placement or a mark; upstream falls back to that
-    mode exactly when nobody is ranked, which is what "delete all results" produces). Retracted: `outcome`, `gates`,
+    mode exactly when nobody is ranked, which is what "delete all results" produces). Retracted: `outcome`, `gates`
+    (in Kayak Cross `faults`, its judging field, here and below),
     `placement`, `underReview`, `qualified`, and any mark in `status`.
   - **TCP, paired second run:** the row is absent: as above, plus `pairTotal` and `countingRun`. The
     row is present with an empty time and no mark: `outcome`, `gates` **and any mark in `status`** of
@@ -1458,8 +1486,13 @@ implementation must satisfy, not an algorithm.
 - **INV-4 (identity bindings carry the same envelope).** `Attempt.entry` is `Observed`, like any other
   field. A correction to who raced under a bib is an ordinary `known → known` change.
 - **INV-5 (idempotent supersession).** Re-delivering an identical observation, with the same `value`
-  from the same source for the same run generation, is a no-op and triggers no client-visible
-  notification: nothing retained changes. The retained observation's content age (INV-2c) is kept
+  from the same source for the same run generation, is a no-op for what is presented and triggers no
+  client-visible notification where that value is already presented from that source. **The
+  re-delivery is still an observation in its own right:** it takes its own ingest sequence and, on
+  `tcp`, continuity since its own ingestion (rule 2: a push is upstream's table at the moment of
+  sending), so a value TCP re-sends after a reconnect — the connect burst, a rotation — regains
+  precedence over an `xml` value that displaced it during the outage; that is an envelope change and
+  is pushed. The retained observation's content age (INV-2c) is kept
   where the re-delivery's is `null` or not later (a first read after `setPath` re-delivering a
   value the XML already stated keeps that value's `changedAfter`, so a standing
   `source-disagreement` neither clears nor re-raises), and advances to the re-delivery's where that
@@ -1496,7 +1529,9 @@ re-baseline, per Phase or per Event:
 2. reads the current XML snapshot, validated, and ingests it as a scope snapshot with a fresh ingest
    sequence — a unit like the reader's, its `changedAfter` by the same definition
    (`DERIVATIONS.md` §0.3), met by nothing step 1 discarded. If no valid snapshot can be read, the
-   action fails with `409 source-unavailable` and changes nothing;
+   action fails with `409 source-unavailable` and changes nothing: the read precedes step 1, and
+   steps 1 and 2 reach the core as one ingest unit, the `rebaseline` event followed by the snapshot's
+   elements, so the discard and the rebuild are one step and `scope.replaced` goes with it;
 3. lets the on-course stream and the next TCP push of each race in scope refill the `tcp` slots.
    Under rule 2 the `xml` observation is presented until then, because the `tcp` slots are empty;
 4. pushes the whole scope to every on-site client as `scope.replaced` (§7.2), and to live as a Phase

@@ -161,3 +161,16 @@ reader's `changedAfter` (`ADR-003` Revision 6; `CONTRACTS.md` §4 INV-2c), `null
 which never qualifies. The re-baseline's own read (decision 8, step 2) carries the same stamp.
 An absent XML row and an XML table with no rows are not retractions (INV-7, XML bullet); TCP's
 absent row and start-list table remain so.
+
+## Revision 4 — the stream withdraws a finish it alone stated; a retraction supersedes the `tcp` slot (2026-11-06)
+
+INV-2d is for a finish presented from a results-table observation. A finish the on-course stream
+alone has stated — `dtFinish` set, no row of the generation carrying a time or a mark yet — is
+withdrawn by the next listing of the Attempt without it: `status` follows that listing (`at-start`
+or `on-course`), the generation's finish and the `duration` inference are forgotten, no diagnostic
+(recorded: cp3-cross WX1_XT_26:25, a finish impulse with no start and no time, withdrawn four
+minutes later, the athlete then `DNS`; `DERIVATIONS.md` §4.1; `CONTRACTS.md` §3.2). An XML
+retraction that passes the guard supersedes the `tcp` observation it retracts, which is no longer a
+candidate of its source; a TCP row restating the value afterwards is a new observation and is
+presented (`DERIVATIONS.md` §4.12). Steps 1 and 2 of the re-baseline reach the core as one ingest
+unit after the read has succeeded (`CONTRACTS.md` §4).

@@ -237,14 +237,15 @@ the step index, the Attempt, the field and the property number.
    (property 10) or contradicts a finish (property 7); a `rebaseline` of its scope (property 13).
    `unavailable` appears only with a closed reason, and only at a step that carries the field for the
    Attempt (property 3) or at a scope snapshot of its race, never at a connection event, a `fragment`
-   or by itself (INV-3): a `not-configured` decided from `SourceStatus` or a fabricated `RaceConfig`
-   (`DERIVATIONS.md` §4.6) is presented at the Attempt's next such step.
+   or by itself (INV-3): a `not-configured` decided from `SourceStatus` or the snapshot
+   (`DERIVATIONS.md` §4.6; a `RaceConfig` decides none) is presented at the Attempt's next such step.
 5. **Retraction is scoped and guarded (INV-7).** At a scope-snapshot step for race R, a regression
    of an Attempt of R touches only the fields INV-7 names for the case — first or single run:
-   `outcome`, `gates`, `placement`, `underReview`, `qualified` and a mark in `status`; paired second
+   `outcome`, `gates` (in Kayak Cross `faults`), `placement`, `underReview`, `qualified` and a mark
+   in `status`; paired second
    run with the row absent: those plus `pairTotal` and `countingRun`; second run with an empty time:
-   `outcome` and `gates` only — and never `entry`, `bib`, `startOrder`, `heat`, `startLane` or
-   `run`. It never touches a field whose presented value is an on-course inference
+   `outcome` and `gates` (`faults`) only — and never `entry`, `bib`, `startOrder`, `heat`,
+   `startLane` or `run`. It never touches a field whose presented value is an on-course inference
    (`kind: inference`, or `outcome.kind: 'running'`). Afterwards `status` is what the on-course
    listing shows for the Attempt (`at-start`, `on-course`, or an inferred `finished` that still
    stands), else `not-started`; a `finished → on-course` at this step is this property's, not
@@ -276,7 +277,11 @@ the step index, the Attempt, the field and the property number.
    own (`Gate.memberPenalties`, `Course.courseId`) are not clauses. A first run's own figures are its
    own Attempt's, from either source.
 7. **Contradiction (INV-2d).** `status` goes `finished → on-course` only at: an on-course listing of
-   the Attempt with the generation's start and no finish (this property); a listing with a new start
+   the Attempt with the generation's start and no finish, the finish having been presented from a
+   results-table observation (this property); a listing without a finish while the presented
+   `finished` is a stream inference that no results-table row of the generation has confirmed
+   (`DERIVATIONS.md` §4.1: the stream withdraws its own finish; `at-start` where the listing has no
+   start; no diagnostic; raw stream at admission); a listing that starts a new generation
    (property 10, `at-start` being the other target there); a retraction (property 5); or a
    `rebaseline` of its scope (property 13), which ingests a scope snapshot. In the first
    case, in that same step `outcome` becomes
@@ -300,17 +305,28 @@ the step index, the Attempt, the field and the property number.
    The one exception is the run-increment delta, whose run-scoped fields property 10 requires
    explicitly even when already `not-yet`.
 10. **Run generation (`ADR-013`).** `run` never decreases. It increments only at an on-course listing
-    of the Attempt with a start different from the current generation's, and in that same delta
+    of the Attempt that carries a start different from the generation's recorded start **and no
+    finish, while the generation is recorded** — the raw stream listed a finish with that start, or a
+    results-table row carrying a time or a mark was attributed to the generation, whether or not a
+    retraction followed (`DERIVATIONS.md` §4.11; the checker tracks this from the raw stream and the
+    rows). In that same delta
     every run-scoped field is explicitly `not-yet` — none omitted — and `status` is `at-start` or
-    `on-course`. No results-table observation whose finish precedes the new generation's start is
-    presented afterwards (`DERIVATIONS.md` §4.11).
+    `on-course`. **A listing that changes the start otherwise is a start correction:** `run` and
+    every presented result field are unchanged at that step, and the generation's recorded start
+    is the listing's from then on; a listing with an empty start changes neither. No
+    results-table observation whose finish precedes the new generation's start is
+    presented afterwards (`DERIVATIONS.md` §4.11). Mutation: a checker built on "a different start
+    alone" must fail on the recorded post-finish corrections (jarni-so-odp C1M_BR2_18:56 and the two
+    nkz-19so K1M_BR2_19 cases, `DERIVATIONS.md` §4.11), where the correct replay keeps `run` at 1.
 11. **Provisional (§1.2).** `status` is never provisional. Any other presented result value has
     `provisional: true` exactly when: it is an inference (`kind: inference`, or
-    `outcome.kind: 'running'`); or upstream still lists the Attempt (no `oncourse-left` yet, from the
-    raw stream at admission; the latest `oncourse.updated` in a **D** re-run) and either a presented
-    `gates` cell is `null`, a Kayak Cross Attempt's slot cells leave a slot blank (`faults` is read
-    over the slot cells, `DERIVATIONS.md` §4.6(d)), or `gates`, in Cross `faults`, is not `known`
-    because no course is bound; or it is a second run's `placement`,
+    `outcome.kind: 'running'`); or the run is not closed (`DERIVATIONS.md` §4.4: no `Completed="Y"`
+    listing of it, no `oncourse-left` for it in this generation — from the raw stream at admission;
+    in a **D** re-run, listed in an earlier `oncourse.updated` and absent from the latest, so an
+    Attempt never listed is not closed by that — and no mark) and either a presented
+    `gates` cell is `null`, a Kayak Cross Attempt's `faults` carries `judgingComplete: false` (the
+    parser reads it over the slot cells, `DERIVATIONS.md` §4.6(d)), or `gates`, in Cross `faults`, is
+    not `known` because no course is bound; or it is a second run's `placement`,
     `pairTotal` or `countingRun` carried over from run 1, from the listing that starts run 2 until a
     row of run 2, carrying its time or its mark, restates that field — judged field by field, since
     `countingRun` arrives only with the XML row; or its `source` is `operator-write` with a pending

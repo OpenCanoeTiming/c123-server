@@ -114,3 +114,22 @@ stale-mark rule. With the re-run wizard (the normal path) the question rarely ar
 old row stays in every push until the new finish and would otherwise have been presented as the
 running athlete's result. `DERIVATIONS.md` §4.11 carries the rule; vector
 `rerun-tcp-row-before-new-finish-not-presented`.
+
+## Revision 4 — a changed start is the trigger only with no finish and a recorded generation (2026-11-06)
+
+The merge core's first sweep over all seven recordings (round 19) found seven listings that changed
+an Attempt's `dtStart`; one was the re-run of Revision 3's recorded episode (nkz-19so C1M_BR1_19:7).
+The other six were corrections of a start impulse inside the same run: three mid-run before any
+finish, one a false start deleted and given again, and three after the finish, where the listing
+carried the same `dtFinish` with a new `Time` and the row with the new time had been pushed
+0.1–0.2 s earlier. Trigger (a), "a start time that is not the current generation's start",
+incremented on all seven, wiped the row just pushed and reset writes and checks for a run that was
+never re-raced. The trigger now reads: a listing with a start different from the generation's
+recorded start **and no finish, while the generation is recorded** — the stream listed a finish for
+its start, or a results-table row with a time or a mark was attributed to it, a later retraction
+notwithstanding. Every other change of the listed start is a start correction inside the generation:
+the recorded start follows the listing, nothing presented changes at the listing, the moved time
+arrives as the next row (`CONTRACTS.md` §4 INV-2c, same source). The one case the stream cannot
+decide, a re-run begun and finished inside a TCP outage, reads as a correction by default
+(`DERIVATIONS.md` §10 item 23). `CONTRACTS.md` §2.6 and `DERIVATIONS.md` §4.11 carry the rule and
+the seven cases; `TEST-ARCHITECTURE.md` property 10 reads it from the raw stream.
