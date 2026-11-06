@@ -36,7 +36,13 @@ client's local clock already stops (CONTRACTS §2.6, §2.12, §3.2, §4; DERIVAT
 §4.11, §6, §10; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §1, §2, §5; ADR-011; ADR-013; ADR-015). Its third pass (2026-11-06) changed none: `at-start → finished` is a
 finish like any other, a mark standing at the recorded start recording nothing is the core's term, and the
 provenance rewording states behaviour only (CONTRACTS §2.6, §3.2; DERIVATIONS §4.1, §4.4, §4.6, §4.11,
-§8, §10; TEST-ARCHITECTURE §3.2; ADR-011; ADR-013; ADR-015).
+§8, §10; TEST-ARCHITECTURE §3.2; ADR-011; ADR-013; ADR-015). Round 20 (2026-11-06) changed none: the
+leave constant, `no-result` as the presented `status`'s presentation, the `tcp` content age, closure's
+one definition, `not-started` from the first row, the carry from the first listing in run 2, the
+within-kind cell merge and a `Gates=""` row are the core's (CONTRACTS §1.2, §2.6, §3.2, §4;
+DERIVATIONS §4, §4.1, §4.4, §4.6, §4.11, §4.12, §8, §10; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §1,
+§2; ADR-017); a client already handles `not-started`, `no-result` beside its mark and `provisional`
+moving, and the on-course set's membership rule is unchanged.
 
 ---
 
@@ -161,7 +167,7 @@ provenance rewording states behaviour only (CONTRACTS §2.6, §3.2; DERIVATIONS 
 - [ ] Read `birthYear: number | null`; the on-site tier carries no birth date (CONTRACTS §2.5, §7; ADR-006).
 - [ ] Use `format` and `phaseId` as Canoe123-native tokens, verbatim (CONTRACTS §7; ADR-007).
 - [ ] Show an unknown `format` token verbatim, with what the structural fields say; never invent a name and never fail to render (CONTRACTS §2.4; DERIVATIONS §9).
-- [ ] Keep the on-course set from `/api/oncourse` and `oncourse.updated`, in `courseOrder` with those lacking one last by `startOrder`; several at once and an empty set are both valid. The set is upstream's list: a finisher stays in it as `finished` or a mark until upstream closes the run, typically about 20 s but a venue setting no client may assume; leaving the set is the closure, never the finish; take the set's age from `asOf` on `/api/oncourse` and on `oncourse.updated` (CONTRACTS §7.1, §7.2; ADR-009).
+- [ ] Keep the on-course set from `/api/oncourse` and `oncourse.updated`, in `courseOrder` with those lacking one last by `startOrder`; several at once and an empty set are both valid. The set is upstream's list: a finisher stays in it as `finished` or a mark until upstream closes the run, typically about 20 s but a venue setting no client may assume; leaving the set is upstream's removal, never the finish; take the set's age from `asOf` on `/api/oncourse` and on `oncourse.updated` (CONTRACTS §7.1, §7.2; ADR-009).
 - [ ] Keep a Kayak Cross heat that has left the on-course list at `on-course` until its order arrives; never treat leaving the list as a finish (CONTRACTS §7.1, §7.2; ARCHITECTURE §6.D).
 - [ ] Ignore `Standing.anomalies`, which on-site serves for the admin UI only (CONTRACTS §2.7, §5).
 - [ ] Treat `/api/sources`, `/api/diagnostics`, `diagnostics.updated` and `POST /api/rebaseline` as admin-audience only; ignore diagnostics and never expose the re-baseline (CONTRACTS §2.8, §4, §7.1, §7.2).
