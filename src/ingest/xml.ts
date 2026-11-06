@@ -159,8 +159,7 @@ export function parseXmlSnapshot(xml: string, ctx: IngestContext): IngestElement
       const crows = rows.flatMap((r) => classificationRow(u, `${phaseId}:${tx(r, 'Bib').trim()}`, {
         entryId: tx(r, 'Id'), bib: tx(r, 'Bib'), rank: tx(r, 'Rnk'), order: tx(r, 'RnkOrder'), decidedIn: tx(r, 'RecordType'),
       }) ?? []);
-      u.add({ push: 'classification', phaseId, body: { rows: crows, asOf: ctx.observedAt } });
-      u.add({ snapshot: { source: 'xml', phaseId, mode: 'results', rows: crows } }); // §4.10: a scope snapshot of ClassificationRows
+      u.add({ snapshot: { source: 'xml', phaseId, mode: crows.some((r) => r['rank'] !== null && r['rank'] !== undefined) ? 'results' : 'start-list', rows: crows } }); // §4.10: a scope snapshot of ClassificationRows
       continue;
     }
     // the bound course is the caller's; the snapshot's own CourseData is the fallback, without captions

@@ -265,7 +265,7 @@ export function parseLayout(layout: string, captions?: string[]): Layout {
       out.slots.push({ slot: out.slots.length + 1, kind: 'gate', gateNumber: gate });
     } else if (ch === 'D' || ch === 'E') {
       out.slots.push({ slot: out.slots.length + 1, kind: ch === 'D' ? 'start-ramp' : 'roll-zone' });
-    } else if (ch === 'S') { if (gate > 0) out.sectorEndsAfterGate.push(gate); } // before the first gate records nothing (§2.3)
+    } else if (ch === 'S') { if (gate > 0 && out.sectorEndsAfterGate[out.sectorEndsAfterGate.length - 1] !== gate) out.sectorEndsAfterGate.push(gate); } // before the first gate records nothing (§2.3)
     else if (ch === 'I') { if (gate > 0) out.splitsAfterGate.push(gate); }
     else out.unknownChars.push(ch);
   }

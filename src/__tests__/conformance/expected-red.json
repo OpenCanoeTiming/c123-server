@@ -18,6 +18,7 @@
   "ongoing-recomputation-provisional-total-revised-by-late-gate",
   "inv2b-disagreement-surfaced-not-adopted",
   "inv2c-snapshot-older-than-push-refused-during-outage",
+  "inv2c-first-read-unknown-age-refused",
   "inv2c-same-source-earlier-finish-supersedes",
   "trichotomy-known-zero-not-confused-with-absence",
   "trichotomy-unavailable-persists-explicitly",

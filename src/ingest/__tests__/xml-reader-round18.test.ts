@@ -1,0 +1,654 @@
+/**
+ * #253 rows 1-13: the XML reader after contract round 18. Rules: CONTRACTS §2.8, §4 INV-2c; DERIVATIONS §0.3, §5;
+ * #251 (re-entrancy). Interfaces assumed: xml-reader-harness.ts. Every test builds its own clock, fs and reader.
+ *
+ * `changedAfter` oracle used throughout: the time of the last successful stat (a statLog entry that has a
+ * signature) before the detecting stat that showed a signature other than the one read whole.
+ */
+import { describe, it, expect } from 'vitest';
+import { createXmlReader } from '../xml-reader.js';
+import { ctx } from './helpers.js';
+import { parseXmlSnapshot } from '../index.js';
+import { fakeClock, fakeFs, file, whole, truncated, phaseIds, iso, type FakeFile } from './xml-reader-harness.js';
+
+const P = '/data/event.xml';
+type El = Record<string, any>;
+const EMPTY_DOC = '<?xml version="1.0" encoding="utf-8"?><Canoe123Data></Canoe123Data>';
+
+function setup(opts: { files?: Record<string, FakeFile>; path?: string | undefined; deliver?: (els: El[]) => void } = {}) {
+  const clock = fakeClock();
+  const f = fakeFs(clock, opts.files ?? { [P]: file('slalom.xml', 1000) });
+  const units: El[][] = [];
+  const statuses: El[] = [];
+  const reader = createXmlReader({
+    path: 'path' in opts ? opts.path : P,
+    pollIntervalSeconds: 5,
+    clock, fs: f.fs, ctx: ctx(),
+    onUnit: (els: El[]) => { opts.deliver?.(els); units.push(els); },
+    onStatus: (s: El) => { statuses.push(s); },
+  });
+  const last = () => statuses[statuses.length - 1];
+  /** Run the clock until `ms` after `t`. */
+  const until = async (t: number) => { await clock.advance(Math.max(0, t - clock.now())); };
+  /** Start and wait for the first stat; returns its time (a poll grid anchor). */
+  const startAndFirstStat = async () => {
+    reader.start();
+    for (let i = 0; i < 2000 && f.statLog.length < 1; i++) await clock.advance(100);
+    await clock.advance(0);
+    return f.statLog[0]!.at;
+  };
+  return { clock, f, units, statuses, reader, last, until, startAndFirstStat };
+}
+type S = ReturnType<typeof setup>;
+
+const event = (u: El[]): El => u.find((e) => e.event === 'xml-rewrite-detected')!;
+const hasKey = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
+/** Index of the first stat of `path` that showed `mtime`. */
+const firstStatShowing = (s: S, mtime: number) => s.f.statLog.findIndex((x) => x.mtimeMs === mtime);
+/** The last stat before index `i` that had a signature other than `mtime` (the oracle). */
+const lastOtherStat = (s: S, i: number, mtime: number) => {
+  for (let j = i - 1; j >= 0; j--) { const x = s.f.statLog[j]!; if (x.mtimeMs !== undefined && x.mtimeMs !== mtime) return x; }
+  return undefined;
+};
+/** Start, finish the first read, and clear the first unit. */
+async function baseline(s: S): Promise<number> {
+  const t0 = await s.startAndFirstStat();
+  await s.until(t0 + 1500);
+  s.units.length = 0;
+  return t0;
+}
+
+describe('row 1-3 changedAfter (INV-2c, DERIVATIONS §0.3 "What the reader stamps")', () => {
+  it('row 1 steady state: a rewrite between two polls carries the previous poll\'s stat time; the write is later; observedAt stays the first detection', async () => {
+    const s = setup();
+    const t0 = await baseline(s);
+    await s.until(t0 + 5000 + 1000); // just after the second poll
+    const wrote = s.clock.now();
+    s.f.files[P] = file('cross.xml', 2000);
+    await s.until(t0 + 10000 + 1500);
+    expect(s.units.length).toBe(1);
+    const ev = event(s.units[0]!);
+    const i = firstStatShowing(s, 2000);
+    const det = s.f.statLog[i]!.at;
+    expect(det).toBe(t0 + 10000);
+    expect(ev.observedAt).toBe(iso(det));
+    expect(ev.changedAfter).toBe(iso(t0 + 5000)); // the previous poll, taken before the call
+    expect(Date.parse(ev.changedAfter)).toBeLessThan(wrote);
+    expect(wrote).toBeLessThan(det);
+    s.reader.stop();
+  });
+
+  it('row 2 long read: a 7 s read on a 5 s poll; changedAfter is the read\'s closing stat, not an earlier poll', async () => {
+    const s = setup();
+    s.f.ctl.readMs = 7000;
+    const t0 = await s.startAndFirstStat(); // the baseline read starts here and ends at t0 + 7000
+    await s.until(t0 + 7000 + 100);
+    const closing = s.f.statLog.find((x) => x.at === t0 + 7000);
+    expect(closing, 'a closing stat after the read, at its end').toBeDefined();
+    s.units.length = 0;
+    s.f.ctl.readMs = 0;
+    const wrote = s.clock.now();
+    s.f.files[P] = file('cross.xml', 2000); // written after the closing stat, before the next poll
+    await s.until(t0 + 30000);
+    expect(s.units.length).toBe(1);
+    const ev = event(s.units[0]!);
+    const det = s.f.statLog[firstStatShowing(s, 2000)]!.at;
+    expect(det).toBeGreaterThan(t0 + 7000);
+    expect(ev.observedAt).toBe(iso(det));
+    expect(ev.changedAfter).toBe(iso(t0 + 7000)); // the closing stat: no stat between it and detection showed the old file
+    expect(det - Date.parse(ev.changedAfter)).toBeLessThanOrEqual(5000);
+    expect(Date.parse(ev.changedAfter)).toBeLessThan(wrote);
+    s.reader.stop();
+  });
+
+  it('row 2 long read, figures: stats at t5, t12 (closing), t15; t10 skipped; file changes at t13: changedAfter t12, observedAt t15, 3 s before detection', async () => {
+    const s = setup();
+    s.f.ctl.readMs = 7000;
+    const t0 = await s.startAndFirstStat(); // t5
+    await s.until(t0 + 7000 + 100);
+    s.units.length = 0;
+    s.f.ctl.readMs = 0;
+    await s.until(t0 + 8000); // t13
+    s.f.files[P] = file('cross.xml', 2000);
+    await s.until(t0 + 10000 + 1500); // past t15
+    expect([...new Set(s.f.statLog.map((x) => x.at).filter((at) => at <= t0 + 10000))]).toEqual([t0, t0 + 7000, t0 + 10000]); // the poll at t10 did not run
+    expect(s.units.length).toBe(1);
+    const ev = event(s.units[0]!);
+    expect(ev.changedAfter).toBe(iso(t0 + 7000));
+    expect(ev.observedAt).toBe(iso(t0 + 10000));
+    expect(Date.parse(ev.observedAt) - Date.parse(ev.changedAfter)).toBe(3000);
+    s.reader.stop();
+  });
+
+  it('row 3 recovery: failed stats, then a change; changedAfter is the last good stat, earlier than one interval before detection', async () => {
+    const s = setup();
+    const t0 = await baseline(s);
+    s.f.remove(P);
+    await s.until(t0 + 5 * 5000 + 1500); // several failed polls
+    expect(s.last()?.state).not.toBe('connected');
+    const wrote = s.clock.now();
+    s.f.put(P, file('cross.xml', 2000));
+    await s.until(t0 + 7 * 5000 + 1500);
+    expect(s.units.length).toBe(1);
+    const ev = event(s.units[0]!);
+    const i = firstStatShowing(s, 2000);
+    const lastGood = lastOtherStat(s, i, 2000)!;
+    expect(lastGood.at).toBeLessThan(t0 + 2 * 5000); // before the file went missing
+    expect(ev.changedAfter).toBe(iso(lastGood.at));
+    expect(ev.observedAt).toBe(iso(s.f.statLog[i]!.at));
+    expect(s.f.statLog[i]!.at - lastGood.at).toBeGreaterThan(5000);
+    expect(Date.parse(ev.changedAfter)).toBeLessThan(wrote);
+    s.reader.stop();
+  });
+});
+
+describe('row 4-5 first read', () => {
+  it('row 4 first read: changedAfter is null, the key present, after start and after setPath; setPath back to a file gives null again', async () => {
+    const A = '/data/a.xml';
+    const B = '/data/b.xml';
+    const s = setup({ files: { [A]: file('slalom.xml', 1000), [B]: file('cross.xml', 1000) }, path: A });
+    s.reader.start();
+    await s.until(s.clock.now() + 6000);
+    expect(s.units.length).toBe(1);
+    expect(hasKey(event(s.units[0]!), 'changedAfter')).toBe(true);
+    expect(event(s.units[0]!).changedAfter).toBeNull();
+
+    s.f.files[A] = file('cross-untimed.xml', 2000); // a second read has a timestamp
+    await s.until(s.clock.now() + 11000);
+    expect(s.units.length).toBe(2);
+    expect(typeof event(s.units[1]!).changedAfter).toBe('string');
+
+    s.reader.setPath(B);
+    await s.until(s.clock.now() + 11000);
+    expect(s.units.length).toBe(3);
+    expect(hasKey(event(s.units[2]!), 'changedAfter')).toBe(true);
+    expect(event(s.units[2]!).changedAfter).toBeNull();
+
+    s.reader.setPath(undefined);
+    await s.until(s.clock.now() + 1000);
+    s.reader.setPath(A); // the same file as before, with the signature it had
+    await s.until(s.clock.now() + 11000);
+    expect(s.units.length).toBe(4);
+    expect(event(s.units[3]!).changedAfter).toBeNull();
+    s.reader.stop();
+  });
+
+  it('row 5 first read with history: a file seen invalid under one signature, then valid under another, has a timestamp', async () => {
+    const bad = truncated(whole('slalom.xml'));
+    const s = setup({ files: { [P]: { mtimeMs: 1000, size: bad.length, content: bad } } });
+    const t0 = await s.startAndFirstStat();
+    await s.until(t0 + 3 * 5000 + 1500); // the stat showed signature 1000 on several polls; nothing valid
+    expect(s.units.length).toBe(0);
+    s.f.files[P] = file('cross.xml', 2000);
+    await s.until(t0 + 6 * 5000 + 1500);
+    expect(s.units.length).toBe(1);
+    const ev = event(s.units[0]!);
+    expect(ev.changedAfter).not.toBeNull();
+    const i = firstStatShowing(s, 2000);
+    expect(ev.changedAfter).toBe(iso(lastOtherStat(s, i, 2000)!.at));
+    expect(Date.parse(ev.changedAfter)).toBeLessThan(Date.parse(ev.observedAt));
+    s.reader.stop();
+  });
+
+  it('row 5 first read whose file moves during the read: changedAfter is the first stat, observedAt the closing stat that showed the new signature', async () => {
+    const s = setup();
+    s.f.ctl.readMs = 3000;
+    s.f.duringNextRead(() => { s.f.files[P] = file('cross.xml', 2000); s.f.ctl.readMs = 0; }); // moves while the first read is in flight
+    const t = await s.startAndFirstStat();
+    await s.until(t + 30000);
+    expect(s.units.length).toBeGreaterThanOrEqual(1);
+    const closing = s.f.statLog[firstStatShowing(s, 2000)]!;
+    expect(closing.at).toBe(t + 3000);
+    const ev = event(s.units[s.units.length - 1]!);
+    expect(ev.observedAt).toBe(iso(t + 3000));
+    expect(ev.changedAfter).toBe(iso(t));
+    expect(phaseIds(s.units[s.units.length - 1]!).sort()).toEqual(phaseIds(parseXmlSnapshot(whole('cross.xml'), ctx()) as El[]).sort());
+    s.reader.stop();
+  });
+});
+
+describe('row 6-10 the burst endings (CONTRACTS §2.8, DERIVATIONS §0.3 "Validation and the states")', () => {
+  const torn = () => truncated(whole('slalom.xml'));
+
+  it('row 6 torn, stat unchanged: a failed poll each time, reconnecting then unreachable from the fifth; one re-read per poll; tornReads counts every invalid read', async () => {
+    const s = setup({ files: { [P]: { mtimeMs: 1000, size: 10, content: torn() } } });
+    const t0 = await s.startAndFirstStat();
+    const reads = (a: number, b: number) => s.f.readLog.filter((r) => r.at >= a && r.at < b).length;
+    const states: string[] = [];
+    for (let k = 0; k < 6; k++) {
+      await s.until(t0 + k * 5000 + 2500);
+      states.push(s.last()!.state);
+    }
+    expect(states).toEqual(['reconnecting', 'reconnecting', 'reconnecting', 'reconnecting', 'unreachable', 'unreachable']);
+    expect(reads(t0, t0 + 5000)).toBe(4); // the first burst
+    for (let k = 1; k < 6; k++) expect(reads(t0 + k * 5000, t0 + (k + 1) * 5000), `poll ${k}`).toBe(1);
+    expect(s.units.length).toBe(0);
+    expect(s.last()?.abandonedReads).toBe(6); // one per exhausted burst, a one-read poll included (as today)
+    expect(s.last()?.tornReads).toBe(9); // 4 + 5 invalid reads
+    expect(s.last()?.tornReads).toBe(s.f.readLog.length);
+    // it validates (same stat, whole content): delivered, connected, stamped with the first detection
+    s.f.files[P] = { mtimeMs: 1000, size: 10, content: whole('slalom.xml') };
+    await s.until(t0 + 6 * 5000 + 2500);
+    expect(s.units.length).toBe(1);
+    expect(event(s.units[0]!).observedAt).toBe(iso(t0));
+    expect(s.last()?.state).toBe('connected');
+    s.reader.stop();
+  });
+
+  it('row 6 torn, stat unchanged: the poll after the burst reads again although the stat did not change, and a stat change ends the loop', async () => {
+    const s = setup({ files: { [P]: { mtimeMs: 1000, size: 10, content: torn() } } });
+    const t0 = await s.startAndFirstStat();
+    await s.until(t0 + 2 * 5000 + 2500);
+    expect(s.last()?.state).toBe('reconnecting');
+    s.f.files[P] = file('cross.xml', 2000);
+    await s.until(t0 + 4 * 5000 + 2500);
+    expect(s.units.length).toBe(1);
+    expect(s.last()?.state).toBe('connected');
+    expect(event(s.units[0]!).observedAt).toBe(iso(s.f.statLog[firstStatShowing(s, 2000)]!.at));
+    s.reader.stop();
+  });
+
+  it('row 7 torn, stat changed: the new stat is the new detection, read at the next poll; the poll is not a failure', async () => {
+    const s = setup();
+    const t0 = await baseline(s);
+    s.f.files[P] = file('cross.xml', 2000);
+    const t = truncated(whole('cross.xml'));
+    s.f.queueReads(t, t, t, t);
+    s.f.duringNextRead(() => {});
+    s.f.duringNextRead(() => {});
+    s.f.duringNextRead(() => {});
+    s.f.duringNextRead(() => { s.f.files[P] = file('cross-untimed.xml', 3000); }); // the writer moves on during the last read
+    await s.until(t0 + 5000 + 2500); // the burst poll
+    expect(s.units.length).toBe(0);
+    expect(s.last()?.state).toBe('connected');
+    expect(s.last()?.tornReads).toBeGreaterThanOrEqual(4);
+    await s.until(t0 + 10000 + 2500); // the next poll reads
+    expect(s.units.length).toBe(1);
+    expect(s.last()?.state).toBe('connected');
+    const i = firstStatShowing(s, 3000);
+    const ev = event(s.units[0]!);
+    expect(ev.observedAt).toBe(iso(s.f.statLog[i]!.at)); // the stat that showed the new signature, not the abandoned one
+    expect(ev.changedAfter).toBe(iso(lastOtherStat(s, i, 3000)!.at));
+    expect(phaseIds(s.units[0]!).sort()).toEqual(phaseIds(parseXmlSnapshot(whole('cross-untimed.xml'), ctx()) as El[]).sort());
+    s.reader.stop();
+  });
+
+  it('row 8 rejected: a burst ending on a rejected read is a failed poll (reconnecting), also when torn reads came first and the stat moved', async () => {
+    const s = setup();
+    const t0 = await baseline(s);
+    s.f.files[P] = file('cross.xml', 2000);
+    const t = truncated(whole('cross.xml'));
+    s.f.queueReads(t, t, t);
+    s.f.rejectReads(1);
+    s.f.duringNextRead(() => {});
+    s.f.duringNextRead(() => {});
+    s.f.duringNextRead(() => {});
+    s.f.duringNextRead(() => { s.f.files[P] = file('cross-untimed.xml', 3000); });
+    await s.until(t0 + 5000 + 2500);
+    expect(s.units.length).toBe(0);
+    expect(s.last()?.state).toBe('reconnecting');
+    await s.until(t0 + 10000 + 2500);
+    expect(s.units.length).toBe(1);
+    expect(s.last()?.state).toBe('connected');
+    s.reader.stop();
+  });
+
+  it('row 9 moved: every read valid, the stat still moving across the whole burst; connected, and the next poll reads again', async () => {
+    const s = setup();
+    const t0 = await baseline(s);
+    s.f.files[P] = file('cross.xml', 2000);
+    for (let k = 0; k < 4; k++) s.f.duringNextRead(() => { s.f.files[P] = file('cross.xml', 3000 + k * 1000); });
+    const before = s.statuses.length;
+    await s.until(t0 + 5000 + 2500);
+    expect(s.statuses.slice(before).every((x) => x.state === 'connected')).toBe(true);
+    expect(s.last()?.state).toBe('connected');
+    const readsAfterBurst = s.f.readLog.length;
+    await s.until(t0 + 10000 + 2500);
+    expect(s.f.readLog.length).toBeGreaterThan(readsAfterBurst);
+    expect(s.units.length).toBeGreaterThanOrEqual(1);
+    expect(s.statuses.slice(before).every((x) => x.state === 'connected')).toBe(true);
+    s.reader.stop();
+  });
+
+  it('row 10 a post-burst stat that rejects is a failed poll when the last attempt was torn', async () => {
+    const s = setup();
+    const t0 = await baseline(s);
+    s.f.files[P] = file('cross.xml', 2000);
+    const t = truncated(whole('cross.xml'));
+    s.f.queueReads(t, t, t, t);
+    s.f.duringNextRead(() => {});
+    s.f.duringNextRead(() => {});
+    s.f.duringNextRead(() => {});
+    s.f.duringNextRead(() => { s.f.remove(P); }); // the file is gone when the burst ends
+    await s.until(t0 + 5000 + 2500);
+    expect(s.last()?.state).toBe('reconnecting');
+    expect(s.units.length).toBe(0);
+    s.f.put(P, file('cross.xml', 2000));
+    await s.until(t0 + 10000 + 2500);
+    expect(s.last()?.state).toBe('connected');
+    s.reader.stop();
+  });
+
+  it('row 10 a closing stat that rejects is a failed poll when the read itself was valid: reconnecting, no unit, even though the file is back for the retry', async () => {
+    const s = setup();
+    const t0 = await baseline(s);
+    s.f.files[P] = file('cross.xml', 2000);
+    const keep = file('cross.xml', 2000);
+    // valid content captured, then the file vanishes before the closing stat (which rejects once) and is back before the retry
+    s.f.duringNextRead(() => { s.f.remove(P); s.clock.setTimeout(() => s.f.put(P, keep), 100); });
+    await s.until(t0 + 5000 + 2500);
+    expect(s.last()?.state).toBe('reconnecting');
+    expect(s.units.length).toBe(0);
+    s.reader.stop();
+  });
+});
+
+describe('row 11-12 states', () => {
+  it('row 11 §5 reconnecting from begin(): a path set reports reconnecting before the first poll; no path reports not-configured; setPath restarts it', async () => {
+    const s = setup();
+    s.reader.start();
+    expect(s.last()?.state).toBe('reconnecting'); // synchronously, before any poll
+    expect(s.f.readLog.length).toBe(0);
+    await s.until(s.clock.now() + 6000);
+    expect(s.last()?.state).toBe('connected');
+    s.reader.stop();
+
+    const n = setup({ path: undefined });
+    n.reader.start();
+    expect(n.last()?.state).toBe('not-configured');
+    n.reader.setPath(P);
+    expect(n.last()?.state).toBe('reconnecting');
+    n.reader.setPath(undefined);
+    expect(n.last()?.state).toBe('not-configured');
+    n.reader.stop();
+  });
+
+  it('row 12 §0.3 valid, naming no race: the unit is the event alone, connected, lastRewriteDetectedAt advances', async () => {
+    const s = setup();
+    const t0 = await baseline(s);
+    s.f.files[P] = { mtimeMs: 2000, size: EMPTY_DOC.length, content: EMPTY_DOC };
+    await s.until(t0 + 2 * 5000 + 1500);
+    expect(s.units.length).toBe(1);
+    expect(s.units[0]!.length).toBe(1);
+    expect(s.units[0]![0]!.event).toBe('xml-rewrite-detected');
+    expect(s.last()?.state).toBe('connected');
+    const det = iso(s.f.statLog[firstStatShowing(s, 2000)]!.at);
+    expect(s.last()?.lastRewriteDetectedAt).toBe(det);
+    expect(Date.parse(det)).toBeGreaterThan(t0);
+    s.reader.stop();
+  });
+
+  it('row 12 §0.3 valid, naming no race: also as the first read', async () => {
+    const s = setup({ files: { [P]: { mtimeMs: 1000, size: EMPTY_DOC.length, content: EMPTY_DOC } } });
+    s.reader.start();
+    await s.until(s.clock.now() + 6000);
+    expect(s.units.length).toBe(1);
+    expect(s.units[0]!.length).toBe(1);
+    expect(s.units[0]![0]!.changedAfter).toBeNull();
+    expect(s.last()?.state).toBe('connected');
+    s.reader.stop();
+  });
+});
+
+describe('row 13 #251 re-entrancy: calls made from inside onUnit', () => {
+  it('#251 probe setPath(undefined) inside onUnit ends not-configured and polls no more', async () => {
+    const h: { r?: S } = {};
+    let once = true;
+    const s = setup({ deliver: () => { if (once) { once = false; h.r!.reader.setPath(undefined); } } });
+    h.r = s;
+    s.reader.start();
+    await s.until(s.clock.now() + 6000);
+    expect(s.last()?.state).toBe('not-configured');
+    const stats = s.f.statLog.length;
+    await s.until(s.clock.now() + 30000);
+    expect(s.last()?.state).toBe('not-configured');
+    expect(s.f.statLog.length).toBe(stats);
+    s.reader.stop();
+  });
+
+  it('#251 probe setPath(Q) inside onUnit, Q with the same mtime and size but other content, reads Q: 2 units', async () => {
+    const Q = '/data/q.xml';
+    const size = whole('slalom.xml').length;
+    const files = { [P]: { mtimeMs: 1000, size, content: whole('slalom.xml') }, [Q]: { mtimeMs: 1000, size, content: whole('cross.xml') } };
+    const h: { r?: S } = {};
+    let once = true;
+    const s = setup({ files, deliver: () => { if (once) { once = false; h.r!.reader.setPath(Q); } } });
+    h.r = s;
+    s.reader.start();
+    await s.until(s.clock.now() + 20000);
+    expect(s.units.length).toBe(2);
+    expect(s.f.readLog.some((r) => r.path === Q)).toBe(true);
+    expect(phaseIds(s.units[1]!).sort()).toEqual(phaseIds(parseXmlSnapshot(whole('cross.xml'), ctx()) as El[]).sort());
+    s.reader.stop();
+  });
+
+  it('#251 probe stop() then start() inside onUnit gives 2 units', async () => {
+    const h: { r?: S } = {};
+    let once = true;
+    const s = setup({ deliver: () => { if (once) { once = false; h.r!.reader.stop(); h.r!.reader.start(); } } });
+    h.r = s;
+    s.reader.start();
+    await s.until(s.clock.now() + 20000);
+    expect(s.units.length).toBe(2);
+    s.reader.stop();
+  });
+});
+
+describe('row 1 changedAfter is the time taken before the stat call (DERIVATIONS §0.3; a stat with latency)', () => {
+  /** Advance in small steps until `pred` holds. */
+  async function stepUntil(s: S, pred: () => boolean): Promise<void> {
+    for (let i = 0; i < 3000 && !pred(); i++) await s.clock.advance(10);
+    expect(pred()).toBe(true);
+  }
+
+  it('row 1 poll stat: a write inside a poll stat\'s latency is after changedAfter', async () => {
+    const s = setup();
+    await baseline(s);
+    s.f.ctl.statMs = 1000;
+    const n = s.f.statLog.length;
+    await stepUntil(s, () => s.f.statLog.length > n); // a poll stat has sampled; it returns 1000 ms later
+    const polled = s.f.statLog[n]!.at;
+    await s.clock.advance(500);
+    const wrote = s.clock.now();
+    expect(wrote).toBeGreaterThan(polled);
+    s.f.files[P] = file('cross.xml', 2000);
+    await s.until(polled + 30000);
+    expect(s.units.length).toBe(1);
+    const ev = event(s.units[0]!);
+    expect(ev.changedAfter).toBe(iso(polled));
+    expect(Date.parse(ev.changedAfter)).toBeLessThan(wrote);
+    s.reader.stop();
+  });
+
+  it('row 1 closing stat: a write inside the closing stat\'s latency is after changedAfter', async () => {
+    const s = setup();
+    s.f.ctl.statMs = 1000;
+    s.f.ctl.readMs = 3000;
+    s.reader.start();
+    await stepUntil(s, () => s.f.statLog.length >= 2); // the closing stat has sampled
+    const closing = s.f.statLog[1]!.at;
+    s.f.ctl.readMs = 0;
+    await s.clock.advance(500);
+    const wrote = s.clock.now();
+    expect(wrote).toBeGreaterThan(closing);
+    s.f.files[P] = file('cross.xml', 2000);
+    await s.until(closing + 40000);
+    const ev = event(s.units[s.units.length - 1]!);
+    expect(s.units.length).toBeGreaterThanOrEqual(2);
+    expect(ev.changedAfter).toBe(iso(closing));
+    expect(Date.parse(ev.changedAfter)).toBeLessThan(wrote);
+    s.reader.stop();
+  });
+
+  it('row 1 post-burst stat: a write inside the post-burst stat\'s latency is after changedAfter', async () => {
+    const s = setup();
+    const t0 = await baseline(s);
+    s.f.files[P] = file('cross.xml', 2000);
+    const t = truncated(whole('cross.xml'));
+    s.f.queueReads(t, t, t, t);
+    s.f.duringNextRead(() => {});
+    s.f.duringNextRead(() => {});
+    s.f.duringNextRead(() => {});
+    s.f.duringNextRead(() => { s.f.files[P] = file('cross-untimed.xml', 3000); s.f.ctl.statMs = 1000; }); // the post-burst stat is slow
+    await stepUntil(s, () => firstStatShowing(s, 3000) >= 0);
+    const post = s.f.statLog[firstStatShowing(s, 3000)]!.at;
+    expect(post).toBeGreaterThan(t0 + 5000);
+    await s.clock.advance(500);
+    const wrote = s.clock.now();
+    expect(wrote).toBeGreaterThan(post);
+    s.f.files[P] = file('cross.xml', 4000);
+    await s.until(post + 30000);
+    expect(s.units.length).toBeGreaterThanOrEqual(1);
+    const ev = event(s.units[s.units.length - 1]!);
+    expect(ev.changedAfter).toBe(iso(post));
+    expect(Date.parse(ev.changedAfter)).toBeLessThan(wrote);
+    s.reader.stop();
+  });
+});
+
+describe('row 7 / item 1 post-burst stat counts as a stat (S4)', () => {
+  it('row 7 S4: after a torn burst whose post-burst stat showed a new signature, a further change gets changedAfter = that post-burst stat', async () => {
+    const s = setup();
+    const t0 = await baseline(s);
+    s.f.files[P] = file('cross.xml', 2000);
+    const t = truncated(whole('cross.xml'));
+    s.f.queueReads(t, t, t, t);
+    s.f.duringNextRead(() => {});
+    s.f.duringNextRead(() => {});
+    s.f.duringNextRead(() => {});
+    s.f.duringNextRead(() => { s.f.files[P] = file('cross-untimed.xml', 3000); });
+    await s.until(t0 + 5000 + 2500);
+    const post = s.f.statLog[firstStatShowing(s, 3000)]!;
+    const poll = s.f.statLog[firstStatShowing(s, 2000)]!;
+    expect(post.at).toBeGreaterThan(poll.at);
+    s.f.files[P] = file('cross.xml', 4000); // the writer moves on after the post-burst stat
+    await s.until(t0 + 10000 + 2500);
+    expect(s.units.length).toBe(1);
+    const ev = event(s.units[0]!);
+    expect(ev.changedAfter).toBe(iso(post.at));
+    s.reader.stop();
+  });
+});
+
+describe('row 11 / #250 N1 / DERIVATIONS §5: a throwing or re-entering onStatus on the first report', () => {
+  function build(onStatus: (s: El, h: { reader: ReturnType<typeof createXmlReader>; n: number }) => void, path: string | undefined = P) {
+    const clock = fakeClock();
+    const Q = '/data/q.xml';
+    const f = fakeFs(clock, { [P]: file('slalom.xml', 1000), [Q]: file('cross.xml', 1000) });
+    const units: El[][] = [];
+    const h = { reader: undefined as unknown as ReturnType<typeof createXmlReader>, n: 0 };
+    h.reader = createXmlReader({
+      path, pollIntervalSeconds: 5, clock, fs: f.fs, ctx: ctx(),
+      onUnit: (els: El[]) => { units.push(els); },
+      onStatus: (st: El) => { h.n++; onStatus(st, h); },
+    });
+    return { clock, f, units, h, Q };
+  }
+  const swallow = (fn: () => void) => { try { fn(); } catch { /* a throwing onStatus may surface or not; the contract is that polling goes on */ } };
+  async function watchRejections<T>(fn: () => Promise<T>): Promise<{ result: T; rejections: unknown[] }> {
+    const rejections: unknown[] = [];
+    const on = (e: unknown) => { rejections.push(e); };
+    process.on('unhandledRejection', on);
+    try { const result = await fn(); await new Promise((r) => setImmediate(r)); return { result, rejections }; } finally { process.off('unhandledRejection', on); }
+  }
+
+  it('N1 start(): onStatus throws on the very first report; polling still runs, a unit arrives, no unhandled rejection', async () => {
+    const b = build((_s, h) => { if (h.n === 1) throw new Error('boom'); });
+    const { rejections } = await watchRejections(async () => {
+      swallow(() => b.h.reader.start());
+      await b.clock.advance(6000);
+    });
+    expect(b.f.statLog.length).toBeGreaterThan(0);
+    expect(b.units.length).toBe(1);
+    expect(rejections).toEqual([]);
+    b.h.reader.stop();
+    expect(b.clock.pending()).toBe(0);
+  });
+
+  it('N1 setPath(): onStatus throws on the first report of the new path; polling still runs, no unhandled rejection', async () => {
+    const b = build((s, h) => { if (h.n === 2) throw new Error('boom'); }, undefined);
+    const { rejections } = await watchRejections(async () => {
+      b.h.reader.start(); // report 1: not-configured
+      swallow(() => b.h.reader.setPath(P)); // report 2: reconnecting, throws
+      await b.clock.advance(6000);
+    });
+    expect(b.h.n).toBeGreaterThanOrEqual(2);
+    expect(b.f.statLog.length).toBeGreaterThan(0);
+    expect(b.units.length).toBe(1);
+    expect(rejections).toEqual([]);
+    b.h.reader.stop();
+  });
+
+  it('N1 re-entry: setPath(Q) from onStatus on the first report of start() leaves one timer, none after stop', async () => {
+    const b = build((_s, h) => { if (h.n === 1) h.reader.setPath(b.Q); });
+    swallow(() => b.h.reader.start());
+    expect(b.clock.pending()).toBe(1);
+    await b.clock.advance(6000);
+    expect(b.f.readLog.every((r) => r.path === b.Q)).toBe(true);
+    expect(b.f.readLog.length).toBeGreaterThan(0);
+    b.h.reader.stop();
+    expect(b.clock.pending()).toBe(0);
+  });
+
+  it('N1 re-entry: setPath(Q) from onStatus on the first report of a setPath() leaves one timer, none after stop', async () => {
+    const b = build((_s, h) => { if (h.n === 2) h.reader.setPath(b.Q); }, undefined);
+    b.h.reader.start();
+    swallow(() => b.h.reader.setPath(P));
+    expect(b.clock.pending()).toBe(1);
+    b.h.reader.stop();
+    expect(b.clock.pending()).toBe(0);
+  });
+});
+
+describe('DERIVATIONS §5 (a path withdrawn is not-configured) / onStatus re-entry at the burst\'s last report', () => {
+  async function withdrawn(arm: 'rejected' | 'moved') {
+    const clock = fakeClock();
+    const f = fakeFs(clock, { [P]: file('slalom.xml', 1000) });
+    const units: El[][] = [];
+    const statuses: El[] = [];
+    let armed = false;
+    let fired = false;
+    let reportsSinceArm = 0;
+    const LAST = 4; // the report of the burst's fourth (last) read, inside the loop; the ending's own reports follow it
+    const hold: { r?: ReturnType<typeof createXmlReader> } = {};
+    hold.r = createXmlReader({
+      path: P, pollIntervalSeconds: 5, clock, fs: f.fs, ctx: ctx(),
+      onUnit: (els: El[]) => { units.push(els); },
+      onStatus: (st: El) => {
+        statuses.push(st);
+        if (armed && !fired && ++reportsSinceArm === LAST) { fired = true; hold.r!.setPath(undefined); }
+      },
+    });
+    hold.r.start();
+    await clock.advance(6500);
+    expect(statuses[statuses.length - 1]!.state).toBe('connected');
+    const t0 = f.statLog[0]!.at;
+    if (arm === 'rejected') {
+      f.rejectReads(4);
+      f.put(P, file('cross.xml', 2000));
+    } else {
+      f.put(P, file('cross.xml', 2000));
+      for (let k = 0; k < 4; k++) f.duringNextRead(() => { f.put(P, file('cross.xml', 3000 + k * 1000)); });
+    }
+    armed = true;
+    await clock.advance(Math.max(0, t0 + 5000 + 2500 - clock.now()));
+    expect(fired).toBe(true);
+    const stats = f.statLog.length;
+    await clock.advance(30000);
+    return { last: statuses[statuses.length - 1]!, stats, after: f.statLog.length, hold };
+  }
+
+  it('onStatus calls setPath(undefined) at the burst\'s last report, rejected arm: not-configured, no more polls', async () => {
+    const r = await withdrawn('rejected');
+    expect(r.last.state).toBe('not-configured');
+    expect(r.after).toBe(r.stats);
+    r.hold.r!.stop();
+  });
+
+  it('onStatus calls setPath(undefined) at the burst\'s last report, moved arm: not-configured, no more polls', async () => {
+    const r = await withdrawn('moved');
+    expect(r.last.state).toBe('not-configured');
+    expect(r.after).toBe(r.stats);
+    r.hold.r!.stop();
+  });
+});

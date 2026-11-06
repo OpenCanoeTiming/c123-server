@@ -1173,6 +1173,215 @@
       }
     },
     {
+      "id": "inv2c-first-read-unknown-age-refused",
+      "invariant": "INV-2c",
+      "description": "A snapshot whose content age is unknown (changedAfter null: a first read) never displaces or retracts a tcp observation, even after a tcp outage; it presents what no tcp observation presents. The next rewrite, whose changedAfter follows the outage, settles the rest, a repeated refused value included.",
+      "context": {
+        "xmlPollIntervalSeconds": 5,
+        "attemptId": "K1M_BR1_6:9",
+        "note": "Attempts A = :9, B = :10, C = :11. A and C have tcp results; B has none."
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR1_6",
+            "mode": "results",
+            "rows": [
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 84,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 84
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "judgingComplete": true,
+                "bib": "9"
+              },
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 90.12,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 90.12
+                },
+                "placement": {
+                  "rank": 2,
+                  "order": 2
+                },
+                "judgingComplete": true,
+                "bib": "11"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:40:59.500Z"
+        },
+        {
+          "ingestSeq": 2,
+          "event": "tcp-disconnected",
+          "observedAt": "2026-09-15T10:41:00.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:41:02.000Z",
+          "changedAfter": null
+        },
+        {
+          "ingestSeq": 4,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "results",
+            "rows": [
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 84,
+                  "penaltySeconds": 2,
+                  "totalSeconds": 86
+                },
+                "placement": {
+                  "rank": 2,
+                  "order": 2
+                },
+                "judgingComplete": true,
+                "bib": "9"
+              },
+              {
+                "bib": "11"
+              },
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 88,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 88
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "judgingComplete": true,
+                "bib": "10"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:41:02.000Z"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 3,
+          "expect": {
+            "K1M_BR1_6:9.outcome": {
+              "state": "known",
+              "value": {
+                "kind": "duration",
+                "totalSeconds": 84
+              },
+              "source": "tcp"
+            },
+            "K1M_BR1_6:11.outcome": {
+              "state": "known",
+              "value": {
+                "kind": "duration",
+                "totalSeconds": 90.12
+              },
+              "source": "tcp"
+            },
+            "K1M_BR1_6:10.outcome": {
+              "state": "known",
+              "value": {
+                "kind": "duration",
+                "totalSeconds": 88
+              },
+              "source": "xml"
+            }
+          }
+        }
+      ],
+      "then": [
+        {
+          "ingestSeq": 5,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:41:37.000Z",
+          "changedAfter": "2026-09-15T10:41:32.000Z"
+        },
+        {
+          "ingestSeq": 6,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "results",
+            "rows": [
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 84,
+                  "penaltySeconds": 2,
+                  "totalSeconds": 86
+                },
+                "placement": {
+                  "rank": 2,
+                  "order": 2
+                },
+                "judgingComplete": true,
+                "bib": "9"
+              },
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 88,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 88
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "judgingComplete": true,
+                "bib": "10"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:41:37.000Z"
+        }
+      ],
+      "expect": {
+        "K1M_BR1_6:9.outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "totalSeconds": 86
+          },
+          "source": "xml"
+        },
+        "K1M_BR1_6:10.outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "totalSeconds": 88
+          },
+          "source": "xml"
+        },
+        "K1M_BR1_6:11.outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "totalSeconds": 90.12
+          },
+          "source": "tcp"
+        },
+        "note": "first snapshot: changedAfter null fails the guard, so A (84 vs 86) and C (retraction) stay tcp; B has no tcp observation and is presented from xml. second: changedAfter 10:41:32 follows the outage and the tcp pushes, A's repeated value is presented; C is absent from the XML table and states nothing."
+      }
+    },
+    {
       "id": "inv2c-same-source-earlier-finish-supersedes",
       "invariant": "INV-2c",
       "description": "Two athletes credited with each other's finishes are corrected in the results grid: the later push of the same source supersedes for both, including the one whose true finish is the earlier (ARCHITECTURE Scenario I). The previous edition's event-time floor would have refused that row on the XML side.",

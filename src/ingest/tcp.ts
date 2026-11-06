@@ -50,8 +50,7 @@ function results(u: Unit, ctx: IngestContext, res: Node): void {
       const r = asArray(row['Result'])[0];
       return classificationRow(u, `${phaseId}:${at(p, 'Bib').trim()}`, { entryId: at(p, 'Id'), bib: at(p, 'Bib'), rank: at(r, 'Rank'), order: at(r, 'RankOrder'), decidedIn: '' }) ?? [];
     });
-    u.add({ push: 'classification', phaseId, body: { rows: crows, asOf: ctx.observedAt } });
-    u.add({ snapshot: { source: 'tcp', phaseId, mode: 'results', rows: crows } }); // §4.10: a scope snapshot of ClassificationRows
+    u.add({ snapshot: { source: 'tcp', phaseId, mode: crows.some((r) => r['rank'] !== null && r['rank'] !== undefined) ? 'results' : 'start-list', rows: crows } }); // §4.10: a scope snapshot of ClassificationRows
     return;
   }
   const env = { u, phaseId, fmt, slots: ctx.courses?.[phaseId]?.slots, date: ctx.phaseDates?.[phaseId], zone: ctx.zone };
