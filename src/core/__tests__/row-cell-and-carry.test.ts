@@ -110,7 +110,7 @@ describe('N2: Completed="Y" on a running listing (Time, no dtFinish) closes noth
   ];
   const running = { dtStart: '12:00:00.000', time: '45   ', gates: '0,,,,,' };
 
-  it('hand stream: started at 12:00:00.000, listed running, a row stating Time 45 with a blank cell 2 (the push precedes the stream's finish), then the listing with Completed="Y" and no dtFinish: status on-course, gates still provisional', () => {
+  it('hand stream: started at 12:00:00.000, listed running, a row stating Time 45 with a blank cell 2 (the push precedes the finish on the stream), then the listing with Completed="Y" and no dtFinish: status on-course, gates still provisional', () => {
     const c = coreWith([connected(T0), L(0, running), L(1000, running), row(1500, { kind: 'duration', runSeconds: 45, penaltySeconds: 0, totalSeconds: 45 }), L(2000, { ...running, completed: true })]);
     expect((c.presented(X)['status'] as { value?: unknown }).value).toBe('on-course');
     expect(prov(c, X, 'gates')).toBe(true);
