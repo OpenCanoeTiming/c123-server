@@ -119,7 +119,6 @@ export function resolveContentAge(
     });
     const first = elements.find(isXmlElement);
     if (!seenEvent && first) {
-      seenEvent = true;
       const event = {
         ingestSeq: first.ingestSeq,
         event: 'xml-rewrite-detected',

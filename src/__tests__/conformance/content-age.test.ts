@@ -61,6 +61,15 @@ describe('harness content age (CONFORMANCE-VECTORS §1 "Content age", round 18)'
     expect(u.slice(1).every((e) => 'field' in e)).toBe(true);
   });
 
+  it('rule no-preceding-event: each xml unit with no event of its own gets its own: units at 10:00:00 and 10:01:00 give two events, the second changedAfter 10:00:55', () => {
+    const units = run([xmlObs(1, '2026-09-15T10:00:00.000Z'), tcpObs(2, '2026-09-15T10:00:30.000Z'), xmlObs(3, '2026-09-15T10:01:00.000Z')]);
+    const events = units.flat().filter((e) => 'event' in e) as El[];
+    expect(events.length).toBe(2);
+    expect(events[0]!.changedAfter).toBe('2026-09-15T09:59:55.000Z');
+    expect(events[1]!.observedAt).toBe('2026-09-15T10:01:00.000Z');
+    expect(events[1]!.changedAfter).toBe('2026-09-15T10:00:55.000Z');
+  });
+
   it('rule no-preceding-event: an xml snapshot with no earlier event gets the same head event', () => {
     const snap: El = { ingestSeq: 1, snapshot: { source: 'xml', phaseId: 'K1M_BR1_6', mode: 'results', rows: [] }, observedAt: '2026-09-15T10:41:02.000Z' };
     const units = run([snap]);

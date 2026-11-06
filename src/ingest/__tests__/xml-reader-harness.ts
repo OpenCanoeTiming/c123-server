@@ -56,13 +56,16 @@ export function fakeFs(clock: FakeClock, files: Record<string, FakeFile> = {}) {
   const readLog: { at: number; path: string }[] = [];
   const queued: Array<string | Error> = [];
   const hooks: Array<() => void> = [];
-  const ctl = { readMs: 0, alwaysReject: undefined as Error | undefined };
+  const ctl = { readMs: 0, statMs: 0, alwaysReject: undefined as Error | undefined };
   const fs = {
     async stat(path: string) {
       const f = files[path];
       statLog.push({ at: clock.now(), path, ...(f ? { mtimeMs: f.mtimeMs, size: f.size } : {}) });
-      if (!f) throw Object.assign(new Error(`ENOENT ${path}`), { code: 'ENOENT' });
-      return { mtimeMs: f.mtimeMs, size: f.size };
+      const sig = f ? { mtimeMs: f.mtimeMs, size: f.size } : undefined; // sampled at the start of the call
+      // a stat takes ctl.statMs of fake time; the file may be written inside that latency (after the sample)
+      if (ctl.statMs > 0) await new Promise<void>((r) => { clock.setTimeout(r, ctl.statMs); });
+      if (!sig) throw Object.assign(new Error(`ENOENT ${path}`), { code: 'ENOENT' });
+      return sig;
     },
     async read(path: string) {
       readLog.push({ at: clock.now(), path });
