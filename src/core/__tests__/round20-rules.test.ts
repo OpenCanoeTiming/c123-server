@@ -314,7 +314,7 @@ describe('code items 2, 3, 15 (CQ10, #258 cold start): the carry begins at the A
   it('a first-run row with a time and no course bound (no gates known): the outcome cannot be judged complete, so it is provisional until the run is closed', () => {
     const k = kit(A, P);
     const c = k.core();
-    c.applyUnit([k.snap('tcp', at(10), { outcome: duration(82.36, 2), judgingComplete: true })]);
+    c.applyUnit([k.snap('tcp', at(10), { outcome: duration(82.36, 2), judgingComplete: null })]);
     expect(field(c, A, 'gates')).not.toMatchObject({ state: 'known' });
     expect(field(c, A, 'outcome')).toMatchObject({ state: 'known', provisional: true });
   });
