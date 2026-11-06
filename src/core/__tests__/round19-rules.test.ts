@@ -296,7 +296,7 @@ describe('the core is told its Attempt, not left to guess (CONFORMANCE-VECTORS Â
     const core = createMergeCore({ attemptId: A }) as unknown as Core;
     core.applyUnit([keyless('2026-09-15T10:14:02.083Z')]);
     core.applyUnit([{ ingestSeq: 2, attemptId: 'K1M_BR1_6:10', field: 'status', source: 'tcp', kind: 'inference', observedAt: '2026-09-15T10:14:03.000Z', value: 'at-start', confidence: 'authoritative' }]);
-    expect(core.attempts().map(String).sort()).toEqual([A, 'K1M_BR1_6:10']);
+    expect(core.attempts().map(String).sort()).toEqual([A, 'K1M_BR1_6:10'].sort());
     expect(field(core, A, 'status')).toMatchObject({ value: 'on-course' });
     expect(field(core, 'K1M_BR1_6:10', 'status')).toMatchObject({ value: 'at-start' });
   });
