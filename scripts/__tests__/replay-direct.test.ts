@@ -31,7 +31,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const SCRIPT = path.join(ROOT, 'scripts/replay-direct.ts')
 const TSX = path.join(ROOT, 'node_modules/.bin/tsx')
-const CHECKER = '/workspace/timing/.worktrees/protocol-docs-249/tools/gate2/check.js'
+const CHECKER = '/workspace/timing/c123-protocol-docs/tools/gate2/check.js'
 const CACHE = '/workspace/timing/c123-protocol-docs/recordings/.cache'
 const T = 120_000
 
@@ -446,8 +446,7 @@ describe('row 4: determinism', () => {
   })
 
   const cp3 = path.join(CACHE, '2026-04-26-cp3-cross')
-  // skipped until the checker reads `elements` (#249); byte-identity half stays covered by the synthetic determinism test
-  it.skip('real window cp3-cross 08:28:00-08:29:00Z: two replays are byte-identical and the checker accepts the log as input', () => {
+  it('real window cp3-cross 08:28:00-08:29:00Z: two replays are byte-identical and the checker accepts the log as input', () => {
     const args = ['--recording', cp3, '--from', '2026-04-26T08:28:00.000Z', '--to', '2026-04-26T08:29:00.000Z']
     const a = replay(args)
     const b = replay(args)
@@ -463,8 +462,7 @@ describe('row 4: determinism', () => {
     }
   }, T * 2)
 
-  // skipped until the checker reads `elements` (#249)
-  it.skip('the synthetic log is usable input for tools/gate2/check.js (exit 0 or 1, never 2)', () => {
+  it('the synthetic log is usable input for tools/gate2/check.js (exit 0 or 1, never 2)', () => {
     const dir = recording()
     const r = replay(['--recording', dir])
     expect(r.code, r.stderr).toBe(0)
