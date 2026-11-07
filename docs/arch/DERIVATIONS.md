@@ -593,7 +593,9 @@ unavailable{not-applicable}`, whatever `Time` says. Recorded: junior Cross time-
 `Time="100.00" Total="100.00" Pen="" Gates=""` and real ranks, later rank × 1000; 24 of 32 rows of
 one class kept the placeholder through the semi-finals. Untimed is read from the snapshot row
 (`dtFinish` empty, time and placement present) and inherited by the TCP row of the same Attempt, which
-carries no finish time of its own; before the first snapshot a TCP row is presumed timed. Recorded: 47
+carries no finish time of its own; before the first snapshot a TCP row is presumed timed, and the
+flip at that snapshot is an INV-3 assertion over the TCP row, outside INV-2c's guard — no `tcp` row
+carries a finish time to contradict it — with `status` staying `finished` (round 26). Recorded: 47
 junior time-trial Attempts at cp3-cross by the raw rule over all 98 snapshots (43 in the final one;
 `WX1J_XT_26_JUN:25` appears in 30), 0 in every slalom snapshot checked (jarni-ne-do, E1). The flag
 is the parser's on an XML row (`dtFinish` empty, time and placement present); its inheritance by the
@@ -618,6 +620,10 @@ combined values.
 - `penaltySeconds` is the sum of the merged, judged cells. It is final when no cell is blank, or when
   the run is closed.
 - `totalSeconds = runSeconds + penaltySeconds`.
+- The outcome's `observedAt` is the element's that last changed the presented value — `runSeconds`
+  or a merged cell, a listing's included (`CONTRACTS.md` §1.2) — never a re-delivered row's whose
+  own cell change the merge does not present (INV-5; recorded: nkz-20ne K1M_BR2_20:63 at
+  09:41:25.154, the row's 50 blanked while the stream's cell stands; round 26).
 - `pairTotal = @Total`.
 - **Never use `@Pen` or `@Total` for run 2.** They describe the *counting* run: when run 1 is better,
   they are run 1's figures. Run 1 was better in 41% of recorded second-run finishes. They are not a
@@ -1098,8 +1104,11 @@ came from results-table observations:
 - **Paired second run.** The row is absent: retract as above plus `pairTotal` and `countingRun`. The
   row is present with `Time` empty and `IRM` empty: retract run 2's `outcome`, `gates` and any mark in
   `status`; take `placement` and `pairTotal` from the row, since an athlete with only a first-run
-  result is listed that way. Recorded: five DNSs and one CAP cleared in place; C1W_BR2_19 bib 7 went
-  `dns` → `not-started` and then raced.
+  result is listed that way — `not-yet` where its `Rank` or `Total` is empty, as §4.7 reads an empty
+  `Rank` (recorded: jarni-ne-odp C1M_BR2_19:64 at 11:40:07, run 1 marked `dnf` in the same push, no
+  combined result left; round 26). Recorded: five DNSs and one CAP cleared in place; C1W_BR2_19 bib 7 went
+  `dns` → `not-started` and then raced. Such a clearing retracts a mark row that had ended the
+  second-run carry; the carry resumes (`CONTRACTS.md` §1.2).
 - **Never:** an Attempt whose outcome is still an on-course inference; an Attempt never present in a
   results-table observation; a row that was never present.
 
@@ -1477,3 +1486,10 @@ and 23 remain.
     mirror shape (second pass): a mark attributed while the athlete is still listed records the
     generation, so a later start change with no finish reads as a re-run; a slip of a mark followed
     by a start correction would therefore increment. Not recorded either way. (Round 19.)
+24. **A Kayak Cross `faults` merge.** `CONTRACTS.md` §4 INV-2 rule 1 merges `gates` cell by cell and
+    names nothing else; a Cross Attempt's `faults` is presented whole from the presented observation,
+    so a fault the stream judges after a row shows at the next row. Recorded once: cp3-cross
+    MX1_XT_26:26, the stream's slot 9 `2` from 08:27:10, the row of 08:27:44 blank there, the next row
+    at 08:27:51 — 7 s of `count 0`, `provisional: true`, the honest label. A merge would be a new
+    rule (slot cells against captions, and which stamp property 11 reads); not taken on one 7 s
+    instance. (Round 26.)
