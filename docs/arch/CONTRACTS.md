@@ -188,7 +188,10 @@ The fields, precisely:
     presented from `tcp`, rule 2's mark exception, so a row with no mark and a row whose mark the
     presented `status` already is are never refused — the snapshot being ignored for that field and the time held back with
     the mark, §2.6; a row the guard admits restates the field whether or not it is then presented,
-    so a row withheld after admission leaves nothing carried; round 25, second pass): field by
+    so a row withheld after admission leaves nothing carried; round 25, second pass; a retraction
+    of the restating row — its mark cleared in place, the row gone, INV-7 — ends its restatement,
+    and the row of run 2 without either that follows leaves the fields carried again, the run
+    being about to happen once more; round 26): field by
     field, since `placement` and `pairTotal` come with the TCP row and `countingRun`
     only with the XML row (`DERIVATIONS.md` §4.4; the TCP row usually arrives before the on-course
     finish message, §2.6);
@@ -837,7 +840,9 @@ and the run is raced again. Meanwhile, it looks as if the athlete never did that
 **Left without a finish.** In slalom, an athlete can leave upstream's on-course list without a finish
 ever being recorded. `status` is then `left-without-finish`. This is an observed fact: upstream
 removed the athlete, and no finish exists.
-- **The reason is not yet known**, and `outcome` stays `pending`. It is **never** inferred as `dnf`.
+- **The reason is not yet known**, and `outcome` stays pending — `not-yet`, the stream's `running`
+  inference withdrawn with the listing (`DERIVATIONS.md` §4.3; `{ kind: 'pending' }` is a
+  Standing's `result`, §2.7; round 26). It is **never** inferred as `dnf`.
 - **Why a separate status.** Upstream enters DNF or DSQ mid-run, and DNS from the start judge's
   terminal, on paths that push nothing on TCP (observed upstream behaviour). Of 145 recorded status
   transitions, 45% reached TCP only on another athlete's push or by rotation: median 20–52 s, worst
@@ -1565,7 +1570,8 @@ implementation must satisfy, not an algorithm.
     row is present with an empty time and no mark: `outcome`, `gates` **and any mark in `status`** of
     run 2 are retracted (recorded: a second-run `dns` cleared in place, the athlete then raced);
     `placement` and `pairTotal` follow the row, since an athlete with only a first-run result is
-    listed that way.
+    listed that way — `not-yet` where its `Rank` or `Total` is empty (recorded: jarni-ne-odp
+    C1M_BR2_19:64 at 11:40:07, run 1 marked `dnf`, no combined result left; round 26).
   - **XML:** a first-run or single-run row carrying no time, no finish time and no mark: as the TCP
     first-run case. A second-run row so carrying: as the TCP time-empty case — before run 2, every
     second-run row in the snapshot already carries the combined placement and total with no time.

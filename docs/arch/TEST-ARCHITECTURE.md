@@ -255,7 +255,11 @@ the step index, the Attempt, the field and the property number.
    row's `finished` over the unit's own listing of the finish is the listing's element, INV-5,
    and keeps the listing's envelope — recorded: nkz-19so C1M_BR1_19:7, the row of 12:41:44.250
    presented at the listing of 12:41:44.358, `outcome` the row's, `status` the listing's; round 25
-   and its second pass).
+   and its second pass; a retraction's fallback to the retained stream inference keeps that
+   listing's envelope, property 5 — recorded: jarni-so-odp K1W_BR2_18:16, `at-start` of
+   14:11:39.886 presented at the clearing of 14:12:08; and a mark a snapshot re-delivers after the
+   guard refused its first read is the re-delivery's element and instant, INV-5, the `no-result`
+   outcome with it (`CONTRACTS.md` §2.6), never the refused read's; round 26).
 2. **Envelopes (§1.2) D.** Every presented envelope validates against `schemas/observed.schema.json`:
    `eventTime` omitted when absent, never `null`; `unavailable.reason` in the closed set; `source`
    never `bridge` on site.
@@ -270,7 +274,11 @@ the step index, the Attempt, the field and the property number.
    case). `SourceStatus` and diagnostics may change at any step.
 4. **No regression by omission (INV-1, INV-3).** A regression occurs only at: a scope snapshot of
    the Attempt's race (property 5); a listing of the Attempt that increments `run` in the same delta
-   (property 10) or contradicts a finish (property 7); a `rebaseline` of its scope (property 13).
+   (property 10) or contradicts a finish (property 7); a `rebaseline` of its scope (property 13);
+   and, for the stream's own `running` outcome alone, an `oncourse-left` or `oncourse-empty`
+   covering the Attempt or a listing of it with `dtStart` empty — the stream withdrawing what it
+   alone stated (`DERIVATIONS.md` §4.3, §4.1; `ADR-015` Revision 4), `status` the leave's
+   `left-without-finish` or the listing's `at-start`, every other field unchanged (round 26).
    `unavailable` appears only with a closed reason, and only at a step that carries the field for the
    Attempt (property 3) or at a scope snapshot of its race, never at a connection event, a `fragment`
    or by itself (INV-3): a `not-configured` decided from `SourceStatus` or the snapshot
@@ -282,7 +290,10 @@ the step index, the Attempt, the field and the property number.
    `outcome`, `gates` (in Kayak Cross `faults`), `placement`, `underReview`, `qualified` and a mark
    in `status`; paired second
    run with the row absent: those plus `pairTotal` and `countingRun`; second run with an empty time:
-   `outcome` and `gates` (`faults`) only — and never `entry`, `bib`, `startOrder`, `heat`,
+   `outcome` and `gates` (`faults`) only, `placement` and `pairTotal` being the row's, `known` or
+   `not-yet` as its `Rank` and `Total` state them (INV-7 "follow the row"; `DERIVATIONS.md` §4.7,
+   §4.12) — a change there is the row's statement, not this property's regression, and so is the
+   `not-yet` an empty `Rank` states on a row carrying a mark (round 26) — and never `entry`, `bib`, `startOrder`, `heat`,
    `startLane` or `run`. It never touches a field whose presented value is an on-course inference
    (`kind: inference`, or `outcome.kind: 'running'`). Afterwards `status` is what the on-course
    listing shows for the Attempt (`at-start`, `on-course`, or an inferred `finished` that still
@@ -295,7 +306,17 @@ the step index, the Attempt, the field and the property number.
    rotation's re-send included, read from the raw stream; for the stream's `status` inference, the
    latest listing stating it, or the message at which the leave was evaluated); otherwise the field
    is unchanged at that step, and so is every other field that re-delivery carried — a mark the guard
-   refused holds back its row's time too (`CONTRACTS.md` §2.6). Where the replay log carries the snapshot's rows, as the vector format does, the
+   refused holds back its row's time too (`CONTRACTS.md` §2.6). The guard's refusal is rule 2's
+   mark exception only — a mark over a `tcp` `status` of `not-started`, `at-start` or
+   `left-without-finish`; a mark over `on-course` or `finished` is refused by rule 2's continuity,
+   and that row's other fields reach rule 1 as §2.6 says (recorded: jarni-so-odp C1M_BR2_18:65 at
+   14:02:47.758, running, `gates` the row's; round 26). An `xml` row that makes the Attempt
+   untimed (`CONTRACTS.md` §2.6; `DERIVATIONS.md` §4.4: placed, no `dtFinish` on the row and none
+   on the raw stream for the Attempt) asserts `outcome: unavailable{not-applicable}` over the TCP
+   row's presumed-timed duration outside the guard — an INV-3 determination no `tcp` row can
+   contradict, a TCP row carrying no finish time — and is no retraction: `status` stays
+   `finished` and every other field stands (recorded: cp3-cross WX1J_XT_26_JUN, the snapshot of
+   06:12:22.482 over pushes to 06:12:23.908; round 26). Where the replay log carries the snapshot's rows, as the vector format does, the
    checker also asserts completeness: every Attempt of R presenting results-table values whose row
    states no result is retracted in that step — for a `tcp` snapshot an absent row and a start-list
    table included; for an `xml` snapshot a present row only, since an absent XML row and an empty
@@ -387,7 +408,9 @@ the step index, the Attempt, the field and the property number.
     gives it (`courseOrder`, a `running` outcome, the stream's cells; `CONTRACTS.md` §1.6: one
     message per unit; round 24), and `status` is `at-start` or
     `on-course`. **A listing that changes the start otherwise is a start correction:** `run`, every
-    presented results-table value and `placement` are unchanged at that step; `status` and the
+    presented results-table value and `placement` are unchanged at that step (value and `source`,
+    as property 5 reads "changes"; the finish `eventTime` `DERIVATIONS.md` §4.4 lets the listing
+    attach to the row's unchanged outcome is no change; round 26); `status` and the
     on-course inferences are the listing's, as at any listing (`DERIVATIONS.md` §4.1, §4.3:
     `running` takes its `Time`); and the generation's recorded start is the listing's from then
     on. A listing with an empty start changes neither `run` nor the recorded start; with `dtFinish`
@@ -414,7 +437,9 @@ the step index, the Attempt, the field and the property number.
     that — and no presented no-result mark, `non-ranked` closing nothing) and either a presented
     `gates` cell is `null`, a Kayak Cross Attempt's `faults` carries `judgingComplete: false` (the
     parser reads it over the slot cells and stamps the `faults` observation alone, and only a `known`
-    one — a `not-yet` `faults` with a course bound, every slot blank, carries no stamp and is not under
+    one; the observation is the presented one — the row's once a row stating a result is presented,
+    INV-2 rule 1 having no cell exception for `faults`, the stream's listing after it retained and
+    never read (recorded: cp3-cross MX1_XT_26:41 at 08:12:38.051; round 26) — a `not-yet` `faults` with a course bound, every slot blank, carries no stamp and is not under
     this clause, `CONTRACTS.md` §1.2; the row's other observations carry no
     judging stamp, `runClosed` at most, `DERIVATIONS.md` §4.4, §4.6(d); the Cross branch never reads
     `gates`, which is `unavailable{not-applicable}` there; round 23), or `gates`, in Cross `faults`, is
@@ -436,11 +461,16 @@ the step index, the Attempt, the field and the property number.
     row of run 2 carrying its time or its mark restates that field — unless the content-age guard
     refused its mark **by the checker's own comparison** (property 5's reading: the snapshot's
     `changedAfter` against the presented `tcp` observation's latest delivery, made only where the
-    row's mark would change the presented `tcp` `status`, rule 2's mark exception, as property 8
+    row's mark would change the presented `tcp` `status`, rule 2's mark exception — one of
+    `not-started`, `at-start`, `left-without-finish`, property 5 — as property 8
     reads it; a row with no mark, and a row whose mark the presented `status` already is, are never
     refused; never by whether a presentation followed), in which case the row restates nothing (INV-7
     "ignored for that field", the time held back with the mark, `CONTRACTS.md` §2.6) and the carry
-    stands; a row the guard admits restates the field whether or not the system under test presents
+    stands; a retraction of the restating row (property 5: its mark cleared in place, the row gone)
+    ends its restatement, and the row of run 2 with no time and no mark that follows leaves the
+    fields carried again, the regression property 4 names having come first (recorded: jarni-so-odp
+    C1M_BR2_18:51, `dns` at 13:48:30 cleared at 13:54:15, its start 13:54:59; round 26); a row the
+    guard admits restates the field whether or not the system under test presents
     it, so a `provisional` left `true` after an admitted row is this property's report (recorded:
     jarni-ne-do K1M_BR2_19:62, the XML `dns` row of 08:55:33 refused against the leave of 08:55:31,
     the TCP `dns` row of 08:55:39 restating `placement` and `pairTotal`, the next XML read

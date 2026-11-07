@@ -94,7 +94,14 @@ only published ones (CONTRACTS §5 step 1, §7.1) states what the core already d
 already receives each Standing by `standing.updated` and may not assume a Standing per scope before
 one is sent. Its third pass moved none: that the guard's comparison reaches only a mark that would
 change a `tcp`-presented `status` (CONTRACTS §1.2; TEST-ARCHITECTURE §3.2) is the checker's reading of
-`provisional`, which a client takes as given.
+`provisional`, which a client takes as given. Round 26 (2026-11-07, whole recordings through gate 2)
+moved none: the stream withdrawing its own `running` outcome at a leave or a deleted start, the
+untimed flip as an INV-3 assertion, the second-run carry resuming after its restating row is
+retracted, a time-empty second-run row's empty `Rank` and `Total` reading `not-yet`, the Cross
+`faults` stamp being the presented observation's and the run-2 outcome's `observedAt` are the core's
+and the checker's (CONTRACTS §1.2, §2.6, §4; DERIVATIONS §4.4, §4.12, §10; TEST-ARCHITECTURE §3.2);
+a client already treats `not-yet` and `unavailable` as states and `provisional` as given, and
+`left-without-finish` as a status whose outcome it never showed as settled.
 
 ---
 
