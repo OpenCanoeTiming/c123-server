@@ -92,7 +92,9 @@ second-run carry standing, a row held for the stream's finish keeping its own `o
 pass moved none either: that a Standing is first published at its first entry and hydration lists
 only published ones (CONTRACTS §5 step 1, §7.1) states what the core already did, and a client
 already receives each Standing by `standing.updated` and may not assume a Standing per scope before
-one is sent.
+one is sent. Its third pass moved none: that the guard's comparison reaches only a mark that would
+change a `tcp`-presented `status` (CONTRACTS §1.2; TEST-ARCHITECTURE §3.2) is the checker's reading of
+`provisional`, which a client takes as given.
 
 ---
 

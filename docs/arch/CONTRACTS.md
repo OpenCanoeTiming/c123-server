@@ -184,7 +184,9 @@ The fields, precisely:
     field (a row of run 2 without either restates run 1's values and leaves them carried; so does a
     row whose mark INV-7's guard refused — refused by the guard's own content-age comparison, the
     snapshot's `changedAfter` against the `tcp` observation's latest delivery, never by whether a
-    presentation followed — the snapshot being ignored for that field and the time held back with
+    presentation followed; the comparison is made only where the row's mark would change a `status`
+    presented from `tcp`, rule 2's mark exception, so a row with no mark and a row whose mark the
+    presented `status` already is are never refused — the snapshot being ignored for that field and the time held back with
     the mark, §2.6; a row the guard admits restates the field whether or not it is then presented,
     so a row withheld after admission leaves nothing carried; round 25, second pass): field by
     field, since `placement` and `pairTotal` come with the TCP row and `countingRun`

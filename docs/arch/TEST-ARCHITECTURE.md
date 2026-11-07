@@ -434,15 +434,19 @@ the step index, the Attempt, the field and the property number.
     `pairTotal` or `countingRun` carried over from run 1, from the Attempt's first on-course listing
     in run 2, staged or started, until a
     row of run 2 carrying its time or its mark restates that field — unless the content-age guard
-    refused it **by the checker's own comparison** (property 5's reading: the snapshot's
-    `changedAfter` against the presented `tcp` observation's latest delivery, as property 8 reads
-    it; never by whether a presentation followed), in which case the row restates nothing (INV-7
+    refused its mark **by the checker's own comparison** (property 5's reading: the snapshot's
+    `changedAfter` against the presented `tcp` observation's latest delivery, made only where the
+    row's mark would change the presented `tcp` `status`, rule 2's mark exception, as property 8
+    reads it; a row with no mark, and a row whose mark the presented `status` already is, are never
+    refused; never by whether a presentation followed), in which case the row restates nothing (INV-7
     "ignored for that field", the time held back with the mark, `CONTRACTS.md` §2.6) and the carry
     stands; a row the guard admits restates the field whether or not the system under test presents
     it, so a `provisional` left `true` after an admitted row is this property's report (recorded:
     jarni-ne-do K1M_BR2_19:62, the XML `dns` row of 08:55:33 refused against the leave of 08:55:31,
     the TCP `dns` row of 08:55:39 restating `placement` and `pairTotal`, the next XML read
-    `countingRun`; round 25, the comparison named in its second pass)
+    `countingRun` — its `dns` already presented, nothing to guard; and K1M_BR2_19:50's XML time row
+    of 08:50:12 with no mark, read while the Attempt was still listed, restating `countingRun`;
+    round 25, the comparison named in its second pass, its reach in the third)
     — judged field by field, since
     `countingRun` arrives only with the XML row; or its `source` is `operator-write` with a pending
     `WriteRequest`. It goes `false → true` only through a regression first (property 4), at the
