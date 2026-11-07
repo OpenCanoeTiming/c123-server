@@ -94,16 +94,24 @@ describe('P9 and P1 status (design-round25 rulings 4 and 5; INV-5; DERIVATIONS �
     expect(field(c, A, 'status')).toEqual(before);
   });
 
-  it('inside one unit (nkz C1M_BR1_19:7 P1 report): a held results row and the listing that settles the finish give `status` the listing\'s envelope, never the row\'s earlier instant', () => {
+  it('inside one unit (nkz C1M_BR1_19:7 step 123637, generation 2; P1 report; INV-5, DERIVATIONS §4.11): the held results row of run 2 and the listing that settles the finish give `status` the listing\'s envelope, never the row\'s earlier instant', () => {
     const A2 = 'C1M_BR1_19:7', P2 = 'C1M_BR1_19';
     const k = kit(A2, P2); const c = k.core();
+    const dur = (s: number) => ({ kind: 'duration', runSeconds: s, penaltySeconds: 0, totalSeconds: s });
+    // generation 1 is recorded: a row with a time, attributed to its finish when the listing shows it
     c.applyUnit(k.listing(sec(1), '10:00:00.000'));
-    // the row arrives while the stream still shows the Attempt running (held), the listing at +0.108 s settles the finish
-    c.applyUnit([k.snap('tcp', sec(20.25), { status: 'finished', outcome: { kind: 'duration', runSeconds: 20, penaltySeconds: 0, totalSeconds: 20 } })]);
-    c.applyUnit(k.listing(sec(20.358), '10:00:00.000', '10:00:20.000'));
+    c.applyUnit([k.snap('tcp', sec(20.25), { outcome: dur(20) })]);
+    c.applyUnit(k.listing(sec(20.358), '10:00:00.000', '10:00:20.000', { runSeconds: 20 }));
+    // a different start with no finish, the generation recorded: run 2 (CONTRACTS §2.6)
+    c.applyUnit(k.listing(sec(60), '10:01:00.000'));
+    expect(field(c, A2, 'run')).toMatchObject({ value: 2 });
+    // the row of run 2 arrives while the stream still shows it running: held, no status presented from it
+    c.applyUnit([k.snap('tcp', sec(80.25), { outcome: dur(21), placement: { rank: 1, order: 1 } })]);
+    expect(field(c, A2, 'status')).toMatchObject({ value: 'on-course' });
+    c.applyUnit(k.listing(sec(80.358), '10:01:00.000', '10:01:21.000', { runSeconds: 21 }));
     const s = field(c, A2, 'status');
     expect(s).toMatchObject({ state: 'known', value: 'finished' });
-    expect(s.observedAt).toBe(sec(20.358));
-    for (const e of sentFor(c, A2, 'status')) if (e.value === 'finished') expect(e.observedAt).toBe(sec(20.358));
+    expect(s.observedAt).toBe(sec(80.358));
+    for (const e of sentFor(c, A2, 'status')) if (e.value === 'finished' && e.observedAt! > sec(60)) expect(e.observedAt, 'run 2 status never carries the held row\'s .250').toBe(sec(80.358));
   });
 });
