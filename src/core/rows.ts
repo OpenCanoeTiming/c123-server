@@ -121,7 +121,7 @@ function writeRow(s: CoreState, a: AttemptState, source: Source, el: Element, ro
   if ('cells' in row) putCells(s, a, source, row['cells'] as Cells, slotOf(s, el, source, 'row', [], seq, extra));
   for (const f of ['gates', 'faults', 'splits']) if (row[f] !== undefined) put(s, a, source, el, f, row[f], seq, extra);
   for (const f of ['placement', 'pairTotal', 'countingRun']) if (f in row) put(s, a, source, el, f, row[f], seq, extra);
-  for (const f of ['underReview', 'qualified']) if (row[f] !== undefined) put(s, a, source, el, f, row[f], seq);
+  for (const f of ['underReview', 'qualified']) if (row[f] !== undefined) put(s, a, source, el, f, row[f], seq, extra);
   if (time === undefined && mark === undefined) keepCarried(s, a, row);
   else {
     for (const f of CARRIED) {

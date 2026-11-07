@@ -1,21 +1,25 @@
 /**
  * Direct-injection ingest path (#242, TEST-ARCHITECTURE §3.2): a recording's tcp and XML records, in recorded order, through the
- * production `parseTcp`, `parseXmlSnapshot` and `createMergeCore`, one element per step, and the step log the gate-2 checker reads.
+ * production `parseTcp`, `parseXmlSnapshot` and `createMergeCore`, one ingest unit per step, and the step log the gate-2 checker reads.
  *
  *   npm run replay:direct -- --recording <dir> [--from <iso>] [--to <iso>] [--events <file>] --out <file>
  *
- * Step log: `{"hydration":{"asOfSeq":0,"state":{...empty...}}}`, then `{i,element,deltas,stateHash}` per element, then
- * `{"end":{"steps":n}}`. `deltas` are the §7.2 messages the core notified for that element alone (applied as a unit of one).
+ * Step log: `{"hydration":{"asOfSeq":0,"state":{...empty...}}}`, then `{i,elements,deltas,stateHash}` per unit (CONTRACTS §1.6: one
+ * message, one event, one XML read, one re-baseline; the boundary is the driver's, never an instant), then `{"end":{"steps":n}}`.
+ * `elements` are the unit's in ingest order, then any `oncourse-left` the core derived at that message; `deltas` the §7.2 messages of the unit.
  * `stateHash` is an order-independent digest of the presented state (every Attempt and Entry a delta has touched, each Standing,
  * the on-course list, the diagnostics, the writes), updated from what each step touched; keys are sorted before hashing.
  *
  * Determinism (CONTRACTS §4): time is the recording's alone (chunk `startTime` + record `ts`); no clock is read. Inputs the recordings
  * lack (TEST-ARCHITECTURE §9): one `tcp-connected` at the first TCP record, unless `--events` states its own. `--events` is a JSON
  * array of `{ event, observedAt, scope?, changedAfter? }` (tcp-connected, tcp-disconnected, rebaseline), merged by `observedAt`,
- * before a record of the same instant, those inside the window only. An XML snapshot whose text repeats the previous one is a poll
+ * before a record of the same instant, those inside the window only. TCP records inside a stated outage, `tcp-disconnected` to the next
+ * `tcp-connected` or the end, are dropped; a stated `rebaseline` is CONTRACTS §4's unit, the event then the last snapshot re-read
+ * (its `changedAfter` unchanged, no stat has shown another signature). An XML snapshot whose text repeats the previous one is a poll
  * that saw no change and is not delivered; a delivered one follows an `xml-rewrite-detected` whose `changedAfter` is null for the
  * first snapshot, else the previous poll (`observedAt` minus the recorder's 5 s). `--from`/`--to` are inclusive; what precedes
- * `--from` is not replayed and the hydration is the empty state. The recording is streamed: memory does not grow with its length.
+ * `--from` is not replayed and the hydration is the empty state: a cold excerpt cut, for a checker reading the same cut (§3.2). Without
+ * `--from` the replay begins at the stream's first record. The recording is streamed: memory does not grow with its length.
  */
 import { closeSync, createReadStream, existsSync, openSync, readFileSync, readdirSync, statSync, writeSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -131,23 +135,36 @@ function rehash(deltas: readonly Record<string, unknown>[]): string {
   return sum.toString(16).padStart(64, '0');
 }
 
-function step(element: IngestElement | Record<string, unknown>): void {
-  core.applyUnit([element as IngestElement]);
+function step(unit: readonly (IngestElement | Record<string, unknown>)[]): void {
+  const derived = core.applyUnit(unit as IngestElement[]);
   const deltas = core.drainNotifications() as Record<string, unknown>[];
   steps++;
-  put({ i: steps, element, deltas, stateHash: rehash(deltas) });
+  put({ i: steps, elements: [...unit, ...derived], deltas, stateHash: rehash(deltas) });
+}
+
+let tcpSeen = false;
+let tcpDown = false; // inside a stated outage
+let lastXml: string | undefined;
+let lastChangedAfter: string | null = null;
+
+/** CONTRACTS §4: the read precedes the discard, and with no snapshot to read the action fails. */
+function rebaselineUnit(element: Record<string, unknown>): Record<string, unknown>[] {
+  if (lastXml === undefined) return fail(`rebaseline at ${String(element['observedAt'])}: no snapshot read yet`, 1);
+  ctx.observedAt = element['observedAt'] as string;
+  const reader = { ingestSeq: 0, event: 'xml-rewrite-detected', observedAt: ctx.observedAt, changedAfter: lastChangedAfter };
+  return [element, reader, ...parseXmlSnapshot(lastXml, ctx)];
 }
 
 let next = 0; // stated events not yet injected
 const injectUntil = (at: number): void => {
   while (next < stated.length && (stated[next] as StatedEvent).at <= at) {
     const { at: _at, ...element } = stated[next++] as StatedEvent;
-    step(element);
+    if (element.event === 'tcp-disconnected') tcpDown = true;
+    else if (element.event === 'tcp-connected') tcpDown = false;
+    step(element.event === 'rebaseline' ? rebaselineUnit(element) : [element]);
   }
 };
 
-let tcpSeen = false;
-let lastXml: string | undefined;
 const defaultConnect = !stated.some((e) => e.event === 'tcp-connected');
 
 for (const chunk of files) {
@@ -166,23 +183,23 @@ for (const chunk of files) {
     const at = base + r.ts;
     if (at < from) continue;
     if (at > to) break;
+    injectUntil(at);
     ctx.observedAt = new Date(at).toISOString();
     const text = typeof r.data === 'string' ? r.data : String(r.data);
-    injectUntil(at);
     if (isXml) {
       if (text === lastXml) continue;
       const els = parseXmlSnapshot(text, ctx);
       if (els.some((e) => 'unparseable' in e)) continue; // a torn read: the reader retries, nothing is delivered
       const changedAfter = lastXml === undefined ? null : new Date(at - POLL_MS).toISOString();
       lastXml = text;
-      step({ ingestSeq: 0, event: 'xml-rewrite-detected', observedAt: ctx.observedAt, changedAfter });
-      for (const el of els) step(el);
+      lastChangedAfter = changedAfter;
+      step([{ ingestSeq: 0, event: 'xml-rewrite-detected', observedAt: ctx.observedAt, changedAfter }, ...els]);
       learn(els, true);
-    } else {
-      if (!tcpSeen && defaultConnect) step({ ingestSeq: 0, event: 'tcp-connected', observedAt: ctx.observedAt });
+    } else if (!tcpDown) {
+      if (!tcpSeen && defaultConnect) step([{ ingestSeq: 0, event: 'tcp-connected', observedAt: ctx.observedAt }]);
       tcpSeen = true;
       const els = parseTcp(text, ctx);
-      for (const el of els) step(el);
+      if (els.length > 0) step(els);
       learn(els, false);
     }
   }

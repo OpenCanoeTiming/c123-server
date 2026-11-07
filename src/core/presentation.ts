@@ -32,7 +32,16 @@ function presentGates(a: AttemptState): Slot | undefined {
     const stream = onCourse.get(g.number) ?? null;
     return { ...g, penalty: newestIsOnCourse ? (stream ?? g.penalty) : (g.penalty ?? stream) };
   });
-  return { ...shown, value };
+  return { ...shown, value, observedAt: cellsChangedAt(a, shown, value, newestIsOnCourse ? inf : shown) };
+}
+
+/** §1.2: the merged vector's `observedAt` is the element's that last changed the presented cells: unchanged cells keep the one presented (INV-5). */
+function cellsChangedAt(a: AttemptState, row: Slot, cells: Gate[], newest: Slot): string {
+  const text = a.sent.get('gates');
+  if (text === undefined) return newest.observedAt;
+  const sent = JSON.parse(text) as { value?: unknown; observedAt?: string; source?: string; confidence?: string };
+  const same = sent.confidence === row.confidence && sent.source === row.source && JSON.stringify(sent.value) === JSON.stringify(cells);
+  return same && sent.observedAt !== undefined ? sent.observedAt : newest.observedAt;
 }
 
 const judgedCells = (gates: Slot | undefined): boolean | undefined =>
@@ -40,17 +49,30 @@ const judgedCells = (gates: Slot | undefined): boolean | undefined =>
     ? (gates.value as Gate[]).every((g) => g.penalty !== null)
     : undefined;
 
-const JUDGED: ReadonlySet<string> = new Set(['outcome', 'gates', 'faults', 'placement', 'pairTotal', 'countingRun']);
+const JUDGED: ReadonlySet<string> = new Set(['outcome', 'gates', 'faults', 'placement', 'pairTotal', 'countingRun', 'underReview', 'qualified']);
+/** §1.2's heat exemption: upstream's whole result, asserted after the judging. The heat's `faults` stays under the clause. */
+const HEAT_ASSERTED: ReadonlySet<string> = new Set(['outcome', 'placement', 'underReview', 'qualified']);
+
+interface Judging {
+  gates: Slot | undefined;
+  closed: boolean;
+  /** Not `known` because no course is bound (§1.2). */
+  unjudgeable: boolean;
+  /** §1.2's first exemption: `status` absent or `not-started`, a row with neither time nor mark. */
+  noRun: boolean;
+  /** §1.2's second exemption: a Kayak Cross heat whose placement is presented. */
+  heatPlaced: boolean;
+}
 
 /** §1.2, §4.4. `status` is never provisional, and neither is what no judging can move. */
-function isProvisional(a: AttemptState, field: string, slot: Slot, gates: Slot | undefined, closed: boolean, unjudgeable: boolean): boolean {
+function isProvisional(a: AttemptState, field: string, slot: Slot, j: Judging): boolean {
   if (slot.kind === 'operator') return slot.provisional === true;
   if (slot.kind === 'inference') return JUDGED.has(field);
   if (!JUDGED.has(field)) return false;
   if (a.carried.has(field)) return true;
-  if (closed) return false;
-  const complete = judgedCells(gates) ?? slot.judgingComplete;
-  return complete === false || complete === null || (complete === undefined && unjudgeable);
+  if (j.closed || j.noRun || (j.heatPlaced && HEAT_ASSERTED.has(field))) return false;
+  const complete = judgedCells(j.gates) ?? slot.judgingComplete;
+  return complete === false || complete === null || (complete === undefined && j.unjudgeable);
 }
 
 function outcomeValue(s: CoreState, a: AttemptState, slot: Slot, gates: Slot | undefined): unknown {
@@ -62,14 +84,16 @@ function outcomeValue(s: CoreState, a: AttemptState, slot: Slot, gates: Slot | u
   return { ...o, penaltySeconds, totalSeconds: r3(o.runSeconds + penaltySeconds) };
 }
 
-/** `eventTime` of a presented outcome: its own, else the finish with the same `Time`, whichever arrived first (§4.4). */
+/** `eventTime` of a presented outcome: its own, else the on-course finish with the same `Time`, whichever arrived first (§4.4); a row INV-2c's guard refuses gives none (round 24). */
 export function finishOf(a: AttemptState, slot: Slot): string | undefined {
   if (slot.eventTime !== undefined) return slot.eventTime;
   const time = (slot.value as { kind?: string; runSeconds?: number } | undefined);
   if (time?.kind !== 'duration') return undefined;
   if (a.gen.finish?.runSeconds === time.runSeconds && a.gen.finish?.eventTime !== undefined) return a.gen.finish.eventTime;
   const xml = a.slots.get('outcome')?.xml;
-  return (xml?.value as { runSeconds?: number } | undefined)?.runSeconds === time.runSeconds ? xml?.eventTime : undefined;
+  // against the row's first ingestion, not its age: a rotation re-delivering the row must not take the time back (INV-5)
+  const later = xml?.age !== null && xml?.age !== undefined && xml.age > slot.at;
+  return later && (xml.value as { runSeconds?: number } | undefined)?.runSeconds === time.runSeconds ? xml.eventTime : undefined;
 }
 
 /** The finish `eventTime` an Attempt presents, for `duplicate-finish` (§2.6). */
@@ -100,13 +124,16 @@ export function viewAttempt(s: CoreState, a: AttemptState): Record<string, unkno
   const statusSlot = presentStatus(a.slots.get('status'));
   const closed = a.gen.completed || a.left || isNoResultMark(statusSlot?.value);
   const gates = presentGates(a);
-  // §1.2: not `known` because no course is bound. A parser stamps a row only against a course (null without one), so an unstamped result
-  // is this case; an Attempt with no run yet has nothing to judge, and a heat's placement is upstream's whole result
+  // §1.2: not `known` because no course is bound. A parser stamps a row only against a course (null without one), so an unstamped result is this case
   const judging = fmt.cross ? present(a.slots.get('faults')) : gates;
-  const hasRun = statusSlot !== undefined && statusSlot.value !== 'not-started';
-  const unjudgeable = hasRun && !fmt.heats && boundSlots(s, a.phaseId) === undefined && judging?.state !== 'known' && judging?.state !== 'unavailable';
+  const judged: Judging = {
+    gates, closed,
+    unjudgeable: boundSlots(s, a.phaseId) === undefined && judging?.state !== 'known' && judging?.state !== 'unavailable',
+    noRun: statusSlot === undefined || statusSlot.value === 'not-started',
+    heatPlaced: fmt.heats && present(a.slots.get('placement'))?.state === 'known',
+  };
   const field = (name: string, slot: Slot | undefined = present(a.slots.get(name))): unknown =>
-    envelope(slot, slot !== undefined && isProvisional(a, name, slot, gates, closed, unjudgeable));
+    envelope(slot, slot !== undefined && isProvisional(a, name, slot, judged));
 
   const outcomeSlot = present(a.slots.get('outcome'));
   let outcome: unknown;
@@ -116,7 +143,7 @@ export function viewAttempt(s: CoreState, a: AttemptState): Record<string, unkno
     outcome = (outcomeSlot === undefined ? firstRunUnavailable(s, a.phaseId, a.bib) : undefined) ?? field('outcome', outcomeSlot);
   } else {
     const value = outcomeValue(s, a, outcomeSlot, gates);
-    outcome = envelope({ ...outcomeSlot, value }, isProvisional(a, 'outcome', outcomeSlot, gates, closed, unjudgeable), finishOf(a, outcomeSlot));
+    outcome = envelope({ ...outcomeSlot, value }, isProvisional(a, 'outcome', outcomeSlot, judged), finishOf(a, outcomeSlot));
   }
 
   const out: Record<string, unknown> = {
@@ -133,7 +160,7 @@ export function viewAttempt(s: CoreState, a: AttemptState): Record<string, unkno
     countingRun: field('countingRun'),
   };
   for (const f of PLAIN_ENVELOPED) out[f] = field(f);
-  if (s.splitsArmed === false) out['splits'] = { state: 'unavailable', reason: 'not-applicable' };
+  if (a.splitsUnarmed === true) out['splits'] = { state: 'unavailable', reason: 'not-applicable' };
   return out;
 }
 

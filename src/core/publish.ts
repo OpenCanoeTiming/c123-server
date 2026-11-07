@@ -98,8 +98,9 @@ function ofPhase(s: CoreState, phaseId: string, asOf: string): Standing[] {
   if (fmt.pair?.role === 'second') {
     // §5 step 1: the pair exists once `pair.siblingPhaseId` is known. A parser's `null` says the schedule has not named it; with no `pair`
     // observed at all (a stream of snapshots alone, vector standing-not-resent-on-running-tick) the format token names the first run.
-    const stated = s.phases.get(phaseId)?.plain.get('pair') as { siblingPhaseId?: string | null } | undefined;
-    const first = stated === undefined ? siblingPhaseId(s, phaseId) : (stated.siblingPhaseId ?? undefined);
+    const phase = s.phases.get(phaseId);
+    const stated = phase?.plain.get('pair') as { siblingPhaseId?: string | null } | null | undefined;
+    const first = phase?.pairStated === true ? (stated?.siblingPhaseId ?? undefined) : siblingPhaseId(s, phaseId);
     if (first !== undefined) scoped('pair', { kind: 'pair', firstPhaseId: first, secondPhaseId: phaseId });
   }
   if (fmt.heats) {
