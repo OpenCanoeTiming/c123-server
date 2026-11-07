@@ -293,7 +293,10 @@ the step index, the Attempt, the field and the property number.
    `outcome` and `gates` (`faults`) only, `placement` and `pairTotal` being the row's, `known` or
    `not-yet` as its `Rank` and `Total` state them (INV-7 "follow the row"; `DERIVATIONS.md` §4.7,
    §4.12) — a change there is the row's statement, not this property's regression, and so is the
-   `not-yet` an empty `Rank` states on a row carrying a mark (round 26) — and never `entry`, `bib`, `startOrder`, `heat`,
+   `not-yet` an empty `Rank` states on a row carrying a mark (round 26) — `countingRun` standing at
+   a present `tcp` row, which has no column for it, and being the row's at an `xml` row,
+   `BetterRunNr` `0` as `not-yet` (INV-7; recorded: jarni-ne-odp C1M_BR2_19:64, the snapshot of
+   11:40:25.507; round 26, second pass) — and never `entry`, `bib`, `startOrder`, `heat`,
    `startLane` or `run`. It never touches a field whose presented value is an on-course inference
    (`kind: inference`, or `outcome.kind: 'running'`). Afterwards `status` is what the on-course
    listing shows for the Attempt (`at-start`, `on-course`, or an inferred `finished` that still
@@ -320,7 +323,8 @@ the step index, the Attempt, the field and the property number.
    checker also asserts completeness: every Attempt of R presenting results-table values whose row
    states no result is retracted in that step — for a `tcp` snapshot an absent row and a start-list
    table included; for an `xml` snapshot a present row only, since an absent XML row and an empty
-   XML table state nothing (INV-7). A refusal holds the field's value and `source`; `provisional`,
+   XML table state nothing (INV-7); `countingRun` is asked of an `xml` row and of an absent `tcp`
+   row, never of a present `tcp` row, which cannot state it (round 26, second pass). A refusal holds the field's value and `source`; `provisional`,
    recomputed when the course binds (property 11), and an `eventTime` the Phase date first lets
    `DERIVATIONS.md` §0.2 build (§0.5, §4.4: from the on-course finish, never from the refused row)
    may change at the snapshot step that supplies them, and "changes" and "flips" here, in 6(c) and

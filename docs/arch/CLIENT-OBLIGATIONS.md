@@ -101,7 +101,10 @@ retracted, a time-empty second-run row's empty `Rank` and `Total` reading `not-y
 `faults` stamp being the presented observation's and the run-2 outcome's `observedAt` are the core's
 and the checker's (CONTRACTS §1.2, §2.6, §4; DERIVATIONS §4.4, §4.12, §10; TEST-ARCHITECTURE §3.2);
 a client already treats `not-yet` and `unavailable` as states and `provisional` as given, and
-`left-without-finish` as a status whose outcome it never showed as settled.
+`left-without-finish` as a status whose outcome it never showed as settled. Its second pass
+(2026-11-08) moved none: a present TCP row leaving `countingRun` standing and the XML row's
+`BetterRunNr` `0` reading `not-yet` are the core's and the checker's (CONTRACTS §4; DERIVATIONS
+§4.12; TEST-ARCHITECTURE §3.2); a client receives `not-yet` either way.
 
 ---
 
