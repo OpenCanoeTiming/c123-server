@@ -247,7 +247,10 @@ the step index, the Attempt, the field and the property number.
 1. **Sequence (INV-6) D.** `seq` strictly increases across deltas, and the first delta's `seq`
    exceeds the hydration step's `asOfSeq`. No `observedAt` in any delta is a replay-time clock
    value: each is the recorded `observedAt` of the element that produced that observation, at or
-   before the step (a creation message or a standing legitimately carries earlier envelopes).
+   before the step (a creation message or a standing legitimately carries earlier envelopes; so
+   does a row the merge held for the stream's finish, `DERIVATIONS.md` §4.11, presented with its
+   own `observedAt` at the listing that settled it — recorded: nkz-19so C1M_BR1_19:7, the row of
+   12:41:44.250 presented at the listing of 12:41:44.358; round 25).
 2. **Envelopes (§1.2) D.** Every presented envelope validates against `schemas/observed.schema.json`:
    `eventTime` omitted when absent, never `null`; `unavailable.reason` in the closed set; `source`
    never `bridge` on site.
@@ -425,7 +428,12 @@ the step index, the Attempt, the field and the property number.
     closure; round 23); or it is a second run's `placement`,
     `pairTotal` or `countingRun` carried over from run 1, from the Attempt's first on-course listing
     in run 2, staged or started, until a
-    row of run 2, carrying its time or its mark, restates that field — judged field by field, since
+    row of run 2 whose time or mark the merge presents restates that field — a row the content-age
+    guard refused (property 5; INV-7 "ignored for that field", the time held back with the mark,
+    `CONTRACTS.md` §2.6) restates nothing and leaves the carry standing (recorded: jarni-ne-do
+    K1M_BR2_19:62, the XML `dns` row of 08:55:33 refused against the leave of 08:55:31, the TCP `dns`
+    row of 08:55:39 restating `placement` and `pairTotal`, the next XML read `countingRun`; round 25)
+    — judged field by field, since
     `countingRun` arrives only with the XML row; or its `source` is `operator-write` with a pending
     `WriteRequest`. It goes `false → true` only through a regression first (property 4), at the
     Attempt's first on-course listing of a generation (staged or started; recorded: nkz-19so
@@ -445,7 +453,10 @@ the step index, the Attempt, the field and the property number.
     row carried; a mark refused for `status` (properties 6(c) and 8) shows in no field. Two Attempts of one Phase presenting the same
     finish `eventTime` have a `duplicate-finish` diagnostic in that step.
 13. **Re-baseline (`ADR-015`).** `scope.replaced` appears only at a `rebaseline` step and carries every
-    Attempt of the scope and the Standings §7.2 names. Across it, `entry`, `bib`, `run`,
+    Attempt of the scope and the Standings §7.2 names — none with no entries: a Standing of the
+    scope absent from the message is one no Attempt of the message feeds (`CONTRACTS.md` §5 steps
+    2–3; recorded: cp3-cross at a stated 09:05Z re-baseline, `heat:WX1_XS_26:1/all` with its heat's
+    placements in no XML row, rebuilt by the next TCP push; round 25). Across it, `entry`, `bib`, `run`,
     `startOrder`, `heat`, `startLane`, every check and flag, and every `WriteRequest` are unchanged;
     afterwards every presented value of a field §4 step 1 discards has `source` `tcp` or `xml`, and
     none of those has `source: tcp` until a `tcp` observation of it follows (`courseOrder`, `timeToBeat`

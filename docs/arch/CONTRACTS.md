@@ -180,8 +180,10 @@ The fields, precisely:
     here in round 24, both named in its second pass);
   - it is a second run's `placement`, `pairTotal` or `countingRun` carried over from run 1, from the
     Attempt's first on-course listing in run 2 — staged or started: the stream saying the run is
-    about to happen — until a row of run 2 — one carrying its time or its mark — restates that
-    field (a row of run 2 without either restates run 1's values and leaves them carried): field by
+    about to happen — until a row of run 2 — one whose time or mark the merge presents — restates that
+    field (a row of run 2 without either restates run 1's values and leaves them carried; so does a
+    row whose mark INV-7's guard refused, the snapshot being ignored for that field and the time
+    held back with the mark, §2.6: a result not presented restates nothing; round 25): field by
     field, since `placement` and `pairTotal` come with the TCP row and `countingRun`
     only with the XML row (`DERIVATIONS.md` §4.4; the TCP row usually arrives before the on-course
     finish message, §2.6);
@@ -1897,7 +1899,10 @@ Every message carries `seq` (§1.6).
   whole class and every age category). For `{ kind: 'event' }` that is every Attempt and every Standing
   of the event. It never carries Phases, Entries, Classes or Courses: a re-baseline discards result
   fields only, and those entities are unchanged. A client applies it as a **replace**: Attempts and
-  Standings of that scope absent from the message are removed. It is never merged.
+  Standings of that scope absent from the message are removed. It is never merged. **A Standing the
+  rebuilt scope gives no entry (§5 steps 2–3) is not carried:** the rebuilt state is a fresh one,
+  and a Standing is published from its first entry (§5 step 1), so the client's replace removes one
+  it held and `standing.updated` creates it again when an entry returns, whole as always (round 25).
 
 The message set, normatively; `type` is the discriminant and every message carries `seq`:
 
