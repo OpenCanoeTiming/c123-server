@@ -180,10 +180,13 @@ The fields, precisely:
     here in round 24, both named in its second pass);
   - it is a second run's `placement`, `pairTotal` or `countingRun` carried over from run 1, from the
     Attempt's first on-course listing in run 2 — staged or started: the stream saying the run is
-    about to happen — until a row of run 2 — one whose time or mark the merge presents — restates that
+    about to happen — until a row of run 2 — one carrying its time or its mark — restates that
     field (a row of run 2 without either restates run 1's values and leaves them carried; so does a
-    row whose mark INV-7's guard refused, the snapshot being ignored for that field and the time
-    held back with the mark, §2.6: a result not presented restates nothing; round 25): field by
+    row whose mark INV-7's guard refused — refused by the guard's own content-age comparison, the
+    snapshot's `changedAfter` against the `tcp` observation's latest delivery, never by whether a
+    presentation followed — the snapshot being ignored for that field and the time held back with
+    the mark, §2.6; a row the guard admits restates the field whether or not it is then presented,
+    so a row withheld after admission leaves nothing carried; round 25, second pass): field by
     field, since `placement` and `pairTotal` come with the TCP row and `countingRun`
     only with the XML row (`DERIVATIONS.md` §4.4; the TCP row usually arrives before the on-course
     finish message, §2.6);
@@ -1682,8 +1685,11 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    **`asOf`** is the ingest time of the latest observation that changed the standing as serialised;
    for a classification, the latest scope snapshot that changed its rows (§2.4,
    `DERIVATIONS.md` §4.10), not a snapshot re-sending the same rows and not an emptied table, which
-   leaves the Standing as last built (maintainer, 2026-11-06). **A standing is pushed only when its
-   serialised form changes:** an entry added or removed, or an entry's `rank`, `order`, `result`,
+   leaves the Standing as last built (maintainer, 2026-11-06). **A standing is first published at
+   its first entry:** before one, its key is known and nothing is sent, and §7.1's hydration lists
+   it only once it has been published — a standing emptied afterwards (a retraction, a re-run) stays
+   published, empty, its emptying being a change (round 25, second pass). **A standing is pushed
+   only when its serialised form changes:** an entry added or removed, or an entry's `rank`, `order`, `result`,
    `pairTotalSeconds`, `behindSeconds`, `provisional`, `underReview` or `decidedIn`, or `anomalies`.
 2. **Whole-class entries.**
    - Each Attempt of the Phase with a `known` `placement` is an entry; `placement` is `known` only
@@ -1805,7 +1811,7 @@ Every response except `/api/sources` carries `asOfSeq: number` (§1.6) at the to
 | `GET /api/classes/{classId}/phases` | `{ asOfSeq, phases: Phase[] }` | `404 class-not-found` |
 | `GET /api/classes/{classId}/entries` | `{ asOfSeq, entries: OnsiteEntry[] }` | `404 class-not-found` |
 | `GET /api/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }` | `404 phase-not-found` |
-| `GET /api/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`: every scope of §5, for the whole class and per age category | `404 class-not-found` |
+| `GET /api/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`: every published scope of §5 (step 1: from its first entry), for the whole class and per age category | `404 class-not-found` |
 | `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null, asOf: Timestamp \| null }`: **every Attempt upstream currently lists on its on-course list**, across every running Phase, whatever its `status`: `at-start`, `on-course`, and, between a finish and upstream's closure of the run — upstream's auto-complete setting, measured over seven recordings and 1,995 closures: about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % of closures in [18, 20) s), about 47 s at one (medians 47 s, p90 57 s), a minority of manual closes under 5 s (12.6 % and 34.9 % on two days) and a long tail to 126–781 s. **No client may assume a fixed value.** Meanwhile the Attempt is listed as `finished` or a mark. The set is upstream's list; `status` says where each Attempt is. `asOf` is the ingest time of the latest on-course observation behind the set, `null` before any. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8). Kept current by `oncourse.updated` (§7.2) | — |
 | `GET /api/phases/{phaseId}/checks` | `{ asOfSeq, checks: GateCheck[], flags: GateFlag[] }`: every check and flag of the Phase, all run generations, `status` derived at serialisation (§2.10) | `404 phase-not-found` |
 | `GET /api/sources` | `SourceStatus`, unwrapped | — |
@@ -1899,10 +1905,15 @@ Every message carries `seq` (§1.6).
   whole class and every age category). For `{ kind: 'event' }` that is every Attempt and every Standing
   of the event. It never carries Phases, Entries, Classes or Courses: a re-baseline discards result
   fields only, and those entities are unchanged. A client applies it as a **replace**: Attempts and
-  Standings of that scope absent from the message are removed. It is never merged. **A Standing the
-  rebuilt scope gives no entry (§5 steps 2–3) is not carried:** the rebuilt state is a fresh one,
-  and a Standing is published from its first entry (§5 step 1), so the client's replace removes one
-  it held and `standing.updated` creates it again when an entry returns, whole as always (round 25).
+  Standings of that scope absent from the message are removed. It is never merged. **A Standing
+  whose own Attempts give no entry after the rebuild is not carried** — its own Attempts being those
+  §5 names for its scope: the Phase's, the second Phase's for a `pair` (step 2, so a `pair` Standing
+  on the first Phase's re-baseline is fed by Attempts the message does not carry), the heat's, and
+  for an age category the placed entries of that category (step 4) — judged on the state after the
+  message's Attempts are applied: the rebuilt state is a fresh one, and a Standing is published from
+  its first entry (§5 step 1), so the client's replace removes one it held and `standing.updated`
+  creates it again when an entry returns, whole as always (round 25; the Attempts named in its
+  second pass).
 
 The message set, normatively; `type` is the discriminant and every message carries `seq`:
 

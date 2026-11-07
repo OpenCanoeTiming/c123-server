@@ -86,9 +86,13 @@ test document's (CONTRACTS §1.2; TEST-ARCHITECTURE §3.2, §4); a client alread
 `provisional` as two facts and receives a Phase whole on its first message. Round 25 (2026-11-07,
 verdicts on the gate-2 reports of #242) moved none: a row the content-age guard refused leaving the
 second-run carry standing, a row held for the stream's finish keeping its own `observedAt`, and
-`scope.replaced` carrying no Standing the rebuilt scope gives no entry are the core's and the checker's
-(CONTRACTS §1.2, §7.2; TEST-ARCHITECTURE §3.2); a client already applies `scope.replaced` as a replace
-and takes a `standing.updated` whole, a first one included.
+`scope.replaced` carrying no Standing whose own Attempts give no entry are the core's and the checker's
+(CONTRACTS §1.2, §7.2; TEST-ARCHITECTURE §3.2; DERIVATIONS §4.11); a client already applies
+`scope.replaced` as a replace and takes a `standing.updated` whole, a first one included. Its second
+pass moved none either: that a Standing is first published at its first entry and hydration lists
+only published ones (CONTRACTS §5 step 1, §7.1) states what the core already did, and a client
+already receives each Standing by `standing.updated` and may not assume a Standing per scope before
+one is sent.
 
 ---
 

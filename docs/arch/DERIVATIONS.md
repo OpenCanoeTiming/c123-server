@@ -1068,7 +1068,10 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   seen on the on-course stream and the row's `Time` equals the on-course `Time` at that finish (the
   two are identical, §4.4); a TCP row carrying a time that arrives before that finish is retained and
   attributed when the finish arrives with the same `Time` — the usual order, §4.4: 72 % of recorded
-  finishes, the run-2 push 108 ms before the finish among them — else it describes the replaced run;
+  finishes, the run-2 push 108 ms before the finish among them — and presented then with its own
+  envelope, `observedAt` the row's delivery, not the finish's (the attribution is the core's
+  evaluation, the observation the row's; `status` at that unit is the listing's, §4.1; round 25,
+  second pass) — else it describes the replaced run;
   a TCP row carrying a mark and no time cannot be attributed and is judged by the stale-mark rule
   (§4.12) whether or not the generation's finish has been seen: equal to the remembered mark, it is
   withheld with `stale-mark`; different, it is presented. Either way the replaced run's row
