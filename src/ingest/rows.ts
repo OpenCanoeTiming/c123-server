@@ -146,7 +146,7 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
   if (second && r.pairTotal !== undefined) row['pairTotal'] = r.pairTotal;
   if (second && fmt.pair?.combination === 'best' && x !== undefined) {
     const c = int(x.betterRun);
-    if (c === 1 || c === 2) row['countingRun'] = c;
+    row['countingRun'] = c === 1 || c === 2 ? c : null; // BetterRunNr 0: no pair yet, `not-yet` (§4.4)
   }
 
   // §4.7 other row fields
