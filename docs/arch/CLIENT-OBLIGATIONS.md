@@ -83,7 +83,18 @@ none: the checker's raw stream omitting a stated outage's records, the step log 
 stream's start with the window bounding the counts, §1.2 naming both exemptions and "a row stating a
 result", and P13 naming `courseOrder` and `timeToBeat` are the checker's, the driver's and the
 test document's (CONTRACTS §1.2; TEST-ARCHITECTURE §3.2, §4); a client already reads `confidence` and
-`provisional` as two facts and receives a Phase whole on its first message.
+`provisional` as two facts and receives a Phase whole on its first message. Round 25 (2026-11-07,
+verdicts on the gate-2 reports of #242) moved none: a row the content-age guard refused leaving the
+second-run carry standing, a row held for the stream's finish keeping its own `observedAt`, and
+`scope.replaced` carrying no Standing whose own Attempts give no entry are the core's and the checker's
+(CONTRACTS §1.2, §7.2; TEST-ARCHITECTURE §3.2; DERIVATIONS §4.11); a client already applies
+`scope.replaced` as a replace and takes a `standing.updated` whole, a first one included. Its second
+pass moved none either: that a Standing is first published at its first entry and hydration lists
+only published ones (CONTRACTS §5 step 1, §7.1) states what the core already did, and a client
+already receives each Standing by `standing.updated` and may not assume a Standing per scope before
+one is sent. Its third pass moved none: that the guard's comparison reaches only a mark that would
+change a `tcp`-presented `status` (CONTRACTS §1.2; TEST-ARCHITECTURE §3.2) is the checker's reading of
+`provisional`, which a client takes as given.
 
 ---
 
