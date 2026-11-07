@@ -98,6 +98,8 @@ export interface AttemptState {
   cells: Partial<Record<'tcp' | 'xml' | 'inference', { cells: (number | null)[]; slot: Slot }>>;
   /** Fields carried over from run 1 while run 2 runs (§1.2). */
   carried: Set<string>;
+  /** `splits` is `unavailable{not-applicable}`: decided at a step carrying splits or a scope snapshot, never at the `RaceConfig` (§4.8). */
+  splitsUnarmed?: boolean;
   untimed: boolean;
   created: boolean;
   sent: Map<string, string>;
@@ -132,6 +134,8 @@ export interface ResourceState {
   sent: Map<string, string>;
   /** Phase only: the snapshot has assigned `date` (INV-5). */
   dateFixed?: boolean;
+  /** Phase only: a source stated `pair`; until then it is the token's lookup, which names no sibling (§2.1). */
+  pairStated?: boolean;
   /** Phase only: the attempts of this race. */
   attempts?: Set<AttemptState>;
 }

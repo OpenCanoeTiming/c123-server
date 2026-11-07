@@ -79,4 +79,5 @@ export const RUN_SCOPED = [
 export function forgetRunScoped(a: AttemptState): void {
   for (const f of RUN_SCOPED) a.slots.delete(f);
   a.cells = {};
+  delete a.splitsUnarmed;
 }

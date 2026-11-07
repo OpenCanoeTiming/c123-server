@@ -20,6 +20,7 @@ const COURSE_FIELDS = ['layout', 'gates', 'slots', 'sectorEndsAfterGate', 'split
 /** One field of a Phase, Entry, Class or Course. Returns whether anything presented may have changed. */
 export function observeResource(s: CoreState, r: ResourceState, el: Element, field: string, source: Source, seq: number): boolean {
   if (PLAIN.has(field)) {
+    if (field === 'pair') r.pairStated = true;
     if (field === 'date') {
       if (r.dateFixed === true) return false;
       r.dateFixed = true;

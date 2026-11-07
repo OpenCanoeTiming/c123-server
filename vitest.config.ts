@@ -13,6 +13,8 @@ const TOOLS = [
   'src/ingest/__tests__/xml-reader.real.test.ts',
   // a real child process killed between the temporary file and the rename (issue #211)
   'src/store/__tests__/checks.real.test.ts',
+  // child processes replaying recordings through the real parsers and core (issue #242)
+  'scripts/__tests__/replay-direct.test.ts',
 ];
 const EXCLUDE = ['dist/**', 'node_modules/**'];
 

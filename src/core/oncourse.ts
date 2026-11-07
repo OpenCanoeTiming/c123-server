@@ -169,12 +169,18 @@ export function leave(s: CoreState, a: AttemptState, el: Element): void {
   } else if (cur === 'at-start') setStream(s, a, el, 'not-started', seq);
 }
 
-/** The rule's one evaluation, after a TCP unit is merged, so the unit's own listings count. */
-export function applyLeaveRule(s: CoreState, el: Element): void {
+/** The rule's one evaluation, after a TCP unit is merged, so the unit's own listings count. Returns the leaves it derived, as `oncourse-left` elements. */
+export function applyLeaveRule(s: CoreState, el: Element): Element[] {
   const now = Date.parse(el.observedAt);
   const previous = s.previousTcpAt;
   s.previousTcpAt = now;
-  for (const a of [...s.listed.values()]) if (hasStoppedListing(a, now, previous)) leave(s, a, el);
+  const derived: Element[] = [];
+  for (const a of [...s.listed.values()]) {
+    if (!hasStoppedListing(a, now, previous)) continue;
+    leave(s, a, el);
+    derived.push({ ingestSeq: 0, event: 'oncourse-left', attemptId: a.id, observedAt: el.observedAt });
+  }
+  return derived;
 }
 
 /** `oncourse.updated`'s body (§7.2): ordered by `courseOrder`, an Attempt without one last by `startOrder` (§4.8). */

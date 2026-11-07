@@ -6,6 +6,7 @@
  * This file only dispatches. Retention, precedence, generations, retraction and presentation live in their own modules.
  */
 import { applyListing, applyLeaveRule, leave, list, observeStreamOutcome, observeStreamStatus, oncourseView } from './oncourse.js';
+import { isMark } from './precedence.js';
 import { currentDiagnostics, flush } from './notify.js';
 import { phaseResource, attemptFor, fmtFor, resource } from './registry.js';
 import { FIRST_RUN_FIELDS, PAIR_FIELDS, SECOND_RUN_EMPTY_FIELDS, hasResult, retract } from './retraction.js';
@@ -20,7 +21,8 @@ import type { AttemptState, ClassificationRow, ClassificationState, CoreState, D
 export type { MergeCoreOptions } from './types.js';
 
 export interface MergeCore {
-  applyUnit(elements: readonly Element[]): void;
+  /** Merges one unit and notifies once. Returns what the core derived at it: the `oncourse-left` of the leave rule (DERIVATIONS §4.1). */
+  applyUnit(elements: readonly Element[]): Element[];
   presented(attemptId: string): Record<string, unknown>;
   /** The Entry `entryId`; without one, the Entry a vector's unnamed observations address. */
   entry(entryId?: string): Record<string, unknown>;
@@ -91,6 +93,7 @@ function applyEvent(s: CoreState, el: Element): void {
   }
 }
 
+/** §4 step 1's list, `status` marks apart; `courseOrder`, `timeToBeat` and `status`'s lifecycle values are not on it. */
 const REBASELINED = ['outcome', 'gates', 'splits', 'faults', 'placement', 'pairTotal', 'countingRun', 'underReview', 'qualified'] as const;
 
 /** Step 1 of the re-baseline (§4): upstream's result observations go; identities, `run` and the writes stay. */
@@ -106,14 +109,7 @@ function rebaseline(s: CoreState, el: Element): void {
       delete fs.inference;
     }
     const st = a.slots.get('status');
-    if (st !== undefined) {
-      delete st.tcp;
-      delete st.xml;
-      if (!a.listed) {
-        delete st.inference;
-        delete a.gen.finish;
-      }
-    }
+    for (const side of ['tcp', 'xml'] as const) if (st !== undefined && (isMark(st[side]?.value) || st[side]?.marker === true)) delete st[side]; // lifecycle values stay
     a.cells = {};
     a.held = [];
     a.pending = [];
@@ -138,18 +134,19 @@ const isBlank = (row: Row): boolean =>
 function applySnapshot(s: CoreState, el: Element, inUnit: ReadonlySet<string>): void {
   const { source, phaseId, mode, rows } = el['snapshot'] as { source: Source; phaseId: string; mode: 'results' | 'start-list'; rows: Row[] };
   const fmt = fmtFor(s, phaseId);
+  const phase = phaseResource(s, phaseId, el.observedAt);
   if (fmt.kind === 'classification') {
     applyClassification(s, phaseId, source, el, rows as unknown as ClassificationRow[]);
     return;
   }
   const seq = tick(s);
-  const phase = phaseResource(s, phaseId, el.observedAt);
   const second = fmt.pair?.role === 'second';
   const named = new Set<AttemptState>();
   for (const row of rows) {
     const a = attemptFor(s, `${phaseId}:${String(row['bib'])}`, el.observedAt, source);
     named.add(a);
     rebindCells(s, a);
+    a.splitsUnarmed = s.splitsArmed === false;
     if (second && (row['timeEmpty'] === true || isBlank(row))) {
       if (hasResult(a, SECOND_RUN_EMPTY_FIELDS)) retract(s, a, source, el, SECOND_RUN_EMPTY_FIELDS, seq);
       putIdentity(s, a, source, el, row, seq);
@@ -178,9 +175,16 @@ const rowOfField = (el: Element, field: string): Row => {
   return row;
 };
 
+/** A listing's cells, in Kayak Cross the `faults` built from them, are an on-course inference however the element is stamped (§1.2). */
+const STREAM_CELLS = { confidence: 'inferred' } as const;
+
 function observeAttempt(s: CoreState, a: AttemptState, el: Element, field: string): void {
   const seq = tick(s);
   const source = sourceOf(el) ?? 'tcp';
+  if (field === 'splits') {
+    a.splitsUnarmed = s.splitsArmed === false;
+    s.dirtyAttempts.add(a);
+  }
   if (el['source'] === 'operator-write') {
     submitWrite(s, a, el, field, seq);
     return;
@@ -206,13 +210,14 @@ function observeAttempt(s: CoreState, a: AttemptState, el: Element, field: strin
       observeStreamOutcome(s, a, el, el['value'] as { kind: string; runSeconds?: number }, seq);
       return;
     case 'cells':
-      putCells(s, a, 'inference', el['value'] as (number | null)[], slotOf(s, el, 'tcp', 'inference', [], seq));
+      putCells(s, a, 'inference', el['value'] as (number | null)[], slotOf(s, el, 'tcp', 'inference', [], seq, STREAM_CELLS));
       return;
   }
   const extra = 'judgingComplete' in el ? { judgingComplete: el['judgingComplete'] as boolean | null } : {};
   const value = el['state'] === 'unavailable' ? { state: 'unavailable', reason: el['reason'] } : el['value'];
-  const confidence = el['confidence'] === 'inferred' ? { confidence: 'inferred' as const } : {};
-  if (retain(fieldSlots(a.slots, field), 'inference', slotOf(s, el, 'tcp', 'inference', value, seq, { ...extra, ...confidence }))) s.dirtyAttempts.add(a);
+  const confidence = el['confidence'] === 'inferred' || field === 'gates' || field === 'faults' ? STREAM_CELLS : {};
+  // round 24: a listing's `entry` is rule 2's `tcp` side, so an `xml` row restating it moves nothing
+  if (retain(fieldSlots(a.slots, field), field === 'entry' ? 'tcp' : 'inference', slotOf(s, el, 'tcp', 'inference', value, seq, { ...extra, ...confidence }))) s.dirtyAttempts.add(a);
 }
 
 function observe(s: CoreState, el: Element): void {
@@ -294,13 +299,14 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
       const inUnit = new Set<string>();
       for (const el of elements) dispatch(s, el, inUnit);
       const tcp = elements.find((el) => el['source'] === 'tcp');
-      if (tcp !== undefined) applyLeaveRule(s, tcp);
+      const derived = tcp === undefined ? [] : applyLeaveRule(s, tcp);
       const xml = elements.some(isXmlFact);
       if (xml && !s.xmlRead) {
         s.xmlRead = true;
         for (const a of s.attempts.values()) s.dirtyAttempts.add(a);
       }
       flush(s, xml);
+      return derived;
     },
     presented: (id) => {
       const a = s.attempts.get(id);

@@ -22,6 +22,14 @@ export function phaseResource(s: CoreState, phaseId: string, observedAt: string)
     p.attempts = new Set();
     const inferred = zonedDate(observedAt, s.options.zone);
     if (inferred !== undefined) p.plain.set('date', inferred);
+    // §2.1, a lookup with no uncertainty: the first message for the id carries them (§1.6); a snapshot's `DisId` replaces `format` where it differs
+    const fmt = fmtOf(splitRaceId(phaseId).token);
+    p.plain.set('format', fmt.token);
+    p.plain.set('stage', fmt.stage);
+    p.plain.set('kind', fmt.kind);
+    p.plain.set('scoringKind', fmt.scoringKind);
+    p.plain.set('heats', fmt.heats);
+    p.plain.set('pair', fmt.pair === null ? null : { role: fmt.pair.role, siblingPhaseId: null, combination: fmt.pair.combination });
     s.dirtyPhases.add(p);
   }
   return p;
