@@ -24,7 +24,7 @@ function presentGates(a: AttemptState): Slot | undefined {
   const shown = present(fs);
   if (fs === undefined || shown === undefined || fs.operator !== undefined || shown.kind === 'inference' || shown.state !== 'known') return shown;
   const inf = fs.inference;
-  if (!a.listed || inf?.state !== 'known') return shown;
+  if (!a.listed || inf?.state !== 'known') return { ...shown, observedAt: cellsChangedAt(a, shown, shown.value as Gate[], shown) };
   const onCourse = new Map((inf.value as Gate[]).map((g) => [g.number, g.penalty]));
   // by first ingestion: a re-delivered row is no newer judging (INV-5)
   const newestIsOnCourse = inf.at > shown.at || (inf.at === shown.at && inf.seq > shown.seq);

@@ -90,6 +90,13 @@ export function putStanding(s: CoreState, a: AttemptState, source: Source, el: E
   keepCarried(s, a, row);
 }
 
+/** INV-5: a row's `finished` over a `finished` presented from its source becomes the status's basis (INV-7); the presented envelope does not move. */
+function presentedFinish(a: AttemptState, source: Source): Partial<Slot> {
+  const shown = presentStatus(a.slots.get('status'));
+  if (shown?.value !== 'finished' || shown.source !== source) return {};
+  return { observedAt: shown.observedAt, ...(shown.eventTime !== undefined ? { eventTime: shown.eventTime } : {}) };
+}
+
 function writeRow(s: CoreState, a: AttemptState, source: Source, el: Element, row: Row, stale: boolean, seq: number): void {
   const fmt = fmtFor(s, a.phaseId);
   const mark = stale ? undefined : markOf(row);
@@ -111,7 +118,7 @@ function writeRow(s: CoreState, a: AttemptState, source: Source, el: Element, ro
 
   const ranOrPlaced = time !== undefined || (fmt.heats && placed) || row['status'] === 'finished' || a.untimed;
   const status = mark ?? (ranOrPlaced ? 'finished' : undefined);
-  if (status !== undefined) put(s, a, source, el, 'status', status, seq);
+  if (status !== undefined) put(s, a, source, el, 'status', status, seq, status === 'finished' ? presentedFinish(a, source) : {});
   // §2.6: rule 2's guard refuses the observation, not one field of it; the next snapshot that restates the row presents it
   if (source === 'xml' && mark !== undefined && markRefusedByGuard(fieldSlots(a.slots, 'status'))) {
     keepAsHistory(a, source, row);
