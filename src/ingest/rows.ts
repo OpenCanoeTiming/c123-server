@@ -20,8 +20,8 @@ export interface RowIn {
   time: number | undefined;
   pen: number | undefined;
   total: number | undefined;
-  /** TCP `Total` / XML `TotalTotal`, read on a second run only. */
-  pairTotal: number | undefined;
+  /** TCP `Total` / XML `TotalTotal`, read on a second run only; null where a TCP `Total` is empty (no pair total, §4.12). */
+  pairTotal: number | null | undefined;
   gates: string;
   rank: string;
   rankOrder: string;

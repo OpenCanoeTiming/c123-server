@@ -84,6 +84,20 @@ function outcomeValue(s: CoreState, a: AttemptState, slot: Slot, gates: Slot | u
   return { ...o, penaltySeconds, totalSeconds: r3(o.runSeconds + penaltySeconds) };
 }
 
+/**
+ * §1.2, §4.4: a run-2 outcome whose penalty is the merged sum is presented with the instant of the element that last changed
+ * `runSeconds` or a presented merged cell; an unchanged value keeps the one presented (INV-5).
+ */
+function mergedOutcomeAt(a: AttemptState, row: Slot, value: unknown, gates: Slot | undefined): string {
+  const text = a.sent.get('outcome');
+  if (text === undefined) return row.observedAt;
+  const sent = JSON.parse(text) as { value?: { kind?: string; runSeconds?: number }; observedAt?: string; source?: string; confidence?: string };
+  if (sent.source !== row.source || sent.confidence !== row.confidence || sent.observedAt === undefined) return row.observedAt;
+  if (JSON.stringify(sent.value) === JSON.stringify(value)) return sent.observedAt;
+  const sameRun = sent.value?.kind === 'duration' && sent.value.runSeconds === (value as { runSeconds?: number }).runSeconds;
+  return sameRun && gates?.state === 'known' ? gates.observedAt : row.observedAt;
+}
+
 /** `eventTime` of a presented outcome: its own, else the on-course finish with the same `Time`, whichever arrived first (§4.4); a row INV-2c's guard refuses gives none (round 24). */
 export function finishOf(a: AttemptState, slot: Slot): string | undefined {
   if (slot.eventTime !== undefined) return slot.eventTime;
@@ -143,7 +157,8 @@ export function viewAttempt(s: CoreState, a: AttemptState): Record<string, unkno
     outcome = (outcomeSlot === undefined ? firstRunUnavailable(s, a.phaseId, a.bib) : undefined) ?? field('outcome', outcomeSlot);
   } else {
     const value = outcomeValue(s, a, outcomeSlot, gates);
-    outcome = envelope({ ...outcomeSlot, value }, isProvisional(a, 'outcome', outcomeSlot, judged), finishOf(a, outcomeSlot));
+    const observedAt = value === outcomeSlot.value ? outcomeSlot.observedAt : mergedOutcomeAt(a, outcomeSlot, value, gates);
+    outcome = envelope({ ...outcomeSlot, value, observedAt }, isProvisional(a, 'outcome', outcomeSlot, judged), finishOf(a, outcomeSlot));
   }
 
   const out: Record<string, unknown> = {

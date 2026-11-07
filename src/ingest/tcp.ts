@@ -63,10 +63,11 @@ function results(u: Unit, ctx: IngestContext, res: Node): void {
       continue;
     }
     const where = `${phaseId}:${bib}`;
+    // §4.12: an empty Total is no pair total (null), as an empty Rank is no placement
     const input: RowIn = {
       bib, entryId: at(p, 'Id'), startOrder: at(p, 'StartOrder'), startTime: at(p, 'StartTime'), mark: at(r, 'IRM'), pp: at(r, 'PP'),
       time: numAttr(u, where, r, 'Time', num), pen: numAttr(u, where, r, 'Pen', int), total: numAttr(u, where, r, 'Total', num),
-      pairTotal: num(at(r, 'Total')), gates: at(r, 'Gates'), rank: at(r, 'Rank'), rankOrder: at(r, 'RankOrder'), heat: at(r, 'HeatNr'), q: at(r, 'Q'),
+      pairTotal: at(r, 'Total').trim() === '' ? null : num(at(r, 'Total')), gates: at(r, 'Gates'), rank: at(r, 'Rank'), rankOrder: at(r, 'RankOrder'), heat: at(r, 'HeatNr'), q: at(r, 'Q'),
       xml: undefined,
     };
     built.push(buildRow(env, input));
