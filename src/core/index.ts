@@ -16,6 +16,7 @@ import { applyClassification, dirtyHandle, observeResource, refreshCourses, view
 import { submitWrite, wireWrite } from './writes.js';
 import { viewAttempt, viewUnknownAttempt } from './presentation.js';
 import { markOf, startGeneration } from './generations.js';
+import type { Standing } from '@opencanoetiming/c123-contract';
 import type { AttemptState, ClassificationRow, ClassificationState, CoreState, Diagnostic, Element, MergeCoreOptions, Message, Row, Source } from './types.js';
 
 export type { MergeCoreOptions } from './types.js';
@@ -28,6 +29,15 @@ export interface MergeCore {
   entry(entryId?: string): Record<string, unknown>;
   phase(phaseId: string): Record<string, unknown>;
   attempts(): string[];
+  /** Read-only views for hydration (CONTRACTS §7.1): every resource the core holds, as `phase()` and `entry()` serve them. */
+  phaseIds(): string[];
+  entryIds(): string[];
+  classIds(): string[];
+  courseIds(): string[];
+  class(classId: string): Record<string, unknown>;
+  course(courseId: string): Record<string, unknown>;
+  /** The Standings as last sent. */
+  standings(): Standing[];
   oncourse(): { attemptIds: string[]; featuredByUpstream: string | null; asOf: string | null };
   diagnostics(): Diagnostic[];
   writeRequest(): unknown;
@@ -79,6 +89,7 @@ function applyEvent(s: CoreState, el: Element): void {
       return;
     }
     case 'oncourse-empty':
+      s.oncourseAsOf = el.observedAt; // an observation of the on-course list: the set is as of now, whether or not it held anything (§7.2)
       for (const a of [...s.listed.values()]) leave(s, a, el);
       return;
     case 'oncourse-left': {
@@ -286,10 +297,10 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
   const s: CoreState = {
     options, counter: options.initialSeq ?? 0, epoch: 0, tcpUp: undefined, rewrite: undefined, xmlRead: false, previousTcpAt: undefined,
     attempts: new Map(), phases: new Map(), entries: new Map(), classes: new Map(), courses: new Map(), classifications: new Map(),
-    listed: new Map(), oncourseAsOf: null, oncourseSent: '[[],null]', featured: null, writes: [], splitsArmed: undefined,
+    listed: new Map(), oncourseAsOf: null, oncourseStatedAsOf: null, oncourseSent: '[[],null]', featured: null, writes: [], splitsArmed: undefined,
     parserDiagnostics: new Map(), phaseDiagnostics: new Map(), diagnosticsSent: '[]', diagnosticsDirty: false, log: [],
     dirtyAttempts: new Set(), dirtyPhases: new Set(), dirtyResources: new Set(), dirtyWrites: new Set(), pendingRebaseline: undefined,
-    dirtyScopes: new Set(), unitAt: '', standingsSent: new Map(), standingKeys: new Map(), entryPhases: new Map(),
+    dirtyScopes: new Set(), unitAt: '', standingsSent: new Map(), standingKeys: new Map(), standingsHeld: new Map(), entryPhases: new Map(),
     counters: { generations: 0, retractions: 0, contradictions: 0, leaves: 0, refusals: {} },
   };
   return {
@@ -321,6 +332,19 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
       return r === undefined ? { phaseId } : viewResource(r, 'phase');
     },
     attempts: () => [...s.attempts.keys()],
+    phaseIds: () => [...s.phases.keys()],
+    entryIds: () => [...s.entries.keys()],
+    classIds: () => [...s.classes.keys()],
+    courseIds: () => [...s.courses.keys()],
+    class: (id) => {
+      const r = s.classes.get(id);
+      return r === undefined ? { classId: id } : viewResource(r, 'class');
+    },
+    course: (id) => {
+      const r = s.courses.get(id);
+      return r === undefined ? { courseId: id } : viewResource(r, 'course');
+    },
+    standings: () => [...s.standingsHeld.values()],
     oncourse: () => oncourseView(s),
     diagnostics: () => currentDiagnostics(s),
     writeRequest: () => {

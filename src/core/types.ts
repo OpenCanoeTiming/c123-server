@@ -2,7 +2,7 @@
  * Internal shapes of the merge core (#203). Wire shapes come from `@opencanoetiming/c123-contract`; what is here is retention,
  * which never leaves the core. Nothing here reads a clock: every time is taken from an element.
  */
-import type { ClassificationRow, Diagnostic, Faults, Gate, Outcome, Placement, ResultMark, WriteRequest } from '@opencanoetiming/c123-contract';
+import type { ClassificationRow, Diagnostic, Faults, Gate, Outcome, Placement, ResultMark, Standing, WriteRequest } from '@opencanoetiming/c123-contract';
 import type { IngestElement } from '../ingest/index.js';
 
 export type { ClassificationRow, Diagnostic, Faults, Gate, Placement, ResultMark };
@@ -194,6 +194,8 @@ export interface CoreState {
   classifications: Map<string, ClassificationState>;
   listed: Map<string, AttemptState>;
   oncourseAsOf: string | null;
+  /** `oncourseAsOf` as of the last `oncourse.updated`: what the set's `asOf` shows, so a hydration and the push agree (§7.1, §7.2). */
+  oncourseStatedAsOf: string | null;
   oncourseSent: string;
   featured: { odd: { attemptId: string } | null; even: { attemptId: string } | null } | null;
   writes: WriteState[];
@@ -216,6 +218,8 @@ export interface CoreState {
   standingsSent: Map<string, string>;
   /** The keys sent per Phase: an age category that empties is pushed empty. */
   standingKeys: Map<string, Set<string>>;
+  /** The Standings as last sent, by `standingKey`: what a hydration serves (§7.1). */
+  standingsHeld: Map<string, Standing>;
   /** The Phases an Entry's Attempts are in, for an Entry whose age category changed. */
   entryPhases: Map<string, Set<string>>;
   pendingRebaseline: unknown;

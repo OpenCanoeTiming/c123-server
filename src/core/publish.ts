@@ -124,6 +124,7 @@ const textOf = (st: Standing): string => JSON.stringify([st.entries, st.anomalie
 
 function remember(s: CoreState, phaseId: string, st: Standing): void {
   s.standingsSent.set(st.standingKey, textOf(st));
+  s.standingsHeld.set(st.standingKey, st);
   let keys = s.standingKeys.get(phaseId);
   if (keys === undefined) s.standingKeys.set(phaseId, (keys = new Set()));
   keys.add(st.standingKey);
@@ -152,7 +153,10 @@ export function replacedStandings(s: CoreState, scope: { kind?: string; phaseId?
   }
   const out: Standing[] = [];
   for (const phaseId of phases) {
-    for (const key of s.standingKeys.get(phaseId) ?? []) s.standingsSent.delete(key);
+    for (const key of s.standingKeys.get(phaseId) ?? []) {
+      s.standingsSent.delete(key);
+      s.standingsHeld.delete(key);
+    }
     s.standingKeys.delete(phaseId);
     for (const st of ofPhase(s, phaseId, s.unitAt)) {
       if (st.entries.length === 0) continue;

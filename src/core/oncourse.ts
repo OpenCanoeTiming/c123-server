@@ -196,6 +196,6 @@ export function oncourseView(s: CoreState): { attemptIds: string[]; featuredByUp
   return {
     attemptIds: listed.map((a) => a.id),
     featuredByUpstream: named(s.featured?.odd) ?? named(s.featured?.even) ?? null,
-    asOf: s.oncourseAsOf,
+    asOf: s.oncourseStatedAsOf,
   };
 }
