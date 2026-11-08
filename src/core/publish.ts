@@ -5,7 +5,6 @@
  * it changed, so a running tick, which is in none of that, assembles nothing.
  */
 import type { Standing } from '@opencanoetiming/c123-contract';
-import { splitRaceId } from '../ingest/common.js';
 import { assembleStanding, type EntryInput } from './standing.js';
 import { isMark, present } from './precedence.js';
 import { fmtFor, siblingPhaseId } from './registry.js';
@@ -58,8 +57,11 @@ const keyOf = (kind: string, phaseId: string, heat: number | undefined, category
 
 /** Every Standing of one Phase. A Standing with no entries is returned only where one was sent before. */
 function ofPhase(s: CoreState, phaseId: string, asOf: string): Standing[] {
-  const classId = splitRaceId(phaseId).classKey;
+  // §2.7 (round 27d): the Phase's class, never the RaceId prefix; a Standing is held until its Phase is created (§2.4), then sent whole
+  const stated = s.phases.get(phaseId)?.plain.get('classId');
   const out: Standing[] = [];
+  if (typeof stated !== 'string') return out;
+  const classId = stated;
   const add = (standing: Omit<Standing, 'asOf'> & { asOf?: string }): void => {
     if (standing.entries.length === 0 && !s.standingsSent.has(standing.standingKey)) return;
     out.push({ ...standing, asOf: standing.asOf ?? asOf } as Standing);
