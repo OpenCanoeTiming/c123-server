@@ -772,10 +772,10 @@ the latest cells per source and decides among three states:
   binds — built from the retained cells: `Gate[]` from the first `slotCount` cells, or in Kayak Cross
   `faults` from the cells and the captions (d); the parser's cell→`Gate[]`/`faults` function is
   reused, and so is the cells' envelope: the vector carries the `source` and `observedAt` of the
-  element that last changed it — the latest cells of that source in the generation read on the
-  course, the instant of the row or listing that last changed those cells, the vector's `source` or
-  its `confidence`, an identical re-delivery moving nothing (round 27e) — never the binding unit's: the course is the key to read a statement already captured
-  (`CONTRACTS.md` §1.2, `observedAt` "the element's that last changed the presented cells"), and a
+  presented observation as `CONTRACTS.md` §1.2 states it — the latest cells of that source in the
+  generation read on the course; the instant the later of the presented row's and the last cell
+  change's, a listing's included, an identical re-delivery moving nothing (round 27e) — never the
+  binding unit's: the course is the key to read a statement already captured (§1.2), and a
   vector of that source on the snapshot's instant is `TEST-ARCHITECTURE.md` §3.2 property 1's
   violation (round 27c; recorded: cp3-cross MX1_XT_26, 43 rows of 08:45:13.346Z read on the course
   of the snapshot at 08:45:18.057Z).
@@ -842,8 +842,8 @@ results push precedes the first snapshot" (`DECISIONS/ADR-017` D4); whole record
   a results-table value with cells taken from the stream, not an inference: once the stream fills
   the last blank cell it is settled (`CONTRACTS.md` §1.2, round 20). Before any row of the
   generation the stream's vector is an on-course inference, `confidence: 'inferred'`; the merged
-  vector carries the row's envelope, `observedAt` the element's that last changed its cells
-  (`CONTRACTS.md` §1.2; round 24).
+  vector carries the row's envelope, `observedAt` the later of the row's own instant and the
+  element's that last changed its cells (`CONTRACTS.md` §1.2; round 24, amended round 27e).
 
 All encodings produce `Gate[]` with exactly the course's gate count. The encoding is recorded only in
 `source`.
