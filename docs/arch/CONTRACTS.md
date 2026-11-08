@@ -984,7 +984,7 @@ assembly precisely.
 ```ts
 type Standing = {
   standingKey: string          // stable key of (scope, ageCategoryId) — §5
-  classId: string
+  classId: string              // the Phase's classId (§2.4), never the RaceId prefix (§2.3); a Standing is published no earlier than its Phase (§1.6) — round 27d
   scope: { kind: 'phase'; phaseId: string }
        | { kind: 'pair'; firstPhaseId: string; secondPhaseId: string }
        | { kind: 'heat'; phaseId: string; heat: number }
@@ -1665,7 +1665,9 @@ re-baseline, per Phase or per Event:
    every `WriteRequest` survive; a pending write stays pending, and a check's `status` is recomputed;
 2. reads the current XML snapshot, validated, and ingests it as a scope snapshot with a fresh ingest
    sequence — a unit like the reader's, its `changedAfter` by the same definition
-   (`DERIVATIONS.md` §0.3), met by nothing step 1 discarded. If no valid snapshot can be read, the
+   (`DERIVATIONS.md` §0.3): the time of the reader's last stat that showed a signature other than
+   the one this read returns — the last poll's stat when the file changed since that poll, else the
+   last delivered unit's (round 27d) — met by nothing step 1 discarded. If no valid snapshot can be read, the
    action fails with `409 source-unavailable` and changes nothing: the read precedes step 1, and
    steps 1 and 2 reach the core as one ingest unit, the `rebaseline` event followed by the snapshot's
    elements, so the discard and the rebuild are one step and `scope.replaced` goes with it;
