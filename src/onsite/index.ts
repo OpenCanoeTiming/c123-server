@@ -103,6 +103,11 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     return store;
   }
   let store: ChecksStore | undefined = event === undefined ? undefined : await storeFor(event.eventId);
+  /** §7.2: the statuses hydration already serves are the ones pushed; seeded at startup and at `startNewEvent`. */
+  function seedCheckStatuses(s: ChecksStore): void {
+    checkStatuses.clear();
+    for (const c of withStatus(s)) checkStatuses.set(keyOf(c as { attemptId: string; run: number; gate: number }), c['status'] as string);
+  }
 
   // ------------------------------------------------------------------------------------------------ the queue and the push
   let tail: Promise<unknown> = Promise.resolve();
@@ -133,7 +138,6 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   let upstreamInstance: 'main' | 'backup' | 'offline' | null = null;
   let timingClockOffsetSeconds: number | null = null;
   let xmlStatus: XmlReaderStatus = { state: opts.xml === undefined ? 'not-configured' : 'reconnecting', lastRewriteDetectedAt: null, tornReads: 0, abandonedReads: 0 };
-  let lastChangedAfter: string | null = null;
   const sourcesNow = (): J => ({
     tcp: { state: tcpState, upstreamInstance, timingClockOffsetSeconds },
     xml: { state: xmlStatus.state, lastRewriteDetectedAt: xmlStatus.lastRewriteDetectedAt },
@@ -162,6 +166,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     return out;
   }
   const withStatus = (s: ChecksStore): J[] => s.checksWithStatus(presentedFor(s.list().checks.map((c) => c.attemptId))) as unknown as J[];
+  if (store !== undefined) seedCheckStatuses(store);
   /** §7.2: `check.updated` for every check whose derived `status` differs from the one last pushed. */
   function checkStatusChanges(): J[] {
     if (store === undefined) return [];
@@ -245,8 +250,6 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     reader = createXmlReader({
       path: opts.xml?.path, pollIntervalSeconds: opts.xml?.pollSeconds, clock, fs, ctx: tracker.ctx,
       onUnit: (elements) => {
-        const first = elements[0];
-        if (first?.['event'] === 'xml-rewrite-detected') lastChangedAfter = (first['changedAfter'] as string | null) ?? null;
         tracker.learn(elements, true);
         unit(elements);
       },
@@ -279,10 +282,10 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
       if (scope.kind === 'phase' && !core.phaseIds().includes(scope.phaseId)) return { ok: false, status: 404, code: 'phase-not-found' };
       const unavailable = (reason: 'not-configured' | 'unreadable' | 'invalid'): RebaselineOutcome => ({ ok: false, status: 409, code: 'source-unavailable', reason });
       if (opts.xml === undefined) return unavailable('not-configured');
-      let writtenAt: number;
+      let sig: { mtimeMs: number; size: number };
       let text: string;
       try {
-        writtenAt = (await fs.stat(opts.xml.path)).mtimeMs;
+        sig = await fs.stat(opts.xml.path);
         text = await fs.read(opts.xml.path);
       } catch { return unavailable('unreadable'); }
       const at = clock.now();
@@ -290,17 +293,18 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
       const ctx: IngestContext = { ...tracker.ctx, observedAt: stamp };
       const els = text.includes(ROOT_CLOSE) && XMLValidator.validate(text) === true ? parseXmlSnapshot(text, ctx) : undefined;
       if (els === undefined || els.some((e) => 'unparseable' in e)) return unavailable('invalid');
-      // §4 step 2: the read has its own ingest sequence; its content age is the last one the reader delivered, which no stat has contradicted
+      // §4 step 2: the read has its own ingest sequence; its content age by DERIVATIONS §0.3, from the reader's successful stats
+      const changedAfter = reader.changedAfterFor(sig);
       const unitEls: IngestElement[] = [
         { ingestSeq: 0, event: 'rebaseline', observedAt: stamp, scope },
-        { ingestSeq: 0, event: 'xml-rewrite-detected', observedAt: stamp, changedAfter: lastChangedAfter },
+        { ingestSeq: 0, event: 'xml-rewrite-detected', observedAt: stamp, changedAfter },
         ...els,
       ];
       tracker.learn(els, true);
       await processUnit(unitEls);
       const ids = core.attempts();
       const attempts = scope.kind === 'event' ? ids.length : ids.filter((a) => phaseOfAttempt(a) === scope.phaseId).length;
-      return { ok: true, body: { asOfSeq: seq.current(), scope, snapshotWrittenAt: new Date(writtenAt).toISOString(), snapshotDetectedAt: stamp, attempts } };
+      return { ok: true, body: { asOfSeq: seq.current(), scope, snapshotWrittenAt: new Date(sig.mtimeMs).toISOString(), snapshotDetectedAt: stamp, attempts } };
     })) ?? { ok: false, status: 409, code: 'source-unavailable', reason: 'unreadable' }; // the process was killed under the request
   }
 
@@ -380,8 +384,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
         core = newCore();
         tracker = newTracker();
         classesSent.clear();
-        checkStatuses.clear();
-        for (const c of withStatus(next)) checkStatuses.set(keyOf(c as { attemptId: string; run: number; gate: number }), c['status'] as string);
+        seedCheckStatuses(next);
         stepLog?.reset();
         reader.stop();
         startReader();
