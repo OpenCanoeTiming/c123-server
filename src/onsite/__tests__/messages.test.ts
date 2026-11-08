@@ -211,6 +211,10 @@ describe('CQ2 (round 27d): Standing.classId is the Phase\'s classId, never the R
     expect((rest.body.standings as J[]).map((s) => s.standingKey).sort()).toEqual(pushed.map((m) => m.standing.standingKey).sort());
     expect((await get(env, '/api/classes/C1M/standings')).status, 'no class C1M was stated').toBe(404);
     expect(view(modelFrom(ws.messages))['standings']).toEqual(view((await hydrate(env)).model)['standings']);
+    // within the unit that creates the Phase, its message precedes the Standing's (round 27d-2)
+    const phase = ws.messages.find((m) => m.type === 'phase.updated' && m.phaseId === ODP.phaseId)!;
+    expect(phase.fields.classId).toBe('C1M-ST');
+    expect(phase.seq).toBeLessThan(Math.min(...pushed.map((m) => m.seq)));
   });
 
   it('contract §1.6 + round 27d: no standing.updated precedes the creating phase.updated of a Phase the Standing names (TCP-only nkz and the odp stream)', async () => {

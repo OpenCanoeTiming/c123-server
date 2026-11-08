@@ -71,6 +71,36 @@ describe('row 11: re-baseline (CONTRACTS §7.1, §4, §7.2)', () => {
     expect(detected(unit)!['changedAfter']).toBe(carried);
   });
 
+  it('contract §4 step 2 / DERIVATIONS §0.3 (round 27d-2): a run of failed polls before a changed file: changedAfter is the last SUCCESSFUL stat before the failures; failed stats never count', async () => {
+    const lines: string[] = [];
+    const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day, stepLog: (l) => { lines.push(l); } });
+    for (const u of ODP.units()) await feed(env, u);
+    const lastGood = Date.parse(ODP.xmlRec().observedAt) + 5_000; // the reader's last successful stat (old signature)
+    expect(env.clock.now()).toBe(lastGood);
+    env.fs.remove(XML_PATH);
+    await env.clock.advance(22_000); // four failed polls: the file is missing
+    expect((await get(env, '/api/sources')).body.xml.state).toBe('reconnecting');
+    const written = env.clock.now() + 1_000;
+    env.fs.put(XML_PATH, ODP.xmlRec().data, written); // back, with a new signature, not yet polled
+    env.clock.jump(written + 3_000);
+    expect((await post(env, { scope: { kind: 'event' } })).status).toBe(200);
+    const unit = lines.map((l) => JSON.parse(l) as J).find((o) => Array.isArray(o['elements']) && (o['elements'] as J[]).some((e) => e['event'] === 'rebaseline'))!;
+    const detected = (unit['elements'] as J[]).find((e) => e['event'] === 'xml-rewrite-detected')!;
+    expect(detected['changedAfter'], 'not a failed poll\'s time, not the last delivered unit\'s content age').toBe(new Date(lastGood).toISOString());
+  });
+
+  it('contract §4 step 2 / DERIVATIONS §0.3 (round 27d-2): the first read: no earlier successful stat showed another signature, so changedAfter is null', async () => {
+    const lines: string[] = [];
+    const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day, stepLog: (l) => { lines.push(l); } });
+    const at = Date.parse(ODP.startAt) + 60_000;
+    env.fs.put(XML_PATH, ODP.xmlRec().data, at - 1_000); // the file exists; the reader has not read it
+    env.clock.jump(at);
+    expect((await post(env, { scope: { kind: 'event' } })).status).toBe(200);
+    const unit = lines.map((l) => JSON.parse(l) as J).find((o) => Array.isArray(o['elements']) && (o['elements'] as J[]).some((e) => e['event'] === 'rebaseline'))!;
+    const detected = (unit['elements'] as J[]).find((e) => e['event'] === 'xml-rewrite-detected')!;
+    expect(detected).toHaveProperty('changedAfter', null);
+  });
+
   it('contract §7.1: scope event -> 200 with attempts the count over every Phase of the event; the body has the scope back', async () => {
     const env = await odp();
     env.fs.setMtime(XML_PATH, Date.parse(ODP.xmlRec().observedAt));
