@@ -16,7 +16,7 @@ export type ErrorCode =
   | 'attempt-not-found' | 'write-not-found' | 'flag-not-found' | 'write-not-possible'
   | 'validation-failed' | 'vendor-payload-rejected' | 'unauthorized' | 'forbidden'
   | 'rate-limited' | 'source-unavailable'
-export type WriteNotPossibleReason = 'run-not-closed' | 'team-boat' | 'cross'       // §7.3, §7.4
+export type WriteNotPossibleReason = 'run-not-closed' | 'team-boat' | 'cross' | 'upstream-disconnected'   // §7.3, §7.4
 export type SourceUnavailableReason = 'not-configured' | 'unreadable' | 'invalid'   // §7.1 re-baseline: not configured,
                                                                              // not readable, did not validate
 export type ErrorEnvelope = { error:
