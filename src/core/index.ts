@@ -343,7 +343,7 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
       const r = s.courses.get(id);
       return r === undefined ? { courseId: id } : viewResource(r, 'course');
     },
-    standings: () => [...s.standingsHeld.values()],
+    standings: () => [...s.standingsHeld.values()].map((st) => structuredClone(st)), // #273 N3: copies, never the held objects
     oncourse: () => oncourseView(s),
     diagnostics: () => currentDiagnostics(s),
     writeRequest: () => {
