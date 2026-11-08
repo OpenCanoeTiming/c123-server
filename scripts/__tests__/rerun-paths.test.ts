@@ -340,6 +340,21 @@ describe('round 27g-2 B1: observedAt per arrival order (DERIVATIONS 4.11: the ro
         const finPoint = pts.find((p) => runOf(p) === 2 && statusOf(p) === 'finished')
         expect(rowPoint?.f['outcome']?.observedAt).toBe(row)
         expect(finPoint?.f['status']?.observedAt).toBe(listing)
+        // CONTRACTS 1.2 (round 27e): gates are dated by the LATER of the presented row's element and the last element that changed the
+        // presented cells; a later row restating equal cells moves nothing (INV-5). Read from the log: where the row's own step
+        // changes the cells, the later of the row's delivery and the last earlier cell change; where it does not (the cells were
+        // already presented from an earlier push), that earlier change.
+        const steps = replay(fx(name))
+        const at = (st: Step): string => (st.elements.find((e) => typeof e['observedAt'] === 'string')?.['observedAt'] as string) ?? ''
+        const changesGates = (st: Step): boolean => st.deltas.some((d) => d.type === 'attempt.updated' && d.attemptId === id && d.fields?.['gates'] !== undefined)
+        let lastCellChange = ''
+        for (const st of steps) {
+          if (st.i >= (rowPoint as Point).i) break
+          if (changesGates(st)) lastCellChange = at(st)
+        }
+        const rowStep = steps.find((st) => st.i === (rowPoint as Point).i) as Step
+        const expected = changesGates(rowStep) ? (lastCellChange > row ? lastCellChange : row) : lastCellChange
+        expect(rowPoint?.f['gates']?.observedAt).toBe(expected)
       }
       // and the two orders really differ in the row's instant
       expect(instants(before, time).row).not.toBe(instants(after, time).row)
