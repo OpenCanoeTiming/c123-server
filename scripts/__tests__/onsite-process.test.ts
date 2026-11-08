@@ -49,7 +49,7 @@ const CHECKER = path.join(PD, 'tools/gate2/check.js');
 const TSX = path.join(ROOT, 'node_modules/.bin/tsx');
 const HAVE = [REC, PLAYER, EXTRACT, CHECKER].every((p) => existsSync(p));
 const EVENT_ID = 'ev-t4';
-const SKEW = 'real-time start offset: the player stream starts after the process clock, so the process's stamps run +96 to +300 ms later than recorded (player.js auto-plays on its 200 ms client poll and ignores pause while stopped; c123-protocol-docs#28); report the cause, never strip';
+const SKEW = "real-time start offset: the player stream starts after the process clock, so the process's stamps run +96 to +300 ms later than recorded (player.js auto-plays on its 200 ms client poll and ignores pause while stopped; c123-protocol-docs#28); report the cause, never strip";
 
 const dirs: string[] = [];
 const children: ChildProcess[] = [];
@@ -68,6 +68,35 @@ function globalMs(iso: string): number {
   const c = m.chunks.find((k) => Date.parse(k.startTime) <= t && t <= Date.parse(k.endTime));
   if (c === undefined) throw new Error(`no chunk holds ${iso}`);
   return c.startOffset + (t - Date.parse(c.startTime));
+}
+
+/**
+ * The first difference between two compared sections, for the failure message only (the comparison itself is `toEqual`, unchanged): the element's key
+ * (attemptId, standingKey, entryId, ...), the path of the field inside it, and both values.
+ */
+function firstDiff(got: unknown, want: unknown): string {
+  const keyOf = (x: unknown, i: number): string => { const o = x as J; return String(o?.['attemptId'] ?? o?.['standingKey'] ?? o?.['entryId'] ?? o?.['phaseId'] ?? o?.['classId'] ?? o?.['courseId'] ?? i); };
+  const walk = (a: unknown, b: unknown, p: string): string | undefined => {
+    if (JSON.stringify(a) === JSON.stringify(b)) return undefined;
+    if (a !== null && b !== null && typeof a === 'object' && typeof b === 'object' && !Array.isArray(a) && !Array.isArray(b)) {
+      for (const k of new Set([...Object.keys(a as J), ...Object.keys(b as J)])) {
+        const d = walk((a as J)[k], (b as J)[k], `${p}.${k}`);
+        if (d !== undefined) return d;
+      }
+    }
+    return `${p}: process ${JSON.stringify(a)} vs replay ${JSON.stringify(b)}`;
+  };
+  if (Array.isArray(got) && Array.isArray(want)) {
+    const gk = new Map(got.map((x, i) => [keyOf(x, i), x] as const)), wk = new Map(want.map((x, i) => [keyOf(x, i), x] as const));
+    for (const k of new Set([...gk.keys(), ...wk.keys()])) {
+      if (!gk.has(k)) return `${k}: missing in the process`;
+      if (!wk.has(k)) return `${k}: missing in the replay`;
+      const d = walk(gk.get(k), wk.get(k), k);
+      if (d !== undefined) return d;
+    }
+    return 'same elements, different order';
+  }
+  return walk(got, want, '') ?? 'no difference found';
 }
 
 const STRIP = ['observedAt', 'asOf', 'asOfSeq', 'seq'] as const;
@@ -210,7 +239,7 @@ describe.skipIf(!HAVE)('rows 14 and 15: a real process fed by player.js (ADR-017
           const [got, expected] = comparedPair(run.model, ref, k);
           expect(expected, `the replay's ${k} is not empty where the window has it`).toBeDefined();
           if (k === 'attempts' || k === 'entries' || k === 'standings') expect((expected as J[]).length).toBeGreaterThan(0);
-          expect(got, SKEW).toEqual(expected);
+          expect(got, `${SKEW}\nfirst difference: ${firstDiff(got, expected)}`).toEqual(expected);
         }, 900_000);
       }
 
