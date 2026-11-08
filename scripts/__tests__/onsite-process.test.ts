@@ -1,0 +1,197 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * #210 rows 14 and 15 (tier 4, tools project): the on-site process as a real process, fed by `player.js` over real sockets and the real XML
+ * poll timer, presents the state the direct-injection replay presents (ADR-017 M1 gate 5, "a real process"), and its step log passes gate 2.
+ * Real time is the point of this tier: nothing here injects a clock. Skipped when the recordings or the protocol-docs tools are absent.
+ *
+ * The excerpt is cp3-cross (Kayak Cross) cut with tools/extract-excerpt.js, so log and raw stream are one cold cut (TEST-ARCHITECTURE §3.2):
+ *   10x: 2026-04-26T08:44:00Z-08:46:30Z: 3 XML snapshots, 2 oncourse-left (closures), whole finished results tables (measured on #242's replay: 582 steps)
+ *   1x:  2026-04-26T08:45:00Z-08:46:15Z: 2 XML snapshots, finishes, on-course listings (the short cut)
+ * Reference: `scripts/replay-direct.ts` over the same excerpt (no window), its step log's deltas folded by the §1.6/§7.2 client rules
+ * (src/onsite/__tests__/model.ts). The process's side: every hydration endpoint of §7.1 read over HTTP, folded the same way.
+ *
+ * The process is started as `node --import tsx src/onsite/main.ts <flags>` (flags: onsite-harness.ts header), the XML poll interval is 5 s / speed
+ * so a poll falls at the same recorded distance at 1x and 10x, and `--external-id-scheme replay` is the replay driver's own scheme.
+ *
+ * CLOSED LIST of ingest-time fields removed before comparing (stamps only, each with its reason). Any other difference fails the test:
+ *   observedAt   inside every Observed `known` envelope and every provenance record: the wall-clock instant of receipt (the replay uses the recording's own instants)
+ *   asOf         on a Standing and on the on-course set: the ingest time of the latest observation behind it (same reason)
+ *   asOfSeq/seq  the process's counter; the replay driver counts nothing (it logs `ingestSeq: 0`)
+ * `eventTime` (the instant upstream states) is NOT in the list: it is content and must be equal. Two serialisation rules of the contract are applied to the
+ * reference, not tolerated as differences: Person.birthDate -> birthYear (§7 intro) and the `eventId` the process gives every Class and Course (§2.3, §2.12).
+ * Not compared, the replay having no counterpart: /api/events/current's `event` (the core has no Event; the bridge asserts it) and /api/sources (a connection
+ * fact, not presented state): only checked present.
+ */
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterAll, describe, expect, it } from 'vitest';
+import { applyMessage, emptyModel, hydrate, view, type J } from '../../src/onsite/__tests__/model.js';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const PD = '/workspace/timing/c123-protocol-docs';
+const REC = path.join(PD, 'recordings/.cache/2026-04-26-cp3-cross');
+const PLAYER = path.join(PD, 'tools/player.js');
+const EXTRACT = path.join(PD, 'tools/extract-excerpt.js');
+const CHECKER = path.join(PD, 'tools/gate2/check.js');
+const TSX = path.join(ROOT, 'node_modules/.bin/tsx');
+const HAVE = [REC, PLAYER, EXTRACT, CHECKER].every((p) => existsSync(p));
+const EVENT_ID = 'ev-t4';
+
+const dirs: string[] = [];
+const children: ChildProcess[] = [];
+afterAll(() => {
+  for (const c of children) { try { c.kill('SIGKILL'); } catch { /* gone */ } }
+  for (const d of dirs) rmSync(d, { recursive: true, force: true });
+});
+const tmp = (): string => { const d = mkdtempSync(path.join(tmpdir(), 'onsite-t4-')); dirs.push(d); return d; };
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+const freePort = (): Promise<number> => new Promise((res, rej) => { const s = createServer(); s.listen(0, '127.0.0.1', () => { const p = (s.address() as { port: number }).port; s.close(() => { res(p); }); }); s.on('error', rej); });
+
+/** Global player ms of an instant (manifest chunk startOffset + distance into the chunk). */
+function globalMs(iso: string): number {
+  const m = JSON.parse(readFileSync(path.join(REC, 'manifest.json'), 'utf8')) as { chunks: { startTime: string; endTime: string; startOffset: number }[] };
+  const t = Date.parse(iso);
+  const c = m.chunks.find((k) => Date.parse(k.startTime) <= t && t <= Date.parse(k.endTime));
+  if (c === undefined) throw new Error(`no chunk holds ${iso}`);
+  return c.startOffset + (t - Date.parse(c.startTime));
+}
+
+const STRIP = ['observedAt', 'asOf', 'asOfSeq', 'seq'] as const;
+function strip(x: unknown): unknown {
+  if (Array.isArray(x)) return x.map(strip);
+  if (x !== null && typeof x === 'object') return Object.fromEntries(Object.entries(x as J).filter(([k]) => !(STRIP as readonly string[]).includes(k)).map(([k, v]) => [k, strip(v)]));
+  return x;
+}
+/** The contract's on-site serialisation applied to the replay's core output (not a tolerance): birthDate -> birthYear, eventId on Class and Course. */
+function onsite(m: ReturnType<typeof emptyModel>): void {
+  for (const [id, e] of m.entries) {
+    const mem = e['members'] as J;
+    if (mem?.state === 'known') e['members'] = { ...mem, value: (mem.value as J[]).map(({ birthDate, ...p }) => ({ ...p, birthYear: typeof birthDate === 'string' ? Number(birthDate.slice(0, 4)) : null })) };
+    m.entries.set(id, e);
+  }
+  for (const c of [...m.classes.values(), ...m.courses.values()]) c['eventId'] = EVENT_ID;
+}
+const compared = (m: ReturnType<typeof emptyModel>): J => {
+  const v = view(m);
+  delete v['event']; delete v['sources']; delete v['checks']; delete v['flags'];
+  return strip(v) as J;
+};
+
+function excerpt(from: string, to: string): string {
+  const out = path.join(tmp(), 'excerpt');
+  const r = spawnSync(process.execPath, [EXTRACT, REC, '--output', out, '--from', String(globalMs(from)), '--to', String(globalMs(to)), '--label', 'onsite-t4'], { encoding: 'utf8', timeout: 120_000 });
+  expect(r.status, r.stderr).toBe(0);
+  return out;
+}
+
+function reference(dir: string): ReturnType<typeof emptyModel> {
+  const out = path.join(tmp(), 'ref.jsonl');
+  const r = spawnSync(TSX, ['--max-old-space-size=3072', path.join(ROOT, 'scripts/replay-direct.ts'), '--recording', dir, '--out', out], { cwd: ROOT, encoding: 'utf8', timeout: 300_000 });
+  expect(r.status, r.stderr).toBe(0);
+  const m = emptyModel();
+  for (const line of readFileSync(out, 'utf8').split('\n')) {
+    if (line.trim() === '') continue;
+    const o = JSON.parse(line) as J;
+    for (const d of (o['deltas'] ?? []) as J[]) applyMessage(m, d);
+  }
+  onsite(m);
+  return m;
+}
+
+interface Run { model: ReturnType<typeof emptyModel>; log: string; sources: J; steps: number }
+async function realProcess(dir: string, speed: number): Promise<Run> {
+  const work = tmp();
+  const xmlOut = path.join(work, 'c123.xml');
+  const log = path.join(work, 'steps.jsonl');
+  const [tcpPort, controlPort] = [await freePort(), await freePort()];
+  const player = spawn(process.execPath, [PLAYER, dir, '--speed', String(speed), '--port', String(tcpPort), '--control-port', String(controlPort), '--no-udp', '--no-cis', '--xml-out', xmlOut], { stdio: 'ignore' });
+  children.push(player);
+  const status = async (): Promise<J | undefined> => { try { return (await (await fetch(`http://127.0.0.1:${controlPort}/status`)).json()) as J; } catch { return undefined; } };
+  for (let i = 0; i < 100 && (await status()) === undefined; i++) await sleep(100);
+  const poll = 5 / speed;
+  const proc = spawn(process.execPath, ['--import', 'tsx', path.join(ROOT, 'src/onsite/main.ts'),
+    '--port', '0', '--data-dir', path.join(work, 'data'), '--event-id', EVENT_ID, '--event-name', 'T4', '--tcp-host', '127.0.0.1', '--tcp-port', String(tcpPort),
+    '--xml', xmlOut, '--xml-poll-seconds', String(poll), '--zone', 'Europe/Prague', '--event-date', '2026-04-26', '--external-id-scheme', 'replay',
+    '--step-log', log, '--no-discovery'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'inherit'] });
+  children.push(proc);
+  const port = await new Promise<number>((res, rej) => {
+    let buf = '';
+    const t = setTimeout(() => { rej(new Error('the process never announced `listening <port>`')); }, 60_000);
+    proc.stdout!.on('data', (d: Buffer) => { buf += d.toString(); const m = /listening (\d+)/.exec(buf); if (m) { clearTimeout(t); res(Number(m[1])); } });
+    proc.on('exit', (c) => { clearTimeout(t); rej(new Error(`the process exited ${String(c)} before listening`)); });
+  });
+  // the player plays once a TCP client is connected; wait for the end of the excerpt
+  for (let i = 0; i < 1200; i++) { const s = await status(); if (s !== undefined && s['state'] === 'stopped' && (s['stats'] as J)?.['messagesSent'] > 0) break; await sleep(250); }
+  // settle: bodies equal on two reads three polls apart (the last snapshot is read by the poll timer, not by the end of playback)
+  let prev = '';
+  let model = emptyModel();
+  for (let i = 0; i < 40; i++) {
+    await sleep(Math.max(1500, poll * 3000));
+    model = (await hydrate({ h: { port } })).model;
+    const now = JSON.stringify(compared(model));
+    if (now === prev) break;
+    prev = now;
+  }
+  const sources = (await (await fetch(`http://127.0.0.1:${port}/api/sources`)).json()) as J;
+  proc.kill('SIGTERM');
+  const code = await new Promise<number | null>((res) => { proc.on('exit', (c) => { res(c); }); setTimeout(() => { res(-1); }, 20_000); });
+  expect(code, 'SIGTERM stops the process gracefully, exit 0, closing the step log').toBe(0);
+  player.kill('SIGKILL');
+  const steps = readFileSync(log, 'utf8').trim().split('\n').length;
+  return { model, log, sources, steps };
+}
+
+const WINDOWS = [
+  { speed: 10, from: '2026-04-26T08:44:00.000Z', to: '2026-04-26T08:46:30.000Z' },
+  { speed: 1, from: '2026-04-26T08:45:00.000Z', to: '2026-04-26T08:46:15.000Z' },
+] as const;
+
+describe.skipIf(!HAVE)('rows 14 and 15: a real process fed by player.js (ADR-017 gate 5; TEST-ARCHITECTURE §3.2)', () => {
+  for (const w of WINDOWS) {
+    describe(`cp3-cross ${w.from.slice(11, 19)}-${w.to.slice(11, 19)}Z at ${w.speed}x`, () => {
+      let run: Run;
+      let ref: ReturnType<typeof emptyModel>;
+      let dir: string;
+      let started: Promise<void> | undefined;
+      const start = (): Promise<void> => (started ??= (async () => {
+        dir = excerpt(w.from, w.to);
+        ref = reference(dir);
+        run = await realProcess(dir, w.speed);
+      })());
+
+      const section = (k: string): J => (compared(run.model)[k] as J);
+      for (const k of ['classes', 'courses', 'phases', 'entries', 'attempts', 'standings', 'oncourse', 'diagnostics']) {
+        it(`ADR-017 gate 5, ${w.speed}x: the hydrated "${k}" equal the direct-injection replay's final state, stamps removed (closed list in the header)`, async () => {
+          await start();
+          const expected = compared(ref)[k];
+          expect(expected, `the replay's ${k} is not empty where the window has it`).toBeDefined();
+          if (k === 'attempts' || k === 'entries' || k === 'standings') expect((expected as J[]).length).toBeGreaterThan(0);
+          expect(section(k)).toEqual(expected);
+        }, 900_000);
+      }
+
+      it(`ADR-017 gate 5, ${w.speed}x: the replay excerpt has what the row needs (finishes, a closure, XML polls), the process saw them`, async () => {
+        await start();
+        const attempts = [...ref.attempts.values()];
+        expect(attempts.some((a) => (a['status'] as J)?.value === 'finished')).toBe(true);
+        expect(run.sources.xml.state).toBe('connected');
+        expect(run.sources.xml.lastRewriteDetectedAt).toEqual(expect.any(String));
+        expect(run.sources.tcp.state).toBe('connected');
+      }, 900_000);
+
+      it(`ADR-017 gate 5 + TEST-ARCHITECTURE §3.2, ${w.speed}x: the process writes the step log when asked, and the gate-2 checker reports 0 violations on it`, async () => {
+        await start();
+        expect(run.steps).toBeGreaterThan(2);
+        const first = JSON.parse(readFileSync(run.log, 'utf8').split('\n')[0]!) as J;
+        expect(first).toHaveProperty('hydration');
+        const c = spawnSync(process.execPath, [CHECKER, run.log, '--recording', dir], { encoding: 'utf8', timeout: 600_000 });
+        expect(c.status, `checker: ${c.stdout.slice(0, 600)} ${c.stderr.slice(0, 300)}`).toBe(0);
+        expect((JSON.parse(c.stdout) as { violations: unknown[] }).violations).toEqual([]);
+      }, 900_000);
+    });
+  }
+});
