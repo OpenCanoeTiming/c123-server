@@ -240,6 +240,34 @@ describe('CQ2 (round 27d): Standing.classId is the Phase\'s classId, never the R
   });
 });
 
+describe('review B6 (CONTRACTS §5 step 1 "On site, no earlier than its Phase", §2.7): a Standing is held until its Phase is created', () => {
+  it('contract §5 step 1 + §1.6: a ranked on-course listing before any Results message pushes no Standing and no Phase; at the Results unit the Phase\'s message comes first and the Standing follows whole with the row\'s classId', async () => {
+    const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day });
+    const ws = await openWs(env);
+    await ws.barrier(); ws.take();
+    const listings = ODP.units().filter((u) => u.rec.data.includes('<OnCourse') && !u.rec.data.includes('Rank=""')).slice(0, 3);
+    expect(listings.some((u) => /Rank="\d+"/.test(u.rec.data)), 'the recorded listings state a rank before any Results message').toBe(true);
+    for (const u of listings) await feed(env, u);
+    await ws.barrier();
+    const early = ws.take();
+    expect(early.filter((m) => m.type === 'standing.updated' || m.type === 'phase.updated'), 'nothing for the Phase until a message states its class').toEqual([]);
+    expect(early.some((m) => m.type === 'attempt.updated')).toBe(true);
+    await feed(env, ODP.hyphenRow()); // the first Results row: ClassId C1M-ST, RaceId prefix C1M
+    await ws.barrier();
+    const unit = ws.take();
+    const phase = unit.find((m) => m.type === 'phase.updated' && m.phaseId === ODP.phaseId)!;
+    const standings = unit.filter((m) => m.type === 'standing.updated');
+    expect(phase, 'the Phase is created at the Results unit').toBeDefined();
+    expect(standings.length, 'the held Standing is published in the unit that creates the Phase').toBeGreaterThan(0);
+    for (const st of standings) {
+      expect(st.seq).toBeGreaterThan(phase.seq);
+      expect(st.standing.classId).toBe('C1M-ST');
+      expect(st.standing.entries.length).toBeGreaterThan(0);
+    }
+    expect(view(modelFrom(ws.messages))['standings']).toEqual(view((await hydrate(env)).model)['standings']);
+  });
+});
+
 describe('row 9: event.changed (CONTRACTS §7.2)', () => {
   it('contract §7.2: sent to a client on connect while an event is configured, carrying the whole OnsiteEvent', async () => {
     const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day });
