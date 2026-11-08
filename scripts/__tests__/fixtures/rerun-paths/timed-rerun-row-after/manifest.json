@@ -1,0 +1,42 @@
+{
+  "version": 3,
+  "event": {
+    "name": "jarni_so_odp",
+    "date": "2026-04-18"
+  },
+  "recorder": "c123-recorder/3.0.0",
+  "fixture": {
+    "name": "timed-rerun-row-after",
+    "synthetic": true,
+    "source": {
+      "recording": "2026-04-18-jarni-so-odp",
+      "window": [
+        "2026-04-18T12:58:00.000Z",
+        "2026-04-18T13:05:30.000Z"
+      ],
+      "attempt": "K1W_BR1_18:25",
+      "donor": "K1W_BR1_18:30"
+    },
+    "order": "run-2 row after the finish listing (the 28 % order)",
+    "edits": [
+      "trimmed to one Attempt as the other fixtures; Results messages keep only one Row",
+      "kept as recorded: bib 25's run (start 12:59:40Z, finish listing 13:01:42.376Z), its timed TCP row and XML row, pushed on every rotation after the finish with the rank as recorded (the rank moves as others finish; the Time, Pen and gates do not)",
+      "added: the re-run listings, copied from bib 30's recorded run of the same race (start listed 13:02:59.807Z, finish listing 13:04:37.037Z) with bib 25's Participant tag: staged and started again with no wizard wipe, so the old timed row is pushed unchanged through run 2 until the new finish (DERIVATIONS 4.11 intro: \"the old result stays in every push until the new finish overwrites it\")",
+      "added: the run-2 result rows, copied from bib 30's recorded TCP Row and XML Results row with bib 25's identity; no mark (the old row carried none)",
+      "removed: bib 30's own records",
+      "moved: the run-2 TCP Results record from 2026-04-18T13:04:36.975Z to 2026-04-18T13:04:37.099Z, the same gap after the finish listing (2026-04-18T13:04:37.037Z); content unchanged"
+    ]
+  },
+  "chunks": [
+    {
+      "seq": 1,
+      "file": "001-excerpt.jsonl",
+      "label": "timed-rerun-row-after",
+      "startTime": "2026-04-18T12:58:00.000Z",
+      "endTime": "2026-04-18T13:05:30.000Z",
+      "duration": 450000,
+      "races": [],
+      "messages": 936
+    }
+  ]
+}

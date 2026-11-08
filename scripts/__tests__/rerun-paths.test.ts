@@ -110,8 +110,21 @@ const runsNeverDecrease = (pts: Point[]): boolean => {
   return true
 }
 const firstRun = (pts: Point[], n: number): Point | undefined => pts.find((p) => runOf(p) === n)
-/** Values only (envelope instants differ by arrival order). */
-const valuesOf = (p: Point): Record<string, unknown> => Object.fromEntries(['run', 'status', 'outcome', 'placement', 'pairTotal', 'countingRun'].map((k) => [k, known(p.f[k])]))
+/**
+ * The whole presented state of the Attempt and its Standings at the end of the log, without envelope instants (the row's own
+ * delivery, which the arrival order moves, DERIVATIONS 4.11), `Standing.asOf` and `seq` (round 27g Q3).
+ */
+function endState(steps: Step[], attemptId: string): unknown {
+  const pts = trail(steps, attemptId)
+  const f = (pts[pts.length - 1] as Point).f
+  const attempt = Object.fromEntries(Object.entries(f).map(([k, e]) => [k, { ...e, observedAt: undefined }]))
+  const standings = new Map<string, unknown>()
+  for (const s of steps) for (const d of s.deltas) {
+    const st = (d as unknown as { standing?: Record<string, unknown> }).standing
+    if (d.type === 'standing.updated' && st) { const { asOf: _a, seq: _s, ...rest } = st; standings.set(String(st['standingKey']), JSON.parse(JSON.stringify(rest, (k, v) => (k === 'observedAt' || k === 'asOf' || k === 'seq' ? undefined : v)))) }
+  }
+  return { attempt: JSON.parse(JSON.stringify(attempt)), standings: [...standings.entries()].sort() }
+}
 
 const fx = (name: string): string => path.join(FIXTURES, name)
 const manifest = (name: string): { fixture: { name: string; synthetic: boolean; source: Record<string, unknown>; edits: string[]; order: string }; event: { date: string } } =>
@@ -197,9 +210,7 @@ describe('row 2: the recorded jury re-run in both arrival orders (committed exce
   })
 
   it('DERIVATIONS 4.11 "both arrival orders give the same end state": the final presented values of run 2 agree', () => {
-    const a = trail(replay(fx('nkz-bib7-row-before')), NKZ_ID)
-    const b = trail(replay(fx('nkz-bib7-row-after')), NKZ_ID)
-    expect(valuesOf(b[b.length - 1] as Point)).toEqual(valuesOf(a[a.length - 1] as Point))
+    expect(endState(replay(fx('nkz-bib7-row-after')), NKZ_ID)).toEqual(endState(replay(fx('nkz-bib7-row-before')), NKZ_ID))
   }, T)
 })
 
@@ -253,9 +264,52 @@ for (const [name, row, order] of dnfOrders) {
 
 describe('rows 3 and 4 together', () => {
   it('DERIVATIONS 4.4 + 4.11: the two DNF fixtures differ in arrival order only and converge on the same presented end state', () => {
-    const a = trail(replay(fx('dnf-rerun-row-before')), DNF_ID)
-    const b = trail(replay(fx('dnf-rerun-row-after')), DNF_ID)
-    expect(valuesOf(b[b.length - 1] as Point)).toEqual(valuesOf(a[a.length - 1] as Point))
+    expect(endState(replay(fx('dnf-rerun-row-after')), DNF_ID)).toEqual(endState(replay(fx('dnf-rerun-row-before')), DNF_ID))
+  }, T)
+})
+
+// ---------------------------------------------------------------------------------------------------------------------
+const TIMED_ID = 'K1W_BR1_18:25'
+const timedOrders = [['timed-rerun-row-before', 'before'], ['timed-rerun-row-after', 'after']] as const
+for (const [name, order] of timedOrders) {
+  describe(`round 27g Q4: non-wizard re-run after a TIMED finish, no wipe, run-2 row ${order} the finish listing (excerpt of jarni-so-odp K1W_BR1_18:25 + a donor run)`, () => {
+    it('setup: run 1 finished with a presented time (the old timed row stands)', () => {
+      const pts = trail(replay(fx(name)), TIMED_ID)
+      const fin = pts.find((p) => runOf(p) === 1 && statusOf(p) === 'finished')
+      expect(outcomeOf(fin as Point)?.kind).toBe('duration')
+      expect(outcomeOf(fin as Point)?.runSeconds).toBe(121.37)
+    }, T)
+
+    it('ADR-013 Revision 3 + DERIVATIONS 4.11: the old timed row is pushed unchanged through run 2 and nothing of it is presented before the new finish', () => {
+      const pts = trail(replay(fx(name)), TIMED_ID)
+      const first = firstRun(pts, 2)
+      expect(first?.at).toBe('2026-04-18T13:02:59.807Z')
+      expect(runsNeverDecrease(pts)).toBe(true)
+      expect(staleOverRunning(pts)).toEqual([])
+      expect(pts.filter((p) => runOf(p) === 2).some((p) => p.f['outcome'] !== undefined && outcomeOf(p)?.runSeconds === 121.37)).toBe(false)
+    }, T)
+
+    it('DERIVATIONS 4.12: no stale mark (the old row carried none), and run 2 ends with its own time', () => {
+      const pts = trail(replay(fx(name)), TIMED_ID)
+      expect(pts.some((p) => p.stale)).toBe(false)
+      const last = pts[pts.length - 1] as Point
+      const time = Number(/Time="([0-9.]+)"/.exec(fixtureRows(name).slice(-1)[0] as string)?.[1])
+      expect(runOf(last)).toBe(2)
+      expect(statusOf(last)).toBe('finished')
+      expect(outcomeOf(last)?.runSeconds).toBe(time)
+    }, T)
+
+    it.skipIf(!haveChecker)('property 10: gate 2 reports 0 with property 10 exercised', () => {
+      replay(fx(name))
+      const g = gate2(fx(name))
+      expect(g.violations).toEqual([])
+      expect(g.exercised['10']).toBeGreaterThan(0)
+    }, T)
+  })
+}
+describe('round 27g Q3 + Q4 together', () => {
+  it('DERIVATIONS 4.11: the two timed fixtures differ in arrival order only and end in the same presented state (Standing.asOf and seq excluded)', () => {
+    expect(endState(replay(fx('timed-rerun-row-after')), TIMED_ID)).toEqual(endState(replay(fx('timed-rerun-row-before')), TIMED_ID))
   }, T)
 })
 
@@ -289,7 +343,7 @@ describe('row 5: a mark standing when the start is listed records nothing (excer
 // ---------------------------------------------------------------------------------------------------------------------
 describe('row 6: fixtures stated (published-results rule; synthetic fixtures name source, window, edits)', () => {
   const names = readdirSync(FIXTURES, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort()
-  it('there are five fixtures', () => expect(names).toEqual(['dnf-rerun-row-after', 'dnf-rerun-row-before', 'mark-at-start-then-correction', 'nkz-bib7-row-after', 'nkz-bib7-row-before']))
+  it('there are seven fixtures', () => expect(names).toEqual(['dnf-rerun-row-after', 'dnf-rerun-row-before', 'mark-at-start-then-correction', 'nkz-bib7-row-after', 'nkz-bib7-row-before', 'timed-rerun-row-after', 'timed-rerun-row-before']))
   for (const name of names) {
     it(`fixture ${name}: manifest states synthetic, source recording and window, order and edits`, () => {
       const f = manifest(name).fixture

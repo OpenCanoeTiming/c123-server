@@ -311,4 +311,65 @@ write(join(outRoot, 'mark-at-start-then-correction'), M, mark.out, {
     'no row added, moved or removed',
   ],
 });
+
+// =====================================================================================================================
+// jarni-so-odp K1W_BR1_18 bib 25: a recorded TIMED finish, then a non-wizard re-run with no wipe (#207 round 27g Q4)
+// =====================================================================================================================
+function timedFixture(name, rowMovedAfterFinish) {
+  const T25 = { ...J, bib: '25', id: null };
+  let tag25;
+  for (const r of records(T25.rec, T25.from, T25.to)) {
+    if (r.src === 'tcp' && r.type === 'OnCourse') { const oc = onCourseOf(r.data); if (oc && oc.bib === '25' && oc.race === T25.race) { tag25 = oc.tag; break; } }
+  }
+  T25.id = attr(tag25, 'Id');
+  const mine = excerpt(T25);
+  const don = excerpt(donor);
+  const dOc = don.out.filter((o) => o.type === 'OnCourse').map((o) => ({ ...o, data: o.data.replace(/<Participant\b[^>]*\/>/, tag25) }));
+  const dFin = dOc.find((o) => /dtFinish="[^"]+"/.test(o.data)).t;
+  const dRow = don.out.find((o) => o.type === 'Results' && /Time="[0-9.]+"/.test(o.data));
+  const dXml = don.out.find((o) => o.src === 'xml' && /<Time>\d+<\/Time>/.test(o.data));
+  const rowAt = rowMovedAfterFinish ? dFin + (dFin - dRow.t) : dRow.t;
+  const out = [];
+  // bib 25's own records as recorded: the finish at 13:01:42Z and the timed row, pushed on every rotation, until the donor's row
+  for (const o of mine.out) {
+    if (o.type === 'OnCourse') { if (o.t < dOc[0].t) out.push(o); }
+    else if (o.type === 'Results') { if (o.t < rowAt) out.push(o); }
+    else if (o.src === 'xml') { if (o.t < dXml.t) out.push(o); }
+    else out.push(o);
+  }
+  for (const o of dOc) out.push(o);
+  const ptag = rowsOf(mine.out.find((o) => o.type === 'Results' && !o.absent).data)[0].ptag;
+  for (const o of don.out) {
+    if (o.type !== 'Results') continue;
+    const moved = o === dRow ? rowAt : o.t;
+    if (moved < rowAt && o !== dRow) continue;
+    out.push({ ...o, t: moved, data: o.data.replace(/<Participant\b[^>]*\/>/, ptag) });
+  }
+  const parts25 = xmlParts(mine.out.find((o) => o.src === 'xml').data, T25);
+  const bib25 = inner(parts25.results[0], 'Bib');
+  for (const o of don.out) {
+    if (o.src !== 'xml' || o.t < dXml.t) continue;
+    const row = xmlParts(o.data, donor).results[0]
+      .replace(/<Id>[^<]*<\/Id>/, `<Id>${T25.id}</Id>`)
+      .replace(/<StartOrder>[^<]*<\/StartOrder>/, `<StartOrder>${attr(tag25, 'StartOrder')}</StartOrder>`)
+      .replace(/<Bib>[^<]*<\/Bib>/, `<Bib>${bib25}</Bib>`);
+    out.push({ ...o, data: xmlDoc(parts25, [row]) });
+  }
+  write(join(outRoot, name), T25, out, {
+    name,
+    synthetic: true,
+    source: { recording: T25.rec, window: [T25.from, T25.to], attempt: `${T25.race}:25`, donor: `${T25.race}:${DONOR}` },
+    order: rowMovedAfterFinish ? 'run-2 row after the finish listing (the 28 % order)' : `run-2 row before the finish listing (as recorded for bib ${DONOR})`,
+    edits: [
+      'trimmed to one Attempt as the other fixtures; Results messages keep only one Row',
+      'kept as recorded: bib 25\'s run (start 12:59:40Z, finish listing 13:01:42.376Z), its timed TCP row and XML row, pushed on every rotation after the finish with the rank as recorded (the rank moves as others finish; the Time, Pen and gates do not)',
+      `added: the re-run listings, copied from bib ${DONOR}'s recorded run of the same race (start listed 13:02:59.807Z, finish listing 13:04:37.037Z) with bib 25's Participant tag: staged and started again with no wizard wipe, so the old timed row is pushed unchanged through run 2 until the new finish (DERIVATIONS 4.11 intro: "the old result stays in every push until the new finish overwrites it")`,
+      `added: the run-2 result rows, copied from bib ${DONOR}'s recorded TCP Row and XML Results row with bib 25's identity; no mark (the old row carried none)`,
+      `removed: bib ${DONOR}'s own records`,
+      rowMovedAfterFinish ? `moved: the run-2 TCP Results record from ${iso(dRow.t)} to ${iso(rowAt)}, the same gap after the finish listing (${iso(dFin)}); content unchanged` : 'no record moved',
+    ],
+  });
+}
+timedFixture('timed-rerun-row-before', false);
+timedFixture('timed-rerun-row-after', true);
 console.log('built', outRoot);
