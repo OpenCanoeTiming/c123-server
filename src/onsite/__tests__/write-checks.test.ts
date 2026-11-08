@@ -63,7 +63,10 @@ describe('row 10: gate checks over REST (CONTRACTS §7.4)', () => {
     expect((await del(env, CHECK(ODP.gate))).status).toBe(204);
     await ws.barrier();
     expect(ws.take().find((m) => m.type === 'check.updated')).toMatchObject({ attemptId: AID, gate: ODP.gate, check: null });
+    ws.take();
     expect((await del(env, CHECK(ODP.gate))).status).toBe(204);
+    await ws.barrier();
+    expect(ws.take().filter((m) => m.type === 'check.updated'), 'round 28 item 7: nothing was removed, nothing is pushed').toEqual([]);
     expect((await checksOf(env)).checks).toEqual([]);
   });
 
@@ -96,7 +99,7 @@ describe('row 10: gate checks over REST (CONTRACTS §7.4)', () => {
     const hold = env.fs.holdRename();
     let answered = false;
     const p = put(env, CHECK(ODP.gate), {}).then((r) => { answered = true; return r; });
-    await hold.reached;
+    await Promise.race([hold.reached, p]); // an answer before the rename is reached fails below, at once
     await ws.barrier();
     expect(answered, 'not acknowledged before it is durable').toBe(false);
     expect(ws.take().filter((m) => m.type === 'check.updated'), 'not pushed before it is durable').toEqual([]);
@@ -118,7 +121,7 @@ describe('row 11: flags over REST (CONTRACTS §7.4, §1.5)', () => {
     expect(typeof a.body.flagId).toBe('string');
     expect('resolution' in a.body).toBe(false);
     const same = await post(env, FLAGS(), body, K('f1'));
-    expect([200, 201]).toContain(same.status);
+    expect(same.status, 'round 28 item 5: a retry with the same key is 200').toBe(200);
     expect(same.body).toEqual(a.body);
     const other = await post(env, FLAGS(), body, K('f2'));
     expect(other.body.flagId).not.toBe(a.body.flagId);
@@ -174,7 +177,7 @@ describe('row 11: flags over REST (CONTRACTS §7.4, §1.5)', () => {
     const hold = env.fs.holdRename();
     let answered = false;
     const p = post(env, FLAGS(), { gate: 5, comment: 'x' }, K('f1')).then((r) => { answered = true; return r; });
-    await hold.reached;
+    await Promise.race([hold.reached, p]); // an answer before the rename is reached fails below, at once
     await ws.barrier();
     expect(answered).toBe(false);
     expect(ws.take().filter((m) => m.type === 'flag.updated')).toEqual([]);

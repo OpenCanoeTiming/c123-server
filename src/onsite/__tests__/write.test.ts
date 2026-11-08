@@ -5,18 +5,21 @@
  * The outbound side is the fake TCP sink `env.tcp.written`; the upstream side of the echo is a TCP Results row fed back (datasets `ODP.echo`).
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
 import {
-  boot, disposeAll, feedTcp, get, hydrate, modelFrom, openWs, post, setInstance, view, type Env, type J,
+  boot, disposeAll, feedTcp, get, hydrate, modelFrom, openWs, post, setInstance, view, virtualClock, type Env, type J,
 } from './onsite-harness.js';
 import { CROSS, JNE, ODP, feed } from './datasets.js';
 
 afterEach(disposeAll);
 
-const SCHEMAS = resolve(dirname(fileURLToPath(import.meta.url)), '../../../docs/arch/schemas');
+const HERE = dirname(fileURLToPath(import.meta.url));
+// Round 28 adds the reason `upstream-disconnected` to error.schema.json; until PR #296 merges the schema is read from its branch's worktree when present.
+const ROUND28 = '/workspace/timing/.worktrees/c123-server-round28/docs/arch/schemas';
+const SCHEMAS = existsSync(resolve(ROUND28, 'error.schema.json')) && readFileSync(resolve(ROUND28, 'error.schema.json'), 'utf8').includes('upstream-disconnected') ? ROUND28 : resolve(HERE, '../../../docs/arch/schemas');
 const errorSchema = (): ((x: unknown) => boolean) & { errors?: unknown } => {
   const Ctor = ((Ajv2020 as any).default ?? Ajv2020) as new (o: object) => any;
   const ajv = new Ctor({ strict: true, allErrors: true });
@@ -119,7 +122,7 @@ describe('row 3: validation (CONTRACTS §7.3, §1.4)', () => {
     const r = await write(env, GOOD, undefined);
     expect(r.status).toBe(400);
     expect(r.body.error.code).toBe('validation-failed');
-    expect(r.body.error.details.length).toBeGreaterThan(0);
+    expect(r.body.error.details).toEqual([{ field: 'Idempotency-Key', issue: 'missing' }]);
     expect(sent(env)).toEqual([]);
   });
 
@@ -222,6 +225,16 @@ describe('row 5: idempotency (CONTRACTS §1.5)', () => {
     expect(later.body.writeId).toBe(first.body.writeId);
     expect(sent(env)).toHaveLength(1);
   });
+
+  it('round 28 item 6: after 24 h the map may be dropped; a retry is then accepted, as the same write (kept) or as a new correction (dropped)', async () => {
+    const env = await closedRun();
+    const first = await write(env, GOOD, 'long');
+    env.clock.jump(env.clock.now() + 24 * 3600 * 1000 + 1000);
+    const later = await write(env, GOOD, 'long');
+    expect([200, 202]).toContain(later.status);
+    if (later.status === 202) { expect(later.body.writeId).not.toBe(first.body.writeId); expect(sent(env)).toHaveLength(2); }
+    else { expect(later.body.writeId).toBe(first.body.writeId); expect(sent(env)).toHaveLength(1); }
+  });
 });
 
 describe('row 6: the correction command (c123-protocol.md "PenaltyCorrection"; EVIDENCE Exhibits 13, 14)', () => {
@@ -248,14 +261,15 @@ describe('row 6: the correction command (c123-protocol.md "PenaltyCorrection"; E
   });
 });
 
-describe('row 7: no TCP connection (CONTRACTS §7.3, §1.4; ADR-010)', () => {
-  it('with TCP not connected the write is refused with a stated error (an error.schema.json envelope, a 4xx/5xx), no WriteRequest, nothing pushed, the key unbound; the same key succeeds after reconnect', async () => {
+describe('row 7: no TCP connection (CONTRACTS §7.3, §1.4, §2.8; round 28 items 1 and 3)', () => {
+  it('round 28: with TCP not connected the write is 409 write-not-possible reason upstream-disconnected (an error.schema.json envelope): no WriteRequest, no push, nothing sent, the key unbound; the same key succeeds after reconnect', async () => {
     const env = await closedRun();
     const ws = await openWs(env);
     env.tcp.disconnect();
     await ws.barrier(); ws.take();
     const r = await write(env, GOOD, 'offline');
-    expect(r.status).toBeGreaterThanOrEqual(400);
+    expect(r.status).toBe(409);
+    expect(r.body.error).toMatchObject({ code: 'write-not-possible', details: { reason: 'upstream-disconnected' } });
     const check = errorSchema();
     expect(check(r.body), JSON.stringify(check.errors)).toBe(true);
     await ws.barrier();
@@ -266,14 +280,65 @@ describe('row 7: no TCP connection (CONTRACTS §7.3, §1.4; ADR-010)', () => {
     expect(ok.status).toBe(202);
   });
 
-  it('a socket write that fails is the same refusal: no WriteRequest and no optimistic value are left behind, the key is unbound', async () => {
+  it('round 28 item 3: a socket write that is rejected is the same 409 upstream-disconnected: no WriteRequest and no optimistic value are left behind, the key is unbound', async () => {
     const env = await closedRun();
     const before = JSON.stringify((await get(env, `/api/phases/${ODP.phaseId}/attempts`)).body.attempts);
     env.tcp.failNextWrite();
     const r = await write(env, GOOD, 'flaky');
-    expect(r.status).toBeGreaterThanOrEqual(400);
+    expect(r.status).toBe(409);
+    expect(r.body.error).toMatchObject({ code: 'write-not-possible', details: { reason: 'upstream-disconnected' } });
     expect(JSON.stringify((await get(env, `/api/phases/${ODP.phaseId}/attempts`)).body.attempts)).toBe(before);
     expect((await write(env, GOOD, 'flaky')).status).toBe(202);
+  });
+});
+
+describe('validation order, most permanent first (round 28 item 4)', () => {
+  const BAD = { gate: 99, value: 7 };
+  it('404 attempt-not-found before everything else (bad body, no key)', async () => {
+    const env = await closedRun();
+    const r = await write(env, BAD, undefined, `/api/attempts/${ODP.phaseId}/999/penalty`);
+    expect(r.status).toBe(404);
+    expect(r.body.error.code).toBe('attempt-not-found');
+  });
+
+  it('409 cross and 409 team-boat before the body and the header are looked at', async () => {
+    const cross = await boot({ startAt: CROSS.startAt, eventDate: CROSS.day });
+    for (const u of CROSS.units()) await feed(cross, u);
+    const c = await write(cross, BAD, undefined, `/api/attempts/${CROSS.phaseId}/${CROSS.bib}/penalty`);
+    expect(c.status).toBe(409);
+    expect(c.body.error.details.reason).toBe('cross');
+    const team = await closedRun({ xmlRec: ODP.teamXml() });
+    const t = await write(team, BAD, undefined);
+    expect(t.status).toBe(409);
+    expect(t.body.error.details.reason).toBe('team-boat');
+  });
+
+  it('400 for the header and the body shape before the course: a missing key reports Idempotency-Key even when the gate is also outside the course; a bad value is 400 before run-not-closed', async () => {
+    const env = await closedRun();
+    const noKey = await write(env, { gate: 99, value: 2 }, undefined);
+    expect(noKey.status).toBe(400);
+    expect(noKey.body.error.details.map((d: J) => d.field)).toContain('Idempotency-Key');
+    const live = await boot({ startAt: ODP.startAt, eventDate: ODP.day });
+    const units = ODP.unitsXmlFirst();
+    for (const u of units.slice(0, units.findIndex((u) => u.rec.data.includes('dtFinish="1')) + 1)) await feed(live, u);
+    expect((await get(live, '/api/oncourse')).body.attempts.map((a: J) => a.attemptId), 'precondition: the run is not closed').toContain(ODP.attemptId);
+    const bad = await write(live, { gate: ODP.gate, value: 7 });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error.code).toBe('validation-failed');
+  });
+
+  it('409 run-not-closed before 409 upstream-disconnected; a valid body on a closed run with TCP down is upstream-disconnected', async () => {
+    const live = await boot({ startAt: ODP.startAt, eventDate: ODP.day });
+    const units = ODP.unitsXmlFirst();
+    for (const u of units.slice(0, units.findIndex((u) => u.rec.data.includes('dtFinish="1')) + 1)) await feed(live, u);
+    live.tcp.disconnect();
+    const r = await write(live, GOOD);
+    expect(r.status).toBe(409);
+    expect(r.body.error.details.reason).toBe('run-not-closed');
+    const closed = await closedRun();
+    closed.tcp.disconnect();
+    expect((await write(closed, { gate: 99, value: 2 })).status, 'validation before the connection check').toBe(400);
+    expect((await write(closed, GOOD)).body.error.details.reason).toBe('upstream-disconnected');
   });
 });
 
@@ -351,5 +416,71 @@ describe('row 9: a closed Phase (CONTRACTS §2.9, maintainer answer A2)', () => 
     expect(r.status).toBe(202);
     await feedTcp(env, ODP.echo(50, env.clock.now() + 1000).rec);
     expect((await get(env, `/api/writes/${r.body.writeId as string}`)).body.status).toBe('confirmed');
+  });
+});
+
+describe('round 28 item 8: the key map and the WriteRequests are durable (CONTRACTS §1.5 "at least 24 hours", §2.9, §2.10 discipline)', () => {
+  /** A pending write on a closed run, then the process is stopped (graceful) or killed; a new process starts over the same data directory. */
+  async function restarted(kind: 'stop' | 'kill'): Promise<{ env1: Env; env2: Env; first: J }> {
+    const env1 = await closedRun();
+    await setInstance(env1, 'Main');
+    const first = await write(env1, GOOD, 'durable-key');
+    expect(first.status).toBe(202);
+    let fs2 = env1.fs;
+    if (kind === 'stop') await env1.h.stop();
+    else { fs2 = env1.fs.afterKill(); env1.h.kill(); } // an acknowledged write is durable: only completed renames survive
+    const env2 = await boot({ startAt: ODP.startAt, eventDate: ODP.day, fs: fs2, clock: virtualClock(env1.clock.now() + 60_000) });
+    return { env1, env2, first: first.body };
+  }
+  const replay = async (env: Env): Promise<void> => {
+    for (const u of ODP.unitsXmlFirst()) await feed(env, u);
+    await feed(env, ODP.emptyAt(env.clock.now() + 1000));
+  };
+
+  for (const kind of ['stop', 'kill'] as const) {
+    it(`a pending WriteRequest survives a ${kind} and start over the same data dir: GET /api/writes/{id} returns it unchanged, still pending`, async () => {
+      const { env2, first } = await restarted(kind);
+      const g = await get(env2, `/api/writes/${first.writeId as string}`);
+      expect(g.status).toBe(200);
+      expect(g.body).toEqual(first);
+      expect(g.body.status).toBe('pending');
+    });
+
+    it(`its key survives a ${kind}: the same key returns 200 with the same WriteRequest and sends no second command upstream`, async () => {
+      const { env2, first } = await restarted(kind);
+      await replay(env2);
+      await setInstance(env2, 'Main');
+      const again = await write(env2, GOOD, 'durable-key');
+      expect(again.status).toBe(200);
+      expect(again.body).toEqual(first);
+      expect(sent(env2), 'a restart must not turn a retried key into a second command').toEqual([]);
+    });
+  }
+
+  it('a pending write resumes waiting for its echo after a restart: an echo of the same field and generation then confirms it', async () => {
+    const { env2, first } = await restarted('stop');
+    await replay(env2);
+    await feed(env2, ODP.echo(50, env2.clock.now() + 1000));
+    const w = (await get(env2, `/api/writes/${first.writeId as string}`)).body;
+    expect(w.status).toBe('confirmed');
+    expect(w.writeId).toBe(first.writeId);
+  });
+
+  it('a write is not durable before it is acknowledged, and not acknowledged before it is durable: with the rename held there is no 202; a kill then leaves neither the write nor the key', async () => {
+    const env1 = await closedRun();
+    await setInstance(env1, 'Main');
+    const hold = env1.fs.holdRename();
+    let answered = false;
+    const done = write(env1, GOOD, 'held-key').then(() => { answered = true; });
+    await Promise.race([hold.reached, done]); // an answer before the rename is reached fails below, at once
+    await env1.clock.advance(0);
+    expect(answered, 'not acknowledged before it is durable').toBe(false);
+    const fs2 = env1.fs.afterKill();
+    env1.h.kill();
+    const env2 = await boot({ startAt: ODP.startAt, eventDate: ODP.day, fs: fs2, clock: virtualClock(env1.clock.now() + 60_000) });
+    await replay(env2);
+    await setInstance(env2, 'Main');
+    const retry = await write(env2, GOOD, 'held-key');
+    expect(retry.status, 'the key was never durable: a new correction').toBe(202);
   });
 });
