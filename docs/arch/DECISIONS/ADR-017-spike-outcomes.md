@@ -230,7 +230,8 @@ the spike core on the same excerpts.
 4. **Outage and reconnect:** jarni-ne-do 08:55–09:10, after recording one deliberate disconnect on the
    bench, since the recorder writes no connection events.
 5. **A real process:** sockets, the XML poll timer and the leave rule, fed by `player.js` at 1× and 10×;
-   its presented state equals the direct-injection replay's.
+   its presented state equals the direct-injection replay's (what is compared, and on which clock:
+   Revision 7).
 6. **Gate-2 strength:** the second checker, mutation-tested per property, on windows that exercise
    properties 4, 7, 8, 10 and 13.
 7. **The XML writer's real timing** (S5, the maintainer's run): INV-2c and INV-7's guard depend on the
@@ -387,3 +388,42 @@ before the hydration); `CONTRACTS.md` §1.2 names both exemptions and "a row sta
 property 13 names `courseOrder` and `timeToBeat`. The 193 property-6 rows the first run reported had
 no row before them: a stream cell taken through the no-course path stayed `authoritative` at the
 binding snapshot, a core defect, not the state §1.2 excluded.
+
+## Revision 7 — gate 5: the real process's clock, its comparison and its log (2026-11-08, round 27)
+
+Item 5 of "What M1 must still prove on data" is stated precisely, from the first real run
+(c123-server #210: equal at 1×; at 10× `run.source` and one on-course leave differed, and the
+checker reported 255 violations on the process's log at both speeds).
+
+**The process runs on the player's clock** (E3: `DERIVATIONS.md` §4.1 states the leave rule in
+ingest time, `CONTRACTS.md` §4 states that nothing depends on wall-clock time, and ingest time is the
+injected `Clock`, `TEST-ARCHITECTURE.md` §5). Fed at N×, the process is started with a `Clock` that
+advances N seconds per wall second from the excerpt's first recorded instant — the time basis the
+direct replay and the checker's `--recording` already read, the 1970-based one of the known
+excerpt-tooling finding included — and its poll, heartbeat and leave rule run on it. At 10× on the
+wall clock the 4 s constant would judge a world ten times faster, which the rule was never stated
+for, and the poll would sit at ten times the recorded distance; neither is a finding about the
+process. Production starts it at rate 1 on the system clock; how the rate and origin are given is the
+entry's.
+
+**What gate 5 compares, closed, at both speeds.** Every structural field; every set (the on-course
+set's membership and order, `featuredByUpstream`, each Standing's entries, the diagnostics); and of
+every `Observed` field its `state`, `value`, `eventTime`, `confidence` and `provisional`. Removed
+before comparing, and nothing else: the stamps `observedAt`, `asOf`, `seq` and `asOfSeq` — a real
+process stamps receipt instants, later than the recorded ones by its delivery latency, N-fold at N×
+— and `source` on an envelope whose `state` and `value` equal the replay's, because which of two
+sources stating one value arrived first is the real arrival order of the XML poll against the TCP
+stream at a cold start, and INV-5 presents the first and changes nothing but the stamp at the
+re-delivery (`CONTRACTS.md` §4). Any other difference fails; one that comes from real timing is
+reported with its cause, never added to the list.
+
+**Gate 2 on the process's log** (E2: the receive latency measured in this ADR — p50 15–31 ms, p95
+35–52 ms, max 211 ms — against `DERIVATIONS.md` §4.1's 0.5–0.8 s leave margin at the worst recorded
+phase). The log is a tier-4 artefact, not a candidate (`TEST-ARCHITECTURE.md` §3.2, the player-driven
+capture). Its instants are receipt instants on the recording's axis, so the properties that read the
+raw stream (3, 6, 10, 11, 13, 14) compare them with recorded ones across the delivery latency: at 1×
+that latency sits inside the leave margin and the checker, run with `--recording`, is expected to
+report 0; at 10× it is 0.15–0.5 s of recorded time, 2.1 s at the measured maximum, outside the margin,
+so the 10× log is asserted written and well-formed (its first line the hydration step) and is no
+gate-2 evidence. The **D**-only reading admits nothing (§3.2) and is not used. A violation at 1× is a
+verdict for the design authority like any other (§3.2), never a tolerance.

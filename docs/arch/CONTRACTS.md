@@ -394,7 +394,13 @@ any message it has already applied.
 **Creation over the push.** A `*.updated` message for an id the client does not hold creates the
 entity. The first message for a new id carries the whole resource, with every `Observed` field that
 is not yet known as `not-yet`; later messages for it are partial. A client therefore never needs to
-re-hydrate to learn of a new Attempt, Entry, Phase, Class or Course.
+re-hydrate to learn of a new Attempt, Entry, Phase, Class or Course. **A Phase is created at the
+first observation that states its `classId`** (`DERIVATIONS.md` §2.1: TCP's `OnCourse` and `Schedule`
+carry no class, `Results` and the snapshot do): an on-course listing creates the Attempt, whose
+`phaseId` names the Phase, and not yet the Phase, so at a TCP cold start a client may hold, for the
+seconds until a `Results` message or the snapshot, an Attempt whose Phase it does not hold; it renders
+what the Attempt carries. Until then the Phase is served nowhere (§7.1) and its Attempts are served by
+`/api/oncourse` and `/api/phases/{phaseId}/attempts` (round 27).
 
 Both on-site client applications and the public spectator client are required to implement this; §7
 and §8.4 each restate only the connection-specific detail, not this sequence.
@@ -469,6 +475,9 @@ across days (Scenario E, `ARCHITECTURE.md`). A future central registry could iss
 (`DECISIONS/ADR-006`).
 
 - **The event title** defaults to the snapshot's own title. It is organiser-authored text (§1.3).
+- **`details`** is the snapshot's `Events` table: `SubTitle`, `Location` as `venue`, `Facility`, and
+  the date parts of `StartDate` and `EndDate`; `not-yet` until the snapshot states it, and the XML
+  parser's element to emit (round 27; E1, the XML layout).
 - **Upstream's own event id** in the snapshot is **not** exposed. It is an input to the operational
   check "is this still the same Canoe123 event" (`ARCHITECTURE.md` Scenario E), never an identity.
 
@@ -482,7 +491,10 @@ contract assumes either layout.
 
 **Invariant:** `eventId`, once minted, never changes and is never reused for a different competition.
 Starting a genuinely new competition on the same laptop is a deliberate operator action, never
-inferred from a changed source.
+inferred from a changed source. Returning to an earlier event is not reuse — the same competition
+under its own id: its §2.10 store reopens as left, `event.changed` carries it and clients re-hydrate
+(§7.2). The action and the return are the admin UI's own, not §7 paths; whether the UI offers the
+return is the maintainer's (round 27).
 
 ### 2.3 Class
 
@@ -521,7 +533,7 @@ One Canoe123 race: exactly one `RaceId`. A Phase is a run, a round, or a classif
 ```ts
 type Phase = {
   phaseId: string                     // = Canoe123 RaceId, verbatim — [D]
-  classId: string
+  classId: string                     // [D] xml, tcp Results; the Phase is created once it is known (§1.6)
   format: string                      // upstream's format token, verbatim, open vocabulary — [D]
   kind: 'race' | 'classification'     // [D] structural, from format
   scoringKind: 'duration' | 'ordinal' // [D] structural, from format
@@ -1146,7 +1158,9 @@ Attempt and generation, and `stale` otherwise, where:
 - `null` and `0` are distinct: a check made while the gate was unjudged is `stale` once it is judged
   clean, and a check made against `0` is `stale` once the gate is retracted to `null`;
 - when `gates` is not `known`, the presented value is `null`;
-- a team's penalty is the sum over its members, compared as a sum.
+- a team's penalty is the sum over its members, compared as a sum;
+- a check whose `run` is not the Attempt's presented generation (`DECISIONS/ADR-013`) has nothing
+  presented to equal and is `stale`, `valueAtCheck: null` included (round 27).
 
 A gate's display state is then a lookup, the same on every tablet: `flagged` if an open flag exists,
 else the check's `status` if a check exists, else `plain`.
@@ -1824,9 +1838,9 @@ Every response except `/api/sources` carries `asOfSeq: number` (§1.6) at the to
 | `GET /api/events/current` | `{ asOfSeq, event: OnsiteEvent, classes: Class[], courses: Course[] }` | `404 event-not-found` |
 | `GET /api/classes/{classId}/phases` | `{ asOfSeq, phases: Phase[] }` | `404 class-not-found` |
 | `GET /api/classes/{classId}/entries` | `{ asOfSeq, entries: OnsiteEntry[] }` | `404 class-not-found` |
-| `GET /api/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }` | `404 phase-not-found` |
+| `GET /api/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }`: every Attempt of the `phaseId`, a Phase whose class is not yet known included (§1.6) | `404 phase-not-found`: a `phaseId` never observed |
 | `GET /api/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`: every published scope of §5 (step 1: from its first entry), for the whole class and per age category | `404 class-not-found` |
-| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null, asOf: Timestamp \| null }`: **every Attempt upstream currently lists on its on-course list**, across every running Phase, whatever its `status`: `at-start`, `on-course`, and, between a finish and upstream's closure of the run — upstream's auto-complete setting, measured over seven recordings and 1,995 closures: about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % of closures in [18, 20) s), about 47 s at one (medians 47 s, p90 57 s), a minority of manual closes under 5 s (12.6 % and 34.9 % on two days) and a long tail to 126–781 s. **No client may assume a fixed value.** Meanwhile the Attempt is listed as `finished` or a mark. The set is upstream's list; `status` says where each Attempt is. `asOf` is the ingest time of the latest on-course observation behind the set, `null` before any. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8). Kept current by `oncourse.updated` (§7.2) | — |
+| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null, asOf: Timestamp \| null }`: **every Attempt upstream currently lists on its on-course list**, across every running Phase, whatever its `status`: `at-start`, `on-course`, and, between a finish and upstream's closure of the run — upstream's auto-complete setting, measured over seven recordings and 1,995 closures: about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % of closures in [18, 20) s), about 47 s at one (medians 47 s, p90 57 s), a minority of manual closes under 5 s (12.6 % and 34.9 % on two days) and a long tail to 126–781 s. **No client may assume a fixed value.** Meanwhile the Attempt is listed as `finished` or a mark. The set is upstream's list; `status` says where each Attempt is. `asOf` is the ingest time of the unit at which the set last changed — membership, order or `featuredByUpstream`: a listing, `oncourse-empty`, or the TCP message at which a leave was derived (`DERIVATIONS.md` §4.1) — `null` before any; a listing that changes nothing moves it no more than a running tick moves a Standing's (§5), so this response and the last `oncourse.updated` agree (§1.6; round 27). **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8). Kept current by `oncourse.updated` (§7.2) | — |
 | `GET /api/phases/{phaseId}/checks` | `{ asOfSeq, checks: GateCheck[], flags: GateFlag[] }`: every check and flag of the Phase, all run generations, `status` derived at serialisation (§2.10) | `404 phase-not-found` |
 | `GET /api/sources` | `SourceStatus`, unwrapped | — |
 | `GET /api/diagnostics` | `{ asOfSeq, diagnostics: Diagnostic[] }`: every current diagnostic of the six kinds in §4 (source disagreement, contradicted finish, duplicate finish, stale mark, member-sum mismatch, unparseable cell). Admin audience only | — |
@@ -1901,7 +1915,8 @@ Every message carries `seq` (§1.6).
   `not-yet` values, never by omission.
 - **`oncourse.updated`** carries the whole on-course set: `{ attemptIds: string[], featuredByUpstream:
   string | null, asOf: Timestamp }`, `attemptIds` in `courseOrder` (§7.1), `asOf` the ingest time of
-  the latest on-course observation behind it. It is sent whenever membership, order or the
+  the unit at which the set last changed, as §7.1 defines it, so it equals what `/api/oncourse`
+  serves. It is sent whenever membership, order or the
   featured competitor changes. A finish changes `status`, not membership: it arrives as an
   `attempt.updated`, and the Attempt leaves the set at upstream's closure, typically about 20 s later
   (a venue setting, §7.1), which is
@@ -1911,7 +1926,8 @@ Every message carries `seq` (§1.6).
 - **`diagnostics.updated`** carries the whole current `Diagnostic[]` under `diagnostics` whenever it
   changes. Admin audience only; a scoreboard ignores it.
 - **`event.changed`** carries the whole `Event`. It is sent when the current event changes: on the
-  explicit "start a new event" action (`ARCHITECTURE.md` Scenario E), or when a client connects while
+  explicit "start a new event" action (`ARCHITECTURE.md` Scenario E; the action is the admin UI's
+  own, not a §7 path, §2.2), or when a client connects while
   an event is configured. On a *different* `eventId` than the one the client holds, the client
   discards everything and re-hydrates (§1.6).
 - **`scope.replaced`** carries, after a re-baseline (§4), **every Attempt of the scope and every
