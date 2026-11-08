@@ -1,0 +1,38 @@
+{
+  "version": 3,
+  "event": {
+    "name": "2026_NKZ_19so",
+    "date": "2026-09-19"
+  },
+  "recorder": "c123-recorder/3.0.0",
+  "fixture": {
+    "name": "nkz-bib7-row-after",
+    "synthetic": true,
+    "source": {
+      "recording": "2026-09-19-2026-nkz-19so",
+      "window": [
+        "2026-09-19T10:44:00.000Z",
+        "2026-09-19T12:43:59.000Z"
+      ],
+      "attempt": "C1M_BR1_19:7"
+    },
+    "order": "row after the on-course finish (the 28 % order, DERIVATIONS 4.4 and 4.11)",
+    "edits": [
+      "same trimming as nkz-bib7-row-before",
+      "moved: the tcp Results record of run 2's first result row (recorded 2026-09-19T12:41:44.250Z, 108 ms BEFORE the first on-course listing with dtFinish 14:41:44.000, 12:41:44.358Z) to 2026-09-19T12:41:44.466Z, the same 108 ms AFTER it; content unchanged",
+      "why it matches upstream: the row and the listing are two pushes of one finish; recorded finishes arrive in either order (72 % row first, 28 % listing first, DERIVATIONS 4.4), and 4.11 states the attribution of a row arriving after the finish listing; nothing else of the Attempt is moved, removed or added"
+    ]
+  },
+  "chunks": [
+    {
+      "seq": 1,
+      "file": "001-excerpt.jsonl",
+      "label": "nkz-bib7-row-after",
+      "startTime": "2026-09-19T10:44:00.000Z",
+      "endTime": "2026-09-19T12:43:59.000Z",
+      "duration": 7199000,
+      "races": [],
+      "messages": 2824
+    }
+  ]
+}

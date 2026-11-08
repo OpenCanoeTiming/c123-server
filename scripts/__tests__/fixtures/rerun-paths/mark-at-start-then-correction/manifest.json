@@ -1,0 +1,39 @@
+{
+  "version": 3,
+  "event": {
+    "name": "2026_NKZ_19so",
+    "date": "2026-09-19"
+  },
+  "recorder": "c123-recorder/3.0.0",
+  "fixture": {
+    "name": "mark-at-start-then-correction",
+    "synthetic": true,
+    "source": {
+      "recording": "2026-09-19-2026-nkz-19so",
+      "window": [
+        "2026-09-19T12:50:00.000Z",
+        "2026-09-19T12:58:00.000Z"
+      ],
+      "attempt": "K1W_BR1_19:53"
+    },
+    "order": "a TCP DNS row standing (2026-09-19T12:53:29.312Z) when the start is listed (12:53:49.355Z, dtStart 14:53:40.200); the athlete raced and finished 12:55:24Z",
+    "note": "no recording holds a DNF standing at a start; the eight recorded Attempts that reached their first start with a mark on the table all hold a DNS or CAP (DERIVATIONS 4.11, third pass). This is the closest recorded shape: the mark is a result mark that sets status (4.1)",
+    "edits": [
+      "trimmed to one Attempt as the other fixtures",
+      "edited: from 2026-09-19T12:54:20.329Z on, every on-course listing of the Attempt (running and the finish listing and the closure) carries dtStart=\"14:53:40.140\" instead of \"14:53:40.200\": a start moved 60 ms earlier mid-run with no finish, the recorded shape of the seven start changes (DERIVATIONS 4.11 table: K1W_BR2_19:9, K1M_BR1_20:115, jarni-so-do K1M_BR1_18:138). Time and dtFinish cells are left as recorded (the 60 ms is inside the whole-second clock the running listings show; the finish Time 103.86 is not recomputed)",
+      "no row added, moved or removed"
+    ]
+  },
+  "chunks": [
+    {
+      "seq": 1,
+      "file": "001-excerpt.jsonl",
+      "label": "mark-at-start-then-correction",
+      "startTime": "2026-09-19T12:50:00.000Z",
+      "endTime": "2026-09-19T12:58:00.000Z",
+      "duration": 480000,
+      "races": [],
+      "messages": 620
+    }
+  ]
+}
