@@ -25,9 +25,11 @@
  * Two serialisation rules of the contract are applied to the reference, not tolerated as differences: Person.birthDate -> birthYear (§7 intro) and the `eventId`
  * the process gives every Class and Course (§2.3, §2.12). Not compared, the replay having no counterpart: `event` of /api/events/current (the core has no Event;
  * the bridge asserts it) and /api/sources (a connection fact): only checked present.
- * Known time skew, reported with its cause and not stripped (review B5): the player cannot be started paused (`pause` is ignored while stopped; it plays on its
- * first TCP client, polling every 200 ms), so the process clock, started at `play` on stdin, begins BEFORE the stream: the stream starts after the clock, and the process's stamps run later than the recorded instants by a start offset of about +96 to +300 ms, constant within a run (measured over 200+ matched TCP steps; c123-protocol-docs#28). Any difference in a leave, a `provisional` flag or a
- * content age near the start of the window is read against that skew first.
+ * Start (c123-protocol-docs#28, player.js `--start-paused`): the player is started paused, the test waits until the process's TCP client is connected, asserts the
+ * player's `/status` is `paused` (the first client gets nothing until `/play`), then writes `play` to the process's stdin (its clock starts) and POSTs `/play`
+ * together. What remains is the delivery latency of one control call; the test MEASURES the offset instead of assuming it: the median of
+ * (the process's stamp minus the replay's stamp) over the TCP steps both logs hold with the same elements, printed in every state-comparison failure message.
+ * Nothing is stripped for it; a leave, a `provisional` flag or a content age that differs near the start of the window is read against that figure first.
  * Gate 2 (round 27 Q1.3): the checker with `--recording` must report 0 on the 1x log. At 10x the receive latency is outside the leave margin, so that log is
  * asserted written with the hydration step first and is no gate-2 evidence. Never the D-only reading.
  */
@@ -49,7 +51,8 @@ const CHECKER = path.join(PD, 'tools/gate2/check.js');
 const TSX = path.join(ROOT, 'node_modules/.bin/tsx');
 const HAVE = [REC, PLAYER, EXTRACT, CHECKER].every((p) => existsSync(p));
 const EVENT_ID = 'ev-t4';
-const SKEW = "real-time start offset: the player stream starts after the process clock, so the process's stamps run +96 to +300 ms later than recorded (player.js auto-plays on its 200 ms client poll and ignores pause while stopped; c123-protocol-docs#28); report the cause, never strip";
+let measuredOffset = 'start offset not measured yet';
+const skew = (): string => `real-time start offset (player --start-paused, process clock started at play): ${measuredOffset}; report the cause of a difference, never strip`;
 
 const dirs: string[] = [];
 const children: ChildProcess[] = [];
@@ -150,11 +153,11 @@ function excerpt(from: string, to: string): string {
   return out;
 }
 
-function reference(dir: string): ReturnType<typeof emptyModel> & { leaves: number } {
+function reference(dir: string): ReturnType<typeof emptyModel> & { leaves: number; log: string } {
   const out = path.join(tmp(), 'ref.jsonl');
   const r = spawnSync(TSX, ['--max-old-space-size=3072', path.join(ROOT, 'scripts/replay-direct.ts'), '--recording', dir, '--out', out], { cwd: ROOT, encoding: 'utf8', timeout: 300_000 });
   expect(r.status, r.stderr).toBe(0);
-  const m = Object.assign(emptyModel(), { leaves: 0 });
+  const m = Object.assign(emptyModel(), { leaves: 0, log: out });
   for (const line of readFileSync(out, 'utf8').split('\n')) {
     if (line.trim() === '') continue;
     const o = JSON.parse(line) as J;
@@ -165,19 +168,33 @@ function reference(dir: string): ReturnType<typeof emptyModel> & { leaves: numbe
   return m;
 }
 
+/** Median and 90th percentile of (process stamp - replay stamp) over steps whose elements are equal once stamps are removed (the same ingest unit in both logs). */
+function startOffset(processLog: string, replayLog: string): string {
+  const noStamp = (k: string, v: unknown): unknown => (k === 'observedAt' || k === 'ingestSeq' ? undefined : v);
+  const steps = (f: string): { key: string; at: number }[] => readFileSync(f, 'utf8').split('\n').filter((l) => l.trim() !== '').map((l) => JSON.parse(l) as J)
+    .filter((o) => Array.isArray(o['elements']) && (o['elements'] as J[]).length > 0 && !(o['elements'] as J[]).some((e) => e['event'] === 'xml-rewrite-detected')) // TCP units: an XML unit is stamped at the poll, up to one poll later by design
+    .map((o) => ({ key: JSON.stringify(o['elements'], noStamp), at: Date.parse(((o['elements'] as J[])[0] as J)['observedAt'] as string) }));
+  const want = new Map<string, number[]>();
+  for (const r of steps(replayLog)) (want.get(r.key) ?? want.set(r.key, []).get(r.key)!).push(r.at);
+  const d: number[] = [];
+  for (const p of steps(processLog)) { const q = want.get(p.key); if (q !== undefined && q.length > 0) d.push(p.at - q.shift()!); }
+  if (d.length === 0) return 'no step matched in both logs';
+  d.sort((a, b) => a - b);
+  const pct = (f: number): number => d[Math.min(d.length - 1, Math.floor(f * d.length))]!;
+  return `process minus replay stamps: p50 ${pct(0.5)} ms over ${d.length} matched TCP steps (first-in-first-out match of equal units; a repeated identical unit can pair with a later one, so only the median is a figure)`;
+}
+
 interface Run { model: ReturnType<typeof emptyModel>; log: string; sources: J; steps: number }
-async function realProcess(dir: string, speed: number): Promise<Run> {
+async function realProcess(dir: string, speed: number, replayLog: string): Promise<Run> {
   const work = tmp();
   const xmlOut = path.join(work, 'c123.xml');
   const log = path.join(work, 'steps.jsonl');
   const [tcpPort, controlPort] = [await freePort(), await freePort()];
-  const player = spawn(process.execPath, [PLAYER, dir, '--speed', String(speed), '--port', String(tcpPort), '--control-port', String(controlPort), '--no-udp', '--no-cis', '--xml-out', xmlOut], { stdio: 'ignore' });
+  const player = spawn(process.execPath, [PLAYER, dir, '--speed', String(speed), '--port', String(tcpPort), '--control-port', String(controlPort), '--no-udp', '--no-cis', '--start-paused', '--xml-out', xmlOut], { stdio: 'ignore' });
   children.push(player);
   const status = async (): Promise<J | undefined> => { try { return (await (await fetch(`http://127.0.0.1:${controlPort}/status`)).json()) as J; } catch { return undefined; } };
   const control = async (cmd: string): Promise<void> => { await fetch(`http://127.0.0.1:${controlPort}/${cmd}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); };
   for (let i = 0; i < 100 && (await status()) === undefined; i++) await sleep(100);
-  // Known skew (review B5): player.js ignores `/pause` while stopped and auto-plays on its first TCP client (polling every 200 ms), so the player cannot be
-  // started paused. The process clock starts when `play` is written to its stdin; the stream starts after it, so the stamps run +96 to +300 ms later than recorded (c123-protocol-docs#28). Nothing is stripped for it.
   const poll = 5; // the setting; the clock scales it
   const proc = spawn(process.execPath, ['--import', 'tsx', path.join(ROOT, 'src/onsite/main.ts'),
     '--port', '0', '--data-dir', path.join(work, 'data'), '--event-id', EVENT_ID, '--event-name', 'T4', '--tcp-host', '127.0.0.1', '--tcp-port', String(tcpPort),
@@ -190,10 +207,13 @@ async function realProcess(dir: string, speed: number): Promise<Run> {
     proc.stdout!.on('data', (d: Buffer) => { buf += d.toString(); const m = /listening (\d+)/.exec(buf); if (m) { clearTimeout(t); res(Number(m[1])); } });
     proc.on('exit', (c) => { clearTimeout(t); rej(new Error(`the process exited ${String(c)} before listening`)); });
   });
-  // connected: the player is already (or about to be) playing; the clock starts now
+  // the process's TCP client is connected and the player has sent it nothing: paused. Then the clock and the stream start together.
   for (let i = 0; i < 200 && ((await status())?.['clients'] as J | undefined)?.['tcp'] !== 1; i++) await sleep(50);
+  const before = await status();
+  expect(before?.['state'], 'player --start-paused: /status is paused while the first client is connected').toBe('paused');
+  expect((before?.['stats'] as J | undefined)?.['messagesSent'], 'nothing has been sent to the client yet').toBe(0);
   proc.stdin!.write('play\n');
-  await control('play'); // a no-op for a player that already started
+  await control('play');
   // wait for the end of the excerpt
   for (let i = 0; i < 1200; i++) { const s = await status(); if (s !== undefined && s['state'] === 'stopped' && (s['stats'] as J)?.['messagesSent'] > 0) break; await sleep(250); }
   // settle: bodies equal on two reads three polls apart (the last snapshot is read by the poll timer, not by the end of playback)
@@ -212,6 +232,8 @@ async function realProcess(dir: string, speed: number): Promise<Run> {
   expect(code, 'SIGTERM stops the process gracefully, exit 0, closing the step log').toBe(0);
   player.kill('SIGKILL');
   const steps = readFileSync(log, 'utf8').trim().split('\n').length;
+  measuredOffset = startOffset(log, replayLog);
+  process.stdout.write(`[onsite-t4 ${speed}x] ${measuredOffset}\n`);
   return { model, log, sources, steps };
 }
 
@@ -230,7 +252,7 @@ describe.skipIf(!HAVE)('rows 14 and 15: a real process fed by player.js (ADR-017
       const start = (): Promise<void> => (started ??= (async () => {
         dir = excerpt(w.from, w.to);
         ref = reference(dir);
-        run = await realProcess(dir, w.speed);
+        run = await realProcess(dir, w.speed, ref.log);
       })());
 
       for (const k of ['classes', 'courses', 'phases', 'entries', 'attempts', 'standings', 'oncourse', 'diagnostics']) {
@@ -239,7 +261,7 @@ describe.skipIf(!HAVE)('rows 14 and 15: a real process fed by player.js (ADR-017
           const [got, expected] = comparedPair(run.model, ref, k);
           expect(expected, `the replay's ${k} is not empty where the window has it`).toBeDefined();
           if (k === 'attempts' || k === 'entries' || k === 'standings') expect((expected as J[]).length).toBeGreaterThan(0);
-          expect(got, `${SKEW}\nfirst difference: ${firstDiff(got, expected)}`).toEqual(expected);
+          expect(got, `${skew()}\nfirst difference: ${firstDiff(got, expected)}`).toEqual(expected);
         }, 900_000);
       }
 
