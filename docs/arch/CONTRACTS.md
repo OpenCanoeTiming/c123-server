@@ -356,11 +356,14 @@ correction attempt (a UUID is sufficient). The server retains the mapping from k
 that same `WriteRequest`, whatever its current `status`, and never submits a second command upstream.
 A **different** key is always a new correction, even against the same field — a judge revising their
 own just-submitted correction is a second legitimate `WriteRequest`, not a retry, and gets its own.
-The key map and every `WriteRequest` are durable with §2.10's discipline, so a restart inside the
-24 hours neither forgets a key nor loses a `pending` write (§2.9: no state is reached by time, a
-restart included; the map may be dropped after the 24 hours, a later retry being a new correction).
-A missing header is `400 validation-failed`, `details: [{ field: 'Idempotency-Key', issue: 'missing' }]`
-(round 28).
+The key maps — of writes and of flags (§7.4) — and every `WriteRequest` are durable with §2.10's
+discipline: a same-key retry "never submits a second command upstream" (above), and `pending`
+"persists until an echo … is ingested" (§2.9), neither of which a restart may undo — a key forgotten
+at a restart would let the retry send a second command or raise a second flag, and a forgotten
+`pending` write would be settled by nothing. The map may be dropped after the 24 hours, a later retry
+being a new correction. A durable `WriteRequest` carries `target.run`, so its survival across a restart
+is sound once `DERIVATIONS.md` §10 item 25 (the generation across a restart) is ruled. A missing header is
+`400 validation-failed`, `details: [{ field: 'Idempotency-Key', issue: 'missing' }]` (round 28).
 
 ### 1.6 Snapshot and subscription ordering
 
@@ -2072,16 +2075,25 @@ closure, not the finish, since a finisher stays listed as `finished` until upstr
 tablet may also simply disable the write while the Attempt is listed, which is the same rule applied
 before the request.
 
-**Order of refusal, and the disconnected case** (round 28). Refusals are checked most permanent
-first, so the tablet learns what will not change: `404 attempt-not-found`; `409 cross`, then
-`team-boat`; `400 validation-failed`, the header and body before the course; `409 run-not-closed`;
-`409 upstream-disconnected` — `SourceStatus.tcp.state` is not `connected` (§2.8), or the command's
-socket write failed. The command is written to the socket before the `WriteRequest` is created and
-the optimistic value applied, which then happen in one step; a refused or failed write creates no
-`WriteRequest`, binds no key and pushes nothing — refuse, never hold, as above. The command is one
-XML document on one line, the `Canoe123` envelope naming the connected instance and the correction
-element with the race id, bib, gate and value, followed by the stream's message terminator;
-whitespace inside the element is not a contract item.
+**The key first, then the order of refusal, then the send** (round 28, its second pass). A request
+whose `Idempotency-Key` is already bound — to a `WriteRequest`, or to a write in flight — is
+answered from it before any refusal: `200` with the `WriteRequest`, whatever its status (§1.5), or,
+while the first request's socket write is still pending, its outcome once known. A missing header
+stays `400`. For a new key the refusals are checked most permanent first, so the tablet learns what
+will not change: `404 attempt-not-found`; `409 cross`, then `team-boat`; `400 validation-failed`,
+the header and body before the course; `409 run-not-closed`; `409 upstream-disconnected` — no
+instance to address the envelope to: `SourceStatus.tcp.state` not `connected`, or `connected` with
+`upstreamInstance` `null` or `'offline'` (§2.8), or the command's socket write failed. The send
+(a design default): the key is reserved as in flight, the command is written to the socket and its
+acceptance awaited, and the step that creates the `WriteRequest`, applies the optimistic value and
+pushes both (§2.9) runs before the next upstream unit is applied — upstream units received
+meanwhile queue behind it, milliseconds — so that no echo can pass before the write exists (INV-2
+rule 4 would leave it `pending` for ever, `DECISIONS/ADR-010`'s lost echo) and no same-key retry
+can send a second command (§1.5). A refused or failed write creates no `WriteRequest`, binds no key
+and pushes nothing — refusing rather than holding, by the same reasoning as the window after the
+finish above. The command is one XML document on one line, the `Canoe123` envelope naming the
+connected instance and the correction element with the race id, bib, gate and value, followed by
+the stream's message terminator; whitespace inside the element is not a contract item.
 
 **Kayak Cross: no penalty writes and no checks.** Cross judging cells are fault marks entered by the
 Cross judges, not penalty seconds (`DERIVATIONS.md` §4.6(d)), and upstream's correction command sets
