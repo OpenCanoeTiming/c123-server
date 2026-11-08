@@ -63,6 +63,8 @@ export const ODP = {
   hyphenRow: (): Unit => tcp(derived(R19.c4RowB, { edit: (d) => d.replace('ClassId="C1M"', 'ClassId="C1M-ST"') })),
   /** The snapshot first, then the listings and rows (§7.3 validates a gate against the Phase's course, which only the snapshot binds). */
   unitsXmlFirst: (): Unit[] => { const u = ODP.units(); return [u.find((x) => x.kind === 'xml')!, ...u.filter((x) => x.kind !== 'xml')]; },
+  /** The recorded snapshot with gate 13 of bib 56 stated as `value` in its Results row (a derived case): a snapshot that restates the target cell. */
+  xmlWithGate13: (value: 0 | 2 | 50): Unit => ({ kind: 'xml', rec: derived(R19.rcXml, { edit: (d) => d.replace(/<Gates>((?:...){12})(...)/, (_m, a) => `<Gates>${a as string}${String(value).padStart(3, ' ')}`) }) }),
   /** The recorded snapshot with bib 56 a team boat (`IsTeam` true): a derived case, the recorded text is otherwise unchanged. */
   teamXml: (): Unit => ({ kind: 'xml', rec: derived(R19.rcXml, { edit: (d) => d.replace('<IsTeam>false</IsTeam>', '<IsTeam>true</IsTeam>') }) }),
   /** The row an echo is: the presented run restated with gate 13 stated as `value`, received at `ms` (see `restate`). */

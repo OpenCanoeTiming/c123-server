@@ -355,7 +355,8 @@ describe('row 8: lifecycle (CONTRACTS §2.9, ADR-010)', () => {
     await ws.barrier();
     const w = await status(env, r.body.writeId);
     expect(w.status).toBe('confirmed');
-    expect(w.confirmedValue).toBeDefined();
+    expect(w.confirmedValue, 'round 28-3: the target cell as { gate, value }, as requestedValue is').toEqual({ gate: ODP.gate, value: 50 });
+    expect(w.requestedValue).toEqual({ gate: ODP.gate, value: 50 });
     expect(w.confirmedAt).toEqual(expect.any(String));
     expect(lastWrite(ws)).toEqual(w);
   });
@@ -368,7 +369,7 @@ describe('row 8: lifecycle (CONTRACTS §2.9, ADR-010)', () => {
     await ws.barrier();
     const w = await status(env, r.body.writeId);
     expect(w.status).toBe('mismatched');
-    expect(w.confirmedValue).toBeDefined();
+    expect(w.confirmedValue, 'round 28-3: the value upstream holds, { gate, value }').toEqual({ gate: ODP.gate, value: 0 });
     expect(lastWrite(ws)).toEqual(w);
   });
 
@@ -391,7 +392,7 @@ describe('row 8: lifecycle (CONTRACTS §2.9, ADR-010)', () => {
     await feed(env, ODP.wipe(env.clock.now() + 1000));
     const w = await status(env, r.body.writeId);
     expect(w.status).toBe('mismatched');
-    expect('confirmedValue' in w).toBe(false);
+    expect('confirmedValue' in w, 'round 28-3: absent on a retraction\'s mismatched, never null').toBe(false);
     expect(w.confirmedAt).toEqual(expect.any(String));
   });
 
@@ -602,5 +603,65 @@ describe('round 28-2: the key in flight, the creating step, key replay first, no
     expect(r.status).toBe(409);
     expect(r.body.error).toMatchObject({ code: 'write-not-possible', details: { reason: 'upstream-disconnected' } });
     expect(sent(env)).toEqual([]);
+  });
+});
+
+describe('round 28-3: a stored pending write is adopted at load (CONTRACTS §2.9, DERIVATIONS §6)', () => {
+  /** A pending write on a closed run, the process stopped, a new process over the same data dir; only the snapshot is read, no on-course listing in the new lifetime. */
+  async function adopted(over: { rerunFirst?: boolean } = {}): Promise<{ env2: Env; ws: Awaited<ReturnType<typeof openWs>>; first: J }> {
+    const env1 = await closedRun();
+    await setInstance(env1, 'Main');
+    if (over.rerunFirst === true) {
+      await feed(env1, ODP.rerun(env1.clock.now() + 1000));
+      await feed(env1, ODP.emptyAt(env1.clock.now() + 1000)); // the re-run is closed again: generation 2
+    }
+    const first = await write(env1, GOOD, 'adopt');
+    expect(first.status, 'precondition: the write is stored').toBe(202);
+    await env1.h.stop();
+    const env2 = await boot({ startAt: ODP.startAt, eventDate: ODP.day, fs: env1.fs, clock: virtualClock(env1.clock.now() + 60_000) });
+    await feed(env2, ODP.unitsXmlFirst()[0]!); // the snapshot binds the course: the only thing the new lifetime has read
+    const ws = await openWs(env2);
+    await ws.barrier(); ws.take();
+    return { env2, ws, first: first.body };
+  }
+  const state = async (env: Env, id: string): Promise<J> => (await get(env, `/api/writes/${id}`)).body;
+  const pushed = (ws: { messages: J[] }): J[] => ws.messages.filter((m) => m.type === 'write.updated').map((m) => m.write);
+
+  it('a TCP Results row stating the requested cell: confirmed, confirmedValue { gate, value }, pushed as write.updated', async () => {
+    const { env2, ws, first } = await adopted();
+    expect((await state(env2, first.writeId)).status, 'the snapshot alone resolves nothing').toBe('pending');
+    await feed(env2, ODP.echo(50, env2.clock.now() + 1000));
+    await ws.barrier();
+    const w = await state(env2, first.writeId);
+    expect(w.status).toBe('confirmed');
+    expect(w.confirmedValue).toEqual({ gate: ODP.gate, value: 50 });
+    expect(pushed(ws).at(-1)).toEqual(w);
+  });
+
+  it('a TCP Results row stating another cell: mismatched, with the value upstream holds, pushed', async () => {
+    const { env2, ws, first } = await adopted();
+    await feed(env2, ODP.echo(0, env2.clock.now() + 1000));
+    await ws.barrier();
+    const w = await state(env2, first.writeId);
+    expect(w.status).toBe('mismatched');
+    expect(w.confirmedValue).toEqual({ gate: ODP.gate, value: 0 });
+    expect(pushed(ws).at(-1)).toEqual(w);
+  });
+
+  it('an XML snapshot whose changedAfter is not later than submittedAt resolves nothing, even when it states the requested cell (the first read has changedAfter null)', async () => {
+    const { env2, ws, first } = await adopted();
+    await feed(env2, ODP.xmlWithGate13(50));
+    await ws.barrier();
+    expect((await state(env2, first.writeId)).status).toBe('pending');
+    expect(pushed(ws)).toEqual([]);
+  });
+
+  it('a row of another generation resolves nothing: a write stored for generation 2 stays pending when the restarted core presents generation 1', async () => {
+    const { env2, ws, first } = await adopted({ rerunFirst: true });
+    expect(first.target.run, 'precondition: the write targets generation 2').toBe(2);
+    await feed(env2, ODP.echo(50, env2.clock.now() + 1000));
+    await ws.barrier();
+    expect((await state(env2, first.writeId)).status).toBe('pending');
+    expect(pushed(ws)).toEqual([]);
   });
 });
