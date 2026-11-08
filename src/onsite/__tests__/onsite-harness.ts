@@ -67,7 +67,8 @@
  * The write path (#212, CONTRACTS §7.3, §7.4, §1.5, §2.9; ADR-010; EVIDENCE Exhibits 13, 14), additions to the same harness:
  *   `fakeTcp()` is a `WritableSource` (src/sources/types.ts): `isWritable` is true while the source is connected; `write(xml)` records the exact string it is
  *   given in `tcp.written` (the production TcpSource sends it as it is; the `|` terminator is part of what the process hands over, Canoe123 messages are `|`-delimited);
- *   `tcp.failNextWrite(err)` makes the next `write` reject. The process must send a command only through `source.write`, and only while `source.isWritable`.
+ *   `tcp.failNextWrite(err)` makes the next `write` reject. `tcp.holdNextWrite()` returns `{ reached, release, fail }`: the next `write` is recorded in `written` at once and stays
+ *   pending (a socket write in flight) until released or failed. The process must send a command only through `source.write`, and only while `source.isWritable`.
  *   `setInstance(env, 'Main' | 'Backup')` controls `SourceStatus.tcp.upstreamInstance` the only way upstream does: the `System` attribute of a TCP message the
  *   source delivers (a TimeOfDay message). `GET /api/sources` then reports `main` / `backup`.
  *   `put/post/del` helpers send REST requests with headers (`Idempotency-Key`). `boot()` is unchanged; the routes are served by the same process.
@@ -178,6 +179,8 @@ export interface FakeTcp extends Source {
   write(xml: string): Promise<void>;
   /** The next `write` rejects with `err`. */
   failNextWrite(err?: Error): void;
+  /** The next `write` is recorded in `written` at once but does not settle until `release()` (accepted) or `fail(err)` (rejected): a socket write in flight. */
+  holdNextWrite(): { reached: Promise<void>; release(): void; fail(err?: Error): void };
   send(text: string): void;
   connect(): void;
   disconnect(): void;
@@ -191,7 +194,21 @@ export function fakeTcp(): FakeTcp {
   e.written = [];
   let failWith: Error | undefined;
   Object.defineProperty(e, 'isWritable', { get: () => status === 'connected' });
-  e.write = async (xml) => { if (failWith !== undefined) { const f = failWith; failWith = undefined; throw f; } e.written.push(xml); };
+  let hold: { reached: () => void; gate: Promise<void> } | undefined;
+  e.write = async (xml) => {
+    if (failWith !== undefined) { const f = failWith; failWith = undefined; throw f; }
+    e.written.push(xml);
+    if (hold !== undefined) { const h = hold; hold = undefined; h.reached(); await h.gate; }
+  };
+  e.holdNextWrite = () => {
+    let release!: () => void;
+    let reject!: (err: Error) => void;
+    let reachedFn!: () => void;
+    const reached = new Promise<void>((r) => { reachedFn = r; });
+    const gate = new Promise<void>((res, rej) => { release = res; reject = rej; });
+    hold = { reached: reachedFn, gate };
+    return { reached, release, fail: (err = new Error('socket write failed')) => { reject(err); } };
+  };
   e.failNextWrite = (err = new Error('socket write failed')) => { failWith = err; };
   e.start = () => { e.started++; };
   e.stop = () => { e.stopped++; status = 'disconnected'; };
@@ -293,7 +310,7 @@ export async function feedXml(env: Env, rec: { observedAt: string; data: string 
   await env.clock.advance((env.opts.xml?.pollSeconds ?? POLL_S) * 1000);
 }
 /** Upstream names its instance in every message's `System` attribute (CONTRACTS §2.8): a TimeOfDay message from Main or Backup. */
-export async function setInstance(env: Env, instance: 'Main' | 'Backup', at?: string): Promise<void> {
+export async function setInstance(env: Env, instance: 'Main' | 'Backup' | 'Offline', at?: string): Promise<void> {
   const t = at ?? new Date(env.clock.now() + 1).toISOString();
   await feedTcp(env, { observedAt: t, data: `<Canoe123 System="${instance}"><TimeOfDay>12:00:00</TimeOfDay></Canoe123>` });
 }

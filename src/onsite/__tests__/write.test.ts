@@ -484,3 +484,120 @@ describe('round 28 item 8: the key map and the WriteRequests are durable (CONTRA
     expect(retry.status, 'the key was never durable: a new correction').toBe(202);
   });
 });
+
+describe('round 28-2: the key in flight, the creating step, key replay first, no instance (CONTRACTS §1.5, §2.9, §7.3)', () => {
+  it('B1: the key is reserved before the socket write: a same-key request during the write waits for the outcome or is answered from it, and never sends a second command; one WriteRequest, one push', async () => {
+    const env = await closedRun();
+    await setInstance(env, 'Main');
+    const ws = await openWs(env);
+    await ws.barrier(); ws.take();
+    const hold = env.tcp.holdNextWrite();
+    const a = write(env, GOOD, 'in-flight');
+    await Promise.race([hold.reached, a]);
+    expect(env.tcp.written, 'the first request is at the socket').toHaveLength(1);
+    const b = write(env, GOOD, 'in-flight');
+    await ws.barrier();
+    hold.release();
+    const [ra, rb] = await Promise.all([a, b]);
+    expect(ra.status).toBe(202);
+    expect(rb.status, 'the second request is answered from the first\'s outcome').toBe(200);
+    expect(rb.body).toEqual(ra.body);
+    expect(sent(env), 'never a second command upstream').toHaveLength(1);
+    await ws.barrier();
+    expect(ws.take().filter((m) => m.type === 'write.updated'), 'one WriteRequest, one push').toHaveLength(1);
+  });
+
+  it('B1: a same-key request that arrives while the first fails at the socket is answered from that outcome: 409 upstream-disconnected, no WriteRequest; the key is then free', async () => {
+    const env = await closedRun();
+    await setInstance(env, 'Main');
+    const hold = env.tcp.holdNextWrite();
+    const a = write(env, GOOD, 'doomed');
+    await Promise.race([hold.reached, a]);
+    const b = write(env, GOOD, 'doomed');
+    hold.fail();
+    const [ra, rb] = await Promise.all([a, b]);
+    expect(ra.status).toBe(409);
+    expect(rb.status).toBe(409);
+    expect(rb.body.error.details.reason).toBe('upstream-disconnected');
+    expect(sent(env)).toHaveLength(1);
+    expect((await write(env, GOOD, 'doomed')).status, 'the key was released').toBe(202);
+  });
+
+  it('B1: no ingest unit is applied between the socket write and the WriteRequest\'s creation: an echo that arrives during the held write is not lost, the write resolves confirmed, and its push precedes the unit\'s', async () => {
+    const env = await closedRun();
+    await setInstance(env, 'Main');
+    const ws = await openWs(env);
+    await ws.barrier(); ws.take();
+    const hold = env.tcp.holdNextWrite();
+    const a = write(env, GOOD, 'racing');
+    await Promise.race([hold.reached, a]);
+    await feed(env, ODP.echo(50, env.clock.now() + 1000)); // upstream\'s echo arrives while the command is still at the socket
+    hold.release();
+    const r = await a;
+    expect(r.status).toBe(202);
+    await ws.barrier();
+    const w = (await get(env, `/api/writes/${r.body.writeId as string}`)).body;
+    expect(w.status, 'the echo was applied after the write existed').toBe('confirmed');
+    const pushes = ws.messages.filter((m) => m.type === 'write.updated');
+    expect(pushes.map((m) => m.write.status)).toEqual(['pending', 'confirmed']);
+    expect(pushes[0]!.seq).toBeLessThan(pushes[1]!.seq);
+    const optimistic = ws.messages.find((m) => m.type === 'attempt.updated' && m.fields.gates?.source === 'operator-write');
+    expect(optimistic, 'the optimistic value is pushed before the echo\'s unit').toBeDefined();
+    expect(optimistic!.seq).toBeLessThan(pushes[1]!.seq);
+  });
+
+  it('B2: a bound key is answered 200 with its WriteRequest before any refusal: after TCP has dropped', async () => {
+    const env = await closedRun();
+    await setInstance(env, 'Main');
+    const first = await write(env, GOOD, 'bound');
+    env.tcp.disconnect();
+    const again = await write(env, GOOD, 'bound');
+    expect(again.status).toBe(200);
+    expect(again.body).toEqual(first.body);
+    expect((await write(env, GOOD, 'fresh')).body.error.details.reason, 'a new key is refused').toBe('upstream-disconnected');
+  });
+
+  it('B2: ... after a re-run has started (the run is on course again, the write superseded): 200 with the superseded WriteRequest, not run-not-closed', async () => {
+    const env = await closedRun();
+    await setInstance(env, 'Main');
+    const first = await write(env, GOOD, 'bound');
+    await feed(env, ODP.rerun(env.clock.now() + 1000));
+    const again = await write(env, GOOD, 'bound');
+    expect(again.status).toBe(200);
+    expect(again.body.writeId).toBe(first.body.writeId);
+    expect(again.body.status).toBe('superseded');
+    expect((await write(env, GOOD, 'fresh')).body.error.details.reason, 'a new key is refused').toBe('run-not-closed');
+  });
+
+  it('B2: ... after a re-baseline (which keeps every WriteRequest, a pending one pending): 200, the same pending WriteRequest', async () => {
+    const env = await closedRun();
+    await setInstance(env, 'Main');
+    const first = await write(env, GOOD, 'bound');
+    const rb = await post(env, '/api/rebaseline', { scope: { kind: 'event' } });
+    expect(rb.status, 'precondition: the re-baseline ran').toBe(200);
+    const again = await write(env, GOOD, 'bound');
+    expect(again.status).toBe(200);
+    expect(again.body.writeId).toBe(first.body.writeId);
+    expect(sent(env)).toHaveLength(1);
+  });
+
+  it('28-2: tcp.state connected with upstreamInstance null (no upstream message seen yet) is 409 upstream-disconnected: there is no instance to address; nothing is sent', async () => {
+    const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day });
+    await feed(env, ODP.unitsXmlFirst()[0]!); // the snapshot only: no TCP message, so no instance is known
+    expect((await get(env, '/api/sources')).body.tcp).toMatchObject({ state: 'connected', upstreamInstance: null });
+    const r = await write(env, GOOD);
+    expect(r.status).toBe(409);
+    expect(r.body.error).toMatchObject({ code: 'write-not-possible', details: { reason: 'upstream-disconnected' } });
+    expect(sent(env)).toEqual([]);
+  });
+
+  it('28-2: tcp.state connected with upstreamInstance offline (upstream\'s offline mode writes nothing) is 409 upstream-disconnected; nothing is sent', async () => {
+    const env = await closedRun();
+    await setInstance(env, 'Offline');
+    expect((await get(env, '/api/sources')).body.tcp).toMatchObject({ state: 'connected', upstreamInstance: 'offline' });
+    const r = await write(env, GOOD);
+    expect(r.status).toBe(409);
+    expect(r.body.error).toMatchObject({ code: 'write-not-possible', details: { reason: 'upstream-disconnected' } });
+    expect(sent(env)).toEqual([]);
+  });
+});

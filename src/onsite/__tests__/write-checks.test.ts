@@ -5,7 +5,7 @@
  * Interface: onsite-harness.ts header. Data: datasets.ts.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { boot, del, disposeAll, get, openWs, post, put, type Env, type J } from './onsite-harness.js';
+import { boot, del, disposeAll, get, openWs, post, put, virtualClock, type Env, type J } from './onsite-harness.js';
 import { CROSS, ODP, feed } from './datasets.js';
 
 afterEach(disposeAll);
@@ -189,4 +189,24 @@ describe('row 11: flags over REST (CONTRACTS §7.4, §1.5)', () => {
     await ws.barrier();
     expect(ws.take().find((m) => m.type === 'flag.updated')!.flag).toEqual(resolved);
   });
+});
+
+describe('round 28-2: the flag key map is durable (CONTRACTS §1.5)', () => {
+  for (const kind of ['stop', 'kill'] as const) {
+    it(`a flag POST retried with the same key after a ${kind} and start over the same data dir is 200 with the same flag, and no second flag exists`, async () => {
+      const { env } = await odp();
+      const first = await post(env, FLAGS(), { gate: 5, comment: 'x' }, K('durable-flag'));
+      expect(first.status).toBe(201);
+      let fs2 = env.fs;
+      if (kind === 'stop') await env.h.stop();
+      else { fs2 = env.fs.afterKill(); env.h.kill(); }
+      const env2 = await boot({ startAt: ODP.startAt, eventDate: ODP.day, fs: fs2, clock: virtualClock(env.clock.now() + 60_000) });
+      for (const u of ODP.unitsXmlFirst()) await feed(env2, u);
+      await feed(env2, ODP.emptyAt(env2.clock.now() + 1000));
+      const again = await post(env2, FLAGS(), { gate: 5, comment: 'x' }, K('durable-flag'));
+      expect(again.status).toBe(200);
+      expect(again.body).toEqual(first.body);
+      expect((await checksOf(env2)).flags).toHaveLength(1);
+    });
+  }
 });
