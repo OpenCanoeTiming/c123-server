@@ -114,7 +114,9 @@ change (what a client already read as the set's age), a check of a superseded ge
 `stale`, `Event.details`' source, the new-event action and the return to an earlier event being the
 admin UI's own, the real process's clock and comparison — is the server's, the parsers' and the
 tier-4 harness's (CONTRACTS §2.2, §2.10, §7.1, §7.2; DERIVATIONS §1, §3; TEST-ARCHITECTURE §3.4;
-ADR-017).
+ADR-017). Round 27c (2026-11-08, the gate-2 verdict on a cold-start cut) moved none: a gate vector
+bound late carrying the envelope of the row that stated its cells is the core's and the checker's
+(DERIVATIONS §4.6; TEST-ARCHITECTURE §3.2); a client receives an ordinary `known` envelope.
 
 ---
 
