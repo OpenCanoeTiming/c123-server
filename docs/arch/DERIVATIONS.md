@@ -1106,7 +1106,9 @@ came from results-table observations:
   `status`; take `placement` and `pairTotal` from the row, since an athlete with only a first-run
   result is listed that way — `not-yet` where its `Rank` or `Total` is empty, as §4.7 reads an empty
   `Rank` (recorded: jarni-ne-odp C1M_BR2_19:64 at 11:40:07, run 1 marked `dnf` in the same push, no
-  combined result left; round 26). Recorded: five DNSs and one CAP cleared in place; C1W_BR2_19 bib 7 went
+  combined result left; round 26). `countingRun` stands: no TCP column states it (§4.4), and the
+  XML row restates it at its next read, `BetterRunNr` `0` as `not-yet` (recorded: the same Attempt,
+  `1` → `0` in the snapshot of 11:40:25.507; round 26, second pass). Recorded: five DNSs and one CAP cleared in place; C1W_BR2_19 bib 7 went
   `dns` → `not-started` and then raced. Such a clearing retracts a mark row that had ended the
   second-run carry; the carry resumes (`CONTRACTS.md` §1.2).
 - **Never:** an Attempt whose outcome is still an on-course inference; an Attempt never present in a

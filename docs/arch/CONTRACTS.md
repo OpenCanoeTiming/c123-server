@@ -1572,8 +1572,14 @@ implementation must satisfy, not an algorithm.
     `placement` and `pairTotal` follow the row, since an athlete with only a first-run result is
     listed that way — `not-yet` where its `Rank` or `Total` is empty (recorded: jarni-ne-odp
     C1M_BR2_19:64 at 11:40:07, run 1 marked `dnf`, no combined result left; round 26).
+    **`countingRun` is outside a present TCP row's statement:** no TCP column carries it
+    (`DERIVATIONS.md` §4.4), so the row leaves it standing (INV-1) until the XML row — its sole
+    carrier — restates it, `BetterRunNr` `0` being `not-yet`; the retraction reaches it only with
+    the row absent (recorded: the same Attempt, `BetterRunNr` `1` → `0` in the snapshot of
+    11:40:25.507, 18 s after the push; round 26, second pass).
   - **XML:** a first-run or single-run row carrying no time, no finish time and no mark: as the TCP
-    first-run case. A second-run row so carrying: as the TCP time-empty case — before run 2, every
+    first-run case. A second-run row so carrying: as the TCP time-empty case, and `countingRun` is
+    the row's as `BetterRunNr` states it, `0` being `not-yet` — before run 2, every
     second-run row in the snapshot already carries the combined placement and total with no time.
     **An absent XML row, and an XML table with no rows, state nothing and retract nothing:** the
     file lists every entry of a race and a cleared result shows as fields going empty
