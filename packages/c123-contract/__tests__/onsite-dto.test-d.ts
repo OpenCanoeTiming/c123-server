@@ -12,14 +12,14 @@ type NoDetails = Exclude<ErrorCode, 'validation-failed' | 'write-not-possible' |
 
 test('ErrorEnvelope narrows details by code (§1.4)', () => {
   expectTypeOf<Extract<Err, { code: 'validation-failed' }>['details']>().toEqualTypeOf<{ field: string; issue: string }[]>()
-  expectTypeOf<Extract<Err, { code: 'write-not-possible' }>['details']['reason']>().toEqualTypeOf<'run-not-closed' | 'team-boat' | 'cross'>()
+  expectTypeOf<Extract<Err, { code: 'write-not-possible' }>['details']['reason']>().toEqualTypeOf<'run-not-closed' | 'team-boat' | 'cross' | 'upstream-disconnected'>()
   expectTypeOf<Extract<Err, { code: 'source-unavailable' }>['details']['reason']>().toEqualTypeOf<'not-configured' | 'unreadable' | 'invalid'>()
   expectTypeOf<Err['message']>().toEqualTypeOf<string>()
   expectTypeOf<Err['code']>().toEqualTypeOf<ErrorCode>()
 
   function narrow(e: Err) {
     if (e.code === 'validation-failed') expectTypeOf(e.details).toEqualTypeOf<{ field: string; issue: string }[]>()
-    if (e.code === 'write-not-possible') expectTypeOf(e.details.reason).toEqualTypeOf<'run-not-closed' | 'team-boat' | 'cross'>()
+    if (e.code === 'write-not-possible') expectTypeOf(e.details.reason).toEqualTypeOf<'run-not-closed' | 'team-boat' | 'cross' | 'upstream-disconnected'>()
     if (e.code === 'source-unavailable') expectTypeOf(e.details.reason).toEqualTypeOf<'not-configured' | 'unreadable' | 'invalid'>()
     if (e.code === 'event-not-found') {
       // @ts-expect-error details does not exist on a code that carries none

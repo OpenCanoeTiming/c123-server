@@ -66,7 +66,7 @@
               "details": {
                 "type": "object",
                 "properties": {
-                  "reason": { "enum": ["run-not-closed", "team-boat", "cross"] }
+                  "reason": { "enum": ["run-not-closed", "team-boat", "cross", "upstream-disconnected"] }
                 },
                 "required": ["reason"],
                 "additionalProperties": false
