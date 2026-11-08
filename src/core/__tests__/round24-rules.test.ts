@@ -103,7 +103,7 @@ describe('C2 (round 24 ruling 5; CONTRACTS §1.6 "the first message for a new id
   });
 
   it('round 27 (CONTRACTS §1.6, §2.4, DERIVATIONS §2.1): nothing is sent for the Phase at the bare on-course listing; its creating phase.updated, at the first message that states its classId, carries format, kind, scoringKind, pair, heats and stage', () => {
-    const c = coreWith([connected('2026-04-19T08:00:00.000Z'), tcpUnit(msg('2026-04-19T08:00:01.000Z', listingText({ race: 'K1M_BR2_19', bib: 51, dtStart: '10:00:00.000' })), JA_DAY)]);
+    const c = coreWith([connected('2026-04-19T08:00:00.000Z'), tcpUnit(msg('2026-04-19T08:00:01.000Z', listingText({ race: 'K1M_BR2_19', bib: 51, dtStart: '10:00:00.000' })), JA_DAY)], { classIdsFromIds: false }); // the kit would state the class from the id
     expect(phaseUpdates(c, 'K1M_BR2_19'), 'a listing states no ClassId: the Phase is not created yet').toEqual([]);
     const row = JA51.find((r) => r.data.includes('<Results'))!; // recorded Results row of K1M_BR2_19: names RaceId and ClassId
     expect(/ClassId="K1M"/.test(row.data)).toBe(true);

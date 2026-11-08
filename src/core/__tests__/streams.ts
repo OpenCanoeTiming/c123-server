@@ -5,6 +5,7 @@
  */
 import { createMergeCore } from '../index.js';
 import { parseTcp, parseXmlSnapshot } from '../../ingest/index.js';
+import { splitRaceId } from '../../ingest/common.js';
 import { ctx as ingestCtx } from '../../ingest/__tests__/helpers.js';
 import type { GivenElement, MergePort } from '../../__tests__/conformance/port.js';
 import type { Rec } from './fixtures/real-excerpts.js';
@@ -47,9 +48,41 @@ export const derive = (rec: Rec, over: { observedAt?: string; edit?: (data: stri
 /** An operator-visible event the recordings do not hold (TEST-ARCHITECTURE §9): the closure of an Attempt's run. */
 export const left = (attemptId: string, observedAt: string): Unit => deepFreeze([{ ingestSeq: 0, event: 'oncourse-left', attemptId, observedAt }]);
 
+/**
+ * Round 27d-2 (CONTRACTS §2.7, §5 step 1): a Standing is published only once its Phase has a `classId`, which the parsers state from `Results@ClassId` or
+ * `Schedule.ClassId`. Hand streams here name Phases with no such element; the harness convention (CONFORMANCE-VECTORS §1: a Phase no element has described
+ * has the id's class part as its `classId`) is applied once, here: before the first unit that names a Phase, the observation the parser would emit.
+ * A test's own `classId` element is never overridden (it is seen first). Nothing else about a unit changes.
+ */
+function withClassIds(core: MergePort): MergePort {
+  const stated = new Set<string>();
+  const phasesOf = (el: Record<string, any>): string[] => [
+    el['snapshot']?.phaseId, el['phaseId'], typeof el['attemptId'] === 'string' ? (el['attemptId'] as string).slice(0, (el['attemptId'] as string).lastIndexOf(':')) : undefined,
+  ].filter((x): x is string => typeof x === 'string' && x !== '');
+  const apply = core.applyUnit.bind(core);
+  core.applyUnit = (unit) => {
+    const extra: Record<string, unknown>[] = [];
+    for (const el of unit as Record<string, any>[]) {
+      if (el['field'] === 'classId' && typeof el['phaseId'] === 'string') stated.add(el['phaseId']);
+    }
+    for (const el of unit as Record<string, any>[]) {
+      for (const id of phasesOf(el)) {
+        if (stated.has(id)) continue;
+        stated.add(id);
+        extra.push({ ingestSeq: 0, observedAt: el['observedAt'], field: 'classId', phaseId: id, source: 'tcp', kind: 'result-row', value: splitRaceId(id).classKey, confidence: 'authoritative' });
+      }
+    }
+    return apply([...extra, ...unit] as typeof unit);
+  };
+  return core;
+}
+
 /** A fresh core with the units applied in order. */
 export function coreWith(units: Unit[], options: Record<string, unknown> = {}): MergePort {
-  const core = createMergeCore(options) as MergePort;
+  // `classIdsFromIds: false` is the one opt-out: a test of what happens while a Phase's class is still unknown (round 27 deferral)
+  const { classIdsFromIds = true, ...coreOptions } = options;
+  const raw = createMergeCore(coreOptions) as MergePort;
+  const core = classIdsFromIds === false ? raw : withClassIds(raw);
   for (const u of units) core.applyUnit(u);
   return core;
 }
