@@ -259,7 +259,20 @@ the step index, the Attempt, the field and the property number.
    listing's envelope, property 5 — recorded: jarni-so-odp K1W_BR2_18:16, `at-start` of
    14:11:39.886 presented at the clearing of 14:12:08; and a mark a snapshot re-delivers after the
    guard refused its first read is the re-delivery's element and instant, INV-5, the `no-result`
-   outcome with it (`CONTRACTS.md` §2.6), never the refused read's; round 26).
+   outcome with it (`CONTRACTS.md` §2.6), never the refused read's; round 26; and a `gates` or
+   `faults` vector the core builds at the scope snapshot of the race that binds the course
+   (`DERIVATIONS.md` §4.6 "no course bound yet"; at no other step) from the cells retained for the
+   Attempt — the **latest** cells-stating row or listing of that source in the **generation**, §4.6
+   retaining the latest cells per source, INV-5 making each re-delivery an observation of its own —
+   carries that element's instant and `source`: the cells are its statement and the course the key
+   to read them (`CONTRACTS.md` §1.2, `provisional`: `observedAt` is "the element's that last changed
+   the presented cells", and a binding changes no cell), so the envelope is the one an earlier
+   binding would have given — recorded: cp3-cross MX1_XT_26:52, the row of 08:45:13.346 read on the
+   course of the snapshot at 08:45:18.057; round 27c). **The reject half, stated once for every
+   field:** an envelope on the step's own instant must have a producer of its own `source` among the
+   unit's elements; a `tcp` vector on an `xml` unit's instant is the violation the acceptance above
+   would otherwise let through (round 27c, review: a replay with the 43 vectors restamped at the
+   binding instant passed the checker as it stood).
 2. **Envelopes (§1.2) D.** Every presented envelope validates against `schemas/observed.schema.json`:
    `eventTime` omitted when absent, never `null`; `unavailable.reason` in the closed set; `source`
    never `bridge` on site.
