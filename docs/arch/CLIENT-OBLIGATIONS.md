@@ -104,7 +104,17 @@ a client already treats `not-yet` and `unavailable` as states and `provisional` 
 `left-without-finish` as a status whose outcome it never showed as settled. Its second pass
 (2026-11-08) moved none: a present TCP row leaving `countingRun` standing and the XML row's
 `BetterRunNr` `0` reading `not-yet` are the core's and the checker's (CONTRACTS §4; DERIVATIONS
-§4.12; TEST-ARCHITECTURE §3.2); a client receives `not-yet` either way.
+§4.12; TEST-ARCHITECTURE §3.2); a client receives `not-yet` either way. Round 27 (2026-11-08, the
+on-site process, server#210) moved one duty: a Phase is created at the first observation stating its
+class, so at a TCP cold start a client hydrates the Attempts of `pendingPhaseIds` and may hold an
+Attempt whose Phase it does not yet hold (CONTRACTS §1.6, §2.4, §7.1; DERIVATIONS §2.1, below; the
+`pendingPhaseIds` field and the gate-5 `source` strip narrowed to `run` are round 27b, the review);
+the rest — the on-course set's `asOf` as the instant of its last
+change (what a client already read as the set's age), a check of a superseded generation reading
+`stale`, `Event.details`' source, the new-event action and the return to an earlier event being the
+admin UI's own, the real process's clock and comparison — is the server's, the parsers' and the
+tier-4 harness's (CONTRACTS §2.2, §2.10, §7.1, §7.2; DERIVATIONS §1, §3; TEST-ARCHITECTURE §3.4;
+ADR-017).
 
 ---
 
@@ -190,6 +200,7 @@ a client already treats `not-yet` and `unavailable` as states and `provisional` 
 - [ ] After any reconnection, repeat the whole handshake for every resource held; there is no replay and no resume, and the last applied `seq` serves only to discard already-applied messages after re-hydration (CONTRACTS §1.6, §8.4).
 - [ ] Use `seq` only to tell whether a change is already incorporated; never as ranking or authority (CONTRACTS §1.6).
 - [ ] Create an entity when a `*.updated` message names an id not held; the first message for a new id carries the whole resource (CONTRACTS §1.6).
+- [ ] At hydration request `/api/phases/{phaseId}/attempts` for every id in `/api/events/current`'s `pendingPhaseIds` as for a listed Phase; tolerate an Attempt whose `phaseId` names a Phase not yet held and render what it carries: at a TCP cold start the Phase arrives whole with its class, at the race's next `Results` message or the snapshot (CONTRACTS §1.6, §2.4, §7.1; DERIVATIONS §2.1).
 - [ ] Apply `attempt.updated`, `phase.updated`, `entry.updated` and `class.updated` as per-field deltas: the id under `attemptId`/`phaseId`/`entryId`/`classId`, the changed fields under `fields`; an omitted field is untouched, never reset; the first message for an unknown id creates the entity from `fields`, which then carries the whole resource (CONTRACTS §1.6, §7.2).
 - [ ] Apply an explicit `{ "state": "not-yet" }` in a delta as a reset of that field (CONTRACTS §7.2, §8.3).
 - [ ] Replace the whole resource on `standing.updated` (under `standing`) and `course.updated` (under `course`) (CONTRACTS §7.2).
@@ -221,7 +232,7 @@ a client already treats `not-yet` and `unavailable` as states and `provisional` 
 
 ### On-site clients — c123-scoreboard, c123-penalty-check
 
-- [ ] Hydrate from the REST reads that apply: `/api/events/current`, `/api/classes/{classId}/phases`, `/entries`, `/standings`, `/api/phases/{phaseId}/attempts`, `/api/oncourse`, each carrying `asOfSeq`, in the §7.1 response types (CONTRACTS §7.1).
+- [ ] Hydrate from the REST reads that apply: `/api/events/current` (its `pendingPhaseIds` included), `/api/classes/{classId}/phases`, `/entries`, `/standings`, `/api/phases/{phaseId}/attempts`, `/api/oncourse`, each carrying `asOfSeq`, in the §7.1 response types (CONTRACTS §7.1).
 - [ ] Expect the on-site serialisations: a person carries `birthYear: number | null` and no `birthDate`, and the Event carries no `organiserId` (CONTRACTS §7).
 - [ ] Take live updates from the WebSocket `/ws`, every message carrying `seq` (CONTRACTS §7.2; ARCHITECTURE §8).
 - [ ] Handle `404 event-not-found` on `/api/events/current` as "no event configured yet" (CONTRACTS §1.4, §7.1).
@@ -229,7 +240,7 @@ a client already treats `not-yet` and `unavailable` as states and `provisional` 
 - [ ] Read `birthYear: number | null`; the on-site tier carries no birth date (CONTRACTS §2.5, §7; ADR-006).
 - [ ] Use `format` and `phaseId` as Canoe123-native tokens, verbatim (CONTRACTS §7; ADR-007).
 - [ ] Show an unknown `format` token verbatim, with what the structural fields say; never invent a name and never fail to render (CONTRACTS §2.4; DERIVATIONS §9).
-- [ ] Keep the on-course set from `/api/oncourse` and `oncourse.updated`, in `courseOrder` with those lacking one last by `startOrder`; several at once and an empty set are both valid. The set is upstream's list: a finisher stays in it as `finished` or a mark until upstream closes the run, typically about 20 s but a venue setting no client may assume; leaving the set is upstream's removal, never the finish; take the set's age from `asOf` on `/api/oncourse` and on `oncourse.updated` (CONTRACTS §7.1, §7.2; ADR-009).
+- [ ] Keep the on-course set from `/api/oncourse` and `oncourse.updated`, in `courseOrder` with those lacking one last by `startOrder`; several at once and an empty set are both valid. The set is upstream's list: a finisher stays in it as `finished` or a mark until upstream closes the run, typically about 20 s but a venue setting no client may assume; leaving the set is upstream's removal, never the finish; take the set's age from `asOf` on `/api/oncourse` and on `oncourse.updated`, the instant the set last changed, which the two agree on (CONTRACTS §7.1, §7.2; ADR-009).
 - [ ] Keep a Kayak Cross heat that has left the on-course list at `on-course` until its order arrives; never treat leaving the list as a finish (CONTRACTS §7.1, §7.2; ARCHITECTURE §6.D).
 - [ ] Ignore `Standing.anomalies`, which on-site serves for the admin UI only (CONTRACTS §2.7, §5).
 - [ ] Treat `/api/sources`, `/api/diagnostics`, `diagnostics.updated` and `POST /api/rebaseline` as admin-audience only; ignore diagnostics and never expose the re-baseline (CONTRACTS §2.8, §4, §7.1, §7.2).
