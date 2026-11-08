@@ -162,8 +162,17 @@ The fields, precisely:
     INV-7's test; cells alone state none — is presented:** `confidence:
     'inferred'`, never retracted (INV-7). Once such a row is presented, the merged
     vector is that row's observation: `confidence: 'authoritative'`, `source` the presented row's,
-    `observedAt` the element's that last changed the presented cells, a listing's included; after
-    the row's retraction the stream's vector is an inference again (round 24);
+    `observedAt` the **later** of the presented observation's own element — the row whose
+    observation of the field became presented; a later row restating equal cells is an INV-5
+    re-delivery and moves nothing — and the element's that last changed the presented cells, a
+    listing's included (round 27e, an amendment:
+    round 24's text took the instant from the last cell change alone and so dated an `authoritative`
+    claim at an inference's instant where a row restated the stream's cells equal; `observedAt` is
+    when the presented observation was captured, and rule 1's supersession presents a new one, as
+    INV-5's regained precedence does); after
+    the row's retraction the stream's vector is an inference again (round 24), the envelope of the
+    retained listing with it — the last listing that changed the presented cells, never a later
+    identical delivery, INV-5 (`TEST-ARCHITECTURE.md` §3.2 property 1, round 26);
   - it is a result whose judging is incomplete — a presented gate cell is still blank (§4 rule 1
     merges the cells) — or whose completeness cannot be judged yet because no course is bound, and
     whose run is not yet closed; closed is `DERIVATIONS.md` §4.4's one definition, stated there
