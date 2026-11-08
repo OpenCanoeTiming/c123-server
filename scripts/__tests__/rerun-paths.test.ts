@@ -314,6 +314,40 @@ describe('round 27g Q3 + Q4 together', () => {
 })
 
 // ---------------------------------------------------------------------------------------------------------------------
+describe('round 27g-2 B1: observedAt per arrival order (DERIVATIONS 4.11: the row\'s own delivery for the row\'s fields, the listing for status)', () => {
+  /** Instants of the run-2 row (first Results record with the Time) and of the finish listing (first OnCourse with a dtFinish and that Time), read from the fixture file. */
+  const instants = (name: string, time: string): { row: string; listing: string } => {
+    const start = Date.parse((JSON.parse(readFileSync(path.join(fx(name), 'manifest.json'), 'utf8')) as { chunks: { startTime: string }[] }).chunks[0]?.startTime as string)
+    const recs = readFileSync(path.join(fx(name), '001-excerpt.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as { ts?: number; type?: string; data?: string })
+    const at = (r?: { ts?: number }): string => new Date(start + (r?.ts as number)).toISOString()
+    const row = recs.find((r) => r.type === 'Results' && r.data?.includes(`Time="${time}"`))
+    const listing = recs.find((r) => r.type === 'OnCourse' && /dtFinish="[^"]+"/.test(r.data ?? '') && r.data?.includes(`Time="${time}"`))
+    expect(row).toBeDefined()
+    expect(listing).toBeDefined()
+    return { row: at(row), listing: at(listing) }
+  }
+  const pairs = [
+    ['nkz', NKZ_ID, '83.57', 'nkz-bib7-row-before', 'nkz-bib7-row-after'],
+    ['dnf', DNF_ID, '96.86', 'dnf-rerun-row-before', 'dnf-rerun-row-after'],
+    ['timed', TIMED_ID, '96.86', 'timed-rerun-row-before', 'timed-rerun-row-after'],
+  ] as const
+  for (const [label, id, time, before, after] of pairs) {
+    it(`${label}: in each order the row's fields carry the row's delivery instant and status the finish listing's`, () => {
+      for (const name of [before, after]) {
+        const { row, listing } = instants(name, time)
+        const pts = trail(replay(fx(name)), id)
+        const rowPoint = pts.find((p) => runOf(p) === 2 && outcomeOf(p)?.kind === 'duration' && p.f['outcome']?.['confidence' as never] === 'authoritative')
+        const finPoint = pts.find((p) => runOf(p) === 2 && statusOf(p) === 'finished')
+        expect(rowPoint?.f['outcome']?.observedAt).toBe(row)
+        expect(finPoint?.f['status']?.observedAt).toBe(listing)
+      }
+      // and the two orders really differ in the row's instant
+      expect(instants(before, time).row).not.toBe(instants(after, time).row)
+    }, T)
+  }
+})
+
+// ---------------------------------------------------------------------------------------------------------------------
 describe('row 5: a mark standing when the start is listed records nothing (excerpt of nkz-19so K1W_BR1_19:53, a standing DNS; no DNF standing at a start is recorded)', () => {
   const ID = 'K1W_BR1_19:53'
   it('setup: the DNS stood on the table before the start was listed', () => {
