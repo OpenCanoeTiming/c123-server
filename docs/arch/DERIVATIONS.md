@@ -771,11 +771,13 @@ the latest cells per source and decides among three states:
   known; only the snapshot carries course numbers (`CONTRACTS.md` §2.12), so a `RaceConfig` never
   binds — built from the retained cells: `Gate[]` from the first `slotCount` cells, or in Kayak Cross
   `faults` from the cells and the captions (d); the parser's cell→`Gate[]`/`faults` function is
-  reused, and so is the cells' envelope: the vector carries the `source` and `observedAt` of the row
-  or listing that stated the cells, never the binding unit's — the course is the key to read a
-  statement already captured (`CONTRACTS.md` §1.2), and INV-2c's `tcp` content age is that row's
-  delivery (round 27c; recorded: cp3-cross MX1_XT_26, 43 rows of 08:45:13.346Z read on the course of
-  the snapshot at 08:45:18.057Z).
+  reused, and so is the cells' envelope: the vector carries the `source` and `observedAt` of the
+  retained cells — the latest row or listing of that source that stated them, in the generation —
+  never the binding unit's: the course is the key to read a statement already captured
+  (`CONTRACTS.md` §1.2, `observedAt` "the element's that last changed the presented cells"), and a
+  vector of that source on the snapshot's instant is `TEST-ARCHITECTURE.md` §3.2 property 1's
+  violation (round 27c; recorded: cp3-cross MX1_XT_26, 43 rows of 08:45:13.346Z read on the course
+  of the snapshot at 08:45:18.057Z).
 - **`unavailable{not-configured}`** when nothing configured can supply a course: the XML source is
   not configured (`SourceStatus.xml`, §5), so nothing can ever bind; or the snapshot shows the Phase
   with no `CourseNr`, or a course whose layout is empty (the snapshot's determination). A fabricated
