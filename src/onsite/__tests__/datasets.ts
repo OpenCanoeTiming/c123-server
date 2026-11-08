@@ -54,6 +54,24 @@ export const ODP = {
   rowAt: (ms: number): Unit => tcp(derived(R19.c4RowB, { observedAt: new Date(ms).toISOString() })),
   /** The recorded result row of bib 56 with its class given as the hyphenated `C1M-ST` while the RaceId keeps its prefix `C1M` (§2.3: ClassId is upstream's own, never the RaceId prefix). */
   hyphenRow: (): Unit => tcp(derived(R19.c4RowB, { edit: (d) => d.replace('ClassId="C1M"', 'ClassId="C1M-ST"') })),
+  /** The snapshot first, then the listings and rows (§7.3 validates a gate against the Phase's course, which only the snapshot binds). */
+  unitsXmlFirst: (): Unit[] => { const u = ODP.units(); return [u.find((x) => x.kind === 'xml')!, ...u.filter((x) => x.kind !== 'xml')]; },
+  /** The recorded snapshot with bib 56 a team boat (`IsTeam` true): a derived case, the recorded text is otherwise unchanged. */
+  teamXml: (): Unit => ({ kind: 'xml', rec: derived(R19.rcXml, { edit: (d) => d.replace('<IsTeam>false</IsTeam>', '<IsTeam>true</IsTeam>') }) }),
+  /** The row an echo is: bib 56 with gate 13 stated as `value` (the other cells as recorded), received at `ms`. Pen is the cell (all others are clean in the recorded row). */
+  echo: (value: 0 | 2 | 50, ms: number): Unit => tcp(derived(R19.c4RowB, {
+    observedAt: new Date(ms).toISOString(),
+    edit: (d) => d.replace(/Gates="((?:...){12})(...)/, (_m, a) => `Gates="${a as string}${String(value).padStart(3, ' ')}`).replace(/ Pen="\d+"/, ` Pen="${value}"`),
+  })),
+  /** The re-run wizard\'s wipe: the row of bib 56 gone from the table (a start-list row with nothing stated). */
+  wipe: (ms: number): Unit => tcp(derived(R19.c4RowB, {
+    observedAt: new Date(ms).toISOString(),
+    edit: (d) => d.replace('Current="Y"', 'Current="N"').replace('SubTitle="1st and 2nd Run"', 'SubTitle="1st and 2nd Run - Start List"')
+      .replace(/ Pen="\d+"/, ' Pen=""').replace(/ Gates="[^"]*"/, ' Gates=""').replace(/ Time="[^"]*"/, ' Time=""').replace(/ Total="[^"]*"/, ' Total=""')
+      .replace(/ Rank="\d*"/, ' Rank=""').replace(/ RankOrder="\d*"/, ' RankOrder=""').replace(/ Behind="[^"]*"/, ' Behind=""'),
+  })),
+  /** The listing of a new start of bib 56 (a different dtStart, no finish): the generation increments (DERIVATIONS §4.11). */
+  rerun: (ms: number): Unit => tcp(derived(R19.c4Start, { observedAt: new Date(ms).toISOString(), edit: (d) => d.replace(/dtStart="[^"]*"/, 'dtStart="17:40:00.000"') })),
   emptyAt: (ms: number): Unit => tcp({ observedAt: new Date(ms).toISOString(), data: EMPTY_ONCOURSE }),
   /** `n` listings of different bibs (derived from the recorded start listing), Position `positions[i]` or none for null: courseOrder = Position (DERIVATIONS §4.8). */
   listings: (positions: (string | null)[], bibs: number[], startOrders: number[]): Unit[] => positions.map((pos, i) => tcp(derived(R19.c4Start, {
@@ -80,6 +98,16 @@ export const JNE = {
     edit: (d) => d.replace(/Gates="[^"]*"/, `Gates="${' '.repeat(80)}"`),
   })),
   sameRow: (): Unit => tcp(derived(REC.j1Row, { observedAt: new Date(Date.parse(REC.j2Xml.observedAt) + 2_000).toISOString() })),
+};
+
+/** cp3-cross, a Kayak Cross heat WX1_XF_26 (TCP only): a Cross Phase for the `cross` refusal. */
+export const CROSS = {
+  day: '2026-04-26',
+  startAt: '2026-04-26T10:00:00.000Z',
+  phaseId: 'WX1_XF_26',
+  units: (): Unit[] => [tcp(R19.xfStartList), tcp(R19.xfFinal)],
+  /** A bib of the recorded final. */
+  bib: ((): string => /<Participant Bib="\s*(\d+)"/.exec(R19.xfFinal.data)![1]!)(),
 };
 
 export const NKZ = {

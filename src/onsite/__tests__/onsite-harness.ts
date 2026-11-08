@@ -64,6 +64,14 @@
  *   phaseIds(): string[]   entryIds(): string[]   classIds(): string[]   courseIds(): string[]   standings(): Standing[]   (existing: phase(id), entry(id), presented(id), attempts(),
  *   oncourse(), diagnostics()). The process stamps `seq` and the Class/Course `eventId`; the core never sees either.
  *
+ * The write path (#212, CONTRACTS §7.3, §7.4, §1.5, §2.9; ADR-010; EVIDENCE Exhibits 13, 14), additions to the same harness:
+ *   `fakeTcp()` is a `WritableSource` (src/sources/types.ts): `isWritable` is true while the source is connected; `write(xml)` records the exact string it is
+ *   given in `tcp.written` (the production TcpSource sends it as it is; the `|` terminator is part of what the process hands over, Canoe123 messages are `|`-delimited);
+ *   `tcp.failNextWrite(err)` makes the next `write` reject. The process must send a command only through `source.write`, and only while `source.isWritable`.
+ *   `setInstance(env, 'Main' | 'Backup')` controls `SourceStatus.tcp.upstreamInstance` the only way upstream does: the `System` attribute of a TCP message the
+ *   source delivers (a TimeOfDay message). `GET /api/sources` then reports `main` / `backup`.
+ *   `put/post/del` helpers send REST requests with headers (`Idempotency-Key`). `boot()` is unchanged; the routes are served by the same process.
+ *
  * Feeding units (what a test does, and so what the process must accept):
  *   TCP: `tcp.send(text)` on the injected source (event 'message', the text as `TcpSource` emits it) and `tcp.connect()` / `tcp.disconnect()` ('status').
  *   XML: the file is put on the injected fs with a modification time; the clock moves forward; the reader's poll finds it (createXmlReader).
@@ -73,7 +81,7 @@
 import { EventEmitter } from 'node:events';
 import { WebSocket } from 'ws';
 import { fakeChecksFs } from '../../store/__tests__/checks-harness.js';
-import { flush } from './model.js';
+import { flush, api, type Reply } from './model.js';
 import type { Clock } from '../../ingest/xml-reader.js';
 import type { Source, SourceStatus as ConnStatus } from '../../sources/types.js';
 // The module under test. A missing module is the expected red until #210 lands.
@@ -164,6 +172,12 @@ export function fakeOnsiteFs(initial: Record<string, string> = {}): FakeOnsiteFs
 export interface FakeTcp extends Source {
   started: number;
   stopped: number;
+  /** WritableSource (#212): every string handed to `write`, in order. */
+  written: string[];
+  readonly isWritable: boolean;
+  write(xml: string): Promise<void>;
+  /** The next `write` rejects with `err`. */
+  failNextWrite(err?: Error): void;
   send(text: string): void;
   connect(): void;
   disconnect(): void;
@@ -174,6 +188,11 @@ export function fakeTcp(): FakeTcp {
   Object.defineProperty(e, 'status', { get: () => status });
   e.started = 0;
   e.stopped = 0;
+  e.written = [];
+  let failWith: Error | undefined;
+  Object.defineProperty(e, 'isWritable', { get: () => status === 'connected' });
+  e.write = async (xml) => { if (failWith !== undefined) { const f = failWith; failWith = undefined; throw f; } e.written.push(xml); };
+  e.failNextWrite = (err = new Error('socket write failed')) => { failWith = err; };
   e.start = () => { e.started++; };
   e.stop = () => { e.stopped++; status = 'disconnected'; };
   e.send = (text) => { e.emit('message', text); };
@@ -273,6 +292,15 @@ export async function feedXml(env: Env, rec: { observedAt: string; data: string 
   env.clock.jump(at);
   await env.clock.advance((env.opts.xml?.pollSeconds ?? POLL_S) * 1000);
 }
+/** Upstream names its instance in every message's `System` attribute (CONTRACTS §2.8): a TimeOfDay message from Main or Backup. */
+export async function setInstance(env: Env, instance: 'Main' | 'Backup', at?: string): Promise<void> {
+  const t = at ?? new Date(env.clock.now() + 1).toISOString();
+  await feedTcp(env, { observedAt: t, data: `<Canoe123 System="${instance}"><TimeOfDay>12:00:00</TimeOfDay></Canoe123>` });
+}
+export const put = (env: { h: { port: number } }, path: string, body?: unknown, headers: Record<string, string> = {}): Promise<Reply> => api(env, 'PUT', path, body ?? {}, headers);
+export const post = (env: { h: { port: number } }, path: string, body?: unknown, headers: Record<string, string> = {}): Promise<Reply> => api(env, 'POST', path, body ?? {}, headers);
+export const del = (env: { h: { port: number } }, path: string): Promise<Reply> => api(env, 'DELETE', path);
+
 /** A recorded record, received later or with its text edited: the only way a derived (not recorded) case is built. */
 export const derived = (r: { observedAt: string; data: string }, over: { observedAt?: string; edit?: (d: string) => string }): { observedAt: string; data: string } => ({
   observedAt: over.observedAt ?? r.observedAt,
