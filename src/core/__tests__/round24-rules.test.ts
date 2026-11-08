@@ -102,12 +102,17 @@ describe('C2 (round 24 ruling 5; CONTRACTS §1.6 "the first message for a new id
     expect(p['stage']).toBeDefined(); // the table does not list Stage's value here; presence is the rule (guess: the value is not pinned)
   });
 
-  it('the first phase.updated of the id carries those fields (not a later one with the first XML read)', () => {
+  it('round 27 (CONTRACTS §1.6, §2.4, DERIVATIONS §2.1): nothing is sent for the Phase at the bare on-course listing; its creating phase.updated, at the first message that states its classId, carries format, kind, scoringKind, pair, heats and stage', () => {
     const c = coreWith([connected('2026-04-19T08:00:00.000Z'), tcpUnit(msg('2026-04-19T08:00:01.000Z', listingText({ race: 'K1M_BR2_19', bib: 51, dtStart: '10:00:00.000' })), JA_DAY)]);
+    expect(phaseUpdates(c, 'K1M_BR2_19'), 'a listing states no ClassId: the Phase is not created yet').toEqual([]);
+    const row = JA51.find((r) => r.data.includes('<Results'))!; // recorded Results row of K1M_BR2_19: names RaceId and ClassId
+    expect(/ClassId="K1M"/.test(row.data)).toBe(true);
+    c.applyUnit(tcpUnit(row, JA_DAY));
     const first = phaseUpdates(c, 'K1M_BR2_19')[0];
     expect(first).toBeDefined();
-    for (const f of ['format', 'kind', 'scoringKind', 'pair', 'heats', 'stage']) expect(first!['fields'], f).toHaveProperty(f);
+    for (const f of ['format', 'kind', 'scoringKind', 'pair', 'heats', 'stage', 'classId']) expect(first!['fields'], f).toHaveProperty(f);
     expect(first!['fields']['format']).toBe('BR2');
+    expect(first!['fields']['classId']).toBe('K1M');
   });
 
   it('real cp3-cross WX1_XF_26 start list (a Kayak Cross heat, first message of the id): format XF, race, ordinal, heats true, no pair', () => {

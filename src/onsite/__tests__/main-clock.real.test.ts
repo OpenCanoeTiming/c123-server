@@ -21,7 +21,7 @@ afterAll(() => { for (const k of kids) k.kill('SIGKILL'); for (const s of server
 describe('production clock wiring (CONTRACTS §1.6, TEST-ARCHITECTURE §5)', () => {
   it('main.ts without --clock-rate and --clock-origin stamps ingest with the system clock at rate 1', async () => {
     const listing = ODP.listings(['1'], [31], [51])[0]!.rec.data; // recorded text; its recorded instant (2026) is not what the process may use
-    const tcp = createServer((sock) => { sock.write(`${listing}\n`); });
+    const tcp = createServer((sock) => { sock.write(`${listing}|`); }); // Canoe123 (and player.js) delimit messages with `|`
     servers.push(tcp);
     await new Promise<void>((r) => { tcp.listen(0, '127.0.0.1', r); });
     const tcpPort = (tcp.address() as { port: number }).port;
