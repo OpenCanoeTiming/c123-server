@@ -23,4 +23,7 @@ describe('round 26b (#278): BetterRunNr 0 on a second-run best-pair XML row (DER
   it('§4.4 control: BetterRunNr 1 still gives countingRun 1', () => {
     expect(br2Row108('1').countingRun).toBe(1);
   });
+  it('round 26b design (12:49:11.285Z run-2 row), §4.4: BetterRunNr 2 gives countingRun 2 (the core presents 2)', () => {
+    expect(br2Row108('2').countingRun).toBe(2);
+  });
 });
