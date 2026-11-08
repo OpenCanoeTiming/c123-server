@@ -428,7 +428,10 @@ the step index, the Attempt, the field and the property number.
    differs from it only in `observedAt`. A re-delivered identical observation is not client-visible.
    The one exception is the run-increment delta, whose run-scoped fields property 10 requires
    explicitly even when already `not-yet`.
-10. **Run generation (`ADR-013`).** `run` never decreases. It increments only at an on-course listing
+10. **Run generation (`ADR-013`).** `run` never decreases; a creating message presents it as `1`
+    (`CONTRACTS.md` §2.6, 1-based: a core that starts cold inside a re-run knows no earlier
+    generation), and it increments **by one** — each trigger is one generation, and §2.10 keys checks
+    and flags by it (round 27i) — only at an on-course listing
     of the Attempt that carries a start different from the generation's recorded start **and no
     finish, while the generation is recorded** (`DERIVATIONS.md` §4.11's two terms, tracked by the
     checker from the raw stream and the rows: the recorded start is the generation's first listed
