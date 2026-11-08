@@ -26,7 +26,7 @@
  * the process gives every Class and Course (§2.3, §2.12). Not compared, the replay having no counterpart: `event` of /api/events/current (the core has no Event;
  * the bridge asserts it) and /api/sources (a connection fact): only checked present.
  * Known time skew, reported with its cause and not stripped (review B5): the player cannot be started paused (`pause` is ignored while stopped; it plays on its
- * first TCP client), so the process clock, started at `play` on stdin, begins about 50-250 ms after the stream. Any difference in a leave, a `provisional` flag or a
+ * first TCP client, polling every 200 ms), so the process clock, started at `play` on stdin, begins BEFORE the stream: the stream starts after the clock, and the process's stamps run later than the recorded instants by a start offset of about +96 to +300 ms, constant within a run (measured over 200+ matched TCP steps; c123-protocol-docs#28). Any difference in a leave, a `provisional` flag or a
  * content age near the start of the window is read against that skew first.
  * Gate 2 (round 27 Q1.3): the checker with `--recording` must report 0 on the 1x log. At 10x the receive latency is outside the leave margin, so that log is
  * asserted written with the hydration step first and is no gate-2 evidence. Never the D-only reading.
@@ -49,7 +49,7 @@ const CHECKER = path.join(PD, 'tools/gate2/check.js');
 const TSX = path.join(ROOT, 'node_modules/.bin/tsx');
 const HAVE = [REC, PLAYER, EXTRACT, CHECKER].every((p) => existsSync(p));
 const EVENT_ID = 'ev-t4';
-const SKEW = 'real-time skew: the process clock starts 50-250 ms after the player stream (player.js auto-plays on its first client and ignores pause while stopped); report the cause, never strip';
+const SKEW = 'real-time start offset: the player stream starts after the process clock, so the process's stamps run +96 to +300 ms later than recorded (player.js auto-plays on its 200 ms client poll and ignores pause while stopped; c123-protocol-docs#28); report the cause, never strip';
 
 const dirs: string[] = [];
 const children: ChildProcess[] = [];
@@ -148,7 +148,7 @@ async function realProcess(dir: string, speed: number): Promise<Run> {
   const control = async (cmd: string): Promise<void> => { await fetch(`http://127.0.0.1:${controlPort}/${cmd}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); };
   for (let i = 0; i < 100 && (await status()) === undefined; i++) await sleep(100);
   // Known skew (review B5): player.js ignores `/pause` while stopped and auto-plays on its first TCP client (polling every 200 ms), so the player cannot be
-  // started paused. The process clock starts when `play` is written to its stdin, about 50-250 ms after the stream began. Nothing is stripped for it.
+  // started paused. The process clock starts when `play` is written to its stdin; the stream starts after it, so the stamps run +96 to +300 ms later than recorded (c123-protocol-docs#28). Nothing is stripped for it.
   const poll = 5; // the setting; the clock scales it
   const proc = spawn(process.execPath, ['--import', 'tsx', path.join(ROOT, 'src/onsite/main.ts'),
     '--port', '0', '--data-dir', path.join(work, 'data'), '--event-id', EVENT_ID, '--event-name', 'T4', '--tcp-host', '127.0.0.1', '--tcp-port', String(tcpPort),

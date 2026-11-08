@@ -54,7 +54,7 @@
  *                                         // (defaults: rate 1, the system clock). Ingest stamps, the XML poll, the heartbeat and the leave rule all run on it.
  *                                         // The T4 tests give rate = the player's speed and origin = the excerpt's first recorded instant; the poll setting stays 5 s.
  *                                         // Round 27b: with `--clock-wait-stdin` the clock stands still at `origin` until the process reads one line on stdin, then runs at `rate`
- *                                         // (the T4 tests write that line right after the player has its client; player.js cannot be started paused, so a 50-250 ms skew remains and is reported, not stripped).
+ *                                         // (the T4 tests write that line right after the player has its client; player.js cannot be started paused, so the stream starts after the clock and stamps run +96 to +300 ms later than recorded; reported, not stripped, c123-protocol-docs#28).
  *                                         // `startOnsite` itself is unchanged: it takes the injected `clock`; main.ts builds the scaled one from these flags.
  *   It prints the line `listening <port>` on stdout once HTTP accepts connections, and on SIGTERM stops gracefully (closing the step log with
  *   `{"end":{"steps":n}}`) and exits 0. The step log is replay-direct.ts's format (its header): `{"hydration":...}`, one `{i,elements,deltas,stateHash}`
