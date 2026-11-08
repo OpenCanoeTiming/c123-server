@@ -129,7 +129,9 @@ re-delivery's, is the core's and the checker's (DERIVATIONS §4.6; TEST-ARCHITEC
 pass (2026-11-08, review of PR #288) amended CONTRACTS §1.2's merged-vector instant to the later of
 the row's and the last cell change's and moved no duty: a client takes `observedAt` as given
 (CONTRACTS §1.2; DERIVATIONS §4.6). Round 27f (2026-11-08, the checker review) moved none: which step
-binds the course is the core's and the checker's (TEST-ARCHITECTURE §3.2; DERIVATIONS §4.6).
+binds the course is the core's and the checker's (TEST-ARCHITECTURE §3.2; DERIVATIONS §4.6). Round 27g
+(2026-11-08, #207 re-run paths) moved none: property 6(b) reading the new generation at an increment is
+the checker's (TEST-ARCHITECTURE §3.2; ADR-013).
 
 ---
 
