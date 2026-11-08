@@ -32,6 +32,8 @@ function results(u: Unit, ctx: IngestContext, res: Node): void {
     if (at(res, 'MainTitle').trim() !== '') u.obs('result-row', 'name', { classId }, at(res, 'MainTitle'));
   }
   const fmt = fmtOf(tokenOf(phaseId));
+  // DERIVATIONS §1: from the formats of its Phases, here the one this message names (the XML snapshot evaluates them all)
+  if (classId !== '' && classId !== 'NA') u.obs('result-row', 'discipline', { classId }, fmt.cross ? 'cross' : 'slalom', 'inferred');
   const rows = asArray(res['Row']);
   if (classId !== '' && classId !== 'NA') u.obs('result-row', 'classId', { phaseId }, classId);
   for (const row of rows) {
