@@ -32,12 +32,16 @@ function results(u: Unit, ctx: IngestContext, res: Node): void {
     if (at(res, 'MainTitle').trim() !== '') u.obs('result-row', 'name', { classId }, at(res, 'MainTitle'));
   }
   const fmt = fmtOf(tokenOf(phaseId));
+  // DERIVATIONS §1: from the formats of its Phases, here the one this message names (the XML snapshot evaluates them all)
+  if (classId !== '' && classId !== 'NA') u.obs('result-row', 'discipline', { classId }, fmt.cross ? 'cross' : 'slalom', 'inferred');
   const rows = asArray(res['Row']);
+  if (classId !== '' && classId !== 'NA') u.obs('result-row', 'classId', { phaseId }, classId);
   for (const row of rows) {
     const p = row['Participant'] as Node | undefined;
     const entryId = at(p, 'Id');
     if (entryId === '') continue;
     const key = { entryId };
+    if (classId !== '' && classId !== 'NA') u.obs('result-row', 'classId', key, classId);
     u.obs('result-row', 'displayName', key, at(p, 'Name'));
     if (at(p, 'Club').trim() !== '') u.obs('result-row', 'club', key, at(p, 'Club'));
     if (at(p, 'Nat').trim() !== '') u.obs('result-row', 'nation', key, at(p, 'Nat'));

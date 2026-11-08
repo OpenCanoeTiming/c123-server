@@ -44,7 +44,10 @@ export function putCells(s: CoreState, a: AttemptState, channel: 'tcp' | 'xml' |
   const field = fmt.cross ? 'faults' : 'gates';
   const slots = boundSlots(s, a.phaseId);
   if (slots === undefined) {
-    a.cells[channel] = { cells, slot };
+    // §1.2, INV-5: an identical re-delivery moves nothing; the retained slot is the one of the last cell change
+    const held = a.cells[channel];
+    const same = held !== undefined && JSON.stringify(held.cells) === JSON.stringify(cells) && held.slot.source === slot.source && held.slot.confidence === slot.confidence;
+    if (!same) a.cells[channel] = { cells, slot };
     if (courseUnavailable(s, a.phaseId)) {
       if (retain(fieldSlots(a.slots, field), channel, { ...slot, state: 'unavailable', reason: NOT_CONFIGURED.reason })) s.dirtyAttempts.add(a);
     }

@@ -7,6 +7,7 @@ import { oncourseView } from './oncourse.js';
 import { presentedFinish, settled, viewAttempt } from './presentation.js';
 import { changedStandings, noteFacts, replacedStandings } from './publish.js';
 import { viewResource } from './resources.js';
+import { fmtFor, siblingPhaseId } from './registry.js';
 import { wireWrite } from './writes.js';
 import type { AttemptState, CoreState, Diagnostic, Message, ResourceState } from './types.js';
 
@@ -22,6 +23,12 @@ function diff(view: Record<string, unknown>, sent: Map<string, string>, created:
     if (!created || sent.get(k) !== text || force?.has(k) === true) fields[k] = v;
     sent.set(k, text);
   }
+  return fields;
+}
+
+/** §7.2: the id key names the entity beside `fields`, never inside them (the creating message included). */
+function withoutId(fields: Record<string, unknown>, idKey: string): Record<string, unknown> {
+  delete fields[idKey];
   return fields;
 }
 
@@ -85,6 +92,12 @@ function flushRebaseline(s: CoreState): void {
 
 export function flush(s: CoreState, xmlInUnit: boolean): void {
   const phases = new Set<ResourceState>();
+  // §4.5: a first run's `outcome` is `unavailable` once its second run has a result, so the sibling's change is the first run's too
+  for (const a of [...s.dirtyAttempts]) {
+    if (fmtFor(s, a.phaseId).pair?.role !== 'second') continue;
+    const first = s.attempts.get(`${siblingPhaseId(s, a.phaseId)}:${a.bib}`);
+    if (first !== undefined) s.dirtyAttempts.add(first);
+  }
   for (const a of s.dirtyAttempts) {
     const raised = attemptDiagnostics(a);
     if (JSON.stringify(raised) !== JSON.stringify(a.diagnostics)) {
@@ -104,9 +117,11 @@ export function flush(s: CoreState, xmlInUnit: boolean): void {
   }
 
   for (const p of s.dirtyPhases) {
-    const fields = diff(viewResource(p, 'phase'), p.sent, p.created);
-    p.created = true;
     s.dirtyScopes.add(p.id);
+    // §2.4 (round 27): a Phase is created at the first observation that states its class; until then no message, no hydration
+    if (!p.plain.has('classId')) continue;
+    const fields = withoutId(diff(viewResource(p, 'phase'), p.sent, p.created), 'phaseId');
+    p.created = true;
     if (Object.keys(fields).length > 0) emit(s, { type: 'phase.updated', phaseId: p.id, fields });
   }
   s.dirtyPhases.clear();
@@ -116,7 +131,7 @@ export function flush(s: CoreState, xmlInUnit: boolean): void {
       resource.created = true;
       continue;
     }
-    const fields = diff(viewResource(resource, type), resource.sent, resource.created);
+    const fields = withoutId(diff(viewResource(resource, type), resource.sent, resource.created), type === 'entry' ? 'entryId' : 'classId');
     resource.created = true;
     if (type === 'entry') for (const phaseId of s.entryPhases.get(resource.id) ?? []) s.dirtyScopes.add(phaseId);
     if (Object.keys(fields).length > 0) emit(s, { type: `${type}.updated`, [type === 'entry' ? 'entryId' : 'classId']: resource.id, fields });
@@ -130,7 +145,7 @@ export function flush(s: CoreState, xmlInUnit: boolean): void {
   for (const a of s.dirtyAttempts) {
     const view = viewAttempt(s, a);
     noteFacts(s, a, view);
-    const fields = diff(view, a.sent, a.created, a.force);
+    const fields = withoutId(diff(view, a.sent, a.created, a.force), 'attemptId');
     a.created = true;
     a.force.clear();
     if (Object.keys(fields).length > 0) emit(s, { type: 'attempt.updated', attemptId: a.id, fields });
@@ -145,7 +160,8 @@ export function flush(s: CoreState, xmlInUnit: boolean): void {
   const key = JSON.stringify([on.attemptIds, on.featuredByUpstream]);
   if (key !== s.oncourseSent) {
     s.oncourseSent = key;
-    emit(s, { type: 'oncourse.updated', ...on });
+    s.oncourseAsOf = s.unitAt; // §7.1/§7.2: the ingest time of the unit at which the set last changed
+    emit(s, { type: 'oncourse.updated', ...on, asOf: s.oncourseAsOf });
   }
   if (!s.diagnosticsDirty) return;
   s.diagnosticsDirty = false;

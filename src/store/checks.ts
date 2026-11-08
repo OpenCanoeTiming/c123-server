@@ -6,7 +6,7 @@
  * Memory changes only after the rename; a failed write leaves it at the previous state. Writes are serialised.
  * Status is derived by `core/workflow`, never stored.
  */
-import { gateStatus, type WorkflowGiven } from '../core/workflow.js';
+import { checkStatus, gateStatus, type WorkflowGiven } from '../core/workflow.js';
 
 export interface ChecksFs {
   mkdir(dir: string): Promise<void>;
@@ -48,9 +48,15 @@ export interface ChecksStore {
   deleteCheck(key: GateKey): Promise<void>;
   createFlag(input: GateKey & { comment: string; suggestedValue?: number; createdBy?: string }): Promise<GateFlag>;
   resolveFlag(flagId: string, input: { note?: string; resolvedBy?: string }): Promise<GateFlag>;
+  /** Copies: nothing a caller holds aliases what the store holds (#273 N3). */
   list(): ChecksState;
+  /** Every check with its own `status`, derived now against `presented` and never stored (CONTRACTS §2.10, §7.1). */
+  checksWithStatus(presented: WorkflowGiven['presented']): Array<StoredCheck & { status: 'verified' | 'stale' }>;
   status(presented: WorkflowGiven['presented']): Record<string, string>;
 }
+
+const copyCheck = (c: StoredCheck): StoredCheck => ({ ...c });
+const copyFlag = (f: GateFlag): GateFlag => ({ ...f, ...(f.resolution !== undefined ? { resolution: { ...f.resolution } } : {}) });
 
 const sameKey = (a: GateKey, b: GateKey): boolean => a.attemptId === b.attemptId && a.run === b.run && a.gate === b.gate;
 const isArray = (v: unknown): v is unknown[] => Array.isArray(v);
@@ -157,7 +163,7 @@ export async function openChecksStore(opts: ChecksStoreOptions): Promise<ChecksS
         ...(i.checkedBy !== undefined ? { checkedBy: i.checkedBy } : {}),
         valueAtCheck: i.valueAtCheck,
       };
-      return { next: { ...cur, checks: [...cur.checks.filter((c) => !sameKey(c, i)), check] }, value: check };
+      return { next: { ...cur, checks: [...cur.checks.filter((c) => !sameKey(c, i)), check] }, value: copyCheck(check) };
     }),
     deleteCheck: (k) => mutate((cur) => ({ next: { ...cur, checks: cur.checks.filter((c) => !sameKey(c, k)) }, value: undefined })),
     createFlag: (i) => mutate((cur) => {
@@ -167,12 +173,12 @@ export async function openChecksStore(opts: ChecksStoreOptions): Promise<ChecksS
         comment: i.comment,
         ...(i.suggestedValue !== undefined ? { suggestedValue: i.suggestedValue } : {}),
       };
-      return { next: { ...cur, flags: [...cur.flags, flag] }, value: flag };
+      return { next: { ...cur, flags: [...cur.flags, flag] }, value: copyFlag(flag) };
     }),
     resolveFlag: (flagId, i) => mutate((cur) => {
       const found = cur.flags.find((f) => f.flagId === flagId);
       if (!found) throw Object.assign(new Error(`no flag ${flagId}`), { code: 'flag-not-found' });
-      if (found.resolution) return { next: cur, value: found };
+      if (found.resolution) return { next: cur, value: copyFlag(found) };
       const resolved: GateFlag = {
         ...found,
         resolution: {
@@ -181,9 +187,10 @@ export async function openChecksStore(opts: ChecksStoreOptions): Promise<ChecksS
           ...(i.note !== undefined ? { note: i.note } : {}),
         },
       };
-      return { next: { ...cur, flags: cur.flags.map((f) => (f.flagId === flagId ? resolved : f)) }, value: resolved };
+      return { next: { ...cur, flags: cur.flags.map((f) => (f.flagId === flagId ? resolved : f)) }, value: copyFlag(resolved) };
     }),
-    list: () => ({ checks: [...state.checks], flags: [...state.flags] }),
+    list: () => ({ checks: state.checks.map(copyCheck), flags: state.flags.map(copyFlag) }),
+    checksWithStatus: (presented) => state.checks.map((c) => ({ ...copyCheck(c), status: checkStatus(c, presented) })),
     status: (presented) => gateStatus({ checks: state.checks.map((c) => ({ ...c })), flags: [...state.flags], presented }).gateStatus,
   };
 }

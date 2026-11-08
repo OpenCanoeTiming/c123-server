@@ -26,6 +26,7 @@ function entry(u: Unit, p: Node, index: Map<string, Node>, bibHandling: string, 
   const entryId = tx(p, 'Id');
   if (entryId === '') return;
   const key = { entryId };
+  if (tx(p, 'ClassId') !== '') u.obs('result-row', 'classId', key, tx(p, 'ClassId'));
   const team = isTrue(tx(p, 'IsTeam'));
   const crew = tx(p, 'FamilyName2').trim() !== '' || tx(p, 'GivenName2').trim() !== '';
   const name = (s: '' | '2') => `${tx(p, 'FamilyName' + s).trim()} ${tx(p, 'GivenName' + s).trim()}`.trim();

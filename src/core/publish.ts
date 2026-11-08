@@ -5,7 +5,6 @@
  * it changed, so a running tick, which is in none of that, assembles nothing.
  */
 import type { Standing } from '@opencanoetiming/c123-contract';
-import { splitRaceId } from '../ingest/common.js';
 import { assembleStanding, type EntryInput } from './standing.js';
 import { isMark, present } from './precedence.js';
 import { fmtFor, siblingPhaseId } from './registry.js';
@@ -58,8 +57,11 @@ const keyOf = (kind: string, phaseId: string, heat: number | undefined, category
 
 /** Every Standing of one Phase. A Standing with no entries is returned only where one was sent before. */
 function ofPhase(s: CoreState, phaseId: string, asOf: string): Standing[] {
-  const classId = splitRaceId(phaseId).classKey;
+  // §2.7 (round 27d): the Phase's class, never the RaceId prefix; a Standing is held until its Phase is created (§2.4), then sent whole
+  const stated = s.phases.get(phaseId)?.plain.get('classId');
   const out: Standing[] = [];
+  if (typeof stated !== 'string') return out;
+  const classId = stated;
   const add = (standing: Omit<Standing, 'asOf'> & { asOf?: string }): void => {
     if (standing.entries.length === 0 && !s.standingsSent.has(standing.standingKey)) return;
     out.push({ ...standing, asOf: standing.asOf ?? asOf } as Standing);
@@ -124,6 +126,7 @@ const textOf = (st: Standing): string => JSON.stringify([st.entries, st.anomalie
 
 function remember(s: CoreState, phaseId: string, st: Standing): void {
   s.standingsSent.set(st.standingKey, textOf(st));
+  s.standingsHeld.set(st.standingKey, st);
   let keys = s.standingKeys.get(phaseId);
   if (keys === undefined) s.standingKeys.set(phaseId, (keys = new Set()));
   keys.add(st.standingKey);
@@ -152,7 +155,10 @@ export function replacedStandings(s: CoreState, scope: { kind?: string; phaseId?
   }
   const out: Standing[] = [];
   for (const phaseId of phases) {
-    for (const key of s.standingKeys.get(phaseId) ?? []) s.standingsSent.delete(key);
+    for (const key of s.standingKeys.get(phaseId) ?? []) {
+      s.standingsSent.delete(key);
+      s.standingsHeld.delete(key);
+    }
     s.standingKeys.delete(phaseId);
     for (const st of ofPhase(s, phaseId, s.unitAt)) {
       if (st.entries.length === 0) continue;
