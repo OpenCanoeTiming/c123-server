@@ -50,6 +50,10 @@
  *   Entry point `src/onsite/main.ts` (what `npm run onsite` runs; the T4 tests spawn it as `node --import tsx src/onsite/main.ts <flags>`):
  *     --port <n> --data-dir <dir> --event-id <id> [--event-name <s>] --tcp-host <h> [--tcp-port <n>] --xml <path> [--xml-poll-seconds <s>]
  *     [--zone <iana>] [--event-date <YYYY-MM-DD>] [--external-id-scheme <s>] [--step-log <file>] [--no-discovery]
+ *     [--clock-rate <n>] [--clock-origin <iso>]   // round 27 (ADR-017 Rev 7): the process's Clock advances `rate` seconds per wall second starting at `origin`
+ *                                         // (defaults: rate 1, the system clock). Ingest stamps, the XML poll, the heartbeat and the leave rule all run on it.
+ *                                         // The T4 tests give rate = the player's speed and origin = the excerpt's first recorded instant; the poll setting stays 5 s.
+ *                                         // `startOnsite` itself is unchanged: it takes the injected `clock`; main.ts builds the scaled one from these flags.
  *   It prints the line `listening <port>` on stdout once HTTP accepts connections, and on SIGTERM stops gracefully (closing the step log with
  *   `{"end":{"steps":n}}`) and exits 0. The step log is replay-direct.ts's format (its header): `{"hydration":...}`, one `{i,elements,deltas,stateHash}`
  *   per ingest unit, `{"end":...}`; `elements` are the unit's in ingest order, `deltas` the §7.2 messages the unit produced.

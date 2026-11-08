@@ -10,17 +10,23 @@
  * Reference: `scripts/replay-direct.ts` over the same excerpt (no window), its step log's deltas folded by the §1.6/§7.2 client rules
  * (src/onsite/__tests__/model.ts). The process's side: every hydration endpoint of §7.1 read over HTTP, folded the same way.
  *
- * The process is started as `node --import tsx src/onsite/main.ts <flags>` (flags: onsite-harness.ts header), the XML poll interval is 5 s / speed
- * so a poll falls at the same recorded distance at 1x and 10x, and `--external-id-scheme replay` is the replay driver's own scheme.
+ * The process is started as `node --import tsx src/onsite/main.ts <flags>` (flags: onsite-harness.ts header) on the player's clock (round 27, ADR-017
+ * Revision 7): `--clock-rate <speed> --clock-origin <the excerpt's first recorded instant>`, the XML poll setting stays 5 s and the clock scales it; poll,
+ * heartbeat, ingest stamps and the leave rule all read that clock. `--external-id-scheme replay` is the replay driver's own scheme.
  *
- * CLOSED LIST of ingest-time fields removed before comparing (stamps only, each with its reason). Any other difference fails the test:
- *   observedAt   inside every Observed `known` envelope and every provenance record: the wall-clock instant of receipt (the replay uses the recording's own instants)
- *   asOf         on a Standing and on the on-course set: the ingest time of the latest observation behind it (same reason)
+ * CLOSED LIST removed before comparing (round 27 Q1.2), nothing else; any other difference fails, and a real-timing difference is reported with its cause:
+ *   observedAt   inside every Observed `known` envelope and every provenance record: a receipt instant, later than recorded by delivery latency (N-fold at N x)
+ *   asOf         on a Standing and on the on-course set: the ingest time of a unit (same reason)
  *   asOfSeq/seq  the process's counter; the replay driver counts nothing (it logs `ingestSeq: 0`)
- * `eventTime` (the instant upstream states) is NOT in the list: it is content and must be equal. Two serialisation rules of the contract are applied to the
- * reference, not tolerated as differences: Person.birthDate -> birthYear (§7 intro) and the `eventId` the process gives every Class and Course (§2.3, §2.12).
- * Not compared, the replay having no counterpart: /api/events/current's `event` (the core has no Event; the bridge asserts it) and /api/sources (a connection
- * fact, not presented state): only checked present.
+ *   source       on an Observed envelope whose `state` and `value` equal the replay's: the real arrival order of the XML poll against the TCP stream at cold
+ *                start (INV-5 presents the first and changes only the stamp at the re-delivery). Where state or value differ, `source` is compared and fails.
+ * Compared in full: every structural field; every set (on-course membership and order, `featuredByUpstream`, Standing entries, diagnostics); of every Observed
+ * field `state`, `value`, `eventTime`, `confidence`, `provisional`. `eventTime` is content, never stripped.
+ * Two serialisation rules of the contract are applied to the reference, not tolerated as differences: Person.birthDate -> birthYear (§7 intro) and the `eventId`
+ * the process gives every Class and Course (§2.3, §2.12). Not compared, the replay having no counterpart: `event` of /api/events/current (the core has no Event;
+ * the bridge asserts it) and /api/sources (a connection fact): only checked present.
+ * Gate 2 (round 27 Q1.3): the checker with `--recording` must report 0 on the 1x log. At 10x the receive latency is outside the leave margin, so that log is
+ * asserted written with the hydration step first and is no gate-2 evidence. Never the D-only reading.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -75,11 +81,41 @@ function onsite(m: ReturnType<typeof emptyModel>): void {
   }
   for (const c of [...m.classes.values(), ...m.courses.values()]) c['eventId'] = EVENT_ID;
 }
+const isEnvelope = (x: unknown): x is J => x !== null && typeof x === 'object' && !Array.isArray(x) && 'state' in (x as J) && 'source' in (x as J);
+/** Drops `source` from the envelopes of two aligned structures whose `state` and `value` are equal (closed list, last item). Pure: returns copies. */
+function dropEqualSource(a: unknown, b: unknown): [unknown, unknown] {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    const out = a.map((x, i) => (i < b.length ? dropEqualSource(x, b[i]) : [x, undefined] as [unknown, unknown]));
+    return [out.map((p) => p[0]), b.map((y, i) => (i < a.length ? out[i]![1] : y))];
+  }
+  if (a !== null && b !== null && typeof a === 'object' && typeof b === 'object' && !Array.isArray(a) && !Array.isArray(b)) {
+    const x = { ...(a as J) }, y = { ...(b as J) };
+    if (isEnvelope(x) && isEnvelope(y) && JSON.stringify(x['state']) === JSON.stringify(y['state']) && JSON.stringify(x['value']) === JSON.stringify(y['value'])) { delete x['source']; delete y['source']; }
+    for (const k of Object.keys(x)) if (k in y && typeof x[k] === 'object' && x[k] !== null) { const [p, q] = dropEqualSource(x[k], y[k]); x[k] = p; y[k] = q; }
+    return [x, y];
+  }
+  return [a, b];
+}
 const compared = (m: ReturnType<typeof emptyModel>): J => {
   const v = view(m);
   delete v['event']; delete v['sources']; delete v['checks']; delete v['flags'];
   return strip(v) as J;
 };
+const comparedPair = (p: ReturnType<typeof emptyModel>, r: ReturnType<typeof emptyModel>, key: string): [unknown, unknown] => dropEqualSource(compared(p)[key], compared(r)[key]);
+
+/** The first recorded tcp or xml instant of an excerpt: the origin of the process's clock (the time basis the replay and the checker read). */
+function firstInstant(dir: string): string {
+  const m = JSON.parse(readFileSync(path.join(dir, 'manifest.json'), 'utf8')) as { chunks: { file: string; startTime: string }[] };
+  for (const c of m.chunks) {
+    const lines = readFileSync(path.join(dir, c.file), 'utf8').split('\n');
+    const base = Date.parse((JSON.parse(lines[0]!) as { _meta: { startTime: string } })._meta.startTime);
+    for (const l of lines.slice(1)) {
+      if (!l.includes('"src":"tcp"') && !l.includes('"type":"XmlSnapshot"')) continue;
+      return new Date(base + (JSON.parse(l) as { ts: number }).ts).toISOString();
+    }
+  }
+  throw new Error('the excerpt holds no tcp or xml record');
+}
 
 function excerpt(from: string, to: string): string {
   const out = path.join(tmp(), 'excerpt');
@@ -112,10 +148,10 @@ async function realProcess(dir: string, speed: number): Promise<Run> {
   children.push(player);
   const status = async (): Promise<J | undefined> => { try { return (await (await fetch(`http://127.0.0.1:${controlPort}/status`)).json()) as J; } catch { return undefined; } };
   for (let i = 0; i < 100 && (await status()) === undefined; i++) await sleep(100);
-  const poll = 5 / speed;
+  const poll = 5; // the setting; the clock scales it
   const proc = spawn(process.execPath, ['--import', 'tsx', path.join(ROOT, 'src/onsite/main.ts'),
     '--port', '0', '--data-dir', path.join(work, 'data'), '--event-id', EVENT_ID, '--event-name', 'T4', '--tcp-host', '127.0.0.1', '--tcp-port', String(tcpPort),
-    '--xml', xmlOut, '--xml-poll-seconds', String(poll), '--zone', 'Europe/Prague', '--event-date', '2026-04-26', '--external-id-scheme', 'replay',
+    '--xml', xmlOut, '--xml-poll-seconds', String(poll), '--clock-rate', String(speed), '--clock-origin', firstInstant(dir), '--zone', 'Europe/Prague', '--event-date', '2026-04-26', '--external-id-scheme', 'replay',
     '--step-log', log, '--no-discovery'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'inherit'] });
   children.push(proc);
   const port = await new Promise<number>((res, rej) => {
@@ -130,7 +166,7 @@ async function realProcess(dir: string, speed: number): Promise<Run> {
   let prev = '';
   let model = emptyModel();
   for (let i = 0; i < 40; i++) {
-    await sleep(Math.max(1500, poll * 3000));
+    await sleep(Math.max(1500, (poll / speed) * 3000)); // wall time of three polls on the scaled clock
     model = (await hydrate({ h: { port } })).model;
     const now = JSON.stringify(compared(model));
     if (now === prev) break;
@@ -163,14 +199,13 @@ describe.skipIf(!HAVE)('rows 14 and 15: a real process fed by player.js (ADR-017
         run = await realProcess(dir, w.speed);
       })());
 
-      const section = (k: string): J => (compared(run.model)[k] as J);
       for (const k of ['classes', 'courses', 'phases', 'entries', 'attempts', 'standings', 'oncourse', 'diagnostics']) {
         it(`ADR-017 gate 5, ${w.speed}x: the hydrated "${k}" equal the direct-injection replay's final state, stamps removed (closed list in the header)`, async () => {
           await start();
-          const expected = compared(ref)[k];
+          const [got, expected] = comparedPair(run.model, ref, k);
           expect(expected, `the replay's ${k} is not empty where the window has it`).toBeDefined();
           if (k === 'attempts' || k === 'entries' || k === 'standings') expect((expected as J[]).length).toBeGreaterThan(0);
-          expect(section(k)).toEqual(expected);
+          expect(got).toEqual(expected);
         }, 900_000);
       }
 
@@ -183,11 +218,18 @@ describe.skipIf(!HAVE)('rows 14 and 15: a real process fed by player.js (ADR-017
         expect(run.sources.tcp.state).toBe('connected');
       }, 900_000);
 
-      it(`ADR-017 gate 5 + TEST-ARCHITECTURE §3.2, ${w.speed}x: the process writes the step log when asked, and the gate-2 checker reports 0 violations on it`, async () => {
+      it(`ADR-017 Revision 7, ${w.speed}x: the process writes the step log when asked, first line the hydration step`, async () => {
         await start();
         expect(run.steps).toBeGreaterThan(2);
         const first = JSON.parse(readFileSync(run.log, 'utf8').split('\n')[0]!) as J;
         expect(first).toHaveProperty('hydration');
+        const last = JSON.parse(readFileSync(run.log, 'utf8').trim().split('\n').at(-1)!) as J;
+        expect(last).toHaveProperty('end');
+      }, 900_000);
+
+      // Round 27 Q1.3: the 1x log only; at 10x the latency is outside the leave margin and the log is no gate-2 evidence.
+      it.skipIf(w.speed !== 1)(`TEST-ARCHITECTURE §3.2, ${w.speed}x: the gate-2 checker with --recording reports 0 violations on the log`, async () => {
+        await start();
         const c = spawnSync(process.execPath, [CHECKER, run.log, '--recording', dir], { encoding: 'utf8', timeout: 600_000 });
         expect(c.status, `checker: ${c.stdout.slice(0, 600)} ${c.stderr.slice(0, 300)}`).toBe(0);
         expect((JSON.parse(c.stdout) as { violations: unknown[] }).violations).toEqual([]);

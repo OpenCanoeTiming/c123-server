@@ -125,6 +125,14 @@ export async function hydrate(env: { h: { port: number } }, between?: () => Prom
     for (const s of (await fetchJson(`/api/classes/${id}/standings`))['standings'] as J[]) m.standings.set(s['standingKey'], s);
   }
   const oc = await fetchJson('/api/oncourse');
+  // Round 27 (CONTRACTS §7.1): an Attempt whose Phase's class is not yet stated is served by /api/oncourse and by /api/phases/{phaseId}/attempts,
+  // the Phase itself nowhere (not reachable through a class).
+  for (const a of oc['attempts'] as J[]) {
+    m.attempts.set(a['attemptId'], a);
+    if (!m.phases.has(a['phaseId'])) {
+      for (const x of (await fetchJson(`/api/phases/${encodeURIComponent(a['phaseId'])}/attempts`))['attempts'] as J[]) m.attempts.set(x['attemptId'], x);
+    }
+  }
   m.oncourse = { attemptIds: (oc['attempts'] as J[]).map((a) => a['attemptId']), featuredByUpstream: oc['featuredByUpstream'], asOf: oc['asOf'] };
   m.diagnostics = (await fetchJson('/api/diagnostics'))['diagnostics'];
   const src = await get(env, '/api/sources');

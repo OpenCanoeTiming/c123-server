@@ -50,6 +50,8 @@ export const ODP = {
     observedAt: new Date(Date.parse(R19.rcXml.observedAt) + 65_000).toISOString(),
     edit: (d) => d.replace(/Gates="(...)(...)/, 'Gates="poz or'),
   })),
+  /** A Results row of bib 56 received at `ms` (a non-listing TCP message: where a leave may be derived, DERIVATIONS §4.1). */
+  rowAt: (ms: number): Unit => tcp(derived(R19.c4RowB, { observedAt: new Date(ms).toISOString() })),
   emptyAt: (ms: number): Unit => tcp({ observedAt: new Date(ms).toISOString(), data: EMPTY_ONCOURSE }),
   /** `n` listings of different bibs (derived from the recorded start listing), Position `positions[i]` or none for null: courseOrder = Position (DERIVATIONS §4.8). */
   listings: (positions: (string | null)[], bibs: number[], startOrders: number[]): Unit[] => positions.map((pos, i) => tcp(derived(R19.c4Start, {

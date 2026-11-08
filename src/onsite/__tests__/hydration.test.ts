@@ -189,7 +189,8 @@ describe('row 3: /api/oncourse (CONTRACTS §7.1)', () => {
 
   it('contract §7.1: ordered by courseOrder ascending (1 = closest to the finish), Attempts without one last, by startOrder', async () => {
     const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day });
-    for (const u of ODP.listings(['3', '1', '2', null, null], [11, 12, 13, 14, 15], [31, 32, 33, 35, 34])) await feed(env, u);
+    const sent = ODP.listings(['3', '1', '2', null, null], [11, 12, 13, 14, 15], [31, 32, 33, 35, 34]);
+    for (const u of sent) await feed(env, u);
     const r = await get(env, '/api/oncourse');
     const at = r.body.attempts as J[];
     expect(ids(r.body).slice(0, 3)).toEqual([`${ODP.phaseId}:12`, `${ODP.phaseId}:13`, `${ODP.phaseId}:11`]);
@@ -198,7 +199,7 @@ describe('row 3: /api/oncourse (CONTRACTS §7.1)', () => {
     expect(rest.map((a) => a.courseOrder.state)).toEqual(['not-yet', 'not-yet']);
     const so = rest.map((a) => a.startOrder);
     if (so.every((s: J) => s.state === 'known')) expect(so[0].value).toBeLessThan(so[1].value);
-    expect(r.body.asOf).toEqual(expect.any(String));
+    expect(r.body.asOf, 'the ingest time of the unit at which the set last changed (round 27)').toBe(sent.at(-1)!.rec.observedAt);
   });
 
   it('contract §7.1 "A finish does not remove it": a finished Attempt stays listed with status finished until upstream drops it, then leaves on the oncourse-empty message', async () => {

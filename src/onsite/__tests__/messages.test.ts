@@ -4,7 +4,7 @@
  * Interface: onsite-harness.ts header.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { boot, disposeAll, get, hydrate, modelFrom, openWs, view, type Env, type J, type WsClient } from './onsite-harness.js';
+import { boot, disposeAll, get, hydrate, modelFrom, openWs, view, WHOLE, type Env, type J, type WsClient } from './onsite-harness.js';
 import { feed, NKZ, ODP, type Unit } from './datasets.js';
 
 afterEach(disposeAll);
@@ -83,6 +83,83 @@ describe('row 6: messages are complete (CONTRACTS §7.2, §1.6 creation over the
     await holdsAfterEachUnit(env, ws, NKZ.units());
     const wipe = ws.messages.find((x) => x.type === 'attempt.updated' && x.attemptId === NKZ.attemptId && x.fields.outcome?.state === 'not-yet');
     expect(wipe, 'the wipe is an explicit not-yet, never an omission').toBeDefined();
+  });
+});
+
+describe('round 27: deferred Phase creation, discipline at creation, oncourse.asOf (CONTRACTS §1.6, §2.4, §7.1, §7.2; DERIVATIONS §1, §2.1)', () => {
+  it('contract §1.6/§2.4 (round 27): the on-course listing that first names a Phase creates the Attempt and not the Phase; the Attempt is served by /api/oncourse and /api/phases/{id}/attempts (not 404), the Phase by no class', async () => {
+    const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day });
+    const ws = await openWs(env);
+    await ws.barrier(); ws.take();
+    await feed(env, ODP.units()[0]!); // a listing of C1M_BR2_18:56: no ClassId on the wire
+    await ws.barrier();
+    const got = ws.take();
+    expect(got.some((m) => m.type === 'attempt.updated' && m.attemptId === ODP.attemptId)).toBe(true);
+    expect(got.filter((m) => m.type === 'phase.updated'), 'no phase.updated while its class is unknown').toEqual([]);
+    const at = await get(env, `/api/phases/${ODP.phaseId}/attempts`);
+    expect(at.status).toBe(200);
+    expect(at.body.attempts.map((a: J) => a.attemptId)).toEqual([ODP.attemptId]);
+    expect((await get(env, '/api/oncourse')).body.attempts.map((a: J) => a.attemptId)).toEqual([ODP.attemptId]);
+    const cur = await get(env, '/api/events/current');
+    for (const c of cur.body.classes as J[]) {
+      expect((await get(env, `/api/classes/${c.classId}/phases`)).body.phases.map((p: J) => p.phaseId)).not.toContain(ODP.phaseId);
+    }
+    expect((await get(env, '/api/phases/NEVER_SEEN/attempts')).status, '404 is for a phaseId never observed').toBe(404);
+  });
+
+  it('contract §2.4 (round 27): the Phase\'s creating message comes at the first unit that states its classId (a Results row), whole, classId included; the Class\'s creating message carries discipline', async () => {
+    const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day });
+    const ws = await openWs(env);
+    await ws.barrier(); ws.take();
+    const units = ODP.units();
+    const firstResults = units.findIndex((u) => u.rec.data.includes('<Results'));
+    expect(firstResults).toBeGreaterThan(0);
+    for (const u of units.slice(0, firstResults)) await feed(env, u);
+    await ws.barrier();
+    expect(ws.messages.filter((m) => m.type === 'phase.updated')).toEqual([]);
+    await feed(env, units[firstResults]!);
+    await ws.barrier();
+    const created = ws.messages.find((m) => m.type === 'phase.updated' && m.phaseId === ODP.phaseId)!;
+    expect(created, 'created at the Results unit').toBeDefined();
+    expect(created.fields.classId).toBe(ODP.classId);
+    expect(Object.keys(created.fields).sort()).toEqual([...WHOLE['phase']!].sort());
+    const cls = ws.messages.find((m) => m.type === 'class.updated' && m.classId === ODP.classId)!;
+    expect(cls.fields.discipline, 'a TCP Results message names its RaceId, whose token decides').toBe('slalom');
+    expect(Object.keys(cls.fields)).toEqual(expect.arrayContaining([...WHOLE['class']!]));
+  });
+
+  it('contract §7.1/§7.2 (round 27): oncourse.asOf is the ingest time of the unit at which the set last changed (listing, order, oncourse-empty, a derived leave); a listing that changes nothing moves nothing; REST equals the last message', async () => {
+    const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day });
+    const ws = await openWs(env);
+    await ws.barrier(); ws.take();
+    const lastSet = (): J => [...ws.messages].reverse().find((m) => m.type === 'oncourse.updated')!;
+    const agree = async (at: number): Promise<void> => {
+      await ws.barrier();
+      expect(lastSet().asOf).toBe(new Date(at).toISOString());
+      expect((await get(env, '/api/oncourse')).body.asOf).toBe(lastSet().asOf);
+    };
+    const [a, a2, b] = ODP.listings(['1', '1', '2'], [31, 31, 32], [51, 51, 52]);
+    const t = (u: { rec: { observedAt: string } }): number => Date.parse(u.rec.observedAt);
+    await feed(env, a!); await agree(t(a!));
+    const n = ws.messages.filter((m) => m.type === 'oncourse.updated').length;
+    await feed(env, a2!); // the same listing again, 0.1 s later: nothing changed
+    await ws.barrier();
+    expect(ws.messages.filter((m) => m.type === 'oncourse.updated').length).toBe(n);
+    expect((await get(env, '/api/oncourse')).body.asOf).toBe(new Date(t(a!)).toISOString());
+    await feed(env, b!); await agree(t(b!));
+    // the leave is derived at a TCP message (§4.1: not named for 4 s of ingest time while other TCP messages keep arriving; a longer gap is a stall, not a leave)
+    let leaveAt = 0;
+    for (let k = 1; k <= 8 && leaveAt === 0; k++) {
+      const at = t(b!) + k * 1000;
+      await feed(env, ODP.rowAt(at));
+      await ws.barrier();
+      if (lastSet().attemptIds.length === 0) leaveAt = at;
+    }
+    expect(leaveAt, 'both Attempts left within 8 s of messages').toBeGreaterThan(0);
+    await agree(leaveAt);
+    const e = leaveAt + 10_000;
+    await feed(env, a!); await feed(env, ODP.emptyAt(e));
+    await agree(e);
   });
 });
 
