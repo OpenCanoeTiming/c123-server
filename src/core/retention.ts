@@ -60,7 +60,9 @@ export function retain(fs: FieldSlots, channel: Channel, slot: Slot, statusView?
   }
   const age = laterAge(cur.age, slot.age);
   const other = channel === 'tcp' ? fs.xml : channel === 'xml' ? fs.tcp : statusView !== undefined ? fs.xml : undefined;
-  if (other !== undefined && view(fs) === other) {
+  // `status`: the rival is rule 2's whole `tcp` view, the stream included, so a refused row re-delivered and admitted is the re-delivery's
+  const displaced = statusView !== undefined && channel !== 'operator' ? view(fs) !== cur : other !== undefined && view(fs) === other;
+  if (displaced) {
     fs[channel] = { ...slot, age };
     return false;
   }

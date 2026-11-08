@@ -20,8 +20,8 @@ export interface RowIn {
   time: number | undefined;
   pen: number | undefined;
   total: number | undefined;
-  /** TCP `Total` / XML `TotalTotal`, read on a second run only. */
-  pairTotal: number | undefined;
+  /** TCP `Total` / XML `TotalTotal`, read on a second run only; null where a TCP `Total` is empty (no pair total, §4.12). */
+  pairTotal: number | null | undefined;
   gates: string;
   rank: string;
   rankOrder: string;
@@ -146,7 +146,7 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
   if (second && r.pairTotal !== undefined) row['pairTotal'] = r.pairTotal;
   if (second && fmt.pair?.combination === 'best' && x !== undefined) {
     const c = int(x.betterRun);
-    if (c === 1 || c === 2) row['countingRun'] = c;
+    row['countingRun'] = c === 1 || c === 2 ? c : null; // BetterRunNr 0: no pair yet, `not-yet` (§4.4)
   }
 
   // §4.7 other row fields

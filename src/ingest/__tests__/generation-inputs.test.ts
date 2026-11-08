@@ -83,3 +83,17 @@ describe('§4.12 retraction and contradiction inputs', () => {
     expect(els.filter((e) => e.diagnostic && ['duplicate-finish', 'stale-mark', 'contradicted-finish'].includes(e.diagnostic.kind))).toEqual([]);
   });
 });
+
+describe('round 26 G11 (#278): an empty Total of a second-run row is pairTotal null, as an empty Rank is placement null (DERIVATIONS §4.7, §4.12; ne-odp C1M_BR2_19:64, 11:40:07.366Z)', () => {
+  it('§4.12 second-run TCP row with Time, Total, Rank and RankOrder empty (synthetic from bib 108): the row carries pairTotal: null and placement: null as keys', () => {
+    let m = keepRow(TCP.resultsBr2, 'Id="9047.K1M"');
+    if (!m.includes('Id="9047.K1M"')) throw new Error('fixture row missing');
+    for (const [a, v] of [['Time', '91.64'], ['Total', '88.38'], ['Rank', '20'], ['RankOrder', '20']] as const) m = withAttr(m, a, v, '');
+    m = m.replace(/Gates="[^"]*"/, 'Gates=""');
+    const r = rowOf(parseTcp(m, ctx()), 'K1M_BR2_19', '108');
+    expect(r.timeEmpty).toBe(true);
+    expect(r.placement).toBeNull();
+    expect('pairTotal' in r, 'the key is present so the core\'s writeRow states not-yet').toBe(true);
+    expect(r.pairTotal).toBeNull();
+  });
+});
