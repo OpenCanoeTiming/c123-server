@@ -2,7 +2,7 @@
  * The parser context a recording driver rebuilds from the parsers' own output (sweep:parse, sweep:merge, replay:direct): phase dates
  * and the Course slots each Phase uses. The drivers share only this; how they feed the core differs.
  */
-import type { CourseSlot, IngestContext, IngestElement } from '../../src/ingest/index.js';
+import type { CourseSlot, IngestContext, IngestElement } from './index.js';
 
 export interface ContextTracker {
   ctx: IngestContext;
