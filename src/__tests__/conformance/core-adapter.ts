@@ -10,6 +10,7 @@
  */
 import type {
   ConformancePort,
+  GivenElement,
   MergePort,
   StandingGiven,
   StandingResult,
@@ -18,6 +19,7 @@ import type {
   WorkflowGiven,
   WorkflowResult,
 } from './port.js';
+import { splitRaceId } from '../../ingest/common.js';
 
 export class CoreMissing extends Error {
   constructor(what: string) {
@@ -41,9 +43,38 @@ const absent = (e: unknown): boolean =>
  * (`MergeCoreOptions.attemptId`, `MergeCoreOptions.xml`); the core follows them and keeps no "unnamed Attempt" of its own.
  */
 export function createMergePort(context: VectorContext): MergePort {
-  if (loaded.factory) return loaded.factory({ attemptId: context.attemptId, ...(context['xml'] !== undefined ? { xml: context['xml'] } : {}) });
+  if (loaded.factory) return withConventionalClass(loaded.factory({ attemptId: context.attemptId, ...(context['xml'] !== undefined ? { xml: context['xml'] } : {}) }));
   if (absent(loaded.error)) throw new CoreMissing('createMergePort (src/core)');
   throw loaded.error;
+}
+
+/**
+ * CONFORMANCE-VECTORS §1 (round 27d-2), the harness's alone: a Phase first observed with no `classId` element gets the id's class part
+ * (the part before the format token) as its `classId`, stated in that unit. The core and the parsers never derive a class from an id.
+ */
+function withConventionalClass(port: MergePort): MergePort {
+  const seen = new Set<string>();
+  const applyUnit = port.applyUnit.bind(port);
+  port.applyUnit = (elements) => {
+    const named = new Set<string>();
+    const stated = new Set<string>();
+    for (const e of elements) {
+      const snapshot = e['snapshot'] as { phaseId?: unknown } | undefined;
+      const ids = [e['phaseId'], snapshot?.phaseId, typeof e['attemptId'] === 'string' ? e['attemptId'].slice(0, e['attemptId'].lastIndexOf(':')) : undefined];
+      for (const id of ids) if (typeof id === 'string' && id !== '') named.add(id);
+      if (e['field'] === 'classId' && typeof e['phaseId'] === 'string') stated.add(e['phaseId']);
+    }
+    const first = elements[0];
+    const added: GivenElement[] = [];
+    for (const phaseId of named) {
+      if (seen.has(phaseId)) continue;
+      seen.add(phaseId);
+      if (stated.has(phaseId) || first === undefined) continue;
+      added.push({ ingestSeq: 0, phaseId, field: 'classId', source: 'tcp', kind: 'result-row', observedAt: first['observedAt'], value: splitRaceId(phaseId).classKey } as GivenElement);
+    }
+    applyUnit([...added, ...elements]);
+  };
+  return port;
 }
 
 /** `src/core/standing.ts` (#205): `assembleStanding(given, scope)`, pure. Imported by a variable path so `tsc` does not need the file to exist yet. */
