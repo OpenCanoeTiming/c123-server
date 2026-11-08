@@ -133,7 +133,9 @@ binds the course is the core's and the checker's (TEST-ARCHITECTURE §3.2; DERIV
 (2026-11-08, #207 re-run paths) moved none: property 6(b) reading the new generation at an increment is
 the checker's (TEST-ARCHITECTURE §3.2; ADR-013). Round 27h (2026-11-08, #210 row 15) moved none:
 property 1's "at or before the step" read in ingest order is the checker's (TEST-ARCHITECTURE §3.2;
-CONTRACTS §4 INV-6).
+CONTRACTS §4 INV-6). Round 27i (2026-11-08, the checker review) moved none: `run` incrementing by one is
+the core's and the checker's (TEST-ARCHITECTURE §3.2; CONTRACTS §2.6; ADR-013); its second pass opened
+the generation across a server restart as DERIVATIONS §10 item 25, no duty moving until it is ruled.
 
 ---
 
