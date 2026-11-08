@@ -1515,3 +1515,13 @@ and 23 remain.
     at 08:27:51 — 7 s of `count 0`, `provisional: true`, the honest label. A merge would be a new
     rule (slot cells against captions, and which stamp property 11 reads); not taken on one 7 s
     instance. (Round 26.)
+25. **The generation across a server restart.** `CONTRACTS.md` §2.10 keys checks and flags by `run`,
+    and live-mini holds each Attempt at its pushed `run`; a restarted server that re-derives the
+    Attempt from upstream alone would present `1` for a re-run Attempt — the re-run's checks read
+    `stale`, run 1's are compared against run 2's gates, and the bridge's re-push (§8.2) sends `1`
+    over live's `2`, which property 10 forbids. Nothing persists the generation today. Options: persist
+    `run` per Attempt with §2.10's discipline, or seed it from the store's highest `run` for the
+    Attempt and from live's state. A rare conjunction (one recorded re-run in seven recordings, then a
+    restart inside the event) with a wrong-workflow, never a wrong-result, consequence on site
+    (`ADR-016`), and a decrease on live; to be ruled before penalty-check (M4) and the bridge (M5) rely
+    on it. (Round 27i, second pass.)
