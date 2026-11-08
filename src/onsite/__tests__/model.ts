@@ -125,13 +125,13 @@ export async function hydrate(env: { h: { port: number } }, between?: () => Prom
     for (const s of (await fetchJson(`/api/classes/${id}/standings`))['standings'] as J[]) m.standings.set(s['standingKey'], s);
   }
   const oc = await fetchJson('/api/oncourse');
-  // Round 27 (CONTRACTS §7.1): an Attempt whose Phase's class is not yet stated is served by /api/oncourse and by /api/phases/{phaseId}/attempts,
-  // the Phase itself nowhere (not reachable through a class).
-  for (const a of oc['attempts'] as J[]) {
-    m.attempts.set(a['attemptId'], a);
-    if (!m.phases.has(a['phaseId'])) {
-      for (const x of (await fetchJson(`/api/phases/${encodeURIComponent(a['phaseId'])}/attempts`))['attempts'] as J[]) m.attempts.set(x['attemptId'], x);
-    }
+  // Round 27b (CONTRACTS §7.1, §1.6): a Phase observed but whose class is not yet stated is in `pendingPhaseIds`; its Attempts and its checks are
+  // fetched as for a listed Phase, the Phase itself is held nowhere.
+  for (const id of cur['pendingPhaseIds'] as string[]) {
+    for (const x of (await fetchJson(`/api/phases/${encodeURIComponent(id)}/attempts`))['attempts'] as J[]) m.attempts.set(x['attemptId'], x);
+    const ck = await fetchJson(`/api/phases/${encodeURIComponent(id)}/checks`);
+    for (const k of ck['checks'] as J[]) m.checks.set(checkKey(k as any), k);
+    for (const f of ck['flags'] as J[]) m.flags.set(f['flagId'], f);
   }
   m.oncourse = { attemptIds: (oc['attempts'] as J[]).map((a) => a['attemptId']), featuredByUpstream: oc['featuredByUpstream'], asOf: oc['asOf'] };
   m.diagnostics = (await fetchJson('/api/diagnostics'))['diagnostics'];

@@ -105,6 +105,16 @@ describe('round 27: deferred Phase creation, discipline at creation, oncourse.as
       expect((await get(env, `/api/classes/${c.classId}/phases`)).body.phases.map((p: J) => p.phaseId)).not.toContain(ODP.phaseId);
     }
     expect((await get(env, '/api/phases/NEVER_SEEN/attempts')).status, '404 is for a phaseId never observed').toBe(404);
+    // round 27b: hydration names the Phase as pending, and the checks of an observed but uncreated Phase are 200, an unknown id 404
+    expect(cur.body.pendingPhaseIds).toEqual([ODP.phaseId]);
+    const ck = await get(env, `/api/phases/${ODP.phaseId}/checks`);
+    expect(ck.status).toBe(200);
+    expect(ck.body).toMatchObject({ checks: [], flags: [] });
+    expect((await get(env, '/api/phases/NEVER_SEEN/checks')).status).toBe(404);
+    // a hydrating client holds the Attempt through the pending id, and equals the applied stream
+    const fresh = (await hydrate(env)).model;
+    expect(view(fresh)['attempts']).toEqual(view(modelFrom(ws.messages))['attempts']);
+    expect(fresh.phases.has(ODP.phaseId)).toBe(false);
   });
 
   it('contract §2.4 (round 27): the Phase\'s creating message comes at the first unit that states its classId (a Results row), whole, classId included; the Class\'s creating message carries discipline', async () => {
@@ -119,6 +129,7 @@ describe('round 27: deferred Phase creation, discipline at creation, oncourse.as
     expect(ws.messages.filter((m) => m.type === 'phase.updated')).toEqual([]);
     await feed(env, units[firstResults]!);
     await ws.barrier();
+    expect((await get(env, '/api/events/current')).body.pendingPhaseIds, 'the id leaves the list at the creating phase.updated').toEqual([]);
     const created = ws.messages.find((m) => m.type === 'phase.updated' && m.phaseId === ODP.phaseId)!;
     expect(created, 'created at the Results unit').toBeDefined();
     expect(created.fields.classId).toBe(ODP.classId);

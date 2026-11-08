@@ -18,8 +18,8 @@
  *   observedAt   inside every Observed `known` envelope and every provenance record: a receipt instant, later than recorded by delivery latency (N-fold at N x)
  *   asOf         on a Standing and on the on-course set: the ingest time of a unit (same reason)
  *   asOfSeq/seq  the process's counter; the replay driver counts nothing (it logs `ingestSeq: 0`)
- *   source       on an Observed envelope whose `state` and `value` equal the replay's: the real arrival order of the XML poll against the TCP stream at cold
- *                start (INV-5 presents the first and changes only the stamp at the re-delivery). Where state or value differ, `source` is compared and fails.
+ *   run.source   `source` on the Attempt's `run` envelope only (round 27b): the core's own stamp of the observation at which the generation was first seen, which no
+ *                INV-2 rule orders between sources, so at a cold start it is the real arrival order of the poll against the stream. `source` is compared on every other field.
  * Compared in full: every structural field; every set (on-course membership and order, `featuredByUpstream`, Standing entries, diagnostics); of every Observed
  * field `state`, `value`, `eventTime`, `confidence`, `provisional`. `eventTime` is content, never stripped.
  * Two serialisation rules of the contract are applied to the reference, not tolerated as differences: Person.birthDate -> birthYear (§7 intro) and the `eventId`
@@ -81,27 +81,20 @@ function onsite(m: ReturnType<typeof emptyModel>): void {
   }
   for (const c of [...m.classes.values(), ...m.courses.values()]) c['eventId'] = EVENT_ID;
 }
-const isEnvelope = (x: unknown): x is J => x !== null && typeof x === 'object' && !Array.isArray(x) && 'state' in (x as J) && 'source' in (x as J);
-/** Drops `source` from the envelopes of two aligned structures whose `state` and `value` are equal (closed list, last item). Pure: returns copies. */
-function dropEqualSource(a: unknown, b: unknown): [unknown, unknown] {
-  if (Array.isArray(a) && Array.isArray(b)) {
-    const out = a.map((x, i) => (i < b.length ? dropEqualSource(x, b[i]) : [x, undefined] as [unknown, unknown]));
-    return [out.map((p) => p[0]), b.map((y, i) => (i < a.length ? out[i]![1] : y))];
-  }
-  if (a !== null && b !== null && typeof a === 'object' && typeof b === 'object' && !Array.isArray(a) && !Array.isArray(b)) {
-    const x = { ...(a as J) }, y = { ...(b as J) };
-    if (isEnvelope(x) && isEnvelope(y) && JSON.stringify(x['state']) === JSON.stringify(y['state']) && JSON.stringify(x['value']) === JSON.stringify(y['value'])) { delete x['source']; delete y['source']; }
-    for (const k of Object.keys(x)) if (k in y && typeof x[k] === 'object' && x[k] !== null) { const [p, q] = dropEqualSource(x[k], y[k]); x[k] = p; y[k] = q; }
-    return [x, y];
-  }
-  return [a, b];
-}
 const compared = (m: ReturnType<typeof emptyModel>): J => {
   const v = view(m);
   delete v['event']; delete v['sources']; delete v['checks']; delete v['flags'];
   return strip(v) as J;
 };
-const comparedPair = (p: ReturnType<typeof emptyModel>, r: ReturnType<typeof emptyModel>, key: string): [unknown, unknown] => dropEqualSource(compared(p)[key], compared(r)[key]);
+/** Closed list, last item (round 27b): `source` on `run` only, the core's own stamp of the observation at which the generation was first seen (cold-start arrival order). */
+const comparedPair = (p: ReturnType<typeof emptyModel>, r: ReturnType<typeof emptyModel>, key: string): [unknown, unknown] => {
+  const one = (m: ReturnType<typeof emptyModel>): unknown => {
+    const v = compared(m)[key];
+    if (key !== 'attempts') return v;
+    return (v as J[]).map((a) => { const run = a['run'] as J | undefined; if (run === undefined || !('source' in run)) return a; const { source: _s, ...rest } = run; return { ...a, run: rest }; });
+  };
+  return [one(p), one(r)];
+};
 
 /** The first recorded tcp or xml instant of an excerpt: the origin of the process's clock (the time basis the replay and the checker read). */
 function firstInstant(dir: string): string {
@@ -147,12 +140,14 @@ async function realProcess(dir: string, speed: number): Promise<Run> {
   const player = spawn(process.execPath, [PLAYER, dir, '--speed', String(speed), '--port', String(tcpPort), '--control-port', String(controlPort), '--no-udp', '--no-cis', '--xml-out', xmlOut], { stdio: 'ignore' });
   children.push(player);
   const status = async (): Promise<J | undefined> => { try { return (await (await fetch(`http://127.0.0.1:${controlPort}/status`)).json()) as J; } catch { return undefined; } };
+  const control = async (cmd: string): Promise<void> => { await fetch(`http://127.0.0.1:${controlPort}/${cmd}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); };
   for (let i = 0; i < 100 && (await status()) === undefined; i++) await sleep(100);
+  await control('pause'); // round 27b: the player starts paused; the process's clock starts at play
   const poll = 5; // the setting; the clock scales it
   const proc = spawn(process.execPath, ['--import', 'tsx', path.join(ROOT, 'src/onsite/main.ts'),
     '--port', '0', '--data-dir', path.join(work, 'data'), '--event-id', EVENT_ID, '--event-name', 'T4', '--tcp-host', '127.0.0.1', '--tcp-port', String(tcpPort),
-    '--xml', xmlOut, '--xml-poll-seconds', String(poll), '--clock-rate', String(speed), '--clock-origin', firstInstant(dir), '--zone', 'Europe/Prague', '--event-date', '2026-04-26', '--external-id-scheme', 'replay',
-    '--step-log', log, '--no-discovery'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'inherit'] });
+    '--xml', xmlOut, '--xml-poll-seconds', String(poll), '--clock-rate', String(speed), '--clock-origin', firstInstant(dir), '--clock-wait-stdin', '--zone', 'Europe/Prague', '--event-date', '2026-04-26', '--external-id-scheme', 'replay',
+    '--step-log', log, '--no-discovery'], { cwd: ROOT, stdio: ['pipe', 'pipe', 'inherit'] });
   children.push(proc);
   const port = await new Promise<number>((res, rej) => {
     let buf = '';
@@ -160,7 +155,11 @@ async function realProcess(dir: string, speed: number): Promise<Run> {
     proc.stdout!.on('data', (d: Buffer) => { buf += d.toString(); const m = /listening (\d+)/.exec(buf); if (m) { clearTimeout(t); res(Number(m[1])); } });
     proc.on('exit', (c) => { clearTimeout(t); rej(new Error(`the process exited ${String(c)} before listening`)); });
   });
-  // the player plays once a TCP client is connected; wait for the end of the excerpt
+  // connected and paused: the clock and the player start together
+  for (let i = 0; i < 200 && ((await status())?.['clients'] as J | undefined)?.['tcp'] !== 1; i++) await sleep(50);
+  proc.stdin!.write('play\n');
+  await control('play');
+  // wait for the end of the excerpt
   for (let i = 0; i < 1200; i++) { const s = await status(); if (s !== undefined && s['state'] === 'stopped' && (s['stats'] as J)?.['messagesSent'] > 0) break; await sleep(250); }
   // settle: bodies equal on two reads three polls apart (the last snapshot is read by the poll timer, not by the end of playback)
   let prev = '';

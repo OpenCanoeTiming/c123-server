@@ -36,7 +36,8 @@ describe('row 1: hydration bodies (CONTRACTS §7.1)', () => {
     const env = await odp();
     const r = await get(env, '/api/events/current');
     expect(r.status).toBe(200);
-    expect(keys(r.body)).toEqual(['asOfSeq', 'classes', 'courses', 'event']);
+    expect(keys(r.body)).toEqual(['asOfSeq', 'classes', 'courses', 'event', 'pendingPhaseIds']);
+    expect(r.body.pendingPhaseIds, 'normally empty: every observed Phase has a class').toEqual([]);
     expect(typeof r.body.asOfSeq).toBe('number');
     expect(r.body.event).toMatchObject({ eventId: 'ev-1', name: 'Test Event' });
     expect(r.body.classes.map((c: J) => c.classId), 'every Class of the event, the recorded XML lists several').toContain(ODP.classId);
