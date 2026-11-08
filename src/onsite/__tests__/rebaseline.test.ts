@@ -4,7 +4,7 @@
  * Interface: onsite-harness.ts header.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { api, boot, disposeAll, get, hydrate, modelFrom, openWs, view, XML_PATH, type Env, type J } from './onsite-harness.js';
+import { api, boot, disposeAll, feedXml, get, hydrate, modelFrom, openWs, view, XML_PATH, type Env, type J } from './onsite-harness.js';
 import { feed, ODP } from './datasets.js';
 
 afterEach(disposeAll);
@@ -50,6 +50,25 @@ describe('row 11: re-baseline (CONTRACTS §7.1, §4, §7.2)', () => {
     const unit = lines.map((l) => JSON.parse(l) as J).find((o) => Array.isArray(o['elements']) && (o['elements'] as J[]).some((e) => e['event'] === 'rebaseline'))!;
     const detected = (unit['elements'] as J[]).find((e) => e['event'] === 'xml-rewrite-detected')!;
     expect(detected['changedAfter'], 'the reader\'s last stat, not the last delivered unit\'s content age').toBe(new Date(lastStat).toISOString());
+  });
+
+  it('contract §4 step 2, CQ1 (round 27d): when the file is unchanged since the last poll, the re-baseline read carries the last delivered unit\'s changedAfter', async () => {
+    const lines: string[] = [];
+    const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day, stepLog: (l) => { lines.push(l); } });
+    for (const u of ODP.units()) await feed(env, u);
+    // a second, different snapshot is delivered: its changedAfter is the reader's earlier stat, a non-null value to carry
+    const rec = ODP.xmlRec();
+    const second = { observedAt: new Date(Date.parse(rec.observedAt) + 120_000).toISOString(), data: rec.data.replace('</Canoe123Data>', '<!-- changed --></Canoe123Data>') };
+    await feedXml(env, second);
+    const steps = (): J[] => lines.map((l) => JSON.parse(l) as J).filter((o) => Array.isArray(o['elements']));
+    const detected = (o: J): J | undefined => (o['elements'] as J[]).find((e) => e['event'] === 'xml-rewrite-detected');
+    const delivered = steps().filter((o) => (o['elements'] as J[]).every((e) => e['event'] !== 'rebaseline') && detected(o) !== undefined).at(-1)!;
+    const carried = detected(delivered)!['changedAfter'];
+    expect(carried, 'the second delivery states the content age of its change').toEqual(expect.any(String));
+    const r = await post(env, { scope: { kind: 'event' } }); // no new signature since the last poll
+    expect(r.status).toBe(200);
+    const unit = steps().find((o) => (o['elements'] as J[]).some((e) => e['event'] === 'rebaseline'))!;
+    expect(detected(unit)!['changedAfter']).toBe(carried);
   });
 
   it('contract §7.1: scope event -> 200 with attempts the count over every Phase of the event; the body has the scope back', async () => {

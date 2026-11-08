@@ -52,6 +52,8 @@ export const ODP = {
   })),
   /** A Results row of bib 56 received at `ms` (a non-listing TCP message: where a leave may be derived, DERIVATIONS §4.1). */
   rowAt: (ms: number): Unit => tcp(derived(R19.c4RowB, { observedAt: new Date(ms).toISOString() })),
+  /** The recorded result row of bib 56 with its class given as the hyphenated `C1M-ST` while the RaceId keeps its prefix `C1M` (§2.3: ClassId is upstream's own, never the RaceId prefix). */
+  hyphenRow: (): Unit => tcp(derived(R19.c4RowB, { edit: (d) => d.replace('ClassId="C1M"', 'ClassId="C1M-ST"') })),
   emptyAt: (ms: number): Unit => tcp({ observedAt: new Date(ms).toISOString(), data: EMPTY_ONCOURSE }),
   /** `n` listings of different bibs (derived from the recorded start listing), Position `positions[i]` or none for null: courseOrder = Position (DERIVATIONS §4.8). */
   listings: (positions: (string | null)[], bibs: number[], startOrders: number[]): Unit[] => positions.map((pos, i) => tcp(derived(R19.c4Start, {

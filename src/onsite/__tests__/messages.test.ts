@@ -196,6 +196,46 @@ describe('row 6, review B2 (#258 O7: a first run\'s §4.5 unavailable when its s
   });
 });
 
+describe('CQ2 (round 27d): Standing.classId is the Phase\'s classId, never the RaceId prefix; a Standing follows its Phase', () => {
+  it('contract §2.7/§2.3: a class whose ClassId differs from its RaceId prefix (C1M-ST against C1M_BR2_18): standing.updated carries classId C1M-ST and /api/classes/C1M-ST/standings serves the Standings', async () => {
+    const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day });
+    const ws = await openWs(env);
+    await ws.barrier(); ws.take();
+    await feed(env, ODP.hyphenRow());
+    await ws.barrier();
+    const pushed = ws.messages.filter((m) => m.type === 'standing.updated');
+    expect(pushed.length, 'the recorded row has a rank, so a Standing is published').toBeGreaterThan(0);
+    for (const m of pushed) expect(m.standing.classId).toBe('C1M-ST');
+    const rest = await get(env, '/api/classes/C1M-ST/standings');
+    expect(rest.status).toBe(200);
+    expect((rest.body.standings as J[]).map((s) => s.standingKey).sort()).toEqual(pushed.map((m) => m.standing.standingKey).sort());
+    expect((await get(env, '/api/classes/C1M/standings')).status, 'no class C1M was stated').toBe(404);
+    expect(view(modelFrom(ws.messages))['standings']).toEqual(view((await hydrate(env)).model)['standings']);
+  });
+
+  it('contract §1.6 + round 27d: no standing.updated precedes the creating phase.updated of a Phase the Standing names (TCP-only nkz and the odp stream)', async () => {
+    for (const [boot_, units] of [[{ startAt: NKZ.startAt, eventDate: NKZ.day }, NKZ.units()], [{ startAt: ODP.startAt, eventDate: ODP.day }, ODP.units()]] as const) {
+      const env = await boot(boot_);
+      const ws = await openWs(env);
+      for (const u of units) await feed(env, u);
+      await ws.barrier();
+      const created = new Map<string, number>();
+      for (const m of ws.messages) if (m.type === 'phase.updated' && !created.has(m.phaseId)) created.set(m.phaseId, m.seq);
+      const standings = ws.messages.filter((m) => m.type === 'standing.updated');
+      for (const m of standings) {
+        const sc = m.standing.scope as J;
+        // the Phase the Standing is of (a pair\'s sibling may never be observed on this stream, so it is ordered only when it exists)
+        for (const id of [sc.phaseId, sc.secondPhaseId ?? sc.firstPhaseId, sc.firstPhaseId].filter((x) => typeof x === 'string')) {
+          if (id !== sc.phaseId && id !== sc.secondPhaseId && !created.has(id)) continue;
+          expect(created.has(id), `${m.standing.standingKey}: its Phase ${id} was created`).toBe(true);
+          expect(created.get(id)!, `${m.standing.standingKey} follows the creating phase.updated of ${id}`).toBeLessThan(m.seq);
+        }
+      }
+      await disposeAll();
+    }
+  });
+});
+
 describe('row 9: event.changed (CONTRACTS §7.2)', () => {
   it('contract §7.2: sent to a client on connect while an event is configured, carrying the whole OnsiteEvent', async () => {
     const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day });
