@@ -28,11 +28,18 @@ export const ODP = {
   birthYear: 2014,
   units: (): Unit[] => byTime([tcp(R19.c4Stage), tcp(R19.c4Start), tcp(R19.c4RowA), tcp(R19.c4Finish), tcp(R19.c4Corr), tcp(R19.c4RowB), tcp(R19.c4Closed), tcp(R19.rc19), xml(R19.rcXml)]),
   xmlRec: () => R19.rcXml,
-  /** A later TCP row of bib 56 that states gate 13 as clean (the presented penalty moves 2 -> 0): a protest-style correction. */
-  correction: (): Unit => tcp(derived(R19.c4RowB, {
-    observedAt: new Date(Date.parse(R19.rcXml.observedAt) + 60_000).toISOString(),
-    edit: (d) => d.replace(/Gates="((?:...){12})(...)/, 'Gates="$1  0').replace(/ Pen="\d+"/, ' Pen="0"'),
+  /**
+   * A TCP row of bib 56 that restates the presented run (the recorded row C4RowA: Time 81.62, rank 11) with only the target gate changed, as upstream\'s correction
+   * does: gate 13 stated as `value`, Pen and Total following from it. A row that restated another run (a different Time) would be refused as a contradicted row
+   * and never reach the echo rule (INV-2 rule 4).
+   */
+  restate: (value: 0 | 2 | 50, ms: number): Unit => tcp(derived(R19.c4RowA, {
+    observedAt: new Date(ms).toISOString(),
+    edit: (d) => d.replace(/Gates="((?:...){12})(...)/, (_m, a) => `Gates="${a as string}${String(value).padStart(3, ' ')}`)
+      .replace(/ Pen="\d+"/, ` Pen="${value}"`).replace(/ Total="[^"]*"/, ` Total="${(81.62 + value).toFixed(2)}"`),
   })),
+  /** A later TCP row of bib 56 that states gate 13 as clean (the presented penalty moves 2 -> 0): a protest-style correction, a restatement of the presented run. */
+  correction: (): Unit => ODP.restate(0, Date.parse(R19.rcXml.observedAt) + 60_000),
   /** RaceConfig with splits armed: the same recorded message with NrSplits changed (a derived case). */
   raceConfigArmed: (): Unit => tcp(derived(R19.rc19, {
     observedAt: new Date(Date.parse(R19.rcXml.observedAt) + 90_000).toISOString(),
@@ -58,11 +65,8 @@ export const ODP = {
   unitsXmlFirst: (): Unit[] => { const u = ODP.units(); return [u.find((x) => x.kind === 'xml')!, ...u.filter((x) => x.kind !== 'xml')]; },
   /** The recorded snapshot with bib 56 a team boat (`IsTeam` true): a derived case, the recorded text is otherwise unchanged. */
   teamXml: (): Unit => ({ kind: 'xml', rec: derived(R19.rcXml, { edit: (d) => d.replace('<IsTeam>false</IsTeam>', '<IsTeam>true</IsTeam>') }) }),
-  /** The row an echo is: bib 56 with gate 13 stated as `value` (the other cells as recorded), received at `ms`. Pen is the cell (all others are clean in the recorded row). */
-  echo: (value: 0 | 2 | 50, ms: number): Unit => tcp(derived(R19.c4RowB, {
-    observedAt: new Date(ms).toISOString(),
-    edit: (d) => d.replace(/Gates="((?:...){12})(...)/, (_m, a) => `Gates="${a as string}${String(value).padStart(3, ' ')}`).replace(/ Pen="\d+"/, ` Pen="${value}"`),
-  })),
+  /** The row an echo is: the presented run restated with gate 13 stated as `value`, received at `ms` (see `restate`). */
+  echo: (value: 0 | 2 | 50, ms: number): Unit => ODP.restate(value, ms),
   /** The re-run wizard\'s wipe: the row of bib 56 gone from the table (a start-list row with nothing stated). */
   wipe: (ms: number): Unit => tcp(derived(R19.c4RowB, {
     observedAt: new Date(ms).toISOString(),

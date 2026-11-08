@@ -29,7 +29,8 @@ const errorSchema = (): ((x: unknown) => boolean) & { errors?: unknown } => {
 
 const PATH = `/api/attempts/${ODP.phaseId}/56/penalty`;
 const KEY = (k: string): Record<string, string> => ({ 'Idempotency-Key': k });
-const write = (env: Env, body: unknown, key: string | undefined = 'k1', path = PATH): ReturnType<typeof post> => post(env, path, body, key === undefined ? {} : KEY(key));
+// `key: null` sends no Idempotency-Key header; `undefined` would take the default and send `k1`
+const write = (env: Env, body: unknown, key: string | null = 'k1', path = PATH): ReturnType<typeof post> => post(env, path, body, key === null ? {} : KEY(key));
 const GOOD = { gate: ODP.gate, value: 50 };
 
 /** The recorded stream through the closure of the run: bib 56 has finished and has left the on-course set. */
@@ -119,7 +120,7 @@ describe('row 3: validation (CONTRACTS §7.3, §1.4)', () => {
 
   it('contract §7.3: a missing Idempotency-Key is 400 validation-failed; nothing is sent', async () => {
     const env = await closedRun();
-    const r = await write(env, GOOD, undefined);
+    const r = await write(env, GOOD, null);
     expect(r.status).toBe(400);
     expect(r.body.error.code).toBe('validation-failed');
     expect(r.body.error.details).toEqual([{ field: 'Idempotency-Key', issue: 'missing' }]);
@@ -296,7 +297,7 @@ describe('validation order, most permanent first (round 28 item 4)', () => {
   const BAD = { gate: 99, value: 7 };
   it('404 attempt-not-found before everything else (bad body, no key)', async () => {
     const env = await closedRun();
-    const r = await write(env, BAD, undefined, `/api/attempts/${ODP.phaseId}/999/penalty`);
+    const r = await write(env, BAD, null, `/api/attempts/${ODP.phaseId}/999/penalty`);
     expect(r.status).toBe(404);
     expect(r.body.error.code).toBe('attempt-not-found');
   });
@@ -304,18 +305,18 @@ describe('validation order, most permanent first (round 28 item 4)', () => {
   it('409 cross and 409 team-boat before the body and the header are looked at', async () => {
     const cross = await boot({ startAt: CROSS.startAt, eventDate: CROSS.day });
     for (const u of CROSS.units()) await feed(cross, u);
-    const c = await write(cross, BAD, undefined, `/api/attempts/${CROSS.phaseId}/${CROSS.bib}/penalty`);
+    const c = await write(cross, BAD, null, `/api/attempts/${CROSS.phaseId}/${CROSS.bib}/penalty`);
     expect(c.status).toBe(409);
     expect(c.body.error.details.reason).toBe('cross');
     const team = await closedRun({ xmlRec: ODP.teamXml() });
-    const t = await write(team, BAD, undefined);
+    const t = await write(team, BAD, null);
     expect(t.status).toBe(409);
     expect(t.body.error.details.reason).toBe('team-boat');
   });
 
   it('400 for the header and the body shape before the course: a missing key reports Idempotency-Key even when the gate is also outside the course; a bad value is 400 before run-not-closed', async () => {
     const env = await closedRun();
-    const noKey = await write(env, { gate: 99, value: 2 }, undefined);
+    const noKey = await write(env, { gate: 99, value: 2 }, null);
     expect(noKey.status).toBe(400);
     expect(noKey.body.error.details.map((d: J) => d.field)).toContain('Idempotency-Key');
     const live = await boot({ startAt: ODP.startAt, eventDate: ODP.day });
@@ -514,6 +515,8 @@ describe('round 28-2: the key in flight, the creating step, key replay first, no
     const a = write(env, GOOD, 'doomed');
     await Promise.race([hold.reached, a]);
     const b = write(env, GOOD, 'doomed');
+    // b must have reached the server (and found the key in flight) before the write fails: real sockets, so a short wait on the wire, not on the process's clock
+    await new Promise<void>((r) => setTimeout(r, 200));
     hold.fail();
     const [ra, rb] = await Promise.all([a, b]);
     expect(ra.status).toBe(409);
