@@ -18,6 +18,7 @@ function validators() {
   const Ctor = ((Ajv2020 as any).default ?? Ajv2020) as new (o: object) => any;
   const ajv = new Ctor({ strict: true, allErrors: true });
   const load = (f: string): J => JSON.parse(readFileSync(resolve(SCHEMAS, f), 'utf8')) as J;
+  ajv.addFormat('date-time', /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/);
   const observed = ajv.compile(load('observed.schema.json'));
   const error = ajv.compile(load('error.schema.json'));
   return { observed, error };
@@ -38,9 +39,9 @@ describe('row 1: hydration bodies (CONTRACTS §7.1)', () => {
     expect(keys(r.body)).toEqual(['asOfSeq', 'classes', 'courses', 'event']);
     expect(typeof r.body.asOfSeq).toBe('number');
     expect(r.body.event).toMatchObject({ eventId: 'ev-1', name: 'Test Event' });
-    expect(r.body.classes.map((c: J) => c.classId)).toEqual([ODP.classId]);
-    expect(keys(r.body.classes[0])).toEqual(['ageCategories', 'classId', 'code', 'discipline', 'eventId', 'name']);
-    expect(r.body.classes[0].eventId).toBe('ev-1');
+    expect(r.body.classes.map((c: J) => c.classId), 'every Class of the event, the recorded XML lists several').toContain(ODP.classId);
+    expect(new Set(r.body.classes.map((c: J) => c.classId)).size).toBe(r.body.classes.length);
+    for (const c of r.body.classes as J[]) { expect(keys(c)).toEqual(['ageCategories', 'classId', 'code', 'discipline', 'eventId', 'name']); expect(c.eventId).toBe('ev-1'); }
     expect(r.body.courses.length).toBeGreaterThan(0);
     const { observed } = validators();
     for (const c of r.body.courses as J[]) {
@@ -84,7 +85,7 @@ describe('row 1: hydration bodies (CONTRACTS §7.1)', () => {
   it('contract §7.1 GET /api/oncourse, /api/phases/{id}/checks, /api/diagnostics: { asOfSeq, ... } shapes; GET /api/sources is an unwrapped SourceStatus with no asOfSeq', async () => {
     const env = await odp();
     const oc = await get(env, '/api/oncourse');
-    expect(keys(oc.body)).toEqual(['asOfSeq', 'asOf', 'attempts', 'featuredByUpstream']);
+    expect(keys(oc.body)).toEqual(['asOf', 'asOfSeq', 'attempts', 'featuredByUpstream']);
     const ck = await get(env, `/api/phases/${encodeURIComponent(ODP.phaseId)}/checks`);
     expect(ck.status).toBe(200);
     expect(keys(ck.body)).toEqual(['asOfSeq', 'checks', 'flags']);

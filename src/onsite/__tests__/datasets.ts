@@ -38,6 +38,18 @@ export const ODP = {
     observedAt: new Date(Date.parse(R19.rcXml.observedAt) + 90_000).toISOString(),
     edit: (d) => d.replace('NrSplits="0"', 'NrSplits="2"'),
   })),
+  /** A TCP row of bib 56 after the snapshot (which binds the Phase to its Course) whose first two gate cells hold text: two unparseable-cell diagnostics (§1.3). */
+  textRow: (): Unit => tcp(derived(R19.c4RowB, {
+    observedAt: new Date(Date.parse(R19.rcXml.observedAt) + 60_000).toISOString(),
+    edit: (d) => d.replace(/Gates="(...)(...)/, 'Gates="poz or'),
+  })),
+  /** The same row restated later with the text gone (the recorded cells): the diagnostics are no longer current. */
+  cleanRow: (): Unit => tcp(derived(R19.c4RowB, { observedAt: new Date(Date.parse(R19.rcXml.observedAt) + 70_000).toISOString() })),
+  /** The text row received again, unchanged. */
+  textRowAgain: (): Unit => tcp(derived(R19.c4RowB, {
+    observedAt: new Date(Date.parse(R19.rcXml.observedAt) + 65_000).toISOString(),
+    edit: (d) => d.replace(/Gates="(...)(...)/, 'Gates="poz or'),
+  })),
   emptyAt: (ms: number): Unit => tcp({ observedAt: new Date(ms).toISOString(), data: EMPTY_ONCOURSE }),
   /** `n` listings of different bibs (derived from the recorded start listing), Position `positions[i]` or none for null: courseOrder = Position (DERIVATIONS §4.8). */
   listings: (positions: (string | null)[], bibs: number[], startOrders: number[]): Unit[] => positions.map((pos, i) => tcp(derived(R19.c4Start, {

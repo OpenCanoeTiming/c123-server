@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { boot, disposeAll, get, hydrate, modelFrom, openWs, view, type Env, type J, type WsClient } from './onsite-harness.js';
-import { feed, JNE, NKZ, ODP, type Unit } from './datasets.js';
+import { feed, NKZ, ODP, type Unit } from './datasets.js';
 
 afterEach(disposeAll);
 
@@ -112,7 +112,7 @@ describe('row 9: event.changed (CONTRACTS §7.2)', () => {
     a.take(); b.take();
     await env.h.startNewEvent({ eventId: 'ev-2', name: 'Second Event' });
     for (const c of [a, b]) {
-      const m = await c.until((x) => x.type === 'event.changed');
+      const m = await c.until((x) => x.type === 'event.changed' && x.event.eventId === 'ev-2');
       expect(m.event).toMatchObject({ eventId: 'ev-2', name: 'Second Event' });
       expect('organiserId' in m.event).toBe(false);
     }
@@ -124,30 +124,39 @@ describe('row 9: event.changed (CONTRACTS §7.2)', () => {
 
 describe('row 12: diagnostics (CONTRACTS §7.1, §7.2)', () => {
   const diag = async (env: Env): Promise<J[]> => (await get(env, '/api/diagnostics')).body.diagnostics as J[];
+  const cells = (l: J[]): J[] => l.filter((d) => d.kind === 'unparseable-cell');
+  const odp = async (): Promise<Env> => {
+    const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day });
+    for (const u of ODP.units()) await feed(env, u); // the snapshot binds the Phase to its Course, so gate cells can be read (and misread)
+    return env;
+  };
 
-  it('contract §7.1/§7.2: GET /api/diagnostics and diagnostics.updated carry the whole current list when it changes: the recorded text cells raise two unparseable-cell, a restated clean row clears them', async () => {
-    const env = await boot({ startAt: JNE.startAt, eventDate: JNE.day });
+  it('contract §7.1/§7.2: GET /api/diagnostics and diagnostics.updated carry the whole current list when it changes: text in two gate cells raises two unparseable-cell, a restated clean row clears them', async () => {
+    const env = await odp();
     const ws = await openWs(env);
-    await feed(env, JNE.units()[0]!);
+    await ws.barrier(); ws.take();
+    await feed(env, ODP.textRow());
     await ws.barrier();
     const first = [...ws.messages].reverse().find((x) => x.type === 'diagnostics.updated')!;
-    expect(first.diagnostics.map((d: J) => d.kind)).toEqual(['unparseable-cell', 'unparseable-cell']);
+    expect(first, 'the list changed, so it is pushed').toBeDefined();
+    expect(cells(first.diagnostics)).toHaveLength(2);
     expect(first.diagnostics).toEqual(await diag(env));
-    await feed(env, JNE.restated());
+    await feed(env, ODP.cleanRow());
     await ws.barrier();
     const last = [...ws.messages].reverse().find((x) => x.type === 'diagnostics.updated')!;
     expect(last.seq).toBeGreaterThan(first.seq);
-    expect(last.diagnostics).toEqual([]);
-    expect(await diag(env)).toEqual([]);
+    expect(cells(last.diagnostics)).toEqual([]);
+    expect(last.diagnostics).toEqual(await diag(env));
   });
 
   it('INV-5: the same row received again changes no diagnostic, so no diagnostics.updated is sent', async () => {
-    const env = await boot({ startAt: JNE.startAt, eventDate: JNE.day });
+    const env = await odp();
     const ws = await openWs(env);
-    await feed(env, JNE.units()[0]!);
+    await feed(env, ODP.textRow());
     await ws.barrier();
+    expect(cells(await diag(env)).length).toBeGreaterThan(0);
     const n = ws.messages.filter((x) => x.type === 'diagnostics.updated').length;
-    await feed(env, JNE.sameRow());
+    await feed(env, ODP.textRowAgain());
     await ws.barrier();
     expect(ws.messages.filter((x) => x.type === 'diagnostics.updated').length).toBe(n);
   });
