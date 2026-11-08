@@ -3,17 +3,19 @@
  *
  *   --port <n> --data-dir <dir> --event-id <id> [--event-name <s>] --tcp-host <h> [--tcp-port <n>] --xml <path> [--xml-poll-seconds <s>]
  *   [--zone <iana>] [--event-date <YYYY-MM-DD>] [--external-id-scheme <s>] [--step-log <file>] [--no-discovery]
+ *   [--clock-rate <n>] [--clock-origin <iso>] [--clock-wait-stdin]   (the process's clock: rate seconds per wall second from origin; default 1 and the
+ *   system time; with --clock-wait-stdin it stands at origin until one line is read on stdin)
  *
  * It prints `listening <port>` once HTTP accepts connections. SIGTERM and SIGINT stop it gracefully (the step log gets its `end` line) and
  * exit 0. Without `--tcp-host` the TCP host comes from Canoe123's UDP broadcast, unless `--no-discovery`.
  */
 import { appendFileSync, writeFileSync } from 'node:fs';
-import { createRealChecksFs, createRealClock, createRealXmlFs } from '../adapters/real-io.js';
+import { createRealChecksFs, createRealClock, createRealXmlFs, createScaledClock } from '../adapters/real-io.js';
 import { UdpDiscovery } from '../sources/UdpDiscovery.js';
 import { DEFAULT_PORT, startOnsite, type OnsiteDiscovery, type OnsiteOptions } from './index.js';
 
-const FLAGS = new Set(['--port', '--data-dir', '--event-id', '--event-name', '--tcp-host', '--tcp-port', '--xml', '--xml-poll-seconds', '--zone', '--event-date', '--external-id-scheme', '--step-log']);
-const USAGE = 'usage: npm run onsite -- --data-dir <dir> [--port <n>] [--event-id <id> [--event-name <s>]] [--tcp-host <h> [--tcp-port <n>]] [--xml <path> [--xml-poll-seconds <s>]] [--zone <iana>] [--event-date <YYYY-MM-DD>] [--external-id-scheme <s>] [--step-log <file>] [--no-discovery]\n';
+const FLAGS = new Set(['--port', '--data-dir', '--event-id', '--event-name', '--tcp-host', '--tcp-port', '--xml', '--xml-poll-seconds', '--zone', '--event-date', '--external-id-scheme', '--step-log', '--clock-rate', '--clock-origin']);
+const USAGE = 'usage: npm run onsite -- --data-dir <dir> [--port <n>] [--event-id <id> [--event-name <s>]] [--tcp-host <h> [--tcp-port <n>]] [--xml <path> [--xml-poll-seconds <s>]] [--zone <iana>] [--event-date <YYYY-MM-DD>] [--external-id-scheme <s>] [--step-log <file>] [--no-discovery] [--clock-rate <n>] [--clock-origin <iso>] [--clock-wait-stdin]\n';
 
 function fail(message: string): never {
   process.stderr.write(`${message}\n${USAGE}`);
@@ -22,9 +24,11 @@ function fail(message: string): never {
 
 const args = new Map<string, string>();
 let discover = true;
+let waitStdin = false;
 for (let k = 2; k < process.argv.length; k++) {
   const flag = process.argv[k] ?? '';
   if (flag === '--no-discovery') { discover = false; continue; }
+  if (flag === '--clock-wait-stdin') { waitStdin = true; continue; }
   const value = process.argv[++k];
   if (!FLAGS.has(flag) || value === undefined) fail(`bad argument ${flag}`);
   args.set(flag, value as string);
@@ -44,10 +48,27 @@ const tcpHost = text('--tcp-host');
 const xmlPath = text('--xml');
 const stepLog = text('--step-log');
 if (stepLog !== undefined) writeFileSync(stepLog, '');
+const clockRate = num('--clock-rate') ?? 1;
+if (clockRate <= 0) fail('--clock-rate must be above 0');
+const clockOriginText = text('--clock-origin');
+const clockOrigin = clockOriginText === undefined ? undefined : Date.parse(clockOriginText);
+if (clockOrigin !== undefined && !Number.isFinite(clockOrigin)) fail(`--clock-origin is not an instant: ${clockOriginText ?? ''}`);
+const scaled = clockRate === 1 && clockOrigin === undefined && !waitStdin ? undefined : createScaledClock(clockRate, clockOrigin ?? Date.now(), waitStdin);
+if (scaled !== undefined && waitStdin) {
+  let buf = '';
+  const onData = (d: Buffer): void => {
+    buf += d.toString();
+    if (!buf.includes('\n')) return;
+    process.stdin.off('data', onData);
+    process.stdin.pause();
+    scaled.start();
+  };
+  process.stdin.on('data', onData);
+}
 
 const opts: OnsiteOptions = {
   port: num('--port') ?? DEFAULT_PORT,
-  clock: createRealClock(),
+  clock: scaled ?? createRealClock(),
   fs: { ...createRealChecksFs(), ...createRealXmlFs() },
   dataDir: dataDir as string,
   ...(text('--event-id') !== undefined ? { eventId: text('--event-id') as string, ...(text('--event-name') !== undefined ? { eventName: text('--event-name') as string } : {}) } : {}),

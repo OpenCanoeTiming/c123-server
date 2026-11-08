@@ -54,6 +54,8 @@ export function createApp(api: OnsiteApi): express.Express {
       asOfSeq: api.asOfSeq(), event: onsiteEvent(event),
       classes: core.classIds().map((id) => classWhole(core.class(id), event.eventId)),
       courses: core.courseIds().map((id) => courseWhole(core.course(id), event.eventId)),
+      // §7.1 (round 27b): observed Phases whose class is not yet stated, created by no message yet; their Attempts are fetched as for a listed Phase
+      pendingPhaseIds: core.phaseIds().filter((p) => core.phase(p)['classId'] === undefined),
     });
   });
 
