@@ -247,7 +247,10 @@ the step index, the Attempt, the field and the property number.
 1. **Sequence (INV-6) D.** `seq` strictly increases across deltas, and the first delta's `seq`
    exceeds the hydration step's `asOfSeq`. No `observedAt` in any delta is a replay-time clock
    value: each is the recorded `observedAt` of the element that produced that observation, at or
-   before the step (a creation message or a standing legitimately carries earlier envelopes; so
+   before the step **in ingest order** (INV-6: a real process applies an XML unit, stamped at its
+   detection, `DERIVATIONS.md` §0.3, after the TCP units it received during the read, so a log's
+   instants are not monotonic across sources, and a replay-time clock value is one that exceeds every
+   instant the log has seen up to the step; round 27h) (a creation message or a standing legitimately carries earlier envelopes; so
    does a row the merge held for the stream's finish, `DERIVATIONS.md` §4.11, presented at the
    listing that settled it with its own `observedAt` **and its own value** — the fields the row
    states, `outcome`, `placement`, `qualified` and the like, each at the instant of the row that

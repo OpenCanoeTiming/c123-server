@@ -131,7 +131,9 @@ the row's and the last cell change's and moved no duty: a client takes `observed
 (CONTRACTS §1.2; DERIVATIONS §4.6). Round 27f (2026-11-08, the checker review) moved none: which step
 binds the course is the core's and the checker's (TEST-ARCHITECTURE §3.2; DERIVATIONS §4.6). Round 27g
 (2026-11-08, #207 re-run paths) moved none: property 6(b) reading the new generation at an increment is
-the checker's (TEST-ARCHITECTURE §3.2; ADR-013).
+the checker's (TEST-ARCHITECTURE §3.2; ADR-013). Round 27h (2026-11-08, #210 row 15) moved none:
+property 1's "at or before the step" read in ingest order is the checker's (TEST-ARCHITECTURE §3.2;
+CONTRACTS §4 INV-6).
 
 ---
 
