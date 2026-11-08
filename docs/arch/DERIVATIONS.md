@@ -772,8 +772,9 @@ the latest cells per source and decides among three states:
   binds — built from the retained cells: `Gate[]` from the first `slotCount` cells, or in Kayak Cross
   `faults` from the cells and the captions (d); the parser's cell→`Gate[]`/`faults` function is
   reused, and so is the cells' envelope: the vector carries the `source` and `observedAt` of the
-  retained cells — the latest row or listing of that source that stated them, in the generation —
-  never the binding unit's: the course is the key to read a statement already captured
+  element that last changed it — the latest cells of that source in the generation read on the
+  course, the instant of the row or listing that last changed those cells, the vector's `source` or
+  its `confidence`, an identical re-delivery moving nothing (round 27e) — never the binding unit's: the course is the key to read a statement already captured
   (`CONTRACTS.md` §1.2, `observedAt` "the element's that last changed the presented cells"), and a
   vector of that source on the snapshot's instant is `TEST-ARCHITECTURE.md` §3.2 property 1's
   violation (round 27c; recorded: cp3-cross MX1_XT_26, 43 rows of 08:45:13.346Z read on the course

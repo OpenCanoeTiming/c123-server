@@ -262,9 +262,15 @@ the step index, the Attempt, the field and the property number.
    outcome with it (`CONTRACTS.md` §2.6), never the refused read's; round 26; and a `gates` or
    `faults` vector the core builds at the scope snapshot of the race that binds the course
    (`DERIVATIONS.md` §4.6 "no course bound yet"; at no other step) from the cells retained for the
-   Attempt — the **latest** cells-stating row or listing of that source in the **generation**, §4.6
-   retaining the latest cells per source, INV-5 making each re-delivery an observation of its own —
-   carries that element's instant and `source`: the cells are its statement and the course the key
+   Attempt — the latest cells of that source in the **generation**, §4.6 — carries the instant of
+   the element that **last changed the presented vector**: its cells on the bound course, its
+   `source` or its `confidence`, so the generation's first results-table row of that source is such
+   an element even where its cells equal the stream's (`CONTRACTS.md` §1.2: once a row is presented
+   the merged vector is the row's observation), and an identical re-delivery after it moves nothing
+   (§1.2 "the element's that last changed the presented cells", INV-5) — recorded: MX1_XT_26:8,
+   listings 08:45:13.218–17.961 and the row of 13.346 all stating nine clean cells, the vector at
+   13.346 (round 27e, which withdrew round 27c's "latest delivery"); the vector's `source` is that
+   element's: the cells are its statement and the course the key
    to read them (`CONTRACTS.md` §1.2, `provisional`: `observedAt` is "the element's that last changed
    the presented cells", and a binding changes no cell), so the envelope is the one an earlier
    binding would have given — recorded: cp3-cross MX1_XT_26:52, the row of 08:45:13.346 read on the
