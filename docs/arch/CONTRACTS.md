@@ -1647,7 +1647,9 @@ implementation must satisfy, not an algorithm.
   once and is never re-derived.
 - **INV-6 (ordering is a monotonic ingest sequence, never the wall clock).** Every "later" or "newer"
   above is defined over an internal, strictly increasing sequence, assigned at the ingest boundary
-  together with `observedAt`. It is never defined by comparing `observedAt` values. A clock jump
+  together with `observedAt` (for an XML unit `observedAt` is its detection, `DERIVATIONS.md` §0.3,
+  and its sequence its apply, so the two need not run together; round 27h). It is never defined by
+  comparing `observedAt` values. A clock jump
   cannot reorder a merge decision. The sequence is exposed on the wire only as `seq` (§1.6), for
   reconciliation.
 
