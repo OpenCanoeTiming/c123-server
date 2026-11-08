@@ -259,7 +259,14 @@ the step index, the Attempt, the field and the property number.
    listing's envelope, property 5 — recorded: jarni-so-odp K1W_BR2_18:16, `at-start` of
    14:11:39.886 presented at the clearing of 14:12:08; and a mark a snapshot re-delivers after the
    guard refused its first read is the re-delivery's element and instant, INV-5, the `no-result`
-   outcome with it (`CONTRACTS.md` §2.6), never the refused read's; round 26).
+   outcome with it (`CONTRACTS.md` §2.6), never the refused read's; round 26; and a `gates` or
+   `faults` vector the core builds when a later unit binds the course — a scope snapshot of the
+   race, `DERIVATIONS.md` §4.6 "no course bound yet" — from the cells a row or listing stated
+   before it carries that row's or listing's element and instant, `source` included: the cells are
+   its statement and the course the key to read them, so the envelope is the one an earlier binding
+   would have given; a vector of that source on the binding unit's instant is the violation —
+   recorded: cp3-cross MX1_XT_26:52, the row of 08:45:13.346 read on the course of the snapshot at
+   08:45:18.057; round 27c).
 2. **Envelopes (§1.2) D.** Every presented envelope validates against `schemas/observed.schema.json`:
    `eventTime` omitted when absent, never `null`; `unavailable.reason` in the closed set; `source`
    never `bridge` on site.
