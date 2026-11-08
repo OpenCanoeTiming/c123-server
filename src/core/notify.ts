@@ -117,9 +117,11 @@ export function flush(s: CoreState, xmlInUnit: boolean): void {
   }
 
   for (const p of s.dirtyPhases) {
+    s.dirtyScopes.add(p.id);
+    // §2.4 (round 27): a Phase is created at the first observation that states its class; until then no message, no hydration
+    if (!p.plain.has('classId')) continue;
     const fields = withoutId(diff(viewResource(p, 'phase'), p.sent, p.created), 'phaseId');
     p.created = true;
-    s.dirtyScopes.add(p.id);
     if (Object.keys(fields).length > 0) emit(s, { type: 'phase.updated', phaseId: p.id, fields });
   }
   s.dirtyPhases.clear();
@@ -158,7 +160,7 @@ export function flush(s: CoreState, xmlInUnit: boolean): void {
   const key = JSON.stringify([on.attemptIds, on.featuredByUpstream]);
   if (key !== s.oncourseSent) {
     s.oncourseSent = key;
-    s.oncourseStatedAsOf = s.oncourseAsOf;
+    s.oncourseAsOf = s.unitAt; // §7.1/§7.2: the ingest time of the unit at which the set last changed
     emit(s, { type: 'oncourse.updated', ...on, asOf: s.oncourseAsOf });
   }
   if (!s.diagnosticsDirty) return;

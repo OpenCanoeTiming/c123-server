@@ -32,7 +32,6 @@ function hasStoppedListing(a: AttemptState, now: number, previousTcpAt: number |
 export function list(s: CoreState, a: AttemptState, el: Element): void {
   a.lastListedAt = Date.parse(el.observedAt);
   a.left = false;
-  s.oncourseAsOf = el.observedAt;
   if (!a.listed) {
     a.listed = true;
     s.listed.set(a.id, a);
@@ -196,6 +195,6 @@ export function oncourseView(s: CoreState): { attemptIds: string[]; featuredByUp
   return {
     attemptIds: listed.map((a) => a.id),
     featuredByUpstream: named(s.featured?.odd) ?? named(s.featured?.even) ?? null,
-    asOf: s.oncourseStatedAsOf,
+    asOf: s.oncourseAsOf,
   };
 }

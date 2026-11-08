@@ -89,7 +89,6 @@ function applyEvent(s: CoreState, el: Element): void {
       return;
     }
     case 'oncourse-empty':
-      s.oncourseAsOf = el.observedAt; // an observation of the on-course list: the set is as of now, whether or not it held anything (§7.2)
       for (const a of [...s.listed.values()]) leave(s, a, el);
       return;
     case 'oncourse-left': {
@@ -297,7 +296,7 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
   const s: CoreState = {
     options, counter: options.initialSeq ?? 0, epoch: 0, tcpUp: undefined, rewrite: undefined, xmlRead: false, previousTcpAt: undefined,
     attempts: new Map(), phases: new Map(), entries: new Map(), classes: new Map(), courses: new Map(), classifications: new Map(),
-    listed: new Map(), oncourseAsOf: null, oncourseStatedAsOf: null, oncourseSent: '[[],null]', featured: null, writes: [], splitsArmed: undefined,
+    listed: new Map(), oncourseAsOf: null, oncourseSent: '[[],null]', featured: null, writes: [], splitsArmed: undefined,
     parserDiagnostics: new Map(), phaseDiagnostics: new Map(), diagnosticsSent: '[]', diagnosticsDirty: false, log: [],
     dirtyAttempts: new Set(), dirtyPhases: new Set(), dirtyResources: new Set(), dirtyWrites: new Set(), pendingRebaseline: undefined,
     dirtyScopes: new Set(), unitAt: '', standingsSent: new Map(), standingKeys: new Map(), standingsHeld: new Map(), entryPhases: new Map(),

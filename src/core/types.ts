@@ -193,9 +193,8 @@ export interface CoreState {
   courses: Map<string, ResourceState>;
   classifications: Map<string, ClassificationState>;
   listed: Map<string, AttemptState>;
+  /** The ingest time of the unit at which the on-course set last changed, `null` before any (§7.1, §7.2). */
   oncourseAsOf: string | null;
-  /** `oncourseAsOf` as of the last `oncourse.updated`: what the set's `asOf` shows, so a hydration and the push agree (§7.1, §7.2). */
-  oncourseStatedAsOf: string | null;
   oncourseSent: string;
   featured: { odd: { attemptId: string } | null; even: { attemptId: string } | null } | null;
   writes: WriteState[];
