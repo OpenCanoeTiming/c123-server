@@ -261,12 +261,21 @@ the step index, the Attempt, the field and the property number.
    guard refused its first read is the re-delivery's element and instant, INV-5, the `no-result`
    outcome with it (`CONTRACTS.md` §2.6), never the refused read's; round 26; and a `gates` or
    `faults` vector the core builds at the scope snapshot of the race that binds the course
-   (`DERIVATIONS.md` §4.6 "no course bound yet"; at no other step) from the cells retained for the
-   Attempt — the **latest** cells-stating row or listing of that source in the **generation**, §4.6
-   retaining the latest cells per source, INV-5 making each re-delivery an observation of its own —
-   carries that element's instant and `source`: the cells are its statement and the course the key
-   to read them (`CONTRACTS.md` §1.2, `provisional`: `observedAt` is "the element's that last changed
-   the presented cells", and a binding changes no cell), so the envelope is the one an earlier
+   (`DERIVATIONS.md` §4.6 "no course bound yet": the step at which §4.6's `known` condition —
+   `courseId` known and that Course's `gates` known — is first met for the Phase, or met again after
+   `unavailable{not-configured}`; a later snapshot naming another course finds no retained cells,
+   every cell since the binding having been read at its own step; at no other step, round 27f) from the cells retained for the
+   Attempt — the latest cells of that source in the **generation**, §4.6 — carries the instant
+   `CONTRACTS.md` §1.2 gives the merged vector: the **later** of the presented row's own element and
+   the element's that last changed the presented cells on the bound course, a listing's included —
+   after a retraction the last cell-changing listing's (round 26) — an identical re-delivery after either
+   moving nothing (INV-5) — recorded: MX1_XT_26:8, listings 08:45:13.218–17.961 and the row of
+   13.346 all stating nine clean cells, the vector at 13.346 (round 27e, which withdrew round 27c's
+   "latest delivery" and amended §1.2); the vector's `source` is the presented observation's: the
+   cells are its statement and the course the key
+   to read them (`CONTRACTS.md` §1.2, `provisional`: `observedAt` is the later of the presented row's
+   element and "the element's that last changed the presented cells", and a binding changes no
+   cell), so the envelope is the one an earlier
    binding would have given — recorded: cp3-cross MX1_XT_26:52, the row of 08:45:13.346 read on the
    course of the snapshot at 08:45:18.057; round 27c). **The reject half, stated once for every
    field:** an envelope on the step's own instant must have a producer of its own `source` among the
@@ -351,7 +360,11 @@ the step index, the Attempt, the field and the property number.
    reading, for a re-run on the published fixture only; before any row of the generation the
    stream's vector is an inference, `confidence: 'inferred'`, and once a row is presented the merged
    vector carries the row's envelope, `CONTRACTS.md` §1.2), a judged cell (`0`, `2`, `50`) never becomes
-   `null` at a results-table step — upstream's own withdrawal, the stream's listing blanking a cell
+   `null` at a results-table step — and at the listing that increments `run` the vector is the new
+   generation's, named `not-yet` or the listing's own cells in that delta (property 10, `ADR-013`),
+   the previous generation's row holding nothing of it, so (b) reads the generation the delta
+   presents (round 27g, a checker ordering gap, not a core finding: a checker that still held run 1's row
+   at the increment reported 11 cells of K1W_BR1_18:24) — upstream's own withdrawal, the stream's listing blanking a cell
    it judged, is presented wherever no presented row of the generation holds that cell judged: the
    presented row's cell blank, or no row of the generation yet (recorded: nkz-19so K1M_BR2_19:79,
    cells 14–17 judged 25 s into the run and blank 11 s later, mid-run, no row; round 23),

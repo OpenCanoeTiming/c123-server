@@ -123,7 +123,15 @@ being the Phase's, a Standing published no earlier than its Phase, are the reade
 second pass (2026-11-08, review of PR #286) moved none: the re-baseline's `changedAfter` restated as
 §0.3's last successful stat, the standing precondition scoped to on-site and placed in §5 step 1, and
 the vector Phase's conventional class are the reader's, the core's and the harness's (CONTRACTS §2.7,
-§4, §5; CONFORMANCE-VECTORS §1).
+§4, §5; CONFORMANCE-VECTORS §1). Round 27e (2026-11-08, the checker implementer's question) moved
+none: a late-bound vector's instant being the element's that last changed it, not the latest identical
+re-delivery's, is the core's and the checker's (DERIVATIONS §4.6; TEST-ARCHITECTURE §3.2). Its second
+pass (2026-11-08, review of PR #288) amended CONTRACTS §1.2's merged-vector instant to the later of
+the row's and the last cell change's and moved no duty: a client takes `observedAt` as given
+(CONTRACTS §1.2; DERIVATIONS §4.6). Round 27f (2026-11-08, the checker review) moved none: which step
+binds the course is the core's and the checker's (TEST-ARCHITECTURE §3.2; DERIVATIONS §4.6). Round 27g
+(2026-11-08, #207 re-run paths) moved none: property 6(b) reading the new generation at an increment is
+the checker's (TEST-ARCHITECTURE §3.2; ADR-013).
 
 ---
 
