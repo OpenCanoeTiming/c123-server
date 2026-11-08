@@ -984,7 +984,7 @@ assembly precisely.
 ```ts
 type Standing = {
   standingKey: string          // stable key of (scope, ageCategoryId) — §5
-  classId: string              // the Phase's classId (§2.4), never the RaceId prefix (§2.3); a Standing is published no earlier than its Phase (§1.6) — round 27d
+  classId: string              // the Phase's classId (§2.4), never the RaceId prefix (§2.3); on site published no earlier than its Phase (§5 step 1), on live carried by §8.3's PhasePut — round 27d
   scope: { kind: 'phase'; phaseId: string }
        | { kind: 'pair'; firstPhaseId: string; secondPhaseId: string }
        | { kind: 'heat'; phaseId: string; heat: number }
@@ -1665,9 +1665,11 @@ re-baseline, per Phase or per Event:
    every `WriteRequest` survive; a pending write stays pending, and a check's `status` is recomputed;
 2. reads the current XML snapshot, validated, and ingests it as a scope snapshot with a fresh ingest
    sequence — a unit like the reader's, its `changedAfter` by the same definition
-   (`DERIVATIONS.md` §0.3): the time of the reader's last stat that showed a signature other than
-   the one this read returns — the last poll's stat when the file changed since that poll, else the
-   last delivered unit's (round 27d) — met by nothing step 1 discarded. If no valid snapshot can be read, the
+   (`DERIVATIONS.md` §0.3): the time of the last **successful** stat — the reader's polls and reads,
+   or this read's own retry stats — that showed a signature other than the one this read returns,
+   `null` when none (round 27d; its second pass withdrew a gloss that read "the last poll's", which
+   after a run of failed polls dates the read too late and lets a pending write resolve against an
+   older save, INV-2 rule 4) — met by nothing step 1 discarded. If no valid snapshot can be read, the
    action fails with `409 source-unavailable` and changes nothing: the read precedes step 1, and
    steps 1 and 2 reach the core as one ingest unit, the `rebaseline` event followed by the snapshot's
    elements, so the discard and the rebuild are one step and `scope.replaced` goes with it;
@@ -1722,8 +1724,13 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    leaves the Standing as last built (maintainer, 2026-11-06). **A standing is first published at
    its first entry:** before one, its key is known and nothing is sent, and §7.1's hydration lists
    it only once it has been published — a standing emptied afterwards (a retraction, a re-run) stays
-   published, empty, its emptying being a change (round 25, second pass). **A standing is pushed
-   only when its serialised form changes:** an entry added or removed, or an entry's `rank`, `order`, `result`,
+   published, empty, its emptying being a change (round 25, second pass). **On site, no earlier than
+   its Phase:** a Phase exists once its class is known (§1.6) and the standing's `classId` is the
+   Phase's (§2.7), so a standing whose first entry is a running athlete at a TCP cold start waits for
+   the race's `Results` message or the snapshot (§1.6's window), and within that unit the Phase's
+   creating message precedes its standing's; a vector's Phase has its class by convention from its
+   first observation (`CONFORMANCE-VECTORS.md` §1), so nothing waits there (round 27d, second pass).
+   **A standing is pushed only when its serialised form changes:** an entry added or removed, or an entry's `rank`, `order`, `result`,
    `pairTotalSeconds`, `behindSeconds`, `provisional`, `underReview` or `decidedIn`, or `anomalies`.
 2. **Whole-class entries.**
    - Each Attempt of the Phase with a `known` `placement` is an entry; `placement` is `known` only
