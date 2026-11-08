@@ -315,7 +315,12 @@ Each vector has:
   `${phaseId}:${bib}` (§2.6), and where both are present they agree. Reading the Phase off the id is
   a convention of this file alone, for a harness: a deployable finds a Phase through `Attempt.phaseId`
   and parses no identifier (`CONTRACTS.md` §1.1). The same convention describes a Phase no element
-  has described: its `format` is the id's token, and so its `pair`, with the first run named by
+  has described: its `format` is the id's token, its `classId` the id's class part — a convention of
+  this file alone, so that a vector's Phase has a class from its first observation and `CONTRACTS.md`
+  §5 step 1's on-site precondition, a standing no earlier than its Phase, holds without a `classId`
+  element (round 27d, second pass; `standing-not-resent-on-running-tick`,
+  `classification-emptied-keeps-last-standing` and the live `standing.updated` counts stay as written) —
+  and so its `pair`, with the first run named by
   `CONTRACTS.md` §2.4's pairing by class and token — `standing-not-resent-on-running-tick` has its
   `pair` standing from its first snapshot (`CONTRACTS.md` §5 step 1; round 22). A parser states
   `pair` with the format, `siblingPhaseId: null` until the schedule names the first run, and that

@@ -116,7 +116,14 @@ admin UI's own, the real process's clock and comparison — is the server's, the
 tier-4 harness's (CONTRACTS §2.2, §2.10, §7.1, §7.2; DERIVATIONS §1, §3; TEST-ARCHITECTURE §3.4;
 ADR-017). Round 27c (2026-11-08, the gate-2 verdict on a cold-start cut) moved none: a gate vector
 bound late carrying the envelope of the row that stated its cells is the core's and the checker's
-(DERIVATIONS §4.6; TEST-ARCHITECTURE §3.2); a client receives an ordinary `known` envelope.
+(DERIVATIONS §4.6; TEST-ARCHITECTURE §3.2); a client receives an ordinary `known` envelope. Round 27d
+(2026-11-08, the #210 review) moved none: a re-baseline read's `changedAfter` and `Standing.classId`
+being the Phase's, a Standing published no earlier than its Phase, are the reader's and the core's
+(CONTRACTS §2.7, §4, §5); a client already keys standings by the `classId` it hydrates them under. Its
+second pass (2026-11-08, review of PR #286) moved none: the re-baseline's `changedAfter` restated as
+§0.3's last successful stat, the standing precondition scoped to on-site and placed in §5 step 1, and
+the vector Phase's conventional class are the reader's, the core's and the harness's (CONTRACTS §2.7,
+§4, §5; CONFORMANCE-VECTORS §1).
 
 ---
 
