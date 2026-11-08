@@ -8,6 +8,7 @@
  */
 import { createServer, type Server } from 'node:http';
 import { EventEmitter } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { XMLValidator } from 'fast-xml-parser';
 import { createXmlReader, parseTcp, parseXmlSnapshot, type Clock, type IngestContext, type IngestElement, type XmlFs, type XmlReader, type XmlReaderStatus } from '../ingest/index.js';
@@ -15,10 +16,11 @@ import { createContextTracker, type ContextTracker } from '../ingest/context-tra
 import { createMergeCore, type MergeCore } from '../core/index.js';
 import { openChecksStore, type ChecksFs, type ChecksStore } from '../store/checks.js';
 import { TcpSource } from '../sources/TcpSource.js';
-import type { Source } from '../sources/types.js';
-import { createApp, type OnsiteApi, type RebaselineOutcome, type RebaselineScope } from './app.js';
+import type { Source, WritableSource } from '../sources/types.js';
+import { createApp, errorBody, type AttemptRoute, type OnsiteApi, type RestReply, type RebaselineOutcome, type RebaselineScope } from './app.js';
 import { openSeq, type SeqCounter } from './seq.js';
-import { createStepLog, type StepLog } from './step-log.js';
+import { canon, createStepLog, type StepLog } from './step-log.js';
+import { openWritesStore, penaltyCorrectionCommand, type WritesStore } from './writes-store.js';
 import { checkInput, checkKeyInput, flagInput, resolutionInput, ValidationError } from './validate.js';
 import { onsiteEvent, phaseOfAttempt, toWire, type CurrentEvent, type J } from './wire.js';
 
@@ -103,6 +105,19 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     return store;
   }
   let store: ChecksStore | undefined = event === undefined ? undefined : await storeFor(event.eventId);
+  /** The write requests and idempotency keys, one durable file per event (`writes-store.ts`). */
+  const writeStores = new Map<string, WritesStore>();
+  async function writesFor(eventId: string): Promise<WritesStore> {
+    const have = writeStores.get(eventId);
+    if (have !== undefined) return have;
+    const ws = await openWritesStore({ fs, dir: dataDir, eventId, clock });
+    writeStores.set(eventId, ws);
+    return ws;
+  }
+  let wstore: WritesStore | undefined = event === undefined ? undefined : await writesFor(event.eventId);
+  /** Writes the core holds in this lifetime (created here or re-adopted), and the Attempts seen on the on-course list while a write waited. */
+  const adopted = new Set<string>();
+  const listedSeen = new Set<string>();
   /** §7.2: the statuses hydration already serves are the ones pushed; seeded at startup and at `startNewEvent`. */
   function seedCheckStatuses(s: ChecksStore): void {
     checkStatuses.clear();
@@ -184,7 +199,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   const stepLog: (StepLog & { reset(): void }) | undefined = opts.stepLog === undefined ? undefined : createStepLog(opts.stepLog, () => core, seq.current());
 
   /** One ingest unit: merged whole, then stamped and pushed (§1.6). */
-  async function processUnit(elements: IngestElement[]): Promise<void> {
+  async function processUnit(elements: IngestElement[], bind?: { key: string; writeId: string }): Promise<void> {
     for (const el of elements) {
       const status = el['sourceStatus'] as { tcp?: { upstreamInstance?: unknown; timingClockOffsetSeconds?: unknown } } | undefined;
       if (status?.tcp === undefined) continue;
@@ -192,11 +207,72 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
       if (typeof status.tcp.timingClockOffsetSeconds === 'number') timingClockOffsetSeconds = Math.round(status.tcp.timingClockOffsetSeconds);
     }
     const derived = core.applyUnit(elements);
-    const wire = core.drainNotifications().map((m) => toWire(m, event?.eventId ?? '', classesSent));
+    let wire = core.drainNotifications().map((m) => toWire(m, event?.eventId ?? '', classesSent));
+    wire = writesBesideAttempts(wire);
+    // §2.9: every WriteRequest change is durable before it is pushed; a re-adopted write restating what the store holds is no change (§1.6)
+    let failure: unknown;
+    if (wstore !== undefined) {
+      const held = wstore;
+      wire = wire.filter((m) => m['type'] !== 'write.updated' || canon(held.get((m['write'] as J)['writeId'] as string)) !== canon(m['write']));
+      const changed = wire.filter((m) => m['type'] === 'write.updated').map((m) => m['write'] as J);
+      if (changed.length > 0 || bind !== undefined) {
+        try { await held.put(changed, bind); } catch (e) { failure = e; log('writes store', e); }
+      }
+    }
     const state = [...wire, ...checkStatusChanges()];
     const sent = await emit([...state, ...sourcesChange()]);
     const unitMessages = sent.filter((m) => m['type'] !== 'sources.updated');
     stepLog?.step([...elements, ...derived], unitMessages);
+    if (failure !== undefined && bind !== undefined) throw failure;
+    await adoptPending();
+  }
+
+  /** §2.9: a WriteRequest and the optimistic value it carries are one step: `write.updated` goes out right behind the `attempt.updated` of its Attempt. */
+  function writesBesideAttempts(wire: J[]): J[] {
+    const out = wire.filter((m) => m['type'] !== 'write.updated');
+    for (const w of wire.filter((m) => m['type'] === 'write.updated')) {
+      const t = (w['write'] as { target: { phaseId: string; bib: string } }).target;
+      const at = out.map((m) => m['type'] === 'attempt.updated' && m['attemptId'] === `${t.phaseId}:${t.bib}`).lastIndexOf(true);
+      out.splice(at < 0 ? out.length : at + 1, 0, w);
+    }
+    return out;
+  }
+  const runOf = (attemptId: string): number | undefined => {
+    const run = core.presented(attemptId)['run'] as { state?: string; value?: unknown };
+    return run.state === 'known' && typeof run.value === 'number' ? run.value : undefined;
+  };
+  /**
+   * Pending writes the store holds from an earlier lifetime resume waiting for their echo (round 28 item 8): once the Attempt is known
+   * and has left the on-course list again, the write is put back into the core as the operator's provisional value; a write whose run
+   * has moved on is superseded. Before that the stream is still re-establishing the table, and its rows would read as the echo.
+   */
+  async function adoptPending(): Promise<void> {
+    if (wstore === undefined) return;
+    const waiting = wstore.pending().filter((w) => !adopted.has(w['writeId'] as string));
+    if (waiting.length === 0) return;
+    const on = new Set(core.oncourse().attemptIds);
+    for (const id of on) listedSeen.add(id);
+    const known = new Set(core.attempts());
+    for (const w of waiting) {
+      const t = w['target'] as { phaseId: string; bib: string; run: number };
+      const aid = `${t.phaseId}:${t.bib}`;
+      const run = known.has(aid) ? runOf(aid) : undefined;
+      if (run === undefined) continue;
+      const id = w['writeId'] as string;
+      if (run > t.run) {
+        adopted.add(id);
+        const done = { ...w, status: 'superseded' };
+        await wstore.put([done]);
+        await emit([{ type: 'write.updated', write: done }]);
+      } else if (run === t.run && listedSeen.has(aid) && !on.has(aid)) {
+        adopted.add(id);
+        const v = w['requestedValue'] as { gate: number; value: number };
+        await processUnit([{
+          ingestSeq: 0, attemptId: aid, field: 'gates', source: 'operator-write', kind: 'operator', observedAt: w['submittedAt'] as string,
+          value: [{ number: v.gate, penalty: v.value }], confidence: 'authoritative', run: t.run, writeId: id,
+        }]);
+      }
+    }
   }
   const unit = (elements: IngestElement[]): void => { background(() => processUnit(elements)); };
 
@@ -308,6 +384,180 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     })) ?? { ok: false, status: 409, code: 'source-unavailable', reason: 'unreadable' }; // the process was killed under the request
   }
 
+  // ------------------------------------------------------------------------------------------------ checks and flags, inside the queue
+  async function doPutCheck(input: Parameters<OnsiteHandle['checks']['putCheck']>[0]): Promise<J> {
+    const i = checkInput(input);
+    const s = needStore();
+    await s.putCheck(i);
+    const check = withStatus(s).find((c) => keyOf(c as { attemptId: string; run: number; gate: number }) === keyOf(i)) as J;
+    checkStatuses.set(keyOf(i), check['status'] as string);
+    await emit([{ type: 'check.updated', attemptId: i.attemptId, run: i.run, gate: i.gate, check }]);
+    return JSON.parse(JSON.stringify(check)) as J;
+  }
+  async function doDeleteCheck(key: Parameters<OnsiteHandle['checks']['deleteCheck']>[0]): Promise<void> {
+    const k = checkKeyInput(key);
+    const s = needStore();
+    const existed = s.list().checks.some((c) => keyOf(c) === keyOf(k));
+    await s.deleteCheck(k);
+    if (!existed) return;
+    checkStatuses.delete(keyOf(k));
+    await emit([{ type: 'check.updated', attemptId: k.attemptId, run: k.run, gate: k.gate, check: null }]);
+  }
+  async function doCreateFlag(input: Parameters<OnsiteHandle['checks']['createFlag']>[0]): Promise<J> {
+    const i = flagInput(input);
+    const flag = await needStore().createFlag(i);
+    await emit([{ type: 'flag.updated', flag }]);
+    return flag as unknown as J;
+  }
+  async function doResolveFlag(flagId: string, input: { note?: string; resolvedBy?: string }): Promise<J> {
+    const i = resolutionInput(flagId, input);
+    const s = needStore();
+    const was = s.list().flags.find((f) => f.flagId === flagId);
+    const flag = await s.resolveFlag(flagId, i);
+    if (was?.resolution === undefined) await emit([{ type: 'flag.updated', flag }]);
+    return flag as unknown as J;
+  }
+
+  // ------------------------------------------------------------------------------------------------ REST: writes, checks, flags (§7.3, §7.4)
+  const refuse = (status: number, code: string, message: string, details?: unknown): RestReply => ({ status, body: errorBody(code, message, details) });
+  const notPossible = (reason: string, message: string): RestReply => refuse(409, 'write-not-possible', message, { reason });
+  const invalid = (details: { field: string; issue: string }[]): RestReply => refuse(400, 'validation-failed', 'the request is not valid', details);
+  const notFound = (a: AttemptRoute): RestReply => refuse(404, 'attempt-not-found', `no Attempt ${a.bib} in Phase ${a.phaseId}`);
+  const gone = (): RestReply => refuse(503, 'internal-error', 'the process is stopping');
+  const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+  const known = <T>(v: unknown): T | undefined => (isObj(v) && v['state'] === 'known' ? (v['value'] as T) : undefined);
+
+  const attemptOf = (a: AttemptRoute): string | undefined => { const id = `${a.phaseId}:${a.bib}`; return core.attempts().includes(id) ? id : undefined; };
+  const isCross = (attemptId: string): boolean => {
+    const classId = core.phase(phaseOfAttempt(attemptId))['classId'];
+    return typeof classId === 'string' && core.classIds().includes(classId) && core.class(classId)['discipline'] === 'cross';
+  };
+  const isTeamBoat = (attemptId: string): boolean => {
+    const entryId = known<{ entryId?: string }>(core.presented(attemptId)['entry'])?.entryId;
+    return entryId !== undefined && core.entryIds().includes(entryId) && known<boolean>(core.entry(entryId)['isTeam']) === true;
+  };
+  /** The gate numbers of the Phase's course; undefined where the course is not configured. */
+  const courseGates = (attemptId: string): number[] | undefined => {
+    const courseId = known<string>(core.phase(phaseOfAttempt(attemptId))['courseId']);
+    if (courseId === undefined || !core.courseIds().includes(courseId)) return undefined;
+    return known<{ number: number }[]>(core.course(courseId)['gates'])?.map((g) => g.number);
+  };
+  const gateIssue = (attemptId: string, gate: unknown): { field: string; issue: string } | undefined => {
+    const gates = courseGates(attemptId);
+    if (gates === undefined) return { field: 'gate', issue: 'the Phase has no course configured' };
+    return typeof gate === 'number' && gates.includes(gate) ? undefined : { field: 'gate', issue: 'is not a gate of the Phase\'s course' };
+  };
+  const guard = async (fn: () => Promise<RestReply>): Promise<RestReply> => {
+    try { return (await enqueue(fn)) ?? gone(); } catch (e) {
+      const code = (e as { code?: string }).code;
+      if (e instanceof ValidationError) return invalid(e.details);
+      if (code === 'flag-not-found') return refuse(404, 'flag-not-found', (e as Error).message);
+      if (code === 'event-not-found') return refuse(404, 'attempt-not-found', 'no event is configured');
+      throw e;
+    }
+  };
+
+  /** §7.3. The queue serialises the whole request: no ingest unit is applied between the socket write and the step that creates the WriteRequest. */
+  async function penaltyTask(r: AttemptRoute, key: string | undefined, body: unknown): Promise<RestReply> {
+    const aid = attemptOf(r);
+    if (aid === undefined || wstore === undefined || event === undefined) return notFound(r);
+    if (isCross(aid)) return notPossible('cross', 'penalty writes are not possible on a Kayak Cross Attempt');
+    if (isTeamBoat(aid)) return notPossible('team-boat', 'a team boat is corrected in Canoe123');
+    const issues: { field: string; issue: string }[] = [];
+    if (key === undefined) issues.push({ field: 'Idempotency-Key', issue: 'missing' });
+    const b = isObj(body) ? body : undefined;
+    if (b === undefined) issues.push({ field: 'body', issue: 'must be an object' });
+    else {
+      if (typeof b['gate'] !== 'number' || !Number.isInteger(b['gate'])) issues.push({ field: 'gate', issue: 'must be an integer' });
+      if (b['value'] !== 0 && b['value'] !== 2 && b['value'] !== 50) issues.push({ field: 'value', issue: 'must be 0, 2 or 50' });
+    }
+    if (issues.length > 0) return invalid(issues);
+    const gate = (b as { gate: number }).gate;
+    const value = (b as { value: number }).value;
+    const outside = gateIssue(aid, gate);
+    if (outside !== undefined) return invalid([outside]);
+    if (core.oncourse().attemptIds.includes(aid)) return notPossible('run-not-closed', 'the Attempt is still on upstream\'s on-course list');
+    const refusedConnection = notPossible('upstream-disconnected', 'there is no connected upstream instance to address the command to');
+    const system = upstreamInstance === 'main' ? 'Main' : upstreamInstance === 'backup' ? 'Backup' : undefined;
+    const source = tcp;
+    if (tcpState !== 'connected' || system === undefined || source === undefined || !('write' in source) || (source as WritableSource).isWritable !== true) return refusedConnection;
+    const run = runOf(aid);
+    if (run === undefined) return invalid([{ field: 'run', issue: 'the Attempt has no run yet' }]);
+    try {
+      await (source as WritableSource).write(penaltyCorrectionCommand({ system, raceId: r.phaseId, bib: r.bib, gate, value }));
+    } catch (e) {
+      log('command write', e);
+      return refusedConnection;
+    }
+    // the creating step (§2.9): the WriteRequest, the optimistic value and the push in one unit, durable before the 202
+    const writeId = `w-${randomUUID()}`;
+    adopted.add(writeId);
+    await processUnit([{
+      ingestSeq: 0, attemptId: aid, field: 'gates', source: 'operator-write', kind: 'operator', observedAt: iso(),
+      value: [{ number: gate, penalty: value }], confidence: 'authoritative', run, writeId,
+    }], { key: key as string, writeId });
+    return { status: 202, body: wstore.get(writeId) as J, location: `/api/writes/${writeId}` };
+  }
+  const inflight = new Map<string, Promise<RestReply>>();
+  function penalty(r: AttemptRoute, key: string | undefined, body: unknown): Promise<RestReply> {
+    if (key === undefined) return guard(() => penaltyTask(r, undefined, body));
+    const bound = wstore?.byWriteKey(key);
+    if (bound !== undefined) return Promise.resolve({ status: 200, body: bound });
+    const first = inflight.get(key);
+    if (first !== undefined) return first.then((rep) => (rep.status === 202 ? { status: 200, ...(rep.body !== undefined ? { body: rep.body } : {}) } : rep));
+    const p = guard(() => penaltyTask(r, key, body)).finally(() => { inflight.delete(key); });
+    inflight.set(key, p);
+    return p;
+  }
+
+  const currentOf = (aid: string): number => runOf(aid) ?? 1;
+  const putCheck = (r: AttemptRoute, gateText: string, body: unknown): Promise<RestReply> => guard(async () => {
+    const aid = attemptOf(r);
+    if (aid === undefined) return notFound(r);
+    if (isCross(aid)) return notPossible('cross', 'checks are not possible on a Kayak Cross Attempt');
+    const issues: { field: string; issue: string }[] = [];
+    const b = body === undefined ? {} : body;
+    if (!isObj(b)) issues.push({ field: 'body', issue: 'must be an object' });
+    else if (b['checkedBy'] !== undefined && typeof b['checkedBy'] !== 'string') issues.push({ field: 'checkedBy', issue: 'must be a string' });
+    const gate = /^\d+$/.test(gateText) ? Number(gateText) : NaN;
+    const outside = gateIssue(aid, gate);
+    if (outside !== undefined) issues.push(outside);
+    if (issues.length > 0) return invalid(issues);
+    const cells = known<{ number: number; penalty: number | null }[]>(core.presented(aid)['gates']);
+    const valueAtCheck = cells?.find((c) => c.number === gate)?.penalty ?? null;
+    const checkedBy = (b as { checkedBy?: string }).checkedBy;
+    return { status: 200, body: await doPutCheck({ attemptId: aid, run: currentOf(aid), gate, valueAtCheck, ...(checkedBy !== undefined ? { checkedBy } : {}) }) };
+  });
+  const deleteCheck = (r: AttemptRoute, gateText: string): Promise<RestReply> => guard(async () => {
+    const aid = attemptOf(r);
+    if (aid === undefined) return notFound(r);
+    if (!/^\d+$/.test(gateText)) return invalid([{ field: 'gate', issue: 'must be an integer' }]);
+    await doDeleteCheck({ attemptId: aid, run: currentOf(aid), gate: Number(gateText) });
+    return { status: 204 };
+  });
+  const createFlag = (r: AttemptRoute, key: string | undefined, body: unknown): Promise<RestReply> => guard(async () => {
+    const bound = key === undefined ? undefined : wstore?.flagByKey(key);
+    const have = bound === undefined ? undefined : store?.list().flags.find((f) => f.flagId === bound);
+    if (have !== undefined) return { status: 200, body: have as unknown as J };
+    const aid = attemptOf(r);
+    if (aid === undefined || wstore === undefined) return notFound(r);
+    const issues: { field: string; issue: string }[] = [];
+    if (key === undefined) issues.push({ field: 'Idempotency-Key', issue: 'missing' });
+    if (!isObj(body)) issues.push({ field: 'body', issue: 'must be an object' });
+    else {
+      if (typeof body['gate'] !== 'number' || !Number.isInteger(body['gate'])) issues.push({ field: 'gate', issue: 'must be an integer' });
+      if (typeof body['comment'] !== 'string') issues.push({ field: 'comment', issue: 'must be a string' });
+      if (body['suggestedValue'] !== undefined && (typeof body['suggestedValue'] !== 'number' || !Number.isInteger(body['suggestedValue']))) issues.push({ field: 'suggestedValue', issue: 'must be an integer' });
+      if (body['createdBy'] !== undefined && typeof body['createdBy'] !== 'string') issues.push({ field: 'createdBy', issue: 'must be a string' });
+    }
+    if (issues.length > 0) return invalid(issues);
+    const b = body as { gate: number; comment: string; suggestedValue?: number; createdBy?: string };
+    const flag = await doCreateFlag({ attemptId: aid, run: currentOf(aid), gate: b.gate, comment: b.comment, ...(b.suggestedValue !== undefined ? { suggestedValue: b.suggestedValue } : {}), ...(b.createdBy !== undefined ? { createdBy: b.createdBy } : {}) });
+    await wstore.bindFlag(key as string, flag['flagId'] as string);
+    return { status: 201, body: flag };
+  });
+  const resolveFlag = (flagId: string, body: unknown): Promise<RestReply> => guard(async () => ({ status: 200, body: await doResolveFlag(flagId, (body === undefined ? {} : body) as { note?: string; resolvedBy?: string }) }));
+
   // ------------------------------------------------------------------------------------------------ HTTP and /ws
   const api: OnsiteApi = {
     port: () => port,
@@ -321,6 +571,12 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
       return { checks: withStatus(store).filter((c) => mine(c['attemptId'] as string)), flags: store.list().flags.filter((f) => mine(f.attemptId)) as unknown as J[] };
     },
     rebaseline,
+    penalty,
+    writeOf: (id) => wstore?.get(id),
+    putCheck,
+    deleteCheck,
+    createFlag,
+    resolveFlag,
   };
   const server: Server = createServer(createApp(api));
   const wss = new WebSocketServer({ server, path: '/ws' });
@@ -381,6 +637,9 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
         const next = await storeFor(e.eventId);
         event = { eventId: e.eventId, name: e.name };
         store = next;
+        wstore = await writesFor(e.eventId);
+        adopted.clear();
+        listedSeen.clear();
         core = newCore();
         tracker = newTracker();
         classesSent.clear();
@@ -392,40 +651,10 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
       });
     },
     checks: {
-      putCheck: async (input) => (await enqueue(async () => {
-        const i = checkInput(input);
-        const s = needStore();
-        await s.putCheck(i);
-        const check = withStatus(s).find((c) => keyOf(c as { attemptId: string; run: number; gate: number }) === keyOf(i)) as J;
-        checkStatuses.set(keyOf(i), check['status'] as string);
-        await emit([{ type: 'check.updated', attemptId: i.attemptId, run: i.run, gate: i.gate, check }]);
-        return JSON.parse(JSON.stringify(check)) as J;
-      })) as J,
-      deleteCheck: async (key) => {
-        await enqueue(async () => {
-          const k = checkKeyInput(key);
-          const s = needStore();
-          const existed = s.list().checks.some((c) => keyOf(c) === keyOf(k));
-          await s.deleteCheck(k);
-          if (!existed) return;
-          checkStatuses.delete(keyOf(k));
-          await emit([{ type: 'check.updated', attemptId: k.attemptId, run: k.run, gate: k.gate, check: null }]);
-        });
-      },
-      createFlag: async (input) => (await enqueue(async () => {
-        const i = flagInput(input);
-        const flag = await needStore().createFlag(i);
-        await emit([{ type: 'flag.updated', flag }]);
-        return flag as unknown as J;
-      })) as J,
-      resolveFlag: async (flagId, input) => (await enqueue(async () => {
-        const i = resolutionInput(flagId, input);
-        const s = needStore();
-        const was = s.list().flags.find((f) => f.flagId === flagId);
-        const flag = await s.resolveFlag(flagId, i);
-        if (was?.resolution === undefined) await emit([{ type: 'flag.updated', flag }]);
-        return flag as unknown as J;
-      })) as J,
+      putCheck: async (input) => (await enqueue(() => doPutCheck(input))) as J,
+      deleteCheck: async (key) => { await enqueue(() => doDeleteCheck(key)); },
+      createFlag: async (input) => (await enqueue(() => doCreateFlag(input))) as J,
+      resolveFlag: async (flagId, input) => (await enqueue(() => doResolveFlag(flagId, input))) as J,
     },
   };
 }

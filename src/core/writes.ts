@@ -9,9 +9,12 @@ export function submitWrite(s: CoreState, a: AttemptState, el: Element, field: s
   }));
   s.dirtyAttempts.add(a);
   if (assertion) return;
+  const cell = (el['value'] as Gate[])[0];
   const w = {
-    writeId: `write-${seq}`, target: { phaseId: a.phaseId, bib: a.bib, run: a.gen.n, field: 'gate-penalty' as const },
-    requestedValue: el['value'], submittedAt: el.observedAt, status: 'pending' as const, attempt: a, fieldName: field,
+    // the caller names the write when it has an id of its own (a durable one, or a re-adopted one); the counter's is unique within one core only
+    writeId: typeof el['writeId'] === 'string' ? el['writeId'] : `write-${seq}`,
+    target: { phaseId: a.phaseId, bib: a.bib, run: a.gen.n, field: 'gate-penalty' as const },
+    requestedValue: { gate: cell?.number, value: cell?.penalty }, submittedAt: el.observedAt, status: 'pending' as const, attempt: a, fieldName: field,
   };
   s.writes.push(w);
   s.dirtyWrites.add(w);
