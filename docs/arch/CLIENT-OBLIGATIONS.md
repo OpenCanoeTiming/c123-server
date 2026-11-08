@@ -106,8 +106,10 @@ a client already treats `not-yet` and `unavailable` as states and `provisional` 
 `BetterRunNr` `0` reading `not-yet` are the core's and the checker's (CONTRACTS §4; DERIVATIONS
 §4.12; TEST-ARCHITECTURE §3.2); a client receives `not-yet` either way. Round 27 (2026-11-08, the
 on-site process, server#210) moved one duty: a Phase is created at the first observation stating its
-class, so at a TCP cold start a client may hold an Attempt whose Phase it does not yet hold (CONTRACTS
-§1.6, §2.4; DERIVATIONS §2.1, below); the rest — the on-course set's `asOf` as the instant of its last
+class, so at a TCP cold start a client hydrates the Attempts of `pendingPhaseIds` and may hold an
+Attempt whose Phase it does not yet hold (CONTRACTS §1.6, §2.4, §7.1; DERIVATIONS §2.1, below; the
+`pendingPhaseIds` field and the gate-5 `source` strip narrowed to `run` are round 27b, the review);
+the rest — the on-course set's `asOf` as the instant of its last
 change (what a client already read as the set's age), a check of a superseded generation reading
 `stale`, `Event.details`' source, the new-event action and the return to an earlier event being the
 admin UI's own, the real process's clock and comparison — is the server's, the parsers' and the
@@ -198,7 +200,7 @@ ADR-017).
 - [ ] After any reconnection, repeat the whole handshake for every resource held; there is no replay and no resume, and the last applied `seq` serves only to discard already-applied messages after re-hydration (CONTRACTS §1.6, §8.4).
 - [ ] Use `seq` only to tell whether a change is already incorporated; never as ranking or authority (CONTRACTS §1.6).
 - [ ] Create an entity when a `*.updated` message names an id not held; the first message for a new id carries the whole resource (CONTRACTS §1.6).
-- [ ] Tolerate an Attempt, from `attempt.updated` or `/api/oncourse`, whose `phaseId` names a Phase not yet held, and render what the Attempt carries: at a TCP cold start the Phase arrives with its class, at the next `Results` message or the snapshot (CONTRACTS §1.6, §2.4; DERIVATIONS §2.1).
+- [ ] At hydration request `/api/phases/{phaseId}/attempts` for every id in `/api/events/current`'s `pendingPhaseIds` as for a listed Phase; tolerate an Attempt whose `phaseId` names a Phase not yet held and render what it carries: at a TCP cold start the Phase arrives whole with its class, at the race's next `Results` message or the snapshot (CONTRACTS §1.6, §2.4, §7.1; DERIVATIONS §2.1).
 - [ ] Apply `attempt.updated`, `phase.updated`, `entry.updated` and `class.updated` as per-field deltas: the id under `attemptId`/`phaseId`/`entryId`/`classId`, the changed fields under `fields`; an omitted field is untouched, never reset; the first message for an unknown id creates the entity from `fields`, which then carries the whole resource (CONTRACTS §1.6, §7.2).
 - [ ] Apply an explicit `{ "state": "not-yet" }` in a delta as a reset of that field (CONTRACTS §7.2, §8.3).
 - [ ] Replace the whole resource on `standing.updated` (under `standing`) and `course.updated` (under `course`) (CONTRACTS §7.2).
@@ -230,7 +232,7 @@ ADR-017).
 
 ### On-site clients — c123-scoreboard, c123-penalty-check
 
-- [ ] Hydrate from the REST reads that apply: `/api/events/current`, `/api/classes/{classId}/phases`, `/entries`, `/standings`, `/api/phases/{phaseId}/attempts`, `/api/oncourse`, each carrying `asOfSeq`, in the §7.1 response types (CONTRACTS §7.1).
+- [ ] Hydrate from the REST reads that apply: `/api/events/current` (its `pendingPhaseIds` included), `/api/classes/{classId}/phases`, `/entries`, `/standings`, `/api/phases/{phaseId}/attempts`, `/api/oncourse`, each carrying `asOfSeq`, in the §7.1 response types (CONTRACTS §7.1).
 - [ ] Expect the on-site serialisations: a person carries `birthYear: number | null` and no `birthDate`, and the Event carries no `organiserId` (CONTRACTS §7).
 - [ ] Take live updates from the WebSocket `/ws`, every message carrying `seq` (CONTRACTS §7.2; ARCHITECTURE §8).
 - [ ] Handle `404 event-not-found` on `/api/events/current` as "no event configured yet" (CONTRACTS §1.4, §7.1).

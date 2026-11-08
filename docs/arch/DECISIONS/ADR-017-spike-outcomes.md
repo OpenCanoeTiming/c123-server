@@ -400,7 +400,9 @@ ingest time, `CONTRACTS.md` §4 states that nothing depends on wall-clock time, 
 injected `Clock`, `TEST-ARCHITECTURE.md` §5). Fed at N×, the process is started with a `Clock` that
 advances N seconds per wall second from the excerpt's first recorded instant — the time basis the
 direct replay and the checker's `--recording` already read, the 1970-based one of the known
-excerpt-tooling finding included — and its poll, heartbeat and leave rule run on it. At 10× on the
+excerpt-tooling finding included — read at the wall instant the player emits its first record (the
+player started paused, the origin set at play), so no start-up gap is added to the receipt instants;
+its poll, heartbeat and leave rule run on it. At 10× on the
 wall clock the 4 s constant would judge a world ten times faster, which the rule was never stated
 for, and the poll would sit at ten times the recorded distance; neither is a finding about the
 process. Production starts it at rate 1 on the system clock; how the rate and origin are given is the
@@ -408,14 +410,19 @@ entry's.
 
 **What gate 5 compares, closed, at both speeds.** Every structural field; every set (the on-course
 set's membership and order, `featuredByUpstream`, each Standing's entries, the diagnostics); and of
-every `Observed` field its `state`, `value`, `eventTime`, `confidence` and `provisional`. Removed
-before comparing, and nothing else: the stamps `observedAt`, `asOf`, `seq` and `asOfSeq` — a real
-process stamps receipt instants, later than the recorded ones by its delivery latency, N-fold at N×
-— and `source` on an envelope whose `state` and `value` equal the replay's, because which of two
-sources stating one value arrived first is the real arrival order of the XML poll against the TCP
-stream at a cold start, and INV-5 presents the first and changes nothing but the stamp at the
-re-delivery (`CONTRACTS.md` §4). Any other difference fails; one that comes from real timing is
-reported with its cause, never added to the list.
+every `Observed` field its `state`, `value`, `eventTime`, `source`, `confidence` and `provisional`.
+Removed before comparing, and nothing else: the stamps `observedAt`, `asOf`, `seq` and `asOfSeq` — a
+real process stamps receipt instants, later than the recorded ones by its delivery latency, N-fold at
+N× — and `source` on `run` alone: `run` is the core's own stamp (`DERIVATIONS.md` §4.11,
+`DECISIONS/ADR-013`), carried on the envelope of the observation at which the generation was first
+seen, which no INV-2 rule orders between the two sources, so at a cold start it is the real arrival
+order of the XML poll against the TCP stream. On every other field `source` is compared: INV-2 rule 2
+orders the sources (`tcp` holds against an equal `xml` and displaces it, `TEST-ARCHITECTURE.md` §3.2
+property 8), so a `source` difference there is a precedence or connection-event defect in the
+plumbing, the kind this gate exists to catch (round 27b: the first pass stripped `source` on every
+equal value under a misread INV-5, which governs one source; the review undid that). Any other
+difference fails; one that comes from real timing is reported with its cause, never added to the
+list.
 
 **Gate 2 on the process's log** (E2: the receive latency measured in this ADR — p50 15–31 ms, p95
 35–52 ms, max 211 ms — against `DERIVATIONS.md` §4.1's 0.5–0.8 s leave margin at the worst recorded
@@ -423,7 +430,11 @@ phase). The log is a tier-4 artefact, not a candidate (`TEST-ARCHITECTURE.md` §
 capture). Its instants are receipt instants on the recording's axis, so the properties that read the
 raw stream (3, 6, 10, 11, 13, 14) compare them with recorded ones across the delivery latency: at 1×
 that latency sits inside the leave margin and the checker, run with `--recording`, is expected to
-report 0; at 10× it is 0.15–0.5 s of recorded time, 2.1 s at the measured maximum, outside the margin,
-so the 10× log is asserted written and well-formed (its first line the hydration step) and is no
-gate-2 evidence. The **D**-only reading admits nothing (§3.2) and is not used. A violation at 1× is a
-verdict for the design authority like any other (§3.2), never a tolerance.
+report 0 — an expectation, not evidence; at 10× it is 0.15–0.5 s of recorded time at p50–p95, the
+floor of the margin, and 2.1 s at the measured maximum, outside it, so the 10× log is asserted
+written and well-formed (its first line the hydration step) and is no gate-2 evidence. The **D**-only
+reading admits nothing (§3.2) and is not used. A violation at 1× is a verdict for the design authority
+like any other (§3.2), never a tolerance. The 10× on-course set is still expected equal at the
+window's end: a latency spike leaves an Attempt only across a non-removal pause within about 2 s of
+the 4 s constant, and the recorded pauses stop at 2.59 s (`DERIVATIONS.md` §4.1); a difference is
+reported with its gap.

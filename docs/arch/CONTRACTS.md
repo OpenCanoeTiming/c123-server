@@ -397,10 +397,14 @@ is not yet known as `not-yet`; later messages for it are partial. A client there
 re-hydrate to learn of a new Attempt, Entry, Phase, Class or Course. **A Phase is created at the
 first observation that states its `classId`** (`DERIVATIONS.md` §2.1: TCP's `OnCourse` and `Schedule`
 carry no class, `Results` and the snapshot do): an on-course listing creates the Attempt, whose
-`phaseId` names the Phase, and not yet the Phase, so at a TCP cold start a client may hold, for the
-seconds until a `Results` message or the snapshot, an Attempt whose Phase it does not hold; it renders
-what the Attempt carries. Until then the Phase is served nowhere (§7.1) and its Attempts are served by
-`/api/oncourse` and `/api/phases/{phaseId}/attempts` (round 27).
+`phaseId` names the Phase, and not yet the Phase. Hydration stays complete meanwhile:
+`/api/events/current` names every such `phaseId` in `pendingPhaseIds`, and a hydrating client requests
+`/api/phases/{phaseId}/attempts` for each as it does for a listed Phase, so an Attempt that left the
+course before the client connected is held too and its later partial messages apply (round 27b, the
+review). The window lasts about one poll with the snapshot configured, and without it until the race's
+`Results` message — its first push or its turn in the rotation (§4 INV-2). `/api/classes/{classId}/phases`
+lists created Phases only; a client renders what such an Attempt carries until its Phase arrives,
+whole, `classId` included (round 27).
 
 Both on-site client applications and the public spectator client are required to implement this; §7
 and §8.4 each restate only the connection-specific detail, not this sequence.
@@ -1835,13 +1839,13 @@ Every response except `/api/sources` carries `asOfSeq: number` (§1.6) at the to
 
 | Method & path | 200 body | Error |
 |---|---|---|
-| `GET /api/events/current` | `{ asOfSeq, event: OnsiteEvent, classes: Class[], courses: Course[] }` | `404 event-not-found` |
+| `GET /api/events/current` | `{ asOfSeq, event: OnsiteEvent, classes: Class[], courses: Course[], pendingPhaseIds: string[] }`: `pendingPhaseIds` the `phaseId`s observed whose class is not yet known (§1.6), usually empty; a client hydrates their Attempts as it does a listed Phase's | `404 event-not-found` |
 | `GET /api/classes/{classId}/phases` | `{ asOfSeq, phases: Phase[] }` | `404 class-not-found` |
 | `GET /api/classes/{classId}/entries` | `{ asOfSeq, entries: OnsiteEntry[] }` | `404 class-not-found` |
 | `GET /api/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }`: every Attempt of the `phaseId`, a Phase whose class is not yet known included (§1.6) | `404 phase-not-found`: a `phaseId` never observed |
 | `GET /api/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`: every published scope of §5 (step 1: from its first entry), for the whole class and per age category | `404 class-not-found` |
-| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null, asOf: Timestamp \| null }`: **every Attempt upstream currently lists on its on-course list**, across every running Phase, whatever its `status`: `at-start`, `on-course`, and, between a finish and upstream's closure of the run — upstream's auto-complete setting, measured over seven recordings and 1,995 closures: about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % of closures in [18, 20) s), about 47 s at one (medians 47 s, p90 57 s), a minority of manual closes under 5 s (12.6 % and 34.9 % on two days) and a long tail to 126–781 s. **No client may assume a fixed value.** Meanwhile the Attempt is listed as `finished` or a mark. The set is upstream's list; `status` says where each Attempt is. `asOf` is the ingest time of the unit at which the set last changed — membership, order or `featuredByUpstream`: a listing, `oncourse-empty`, or the TCP message at which a leave was derived (`DERIVATIONS.md` §4.1) — `null` before any; a listing that changes nothing moves it no more than a running tick moves a Standing's (§5), so this response and the last `oncourse.updated` agree (§1.6; round 27). **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8). Kept current by `oncourse.updated` (§7.2) | — |
-| `GET /api/phases/{phaseId}/checks` | `{ asOfSeq, checks: GateCheck[], flags: GateFlag[] }`: every check and flag of the Phase, all run generations, `status` derived at serialisation (§2.10) | `404 phase-not-found` |
+| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null, asOf: Timestamp \| null }`: **every Attempt upstream currently lists on its on-course list**, across every running Phase, whatever its `status`: `at-start`, `on-course`, and, between a finish and upstream's closure of the run — upstream's auto-complete setting, measured over seven recordings and 1,995 closures: about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % of closures in [18, 20) s), about 47 s at one (medians 47 s, p90 57 s), a minority of manual closes under 5 s (12.6 % and 34.9 % on two days) and a long tail to 126–781 s. **No client may assume a fixed value.** Meanwhile the Attempt is listed as `finished` or a mark. The set is upstream's list; `status` says where each Attempt is. `asOf` is the ingest time of the unit at which the set last changed — membership, order or `featuredByUpstream`: a listing, `oncourse-empty`, or the TCP message at which a leave was derived (`DERIVATIONS.md` §4.1) — `null` before any; a listing that changes nothing moves it no more than a running tick moves a Standing's (§5), so this response and the last `oncourse.updated` agree (§1.6; round 27); an unchanged set reads as old as its last change, and liveness is §7.2's heartbeat, never `asOf`. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8). Kept current by `oncourse.updated` (§7.2) | — |
+| `GET /api/phases/{phaseId}/checks` | `{ asOfSeq, checks: GateCheck[], flags: GateFlag[] }`: every check and flag of the Phase, all run generations, `status` derived at serialisation (§2.10) | `404 phase-not-found`: a `phaseId` never observed, as the attempts row |
 | `GET /api/sources` | `SourceStatus`, unwrapped | — |
 | `GET /api/diagnostics` | `{ asOfSeq, diagnostics: Diagnostic[] }`: every current diagnostic of the six kinds in §4 (source disagreement, contradicted finish, duplicate finish, stale mark, member-sum mismatch, unparseable cell). Admin audience only | — |
 | `POST /api/rebaseline` | body `{ "scope": { "kind": "phase", "phaseId": string } \| { "kind": "event" } }`. `200 { asOfSeq, scope, snapshotWrittenAt, snapshotDetectedAt, attempts: number }`: the operator re-baseline (§4). `snapshotWrittenAt` is the snapshot file's modification time as the filesystem reports it, `snapshotDetectedAt` the ingest time of the re-baseline's own read of the file (§4 step 2: a read with its own ingest sequence, so not `xml.lastRewriteDetectedAt`, which may predate it when the file changed since the last poll, `DERIVATIONS.md` §0.3); both are present on `200`, since the action fails without a readable snapshot. `attempts` counts the Attempts of the scope after the re-baseline. Admin audience only; safe to repeat | `404 phase-not-found`; `409 source-unavailable` with `details.reason` (§1.4) |
@@ -1849,7 +1853,7 @@ Every response except `/api/sources` carries `asOfSeq: number` (§1.6) at the to
 The `200` bodies, normatively (the table is the reading version):
 
 ```ts
-type EventCurrentResponse = { asOfSeq: number; event: OnsiteEvent; classes: Class[]; courses: Course[] }
+type EventCurrentResponse = { asOfSeq: number; event: OnsiteEvent; classes: Class[]; courses: Course[]; pendingPhaseIds: string[] }
 type ClassPhasesResponse = { asOfSeq: number; phases: Phase[] }
 type ClassEntriesResponse = { asOfSeq: number; entries: OnsiteEntry[] }
 type PhaseAttemptsResponse = { asOfSeq: number; attempts: Attempt[] }
