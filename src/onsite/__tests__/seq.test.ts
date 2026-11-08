@@ -63,7 +63,7 @@ describe('row 4: one seq counter (CONTRACTS §1.6)', () => {
 });
 
 describe('row 5: seq never regresses across a restart (CONTRACTS §1.6)', () => {
-  async function run(kind: 'stop' | 'kill' | 'kill-in-write') {
+  async function run(kind: 'stop' | 'kill') {
     const fs = fakeOnsiteFs();
     const clock = virtualClock(Date.parse(NKZ.startAt));
     const env1 = await boot({ startAt: NKZ.startAt, eventDate: NKZ.day, fs, clock });
@@ -71,16 +71,14 @@ describe('row 5: seq never regresses across a restart (CONTRACTS §1.6)', () => 
     const units = NKZ.units();
     for (const u of units.slice(0, 4)) await feed(env1, u);
     await ws1.barrier();
-    if (kind === 'kill-in-write') {
-      fs.holdRename(); // the next durable write never completes: a kill between the temporary file and the rename
-      for (const u of units.slice(4, 6)) await feed(env1, u);
-      await ws1.barrier();
-    }
     const sent = maxSeq(ws1.messages);
     expect(sent).toBeGreaterThan(3);
     let fs2 = fs;
     if (kind === 'stop') await env1.h.stop();
     else { fs2 = fs.afterKill(); env1.h.kill(); }
+    await restartAndCheck(fs2, units, sent, kind);
+  }
+  async function restartAndCheck(fs2: ReturnType<typeof fakeOnsiteFs>, units: ReturnType<typeof NKZ.units>, sent: number, kind: string) {
     const env2 = await boot({ startAt: NKZ.startAt, eventDate: NKZ.day, fs: fs2, clock: virtualClock(Date.parse(NKZ.startAt) + 3_600_000) });
     const ws2 = await openWs(env2);
     await feed(env2, units[0]!);
@@ -92,7 +90,27 @@ describe('row 5: seq never regresses across a restart (CONTRACTS §1.6)', () => 
   }
   it('contract §1.6: stop, start over the same directory: the first new seq is above every seq sent before', () => run('stop'));
   it('contract §1.6: kill without stopping, start over the durable files: the first new seq is above every seq sent before', () => run('kill'));
-  it('contract §1.6 (as #211 row 10): kill between the temporary file and the rename of a durable write: the first new seq is above every seq sent before', () => run('kill-in-write'));
+  it('contract §1.6 (as #211 row 10, review B1): kill INSIDE a seq write, between its temporary file and its rename, after the counter crossed a high-water block: the first new seq is above every seq sent', async () => {
+    const fs = fakeOnsiteFs();
+    const clock = virtualClock(Date.parse(NKZ.startAt));
+    const env1 = await boot({ startAt: NKZ.startAt, eventDate: NKZ.day, fs, clock });
+    const ws1 = await openWs(env1);
+    const units = NKZ.units();
+    for (const u of units.slice(0, 4)) await feed(env1, u);
+    // Drive the counter across the persisted block (one heartbeat is one message): fill up to just below it, hold the next durable write,
+    // then keep sending until that write is reached. A server that stamps past the mark without persisting never reaches it and fails here.
+    const hold = fs.holdRename();
+    let reached = false;
+    void hold.reached.then(() => { reached = true; });
+    for (let i = 0; i < 1600 && !reached; i++) await clock.advance(10_000);
+    expect(reached, 'a durable seq write was reached while the counter crossed its block').toBe(true);
+    await ws1.barrier();
+    const sent = maxSeq(ws1.messages);
+    expect(sent, 'the kill is in the write of the second block').toBeGreaterThan(900);
+    const fs2 = fs.afterKill(); // the rename never completed: only completed renames are durable
+    env1.h.kill();
+    await restartAndCheck(fs2, units, sent, 'kill in a seq write');
+  }, 60_000);
 });
 
 describe('row 7: the handshake (CONTRACTS §1.6 steps 1-5)', () => {

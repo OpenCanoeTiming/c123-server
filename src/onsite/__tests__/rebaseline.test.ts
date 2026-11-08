@@ -35,6 +35,23 @@ describe('row 11: re-baseline (CONTRACTS §7.1, §4, §7.2)', () => {
     expect(src.xml.lastRewriteDetectedAt, 'not xml.lastRewriteDetectedAt: the re-baseline reads on its own').not.toBe(r.body.snapshotDetectedAt);
   });
 
+  it('contract §4 re-baseline step 2 + DERIVATIONS §0.3 (review B4, reading CQ1): the re-baseline read\'s changedAfter is the reader\'s last stat whose signature differs from the one read, when the file changed since the last poll', async () => {
+    const lines: string[] = [];
+    const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day, stepLog: (l) => { lines.push(l); } });
+    for (const u of ODP.units()) await feed(env, u);
+    // feedXml leaves the clock one poll after the recorded instant: that poll is the reader\'s last stat, and it saw the OLD signature
+    const lastStat = Date.parse(ODP.xmlRec().observedAt) + 5_000;
+    expect(env.clock.now()).toBe(lastStat);
+    const written = lastStat + 25_000;
+    env.fs.put(XML_PATH, ODP.xmlRec().data, written); // a new signature after the last poll, not yet polled
+    env.clock.jump(written + 7_000);
+    const r = await post(env, { scope: { kind: 'event' } });
+    expect(r.status).toBe(200);
+    const unit = lines.map((l) => JSON.parse(l) as J).find((o) => Array.isArray(o['elements']) && (o['elements'] as J[]).some((e) => e['event'] === 'rebaseline'))!;
+    const detected = (unit['elements'] as J[]).find((e) => e['event'] === 'xml-rewrite-detected')!;
+    expect(detected['changedAfter'], 'the reader\'s last stat, not the last delivered unit\'s content age').toBe(new Date(lastStat).toISOString());
+  });
+
   it('contract §7.1: scope event -> 200 with attempts the count over every Phase of the event; the body has the scope back', async () => {
     const env = await odp();
     env.fs.setMtime(XML_PATH, Date.parse(ODP.xmlRec().observedAt));

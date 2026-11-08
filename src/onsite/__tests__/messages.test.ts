@@ -4,7 +4,7 @@
  * Interface: onsite-harness.ts header.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { boot, disposeAll, get, hydrate, modelFrom, openWs, view, WHOLE, type Env, type J, type WsClient } from './onsite-harness.js';
+import { boot, derived, disposeAll, get, hydrate, modelFrom, openWs, view, WHOLE, type Env, type J, type WsClient } from './onsite-harness.js';
 import { feed, NKZ, ODP, type Unit } from './datasets.js';
 
 afterEach(disposeAll);
@@ -171,6 +171,28 @@ describe('round 27: deferred Phase creation, discipline at creation, oncourse.as
     const e = leaveAt + 10_000;
     await feed(env, a!); await feed(env, ODP.emptyAt(e));
     await agree(e);
+  });
+});
+
+describe('row 6, review B2 (#258 O7: a first run\'s §4.5 unavailable when its sibling arrives)', () => {
+  it('contract §4.5 + §1.6 + §7.2, no XML configured: a BR1 start-list Attempt, then the BR2 result of the same bib: the client that applied every message equals a fresh hydration after each unit', async () => {
+    const env = await boot({ startAt: NKZ.startAt, eventDate: NKZ.day, xml: undefined });
+    const ws = await openWs(env);
+    const units = NKZ.units();
+    const br2 = (at: string, edit: (d: string) => string): Unit => ({ kind: 'tcp', rec: derived(units[1]!.rec, { observedAt: at, edit: (d) => edit(d.replace(/C1M_BR1_19/g, 'C1M_BR2_19')) }) });
+    // the first run is only listed (no outcome of its own); the second run then states a result for the same bib: the first run's outcome becomes unavailable
+    const startList = units[3]!; // the recorded BR1 start-list row of bib 7: the Attempt exists, with no outcome observed
+    expect(startList.rec.data).toContain('1st Run - Start List');
+    const t = Date.parse(startList.rec.observedAt);
+    await holdsAfterEachUnit(env, ws, [
+      startList,
+      br2(new Date(t + 60_000).toISOString(), (d) => d),
+      br2(new Date(t + 61_000).toISOString(), (d) => d.replace('Time="96.69"', 'Time="95.00"').replace('Total="102.69"', 'Total="101.00"')),
+    ]);
+    const outcome = (await get(env, `/api/phases/${NKZ.phaseId}/attempts`)).body.attempts.find((a: J) => a.attemptId === NKZ.attemptId).outcome;
+    expect(outcome, 'CONTRACTS §4.5: run 1 unavailable once run 2 has a result and no XML can supply it').toMatchObject({ state: 'unavailable', reason: 'not-configured' });
+    const first = ws.messages.filter((x) => x.type === 'attempt.updated' && x.attemptId === NKZ.attemptId);
+    expect(first.length).toBeGreaterThan(0);
   });
 });
 

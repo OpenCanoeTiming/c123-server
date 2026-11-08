@@ -97,8 +97,9 @@ describe('row 10: checks and flags (CONTRACTS §2.10, §7.1, §7.2)', () => {
     (f as J)['comment'] = 'mutated';
     expect((await checksOf(env)).flags[0].comment).toBe('c');
     const r = await env.h.checks.resolveFlag(f.flagId, { note: 'n' });
-    (r as J)['resolution'] = undefined;
+    (r as J)['resolution']['note'] = 'mutated in place'; // in place: reassigning `resolution` would not reach a shared nested object
     expect((await checksOf(env)).flags[0].resolution).toMatchObject({ note: 'n' });
+    expect(JSON.parse(durable(env, 'ev-1')).flags[0].resolution.note).toBe('n');
   });
 
   it('contract §2.10 (#273): a malformed check or flag is refused with validation-failed before the store is touched: no file operation, no message, nothing stored', async () => {
@@ -140,5 +141,17 @@ describe('row 10: checks and flags (CONTRACTS §2.10, §7.1, §7.2)', () => {
   it('contract §2.10 (#273 N2): starting the event that is already current is refused, never a second store on it', async () => {
     const { env } = await odp();
     await expect(env.h.startNewEvent({ eventId: 'ev-1', name: 'again' })).rejects.toBeDefined();
+  });
+
+  it('contract §7.2 + INV-5 (review N1): a restart over a stored check pushes no check.updated for a status that hydration already serves', async () => {
+    const { env, run } = await odp();
+    await env.h.checks.putCheck({ attemptId: ODP.attemptId, run, gate: ODP.gate, valueAtCheck: 2 });
+    await env.h.stop();
+    const env2 = await boot({ startAt: ODP.startAt, eventDate: ODP.day, fs: env.fs, clock: env.clock, connected: false });
+    const ws = await openWs(env2);
+    await ws.barrier(); ws.take();
+    env2.tcp.connect();
+    await ws.barrier();
+    expect(ws.take().filter((m) => m.type === 'check.updated')).toEqual([]);
   });
 });

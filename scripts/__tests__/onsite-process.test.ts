@@ -25,6 +25,9 @@
  * Two serialisation rules of the contract are applied to the reference, not tolerated as differences: Person.birthDate -> birthYear (§7 intro) and the `eventId`
  * the process gives every Class and Course (§2.3, §2.12). Not compared, the replay having no counterpart: `event` of /api/events/current (the core has no Event;
  * the bridge asserts it) and /api/sources (a connection fact): only checked present.
+ * Known time skew, reported with its cause and not stripped (review B5): the player cannot be started paused (`pause` is ignored while stopped; it plays on its
+ * first TCP client), so the process clock, started at `play` on stdin, begins about 50-250 ms after the stream. Any difference in a leave, a `provisional` flag or a
+ * content age near the start of the window is read against that skew first.
  * Gate 2 (round 27 Q1.3): the checker with `--recording` must report 0 on the 1x log. At 10x the receive latency is outside the leave margin, so that log is
  * asserted written with the hydration step first and is no gate-2 evidence. Never the D-only reading.
  */
@@ -46,6 +49,7 @@ const CHECKER = path.join(PD, 'tools/gate2/check.js');
 const TSX = path.join(ROOT, 'node_modules/.bin/tsx');
 const HAVE = [REC, PLAYER, EXTRACT, CHECKER].every((p) => existsSync(p));
 const EVENT_ID = 'ev-t4';
+const SKEW = 'real-time skew: the process clock starts 50-250 ms after the player stream (player.js auto-plays on its first client and ignores pause while stopped); report the cause, never strip';
 
 const dirs: string[] = [];
 const children: ChildProcess[] = [];
@@ -117,14 +121,15 @@ function excerpt(from: string, to: string): string {
   return out;
 }
 
-function reference(dir: string): ReturnType<typeof emptyModel> {
+function reference(dir: string): ReturnType<typeof emptyModel> & { leaves: number } {
   const out = path.join(tmp(), 'ref.jsonl');
   const r = spawnSync(TSX, ['--max-old-space-size=3072', path.join(ROOT, 'scripts/replay-direct.ts'), '--recording', dir, '--out', out], { cwd: ROOT, encoding: 'utf8', timeout: 300_000 });
   expect(r.status, r.stderr).toBe(0);
-  const m = emptyModel();
+  const m = Object.assign(emptyModel(), { leaves: 0 });
   for (const line of readFileSync(out, 'utf8').split('\n')) {
     if (line.trim() === '') continue;
     const o = JSON.parse(line) as J;
+    m.leaves += ((o['elements'] ?? []) as J[]).filter((e) => e['event'] === 'oncourse-left').length;
     for (const d of (o['deltas'] ?? []) as J[]) applyMessage(m, d);
   }
   onsite(m);
@@ -142,7 +147,8 @@ async function realProcess(dir: string, speed: number): Promise<Run> {
   const status = async (): Promise<J | undefined> => { try { return (await (await fetch(`http://127.0.0.1:${controlPort}/status`)).json()) as J; } catch { return undefined; } };
   const control = async (cmd: string): Promise<void> => { await fetch(`http://127.0.0.1:${controlPort}/${cmd}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); };
   for (let i = 0; i < 100 && (await status()) === undefined; i++) await sleep(100);
-  await control('pause'); // round 27b: the player starts paused; the process's clock starts at play
+  // Known skew (review B5): player.js ignores `/pause` while stopped and auto-plays on its first TCP client (polling every 200 ms), so the player cannot be
+  // started paused. The process clock starts when `play` is written to its stdin, about 50-250 ms after the stream began. Nothing is stripped for it.
   const poll = 5; // the setting; the clock scales it
   const proc = spawn(process.execPath, ['--import', 'tsx', path.join(ROOT, 'src/onsite/main.ts'),
     '--port', '0', '--data-dir', path.join(work, 'data'), '--event-id', EVENT_ID, '--event-name', 'T4', '--tcp-host', '127.0.0.1', '--tcp-port', String(tcpPort),
@@ -155,10 +161,10 @@ async function realProcess(dir: string, speed: number): Promise<Run> {
     proc.stdout!.on('data', (d: Buffer) => { buf += d.toString(); const m = /listening (\d+)/.exec(buf); if (m) { clearTimeout(t); res(Number(m[1])); } });
     proc.on('exit', (c) => { clearTimeout(t); rej(new Error(`the process exited ${String(c)} before listening`)); });
   });
-  // connected and paused: the clock and the player start together
+  // connected: the player is already (or about to be) playing; the clock starts now
   for (let i = 0; i < 200 && ((await status())?.['clients'] as J | undefined)?.['tcp'] !== 1; i++) await sleep(50);
   proc.stdin!.write('play\n');
-  await control('play');
+  await control('play'); // a no-op for a player that already started
   // wait for the end of the excerpt
   for (let i = 0; i < 1200; i++) { const s = await status(); if (s !== undefined && s['state'] === 'stopped' && (s['stats'] as J)?.['messagesSent'] > 0) break; await sleep(250); }
   // settle: bodies equal on two reads three polls apart (the last snapshot is read by the poll timer, not by the end of playback)
@@ -189,7 +195,7 @@ describe.skipIf(!HAVE)('rows 14 and 15: a real process fed by player.js (ADR-017
   for (const w of WINDOWS) {
     describe(`cp3-cross ${w.from.slice(11, 19)}-${w.to.slice(11, 19)}Z at ${w.speed}x`, () => {
       let run: Run;
-      let ref: ReturnType<typeof emptyModel>;
+      let ref: ReturnType<typeof reference>;
       let dir: string;
       let started: Promise<void> | undefined;
       const start = (): Promise<void> => (started ??= (async () => {
@@ -204,7 +210,7 @@ describe.skipIf(!HAVE)('rows 14 and 15: a real process fed by player.js (ADR-017
           const [got, expected] = comparedPair(run.model, ref, k);
           expect(expected, `the replay's ${k} is not empty where the window has it`).toBeDefined();
           if (k === 'attempts' || k === 'entries' || k === 'standings') expect((expected as J[]).length).toBeGreaterThan(0);
-          expect(got).toEqual(expected);
+          expect(got, SKEW).toEqual(expected);
         }, 900_000);
       }
 
@@ -212,6 +218,7 @@ describe.skipIf(!HAVE)('rows 14 and 15: a real process fed by player.js (ADR-017
         await start();
         const attempts = [...ref.attempts.values()];
         expect(attempts.some((a) => (a['status'] as J)?.value === 'finished')).toBe(true);
+        if (w.speed === 10) expect(ref.leaves, 'the 10x window holds closures (oncourse-left steps), as the header says').toBeGreaterThanOrEqual(2);
         expect(run.sources.xml.state).toBe('connected');
         expect(run.sources.xml.lastRewriteDetectedAt).toEqual(expect.any(String));
         expect(run.sources.tcp.state).toBe('connected');
