@@ -360,7 +360,11 @@ the step index, the Attempt, the field and the property number.
    reading, for a re-run on the published fixture only; before any row of the generation the
    stream's vector is an inference, `confidence: 'inferred'`, and once a row is presented the merged
    vector carries the row's envelope, `CONTRACTS.md` §1.2), a judged cell (`0`, `2`, `50`) never becomes
-   `null` at a results-table step — upstream's own withdrawal, the stream's listing blanking a cell
+   `null` at a results-table step — and at the listing that increments `run` the vector is the new
+   generation's, named `not-yet` or the listing's own cells in that delta (property 10, `ADR-013`),
+   the previous generation's row holding nothing of it, so (b) reads the generation the delta
+   presents (round 27g: a checker that still held run 1's row at the increment reported 11 cells of
+   K1W_BR1_18:24) — upstream's own withdrawal, the stream's listing blanking a cell
    it judged, is presented wherever no presented row of the generation holds that cell judged: the
    presented row's cell blank, or no row of the generation yet (recorded: nkz-19so K1M_BR2_19:79,
    cells 14–17 judged 25 s into the run and blank 11 s later, mid-run, no row; round 23),
