@@ -139,7 +139,10 @@ the generation across a server restart as DERIVATIONS §10 item 25, no duty movi
 write-not-possible` with the new reason `upstream-disconnected` (TCP not connected or the socket write
 failed; nothing sent, created or bound) and expects `200` with the same flag on a retried flag POST
 (CONTRACTS §1.4, §1.5, §7.3, §7.4); the order of refusal, the durable key map and `WriteRequest`s, the
-command's bytes and the no-op `DELETE` are the server's (CONTRACTS §1.5, §1.6, §7.3, §7.4).
+command's bytes and the no-op `DELETE` are the server's (CONTRACTS §1.5, §1.6, §7.3, §7.4). Its third
+pass (2026-11-08) moved none: `{ gate, value }` was already the wire shape of the lifecycle example,
+and a stored write's echo after a restart is the core's (CONTRACTS §7.3; CONFORMANCE-VECTORS §1;
+DERIVATIONS §6).
 
 ---
 
