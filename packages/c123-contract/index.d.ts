@@ -235,7 +235,7 @@ export type OnsitePerson = Omit<Person, 'birthDate'> & { birthYear: number | nul
 export type OnsiteEntry = Omit<Entry, 'members'> & { members: Observed<OnsitePerson[]> }
 export type OnsiteEvent = Omit<Event, 'organiserId'>
 
-export type EventCurrentResponse = { asOfSeq: number; event: OnsiteEvent; classes: Class[]; courses: Course[] }
+export type EventCurrentResponse = { asOfSeq: number; event: OnsiteEvent; classes: Class[]; courses: Course[]; pendingPhaseIds: string[] }
 export type ClassPhasesResponse = { asOfSeq: number; phases: Phase[] }
 export type ClassEntriesResponse = { asOfSeq: number; entries: OnsiteEntry[] }
 export type PhaseAttemptsResponse = { asOfSeq: number; attempts: Attempt[] }

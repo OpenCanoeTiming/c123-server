@@ -212,7 +212,10 @@ cannot read is absent, not invented.
     modelled (§9).
 - **`discipline`.**
   - Source: `'cross'` if any Phase of the class has a Cross format (`X8/X4/XS/XF/XT/XT1/XT2/XER`),
-    otherwise `'slalom'`.
+    otherwise `'slalom'` — over the Phases known at the step, on either channel: a TCP `Results`
+    message names its `RaceId`, whose token decides, so the Class's creating message carries it
+    (`CONTRACTS.md` §1.6); it is re-evaluated as Phases are added, and in practice never moves, a
+    slalom class gaining no Cross Phase (round 27).
   - Envelope: `confidence: 'inferred'`, because it is read off the phase structure.
   - **Do not use `XML.Events.CanoeDiscipline`.** It reads `Slalom` for a recorded Kayak Cross event.
 - **`ageCategories`.**
@@ -228,6 +231,11 @@ cannot read is absent, not invented.
 ### 2.1 Phase identity and structure
 
 - **`phaseId`** is `RaceId`, verbatim.
+- **`classId`** is `XML.Schedule.ClassId`, or the `ClassId` of the TCP `Results` message naming the
+  `RaceId`; never the `RaceId` prefix (§1). TCP `Schedule` and `OnCourse` carry no class (E1, the
+  message layouts), so a Phase first seen on either is created — its first message sent,
+  `CONTRACTS.md` §1.6 — at the first observation that states its class; its Attempts exist from their
+  first row (§4) and name it by `phaseId` meanwhile (round 27).
 - **`format`.**
   - Source: `XML.Schedule.DisId`. On TCP, fall back to the `RaceId` token between the class and the
     day number, because **TCP `Schedule` has no `DisId` attribute**.
@@ -237,9 +245,10 @@ cannot read is absent, not invented.
   `confidence: 'authoritative'`, a lookup.
 - **`kind`, `scoringKind`, `pair`, `heats`.**
   - These come from `CONTRACTS.md` §2.4's token table, a lookup with no uncertainty, so
-    `confidence: 'authoritative'`. They are presented with the Phase's first message, from the first
-    observation of the `RaceId` on either channel (`CONTRACTS.md` §1.6: the first message for a new
-    id carries the whole resource), never deferred to the snapshot (round 24).
+    `confidence: 'authoritative'`. They are presented with the Phase's first message, at the first
+    observation that states its class on either channel (`CONTRACTS.md` §1.6: the first message for a
+    new id carries the whole resource; the `classId` bullet above), never deferred to the snapshot
+    when TCP states it (round 24, round 27).
   - `pair.siblingPhaseId` is the Phase with the same `classId` and the first-run token. When several
     exist, take the one with the same schedule date. This mirrors upstream's own pairing behaviour.
     Until the schedule names it, `siblingPhaseId` is `null`; `role` and `combination` are the token's
@@ -330,6 +339,10 @@ cannot read is absent, not invented.
 - **`entryId`** is `XML.Participants.Id`, or `Participant@Id` on TCP, used verbatim and **never
   parsed** (#171). Where `XML.Events.IDHandling` is `USER`, the operator typed the id by hand. That is
   where the non-conforming ids come from, and one more reason not to parse it.
+- **`classId`** is `XML.Participants.ClassId`, or the `ClassId` of the TCP `Results` message whose
+  row names the participant — the carriers of the Class's own id (§1; E1, the layouts). Every row
+  that creates an Entry carries it, so the creating message does (`CONTRACTS.md` §7.2); an on-course
+  listing states no Entry field (round 27).
 - **`displayName`** is the pre-assembled `Participant@Name` on TCP, in the form `FAMILY Given`, or
   `FAMILY Given/FAMILY2 Given2` for a crew. For a team it is the team's `FamilyName`.
 - **`members`.**

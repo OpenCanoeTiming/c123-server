@@ -696,6 +696,11 @@ purpose; its only question is "does the plumbing connect," and it should stay sm
 failure here almost always means transport, deployment, or version skew, never a merge-rule or
 display bug that slipped through the earlier tiers.
 
+**The real process against the replay** (`DECISIONS/ADR-017` item 5, Revision 7): the process runs
+on the player's clock, rate and origin given at start; the comparison strips the stamps and `source`
+on `run`, nothing else; its step log is a tier-4 artefact, gate 2 run on it with
+`--recording` at 1× only (round 27).
+
 **The one thing today's tooling cannot yet give this tier:** a realistic write-echo. Checked directly
 against prior research in this engagement — `player.js` explicitly does not emulate the write-side
 channels (`tools/player.js:904`: UDP:27334, the terminal-command channel `PenaltyCorrection` travels
