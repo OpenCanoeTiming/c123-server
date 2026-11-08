@@ -128,7 +128,8 @@ none: a late-bound vector's instant being the element's that last changed it, no
 re-delivery's, is the core's and the checker's (DERIVATIONS §4.6; TEST-ARCHITECTURE §3.2). Its second
 pass (2026-11-08, review of PR #288) amended CONTRACTS §1.2's merged-vector instant to the later of
 the row's and the last cell change's and moved no duty: a client takes `observedAt` as given
-(CONTRACTS §1.2; DERIVATIONS §4.6).
+(CONTRACTS §1.2; DERIVATIONS §4.6). Round 27f (2026-11-08, the checker review) moved none: which step
+binds the course is the core's and the checker's (TEST-ARCHITECTURE §3.2; DERIVATIONS §4.6).
 
 ---
 

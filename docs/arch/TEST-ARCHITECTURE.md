@@ -261,7 +261,10 @@ the step index, the Attempt, the field and the property number.
    guard refused its first read is the re-delivery's element and instant, INV-5, the `no-result`
    outcome with it (`CONTRACTS.md` §2.6), never the refused read's; round 26; and a `gates` or
    `faults` vector the core builds at the scope snapshot of the race that binds the course
-   (`DERIVATIONS.md` §4.6 "no course bound yet"; at no other step) from the cells retained for the
+   (`DERIVATIONS.md` §4.6 "no course bound yet": the step at which §4.6's `known` condition —
+   `courseId` known and that Course's `gates` known — is first met for the Phase, or met again after
+   `unavailable{not-configured}`; a later snapshot naming another course finds no retained cells,
+   every cell since the binding having been read at its own step; at no other step, round 27f) from the cells retained for the
    Attempt — the latest cells of that source in the **generation**, §4.6 — carries the instant
    `CONTRACTS.md` §1.2 gives the merged vector: the **later** of the presented row's own element and
    the element's that last changed the presented cells on the bound course, a listing's included —
