@@ -332,7 +332,7 @@ describe('round 27g-2 B1: observedAt per arrival order (DERIVATIONS 4.11: the ro
     ['timed', TIMED_ID, '96.86', 'timed-rerun-row-before', 'timed-rerun-row-after'],
   ] as const
   for (const [label, id, time, before, after] of pairs) {
-    it(`${label}: in each order the row's fields carry the row's delivery instant and status the finish listing's`, () => {
+    it(`${label}: in each order outcome (and placement) carry the row's delivery instant and status the finish listing's; gates and faults are not asserted (CONTRACTS 1.2: the later of the row and the last cell-changing element)`, () => {
       for (const name of [before, after]) {
         const { row, listing } = instants(name, time)
         const pts = trail(replay(fx(name)), id)
