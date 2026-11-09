@@ -1262,6 +1262,18 @@ review R16, E2: the spike applied the stale-mark check only to rows it had attri
   (`changedAfter`) is later than `submittedAt`; a save written before the correction is retained and
   settles nothing.
 - The echo arrives as an event-driven result push, because a correction recalculates the race.
+- **After a restart** a stored `pending` write resumes at load (`CONTRACTS.md` §1.5), keyed by its
+  target and generation, and its echo is the next results-table observation of the target cell for
+  that generation, under the same rule as in any lifetime, so that the outcome never depends on the
+  server's uptime: the first TCP delivery that states the requested value confirms it; an unequal
+  first delivery is not upstream's answer to the correction but the rotation re-sending its table —
+  it becomes the source's retained value, the baseline, and the write stays `pending` until that cell
+  changes (`mismatched`, or `confirmed` if it changes to the requested value), the lost echo of
+  `DECISIONS/ADR-010`; on XML under the content-age guard against `submittedAt` as always (the first
+  read after a restart has `changedAfter: null` and resolves nothing). No on-course condition applies:
+  the write was accepted when the Attempt had left the set, and acceptance is not re-judged. A target
+  generation the restarted core does not present waits on §10 item 25 (round 28, third pass and its
+  review).
 
 **When a write is accepted** (`CONTRACTS.md` §7.3). Let `listed` be whether the Attempt is currently
 on upstream's on-course list (§4.1). `listed` → refused, `run-not-closed`; a team-boat Attempt →

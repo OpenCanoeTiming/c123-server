@@ -2139,7 +2139,11 @@ same `WriteRequest` over time:
 { ..., "status": "superseded" }
 ```
 
-No field ever encodes a timeout or a deadline.
+No field ever encodes a timeout or a deadline. On the wire `requestedValue` and `confirmedValue` are
+`{ gate, value }`, the target cell, as the example shows (§2.9 leaves them `unknown` because the live
+tier's §8.5 assertion has its own shape); a tier-1 vector's `writeRequest.confirmedValue` is the merge
+port's cell vector, the harness shape of `CONFORMANCE-VECTORS.md` §1, which this serialisation maps to
+the target cell (round 28, third pass).
 
 ### 7.4 Gate checks and flags (REST)
 
