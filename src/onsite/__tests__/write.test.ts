@@ -34,10 +34,10 @@ const write = (env: Env, body: unknown, key: string | null = 'k1', path = PATH):
 const GOOD = { gate: ODP.gate, value: 50 };
 
 /** The recorded stream through the closure of the run: bib 56 has finished and has left the on-course set. */
-async function closedRun(over: { xmlRec?: Parameters<typeof feed>[1] } = {}): Promise<Env> {
+async function closedRun(over: { xmlRec?: Parameters<typeof feed>[1]; recordedOrder?: boolean } = {}): Promise<Env> {
   const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day });
-  const units = ODP.unitsXmlFirst();
-  if (over.xmlRec !== undefined) units[0] = over.xmlRec;
+  const units = over.recordedOrder === true ? ODP.units() : ODP.unitsXmlFirst();
+  if (over.xmlRec !== undefined) units[over.recordedOrder === true ? units.length - 1 : 0] = over.xmlRec;
   for (const u of units) await feed(env, u);
   await feed(env, ODP.emptyAt(env.clock.now() + 1000)); // upstream's closure: the set is empty
   const oc = await get(env, '/api/oncourse');
@@ -612,8 +612,8 @@ describe('round 28-3b: a pending write resolves by DERIVATIONS §6 in every life
    * A pending write on a closed run. `restart: true`: the process is stopped and a new one started over the same data dir, its only read being the snapshot (stating gate 13
    * as `xmlValue`, a first read, changedAfter null), no on-course listing in the new lifetime. `restart: false`: the same process goes on.
    */
-  async function scenario(restart: boolean, over: { rerunFirst?: boolean; xmlValue?: 0 | 2 | 50 } = {}): Promise<Scenario> {
-    const env1 = await closedRun();
+  async function scenario(restart: boolean, over: { rerunFirst?: boolean; xmlValue?: 0 | 2 | 50; recordedOrder?: boolean } = {}): Promise<Scenario> {
+    const env1 = await closedRun(over.recordedOrder === true ? { recordedOrder: true } : {});
     await setInstance(env1, 'Main');
     if (over.rerunFirst === true) {
       await feed(env1, ODP.rerun(env1.clock.now() + 1000));
@@ -633,8 +633,8 @@ describe('round 28-3b: a pending write resolves by DERIVATIONS §6 in every life
   }
   const state = async (env: Env, id: string): Promise<J> => (await get(env, `/api/writes/${id}`)).body;
   const pushed = (ws: { messages: J[] }): J[] => ws.messages.filter((m) => m.type === 'write.updated').map((m) => m.write);
-  const xmlRead = async (env: Env, value: 0 | 2 | 50, ms: number): Promise<void> => {
-    const u = ODP.xmlWithGate13(value);
+  const xmlRead = async (env: Env, value: 0 | 2 | 50, ms: number, run: 81 | 120 = 81): Promise<void> => {
+    const u = ODP.xmlWithGate13(value, run);
     await feed(env, { kind: 'xml', rec: { observedAt: new Date(ms).toISOString(), data: u.rec.data } });
   };
 
@@ -678,13 +678,15 @@ describe('round 28-3b: a pending write resolves by DERIVATIONS §6 in every life
       });
 
       it('(d) an XML read whose changedAfter is not later than submittedAt resolves nothing even when it states the requested cell; a later read, changed after submittedAt, resolves', async () => {
-        const { env, ws, first } = await scenario(restart, { xmlValue: 50 });
-        if (!restart) await xmlRead(env, 50, env.clock.now() + 1000); // changed right after the write: the reader\'s last stat before it is not later than submittedAt
+        // in one process the snapshot must come last (the recorded order): the presented run is then the snapshot\'s own 120.98, and a snapshot restating it is not held (INV-2d)
+        const run = restart ? 81 : 120;
+        const { env, ws, first } = await scenario(restart, { xmlValue: 50, recordedOrder: !restart });
+        if (!restart) await xmlRead(env, 50, env.clock.now() + 1000, run); // changed right after the write: the reader\'s last stat before it is not later than submittedAt
         await ws.barrier();
         expect((await state(env, first.writeId)).status, 'a first read, or one dated before the write, is no answer').toBe('pending');
         expect(pushed(ws)).toEqual([]);
         await env.clock.advance(6000); // polls: the reader\'s last stat is now later than submittedAt
-        await xmlRead(env, 50, env.clock.now() + 2000); // a read of content that changed after that stat
+        await xmlRead(env, 50, env.clock.now() + 2000, run); // a read of content that changed after that stat
         await ws.barrier();
         const w = await state(env, first.writeId);
         expect(w.status).toBe('confirmed');

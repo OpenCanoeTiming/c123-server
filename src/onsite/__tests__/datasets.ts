@@ -64,16 +64,18 @@ export const ODP = {
   /** The snapshot first, then the listings and rows (§7.3 validates a gate against the Phase's course, which only the snapshot binds). */
   unitsXmlFirst: (): Unit[] => { const u = ODP.units(); return [u.find((x) => x.kind === 'xml')!, ...u.filter((x) => x.kind !== 'xml')]; },
   /**
-   * The recorded snapshot restating the presented run of bib 56 (Time 81.62 from its start 15:51:40.580 to the recorded finish, rank 11, as the TCP row C4RowA and the finish listing) with only gate 13 changed to `value`, Pen and Total following:
+   * The recorded snapshot restating the presented run of bib 56 with only gate 13 changed to `value`, Pen and Total following. Which run is presented depends on the order the stream arrived in: with the snapshot first the TCP rows win and the presented run is 81.62 (rank 11, the default `run: 81`); in the recorded order (snapshot last) the held 120.98 run is presented and `run: 120` restates that one. An XML row carrying a finish that the core holds as contradicted is refused (INV-2d), so a snapshot for a lifetime that holds a contradiction must restate the presented run:
    * a snapshot written after the correction. (The recorded snapshot\'s own row, Time 120.98, is another state and would be held against the TCP row.)
    */
-  xmlWithGate13: (value: 0 | 2 | 50): Unit => ({ kind: 'xml', rec: derived(R19.rcXml, { edit: (d) => d
-    .replace(/<Gates>((?:...){12})(...)/, (_m, a) => `<Gates>${a as string}${String(value).padStart(3, ' ')}`)
-    .replace(/<Time>120980<\/Time>/, '<Time>81620</Time>').replace(/<Pen>2<\/Pen>/, `<Pen>${value}</Pen>`)
-    .replace(/<Total>122980<\/Total>/, `<Total>${81620 + value * 1000}</Total>`)
-    .replace(/<dtStart>[^<]*<\/dtStart>/, '<dtStart>15:51:40.580</dtStart>') // the presented run\'s start (the TCP finish listing): Time 81.62 ends at the recorded finish 15:53:02.200
-    .replace(/<Rnk>\d+<\/Rnk>/, '<Rnk>11</Rnk>').replace(/<RnkOrder>\d+<\/RnkOrder>/, '<RnkOrder>11</RnkOrder>')
-    .replace(/<TotalRnk>\d+<\/TotalRnk>/, '<TotalRnk>11</TotalRnk>').replace(/<TotalRnkOrder>\d+<\/TotalRnkOrder>/, '<TotalRnkOrder>11</TotalRnkOrder>') }) }),
+  xmlWithGate13: (value: 0 | 2 | 50, run: 81 | 120 = 81): Unit => ({ kind: 'xml', rec: derived(R19.rcXml, { edit: (d) => {
+    let e = d.replace(/<Gates>((?:...){12})(...)/, (_m, a) => `<Gates>${a as string}${String(value).padStart(3, ' ')}`).replace(/<Pen>2<\/Pen>/, `<Pen>${value}</Pen>`);
+    if (run === 120) return e.replace(/<Total>122980<\/Total>/, `<Total>${120980 + value * 1000}</Total>`); // the recorded snapshot\'s own run (Time 120.98), only the gate changed
+    e = e.replace(/<Time>120980<\/Time>/, '<Time>81620</Time>').replace(/<Total>122980<\/Total>/, `<Total>${81620 + value * 1000}</Total>`)
+      .replace(/<dtStart>[^<]*<\/dtStart>/, '<dtStart>15:51:40.580</dtStart>') // the presented run\'s start (the TCP finish listing): Time 81.62 ends at the recorded finish 15:53:02.200
+      .replace(/<Rnk>\d+<\/Rnk>/, '<Rnk>11</Rnk>').replace(/<RnkOrder>\d+<\/RnkOrder>/, '<RnkOrder>11</RnkOrder>')
+      .replace(/<TotalRnk>\d+<\/TotalRnk>/, '<TotalRnk>11</TotalRnk>').replace(/<TotalRnkOrder>\d+<\/TotalRnkOrder>/, '<TotalRnkOrder>11</TotalRnkOrder>');
+    return e;
+  } }) }),
   /** The recorded snapshot with bib 56 a team boat (`IsTeam` true): a derived case, the recorded text is otherwise unchanged. */
   teamXml: (): Unit => ({ kind: 'xml', rec: derived(R19.rcXml, { edit: (d) => d.replace('<IsTeam>false</IsTeam>', '<IsTeam>true</IsTeam>') }) }),
   /** The row an echo is: the presented run restated with gate 13 stated as `value`, received at `ms` (see `restate`). */
