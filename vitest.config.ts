@@ -15,6 +15,8 @@ const TOOLS = [
   'src/store/__tests__/checks.real.test.ts',
   // child processes replaying recordings through the real parsers and core (issue #242)
   'scripts/__tests__/replay-direct.test.ts',
+  // data gate: committed re-run excerpts and one real window through replay-direct and the gate-2 checker (issue #207)
+  'scripts/__tests__/rerun-paths.test.ts',
   // the on-site process fed by player.js over real sockets, compared with the direct-injection replay (issue #210)
   'scripts/__tests__/onsite-process.test.ts',
   // the production clock wiring of the on-site entry, a real child process (issue #210)

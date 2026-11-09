@@ -1,0 +1,39 @@
+{
+  "version": 3,
+  "event": {
+    "name": "2026_NKZ_19so",
+    "date": "2026-09-19"
+  },
+  "recorder": "c123-recorder/3.0.0",
+  "fixture": {
+    "name": "nkz-bib7-row-before",
+    "synthetic": false,
+    "source": {
+      "recording": "2026-09-19-2026-nkz-19so",
+      "window": [
+        "2026-09-19T10:44:00.000Z",
+        "2026-09-19T12:43:59.000Z"
+      ],
+      "attempt": "C1M_BR1_19:7"
+    },
+    "order": "row before the on-course finish (recorded: the run-2 result row at 12:41:44.250Z, the finish listing at 12:41:44.358Z)",
+    "edits": [
+      "trimmed to one Attempt: other bibs, races, TVS, TimingInput, CIS and udp records removed; Results messages keep only the Attempt's Row; XML snapshots keep Events (Report* images removed), the Attempt's Participants, its Classes, Schedule and Results row, CourseData; identical consecutive trimmed snapshots once",
+      "TimeOfDay kept only for 15 s after a kept record",
+      "a race push that carries no Row of the Attempt is kept as a Results message with no Row (absence retracts, INV-7)",
+      "no record of the Attempt moved, removed or added"
+    ]
+  },
+  "chunks": [
+    {
+      "seq": 1,
+      "file": "001-excerpt.jsonl",
+      "label": "nkz-bib7-row-before",
+      "startTime": "2026-09-19T10:44:00.000Z",
+      "endTime": "2026-09-19T12:43:59.000Z",
+      "duration": 7199000,
+      "races": [],
+      "messages": 2824
+    }
+  ]
+}

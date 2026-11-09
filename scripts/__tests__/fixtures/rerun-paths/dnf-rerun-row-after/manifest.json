@@ -1,0 +1,42 @@
+{
+  "version": 3,
+  "event": {
+    "name": "jarni_so_odp",
+    "date": "2026-04-18"
+  },
+  "recorder": "c123-recorder/3.0.0",
+  "fixture": {
+    "name": "dnf-rerun-row-after",
+    "synthetic": true,
+    "source": {
+      "recording": "2026-04-18-jarni-so-odp",
+      "window": [
+        "2026-04-18T12:58:00.000Z",
+        "2026-04-18T13:05:30.000Z"
+      ],
+      "attempt": "K1W_BR1_18:24",
+      "donor": "K1W_BR1_18:30"
+    },
+    "order": "row after the finish listing (the 28 % order)",
+    "edits": [
+      "trimmed to one Attempt as the other fixtures (see nkz-bib7-row-before); Results messages keep only one Row",
+      "kept as recorded: bib 24's on-course listings up to the DNF (start 14:59:01.040 listed 2026-04-18T12:59:01Z, last listing 13:01:00Z), the XML row with Status DNF (13:01:33Z) and every TCP push of its DNF row (Pen 100, no Time) up to the new finish",
+      "added: the run-2 listings, copied from bib 30's recorded run of the same race (start listed 13:02:59.807Z, finish listing 13:04:37.037Z, closure) with the Participant tag replaced by bib 24's; no wizard wipe: bib 24's DNF row keeps being pushed unchanged until the donor's row replaces it",
+      "added: the run-2 result rows, copied from bib 30's recorded TCP Row and XML Results row (Time, Pen, Gates, Rank, dtFinish) with the identity replaced by bib 24's and the DNF mark KEPT (IRM=\"DNF\", Status DNF): upstream overwrites the finish and not the mark (DERIVATIONS 4.11 intro, 4.12 \"stale mark\"; \"an old DNF is not cleared even then\")",
+      "removed: bib 30's own records (its Row, listings and XML row stand only as bib 24's run 2); every later TCP push and XML snapshot carries the run-2 row",
+      "moved: the TCP Results record of the run-2 row from 2026-04-18T13:04:36.975Z (62 ms before the finish listing) to 2026-04-18T13:04:37.099Z (the same gap after it); content unchanged. Matches upstream: the two pushes of one finish arrive in either order (DERIVATIONS 4.4)"
+    ]
+  },
+  "chunks": [
+    {
+      "seq": 1,
+      "file": "001-excerpt.jsonl",
+      "label": "dnf-rerun-row-after",
+      "startTime": "2026-04-18T12:58:00.000Z",
+      "endTime": "2026-04-18T13:05:30.000Z",
+      "duration": 450000,
+      "races": [],
+      "messages": 887
+    }
+  ]
+}
