@@ -1270,7 +1270,12 @@ review R16, E2: the spike applied the stale-mark check only to rows it had attri
   it becomes the source's retained value, the baseline, and the write stays `pending` until that cell
   changes (`mismatched`, or `confirmed` if it changes to the requested value), the lost echo of
   `DECISIONS/ADR-010`; on XML under the content-age guard against `submittedAt` as always (the first
-  read after a restart has `changedAfter: null` and resolves nothing). No on-course condition applies:
+  read after a restart has `changedAfter: null` and resolves nothing). This baseline is for a
+  **resumed** write alone, whose retained value was lost with the process, not absent from
+  upstream's history; a write submitted in this lifetime with no `tcp` value retained for the cell
+  resolves on its first delivery, which changes the source's retained value (`CONTRACTS.md` §4
+  rule 4; vector `operator-write-mismatched-echo-wins`; round 28, third pass, second review). No
+  on-course condition applies:
   the write was accepted when the Attempt had left the set, and acceptance is not re-judged. A target
   generation the restarted core does not present waits on §10 item 25 (round 28, third pass and its
   review).
