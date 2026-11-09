@@ -807,4 +807,34 @@ describe('review B1 / DERIVATIONS §6 "After a restart" + round 28-3d: the TCP r
       });
     });
   }
+
+  describe('review B2: restart with NO XML configured; an unavailable / not-configured slot is not an observation', () => {
+    async function noXml(): Promise<{ env: Env; id: string }> {
+      const env1 = await closedRun();
+      await setInstance(env1, 'Main');
+      const first = await write(env1, GOOD, 'noxml');
+      expect(first.status, 'precondition: the write is accepted').toBe(202);
+      await env1.h.stop();
+      const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day, fs: env1.fs, clock: virtualClock(env1.clock.now() + 60_000), xml: undefined });
+      await setInstance(env, 'Main');
+      return { env, id: first.body.writeId };
+    }
+
+    it('DERIVATIONS §6 "After a restart" + CONTRACTS §4 rule 4 (retained tcp, no XML): TCP rows re-sending the retained value are a re-delivery: pending, no confirmedValue with value null', async () => {
+      const { env, id } = await noXml();
+      await feed(env, ODP.restate(2, env.clock.now() + 1000));
+      await feed(env, ODP.restate(2, env.clock.now() + 2000));
+      const w = (await get(env, `/api/writes/${id}`)).body;
+      expect(w.status).toBe('pending');
+      expect(w.confirmedValue ?? null).toBeNull();
+    });
+
+    it('DERIVATIONS §6 "After a restart" + §4.6 / §0.5 (retained tcp, no XML): a TCP row stating a different value has no bound course, so it is not an observation: still pending', async () => {
+      const { env, id } = await noXml();
+      await feed(env, ODP.restate(0, env.clock.now() + 1000));
+      const w = (await get(env, `/api/writes/${id}`)).body;
+      expect(w.status).toBe('pending');
+      expect(w.confirmedValue ?? null).toBeNull();
+    });
+  });
 });
