@@ -50,6 +50,28 @@ describe('late-bound gates keep the merged cells\' instant (CONTRACTS §1.2 roun
   });
 });
 
+describe('round 29 / INV-2 rule 1: a late-bound row that changes a cell (CONTRACTS §1.2 round 29; §4 INV-2 rule 1 gates exception; TEST-ARCHITECTURE §3.2 P1 binding clause)', () => {
+  const CHANGED = PEN.map((v, i) => (i === 5 ? 50 : v)); // the results table corrects gate 6 from 2 to 50 while the listing still judges 2
+  const rowOf = (ms: number, vals: number[], n: number): Unit => tcpUnit(msg(plus(T0, ms), `<Canoe123 System="Main"><Results RaceId="${RACE}" ClassId="K1M" Current="Y" MainTitle="K1M" SubTitle="1st and 2nd Run"><Row Number="1"><Participant Bib="  51" Id="9069.K1M" Name="TESTER Hand" Club="TJ Test" Nat="" GivenName="Hand" FamilyName="TESTER" StartOrder="51" StartTime="11:10:40" /><Result Type="T" HeatNr="0" Q="" IRM="" Pen="102" Gates="${vals.map((v, i) => (i < n ? String(v).padStart(3) : '   ')).join('')}" Time="159.87" Total="159.87" Rank="1" RankOrder="1" Behind="" PP="" /></Row></Results></Canoe123>`), DAY, { courses: {} });
+  const listing = (ms: number): Unit => tcpUnit(msg(plus(T0, ms), listingText({ race: RACE, bib: 51, total: 1, pos: 1, dtStart: '11:28:19.180', dtFinish: '11:30:05.050', time: '105.87', completed: true, gates: cells(23) })), DAY, { courses: {} });
+  const bind = (ms: number): Unit => xmlUnit(derive(JA51_XML, { observedAt: plus(T0, ms), edit: (d) => d.replace(/(<CourseNr>2<\/CourseNr>\s*<CourseConfig>)[A-Z]*(<\/CourseConfig>)/, `$1${'N'.repeat(23)}S$2`) }), DAY, JA51_XML.observedAt);
+  const run = (late: boolean): Core => {
+    const c = coreWith([connected(T0), rowOf(0, PEN, 22), listing(430)]);
+    if (late) { c.applyUnit(rowOf(7092, CHANGED, 23)); c.applyUnit(bind(7831)); } else { c.applyUnit(bind(1000)); c.applyUnit(rowOf(7092, CHANGED, 23)); }
+    return c;
+  };
+
+  it('round 29 / INV-2 rule 1: a late-bound row that changes a cell presents the new value at its own instant, as an early binding does', () => {
+    const early = env(run(false), ID, 'gates');
+    const late = env(run(true), ID, 'gates');
+    expect(early.observedAt, 'early binding: the changing row\'s own instant').toBe(plus(T0, 7092));
+    expect(late.observedAt, 'late binding: the changing row\'s own instant').toBe(plus(T0, 7092));
+    expect(late.value).toEqual(early.value);
+    expect(JSON.stringify(late.value), 'the new judged value 50 at gate 6 is presented').toContain('50');
+    expect(late).toEqual(early);
+  });
+});
+
 describe('a leave keeps a presented table row\'s status (CONTRACTS §3.2: no finished -> left-without-finish; DERIVATIONS §4.1 leave rule, #204)', () => {
   const x = (ms: number): Unit => tcpUnit(msg(plus(T0, ms), listingText({ race: RACE, bib: 51, total: 2, pos: 2, dtStart: '11:10:40.000' })), DAY);
   const y = (ms: number): Unit => tcpUnit(msg(plus(T0, ms), listingText({ race: RACE, bib: 44, total: 2, pos: 1, dtStart: '11:10:20.000' })), DAY);
