@@ -1264,13 +1264,20 @@ review R16, E2: the spike applied the stale-mark check only to rows it had attri
 - The echo arrives as an event-driven result push, because a correction recalculates the race.
 - **After a restart** a stored `pending` write resumes at load (`CONTRACTS.md` §1.5), keyed by its
   target and generation, and its echo is the next results-table observation of the target cell for
-  that generation, under the same rule as in any lifetime, so that the outcome never depends on the
-  server's uptime: the first TCP delivery that states the requested value confirms it; an unequal
-  first delivery is not upstream's answer to the correction but the rotation re-sending its table —
-  it becomes the source's retained value, the baseline, and the write stays `pending` until that cell
-  changes (`mismatched`, or `confirmed` if it changes to the requested value), the lost echo of
-  `DECISIONS/ADR-010`; on XML under the content-age guard against `submittedAt` as always (the first
-  read after a restart has `changedAfter: null` and resolves nothing). No on-course condition applies:
+  that generation, under this section's rule unchanged, so that no outcome depends on the server's
+  uptime. What makes that possible: **the durable record of a write carries, from its submission,
+  the source's retained value of the target cell — or that none was retained** (a field of the
+  stored record, not of the wire's `WriteRequest`). A `pending` write's retained value cannot have
+  changed since its submission, a change having resolved it, so the persisted value is exactly the
+  one the core held at the restart; on resume it is the retained value again, and: a delivery equal
+  to it is a re-delivery, the write stays `pending` (`DECISIONS/ADR-010`'s lost echo); a change
+  resolves it, `mismatched`, or `confirmed` if it changes to the requested value; with none retained
+  the first delivery is a change and resolves it, as `operator-write-mismatched-echo-wins` pins in
+  any lifetime. On XML the content-age guard against `submittedAt` applies as always (the first read
+  after a restart has `changedAfter: null` and resolves nothing). (Round 28, third pass and its two
+  reviews: the first pass resolved every resumed write on its first delivery, the second made an
+  unequal first delivery a baseline for every resumed write — each a carve-out that left one
+  sub-case uptime-dependent.) No on-course condition applies:
   the write was accepted when the Attempt had left the set, and acceptance is not re-judged. A target
   generation the restarted core does not present waits on §10 item 25 (round 28, third pass and its
   review).
