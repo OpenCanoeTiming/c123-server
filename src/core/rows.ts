@@ -38,16 +38,38 @@ function courseUnavailable(s: CoreState, phaseId: string): boolean {
   return s.options.xmlConfigured === false || s.phases.get(phaseId)?.fields.get('courseId')?.xml?.state === 'not-yet';
 }
 
+type Held = { cells: Cells; slot: Slot };
+
+/** The retained cells as presented while the Attempt is listed: each cell the newest judged value of either kind (INV-2 rule 1's exception). */
+function mergedCells(row: Held, inf: Held | undefined, listed: boolean): Cells {
+  if (!listed || inf === undefined) return row.cells;
+  const newestIsOnCourse = inf.slot.at > row.slot.at || (inf.slot.at === row.slot.at && inf.slot.seq > row.slot.seq);
+  return row.cells.map((c, i) => {
+    const stream = inf.cells[i] ?? null;
+    return newestIsOnCourse ? (stream ?? c) : (c ?? stream);
+  });
+}
+
+/** Whether a row's changed cells leave the presented merged cells as they are, read with the row in its place (round 29). */
+function restatesMerged(a: AttemptState, held: Held, cells: Cells): boolean {
+  const inf = a.cells.inference;
+  if (!a.listed || inf === undefined) return false;
+  return JSON.stringify(mergedCells(held, inf, true)) === JSON.stringify(mergedCells({ cells, slot: held.slot }, inf, true));
+}
+
 /** Cells with no course in the parser's `ctx`: gates or faults once a course is bound, else retained until one is (§0.5). */
 export function putCells(s: CoreState, a: AttemptState, channel: 'tcp' | 'xml' | 'inference', cells: Cells, slot: Slot): void {
   const fmt = fmtFor(s, a.phaseId);
   const field = fmt.cross ? 'faults' : 'gates';
   const slots = boundSlots(s, a.phaseId);
   if (slots === undefined) {
-    // §1.2, INV-5: an identical re-delivery moves nothing; the retained slot is the one of the last cell change
+    // §1.2, INV-5: an identical re-delivery moves nothing; the retained slot is the one of the last cell change. A row is identical
+    // when it restates the presented merged cells, whatever its source's previous row said (round 29): the slot stays, its cells taken
     const held = a.cells[channel];
-    const same = held !== undefined && JSON.stringify(held.cells) === JSON.stringify(cells) && held.slot.source === slot.source && held.slot.confidence === slot.confidence;
-    if (!same) a.cells[channel] = { cells, slot };
+    const same = held !== undefined && held.slot.source === slot.source && held.slot.confidence === slot.confidence;
+    if (!same || JSON.stringify(held.cells) !== JSON.stringify(cells)) {
+      a.cells[channel] = same && channel !== 'inference' && restatesMerged(a, held, cells) ? { cells, slot: held.slot } : { cells, slot };
+    }
     if (courseUnavailable(s, a.phaseId)) {
       if (retain(fieldSlots(a.slots, field), channel, { ...slot, state: 'unavailable', reason: NOT_CONFIGURED.reason })) s.dirtyAttempts.add(a);
     }
