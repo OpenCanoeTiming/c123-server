@@ -151,8 +151,8 @@ export interface ClassificationState {
 export interface WriteState extends WriteRequest {
   attempt: AttemptState;
   fieldName: string;
-  /** A stored write the caller resumed after a restart (DERIVATIONS §6): a source's first delivery of the cell is its baseline. */
-  resumed?: boolean;
+  /** The TCP source's retained value of the target cell at submission, `null` when none was retained (DERIVATIONS §6); not on the wire. */
+  retainedCell: { penalty: Gate['penalty'] } | null;
 }
 
 export interface Counters {

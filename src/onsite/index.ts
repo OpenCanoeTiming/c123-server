@@ -213,7 +213,11 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     if (wstore !== undefined) {
       const held = wstore;
       wire = wire.filter((m) => m['type'] !== 'write.updated' || canon(held.get((m['write'] as J)['writeId'] as string)) !== canon(m['write']));
-      const changed = wire.filter((m) => m['type'] === 'write.updated').map((m) => m['write'] as J);
+      // the stored record alone carries the TCP source's retained target cell at submission (DERIVATIONS §6); the store keeps it
+      const changed = wire.filter((m) => m['type'] === 'write.updated').map((m) => m['write'] as J).map((w) => {
+        const retainedCell = core.retainedCell(w['writeId'] as string);
+        return retainedCell === undefined ? w : { ...w, retainedCell };
+      });
       if (changed.length > 0 || bind !== undefined) {
         try { await held.put(changed, bind); } catch (e) { failure = e; log('writes store', e); }
       }
@@ -243,7 +247,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   /**
    * Pending writes the store holds from an earlier lifetime resume at load (round 28-3b, DERIVATIONS §6): each is put back into the core as
    * the operator's provisional value as soon as the core knows its Attempt (the restarted core starts empty), with no on-course condition.
-   * From then the echo rule of any lifetime applies: a first TCP delivery of the cell stating another value is the baseline, not an answer.
+   * Its record's `retainedCell` is the TCP source's retained value again (absent: none retained), so §6's ordinary comparison decides.
    * A write whose generation the core has passed is superseded; one whose generation it does not present yet waits (item 25).
    */
   async function adoptPending(): Promise<void> {
@@ -259,7 +263,8 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
       const id = w['writeId'] as string;
       if (run > t.run) {
         adopted.add(id);
-        const done = { ...w, status: 'superseded' };
+        const done: J = { ...w, status: 'superseded' };
+        delete done['retainedCell'];
         await wstore.put([done]);
         await emit([{ type: 'write.updated', write: done }]);
       } else if (run === t.run) {
@@ -267,7 +272,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
         const v = w['requestedValue'] as { gate: number; value: number };
         await processUnit([{
           ingestSeq: 0, attemptId: aid, field: 'gates', source: 'operator-write', kind: 'operator', observedAt: w['submittedAt'] as string,
-          value: [{ number: v.gate, penalty: v.value }], confidence: 'authoritative', run: t.run, writeId: id, resumed: true,
+          value: [{ number: v.gate, penalty: v.value }], confidence: 'authoritative', run: t.run, writeId: id, retainedCell: w['retainedCell'] ?? null,
         }]);
       }
     }

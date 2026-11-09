@@ -23,7 +23,7 @@ export class WritesFileInvalidError extends Error {
 export interface WritesStore {
   /** A copy of the WriteRequest as last pushed. */
   get(writeId: string): J | undefined;
-  /** Every WriteRequest still `pending`. */
+  /** Every WriteRequest still `pending`, as stored: with its `retainedCell` when it has one. */
   pending(): J[];
   /** The WriteRequest a bound, unexpired key maps to. */
   byWriteKey(key: string): J | undefined;
@@ -78,20 +78,25 @@ export async function openWritesStore(opts: { fs: ChecksFs; dir: string; eventId
   const live = (e: KeyEntry | undefined): e is KeyEntry => e !== undefined && clock.now() - e.boundAt < KEY_TTL_MS;
   const fresh = (m: Record<string, KeyEntry>): Record<string, KeyEntry> => Object.fromEntries(Object.entries(m).filter(([, e]) => live(e)));
   const copy = (w: J): J => JSON.parse(JSON.stringify(w)) as J;
+  // `retainedCell` is of the stored record, not of the WriteRequest (DERIVATIONS §6): kept across updates, given only to `pending()`
+  const wire = (w: J): J => { const out = copy(w); delete out['retainedCell']; return out; };
 
   return {
-    get: (id) => { const w = state.writes.find((x) => x['writeId'] === id); return w === undefined ? undefined : copy(w); },
+    get: (id) => { const w = state.writes.find((x) => x['writeId'] === id); return w === undefined ? undefined : wire(w); },
     pending: () => state.writes.filter((w) => w['status'] === 'pending').map(copy),
     byWriteKey: (key) => {
       const e = state.writeKeys[key];
       if (!live(e)) return undefined;
       const w = state.writes.find((x) => x['writeId'] === e.id);
-      return w === undefined ? undefined : copy(w);
+      return w === undefined ? undefined : wire(w);
     },
     flagByKey: (key) => { const e = state.flagKeys[key]; return live(e) ? e.id : undefined; },
     put: (writes, bind) => mutate((cur) => {
       const byId = new Map(cur.writes.map((w) => [w['writeId'] as string, w]));
-      for (const w of writes) byId.set(w['writeId'] as string, copy(w));
+      for (const w of writes) {
+        const was = byId.get(w['writeId'] as string);
+        byId.set(w['writeId'] as string, copy(was !== undefined && 'retainedCell' in was && !('retainedCell' in w) ? { ...w, retainedCell: was['retainedCell'] } : w));
+      }
       return {
         writes: [...byId.values()],
         writeKeys: { ...fresh(cur.writeKeys), ...(bind !== undefined ? { [bind.key]: { id: bind.writeId, boundAt: clock.now() } } : {}) },
