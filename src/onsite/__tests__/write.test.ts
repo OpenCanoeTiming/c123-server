@@ -748,59 +748,61 @@ describe('review B1 / DERIVATIONS §6 "After a restart" + round 28-3d: the TCP r
     const row = (v: 0 | 2 | 50): Unit => (retained === 'tcp' ? ODP.restate(v, env.clock.now() + 1000) : ODP.restate120(v, env.clock.now() + 1000));
     return { env, id: first.body.writeId, row };
   }
+  /**
+   * Feeds the TCP row; after a restart no course is bound yet, so the held cells are not a results-table observation (DERIVATIONS §4.6, §0.5; CONTRACTS `gates`):
+   * the write must still be pending, then the XML first read binds the course and the resolution happens AT that binding.
+   */
+  async function deliver(env: Env, id: string, restart: boolean, u: Unit): Promise<void> {
+    await feed(env, u);
+    if (restart) {
+      expect(await status(env, id), 'before the XML read nothing is judged on unbound cells').toBe('pending');
+      await feed(env, ODP.unitsXmlFirst()[0]!);
+    }
+  }
   const status = async (env: Env, id: string): Promise<string> => (await get(env, `/api/writes/${id}`)).body.status;
   const gates = async (env: Env): Promise<J> => (await get(env, `/api/phases/${ODP.phaseId}/attempts`)).body.attempts.find((x: J) => x.attemptId === ODP.attemptId).gates;
 
   for (const restart of [true, false]) {
     const life = restart ? 'after a restart, TCP row first' : 'control, no restart';
     describe(life, () => {
-      it('DERIVATIONS §6 "After a restart" 28-3d (retained tcp): the first TCP delivery differing from the retained value is mismatched with it, the presented gate is no longer the provisional value', async () => {
+      it('DERIVATIONS §6 "After a restart" 28-3d (retained tcp): the first TCP delivery (resolved at the course binding after a restart) differing from the retained value is mismatched with it, the presented gate is no longer the provisional value', async () => {
         const { env, id, row } = await scenario('tcp', restart);
-        await feed(env, row(0));
+        await deliver(env, id, restart, row(0));
         const w = (await get(env, `/api/writes/${id}`)).body;
         expect(w.status).toBe('mismatched');
         expect(w.confirmedValue).toEqual({ gate: ODP.gate, value: 0 });
         expect(await gates(env)).not.toMatchObject({ source: 'operator-write', provisional: true });
-        if (restart) { // the XML first read arriving later changes nothing
-          await feed(env, ODP.unitsXmlFirst()[0]!);
-          expect(await status(env, id)).toBe('mismatched');
-        }
       });
 
-      it('DERIVATIONS §6 "After a restart" 28-3d (retained tcp): the first TCP delivery equal to the retained value is a re-delivery: pending, then a change resolves it mismatched', async () => {
+      it('DERIVATIONS §6 "After a restart" 28-3d (retained tcp): the first TCP delivery (resolved at the course binding after a restart) equal to the retained value is a re-delivery: pending, then a change resolves it mismatched', async () => {
         const { env, id, row } = await scenario('tcp', restart);
-        await feed(env, row(2));
+        await deliver(env, id, restart, row(2));
         expect(await status(env, id)).toBe('pending');
-        if (restart) await feed(env, ODP.unitsXmlFirst()[0]!);
         expect(await status(env, id)).toBe('pending');
-        await feed(env, row(0));
+        await feed(env, row(0)); // the course is bound by now in both lifetimes
         expect(await status(env, id)).toBe('mismatched');
       });
 
-      it('DERIVATIONS §6 "After a restart" 28-3d (retained tcp): the first TCP delivery stating the requested value is confirmed', async () => {
+      it('DERIVATIONS §6 "After a restart" 28-3d (retained tcp): the first TCP delivery (resolved at the course binding after a restart) stating the requested value is confirmed', async () => {
         const { env, id, row } = await scenario('tcp', restart);
-        await feed(env, row(50));
+        await deliver(env, id, restart, row(50));
         const w = (await get(env, `/api/writes/${id}`)).body;
         expect(w.status).toBe('confirmed');
         expect(w.confirmedValue).toEqual({ gate: ODP.gate, value: 50 });
       });
 
-      it('vector operator-write-mismatched-echo-wins across a restart, DERIVATIONS §6 28-3d (none retained): the first TCP delivery is a change: mismatched, the presented gate is no longer the provisional value', async () => {
+      it('vector operator-write-mismatched-echo-wins across a restart, DERIVATIONS §6 28-3d (none retained): the first TCP delivery (resolved at the course binding after a restart) is a change: mismatched, the presented gate is no longer the provisional value', async () => {
         const { env, id, row } = await scenario('none', restart);
-        await feed(env, row(0));
+        await deliver(env, id, restart, row(0));
         const w = (await get(env, `/api/writes/${id}`)).body;
         expect(w.status).toBe('mismatched');
         expect(w.confirmedValue).toEqual({ gate: ODP.gate, value: 0 });
         expect(await gates(env)).not.toMatchObject({ source: 'operator-write', provisional: true });
-        if (restart) {
-          await feed(env, ODP.unitsXmlFirst()[0]!);
-          expect(await status(env, id)).toBe('mismatched');
-        }
       });
 
-      it('DERIVATIONS §6 "After a restart" 28-3d (none retained): the first TCP delivery stating the requested value is confirmed', async () => {
+      it('DERIVATIONS §6 "After a restart" 28-3d (none retained): the first TCP delivery (resolved at the course binding after a restart) stating the requested value is confirmed', async () => {
         const { env, id, row } = await scenario('none', restart);
-        await feed(env, row(50));
+        await deliver(env, id, restart, row(50));
         expect(await status(env, id)).toBe('confirmed');
       });
     });
