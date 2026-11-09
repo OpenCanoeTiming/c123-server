@@ -606,45 +606,49 @@ describe('round 28-2: the key in flight, the creating step, key replay first, no
   });
 });
 
-describe('round 28-3b: a pending write resolves by DERIVATIONS §6 in every lifetime, restart or none (the invariant)', () => {
-  type Scenario = { env: Env; ws: Awaited<ReturnType<typeof openWs>>; first: J };
+describe('round 28-3d: a pending write resolves by DERIVATIONS §6 in every lifetime; the stored record carries the TCP source\'s retained value of the target cell at submission', () => {
+  type Scenario = { env: Env; ws: Awaited<ReturnType<typeof openWs>>; first: J; row: (v: 0 | 2 | 50) => Unit };
+  type Unit = ReturnType<typeof ODP.restate>;
   /**
-   * A pending write on a closed run. `restart: true`: the process is stopped and a new one started over the same data dir, its only read being the snapshot (stating gate 13
-   * as `xmlValue`, a first read, changedAfter null), no on-course listing in the new lifetime. `restart: false`: the same process goes on.
+   * `retained: 'none'`: the lifetime has read only the snapshot (no TCP row ever stated gate 13), so the write is submitted with no TCP value retained for the cell.
+   * `retained: 'tcp'`: the TCP rows stated gate 13 = 2 before the write. `restart`: the process is stopped and a new one started over the same data dir, its only read being
+   * the snapshot (a first read, changedAfter null), no on-course listing in the new lifetime; otherwise the same process goes on. `row(v)` is a TCP Results row restating the
+   * presented run with gate 13 = v.
    */
-  async function scenario(restart: boolean, over: { rerunFirst?: boolean; xmlValue?: 0 | 2 | 50; recordedOrder?: boolean } = {}): Promise<Scenario> {
-    const env1 = await closedRun(over.recordedOrder === true ? { recordedOrder: true } : {});
-    await setInstance(env1, 'Main');
-    if (over.rerunFirst === true) {
-      await feed(env1, ODP.rerun(env1.clock.now() + 1000));
-      await feed(env1, ODP.emptyAt(env1.clock.now() + 1000)); // the re-run is closed again: generation 2
+  async function scenario(retained: 'none' | 'tcp', restart: boolean): Promise<Scenario> {
+    let env1: Env;
+    if (retained === 'tcp') env1 = await closedRun();
+    else {
+      env1 = await boot({ startAt: ODP.startAt, eventDate: ODP.day });
+      await feed(env1, ODP.unitsXmlFirst()[0]!);
+      const a = (await get(env1, `/api/phases/${ODP.phaseId}/attempts`)).body.attempts.find((x: J) => x.attemptId === ODP.attemptId);
+      expect(a.gates.state, 'precondition: the snapshot states the gates, no TCP row did').toBe('known');
+      expect(a.gates.source).toBe('xml');
     }
+    await setInstance(env1, 'Main');
     const first = await write(env1, GOOD, 'adopt');
     expect(first.status, 'precondition: the write is accepted').toBe(202);
     let env = env1;
     if (restart) {
       await env1.h.stop();
       env = await boot({ startAt: ODP.startAt, eventDate: ODP.day, fs: env1.fs, clock: virtualClock(env1.clock.now() + 60_000) });
-      await feed(env, over.xmlValue === undefined ? ODP.unitsXmlFirst()[0]! : ODP.xmlWithGate13(over.xmlValue)); // the first and only read of the new lifetime
+      await feed(env, ODP.unitsXmlFirst()[0]!);
     }
     const ws = await openWs(env);
     await ws.barrier(); ws.take();
-    return { env, ws, first: first.body };
+    const row = (v: 0 | 2 | 50): Unit => (retained === 'tcp' ? ODP.restate(v, env.clock.now() + 1000) : ODP.restate120(v, env.clock.now() + 1000));
+    return { env, ws, first: first.body, row };
   }
   const state = async (env: Env, id: string): Promise<J> => (await get(env, `/api/writes/${id}`)).body;
   const pushed = (ws: { messages: J[] }): J[] => ws.messages.filter((m) => m.type === 'write.updated').map((m) => m.write);
-  const xmlRead = async (env: Env, value: 0 | 2 | 50, ms: number, run: 81 | 120 = 81): Promise<void> => {
-    const u = ODP.xmlWithGate13(value, run);
-    await feed(env, { kind: 'xml', rec: { observedAt: new Date(ms).toISOString(), data: u.rec.data } });
-  };
 
   for (const restart of [true, false]) {
     const life = restart ? 'after a stop and start over the same data dir' : 'in the same process (no restart)';
 
     describe(life, () => {
       it('(a) the first TCP row stating the requested value: confirmed, confirmedValue { gate, value }, pushed as write.updated', async () => {
-        const { env, ws, first } = await scenario(restart);
-        await feed(env, ODP.echo(50, env.clock.now() + 1000));
+        const { env, ws, first, row } = await scenario('tcp', restart);
+        await feed(env, row(50));
         await ws.barrier();
         const w = await state(env, first.writeId);
         expect(w.status).toBe('confirmed');
@@ -652,13 +656,9 @@ describe('round 28-3b: a pending write resolves by DERIVATIONS §6 in every life
         expect(pushed(ws).at(-1)).toEqual(w);
       });
 
-      it('(b) a row re-sending the old value leaves it pending with no push; a row with a different value then gives mismatched with that value', async () => {
-        const { env, ws, first } = await scenario(restart);
-        await feed(env, ODP.restate(2, env.clock.now() + 1000)); // upstream\'s table as it was: a re-delivery, not an answer
-        await ws.barrier();
-        expect((await state(env, first.writeId)).status).toBe('pending');
-        expect(pushed(ws)).toEqual([]);
-        await feed(env, ODP.restate(0, env.clock.now() + 1000));
+      it('(1) no TCP value retained at submission: an unequal first delivery is a change: mismatched with that value, pushed (the vector\'s outcome in any lifetime)', async () => {
+        const { env, ws, first, row } = await scenario('none', restart);
+        await feed(env, row(0));
         await ws.barrier();
         const w = await state(env, first.writeId);
         expect(w.status).toBe('mismatched');
@@ -666,10 +666,32 @@ describe('round 28-3b: a pending write resolves by DERIVATIONS §6 in every life
         expect(pushed(ws).at(-1)).toEqual(w);
       });
 
-      it('(c) after the old value was re-sent, a row with the requested value gives confirmed', async () => {
-        const { env, ws, first } = await scenario(restart);
-        await feed(env, ODP.restate(2, env.clock.now() + 1000));
-        await feed(env, ODP.echo(50, env.clock.now() + 1000));
+      it('(1b) no TCP value retained: the requested value as the first delivery: confirmed', async () => {
+        const { env, ws, first, row } = await scenario('none', restart);
+        await feed(env, row(50));
+        await ws.barrier();
+        expect((await state(env, first.writeId)).status).toBe('confirmed');
+        expect(pushed(ws).at(-1)!.status).toBe('confirmed');
+      });
+
+      it('(2) a TCP value retained (2): the same value re-delivered is a re-delivery: pending, no push; then a different value: mismatched with it', async () => {
+        const { env, ws, first, row } = await scenario('tcp', restart);
+        await feed(env, row(2));
+        await ws.barrier();
+        expect((await state(env, first.writeId)).status).toBe('pending');
+        expect(pushed(ws)).toEqual([]);
+        await feed(env, row(0));
+        await ws.barrier();
+        const w = await state(env, first.writeId);
+        expect(w.status).toBe('mismatched');
+        expect(w.confirmedValue).toEqual({ gate: ODP.gate, value: 0 });
+        expect(pushed(ws).at(-1)).toEqual(w);
+      });
+
+      it('(2b) a TCP value retained: the same value re-delivered, then the requested value: confirmed', async () => {
+        const { env, ws, first, row } = await scenario('tcp', restart);
+        await feed(env, row(2));
+        await feed(env, row(50));
         await ws.barrier();
         const w = await state(env, first.writeId);
         expect(w.status).toBe('confirmed');
@@ -677,30 +699,26 @@ describe('round 28-3b: a pending write resolves by DERIVATIONS §6 in every life
         expect(pushed(ws).at(-1)).toEqual(w);
       });
 
-      it('(d) an XML read whose changedAfter is not later than submittedAt resolves nothing even when it states the requested cell; a later read, changed after submittedAt, resolves', async () => {
-        // in one process the snapshot must come last (the recorded order): the presented run is then the snapshot\'s own 120.98, and a snapshot restating it is not held (INV-2d)
-        const run = restart ? 81 : 120;
-        const { env, ws, first } = await scenario(restart, { xmlValue: 50, recordedOrder: !restart });
-        if (!restart) await xmlRead(env, 50, env.clock.now() + 1000, run); // changed right after the write: the reader\'s last stat before it is not later than submittedAt
+      it('(3) a TCP value retained: the requested value delivered first: confirmed', async () => {
+        const { env, ws, first, row } = await scenario('tcp', restart);
+        await feed(env, row(50));
         await ws.barrier();
-        expect((await state(env, first.writeId)).status, 'a first read, or one dated before the write, is no answer').toBe('pending');
-        expect(pushed(ws)).toEqual([]);
-        await env.clock.advance(6000); // polls: the reader\'s last stat is now later than submittedAt
-        await xmlRead(env, 50, env.clock.now() + 2000, run); // a read of content that changed after that stat
-        await ws.barrier();
-        const w = await state(env, first.writeId);
-        expect(w.status).toBe('confirmed');
-        expect(pushed(ws).at(-1)).toEqual(w);
+        expect((await state(env, first.writeId)).status).toBe('confirmed');
+        expect(pushed(ws).at(-1)!.status).toBe('confirmed');
       });
     });
   }
 
-  it('(e) a row of another generation resolves nothing: a write stored for generation 2 stays pending when the restarted core presents generation 1', async () => {
-    const { env, ws, first } = await scenario(true, { rerunFirst: true });
-    expect(first.target.run, 'precondition: the write targets generation 2').toBe(2);
-    await feed(env, ODP.echo(50, env.clock.now() + 1000));
+  it('(5) an XML first read after the restart resolves nothing, even stating the requested cell', async () => {
+    const env1 = await closedRun();
+    await setInstance(env1, 'Main');
+    const first = await write(env1, GOOD, 'adopt');
+    await env1.h.stop();
+    const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day, fs: env1.fs, clock: virtualClock(env1.clock.now() + 60_000) });
+    const ws = await openWs(env);
+    await feed(env, ODP.xmlWithGate13(50)); // the lifetime\'s first read: changedAfter null
     await ws.barrier();
-    expect((await state(env, first.writeId)).status).toBe('pending');
+    expect((await state(env, first.body.writeId)).status).toBe('pending');
     expect(pushed(ws)).toEqual([]);
   });
 });

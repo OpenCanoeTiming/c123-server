@@ -38,6 +38,14 @@ export const ODP = {
     edit: (d) => d.replace(/Gates="((?:...){12})(...)/, (_m, a) => `Gates="${a as string}${String(value).padStart(3, ' ')}`)
       .replace(/ Pen="\d+"/, ` Pen="${value}"`).replace(/ Total="[^"]*"/, ` Total="${(81.62 + value).toFixed(2)}"`),
   })),
+  /**
+   * Like `restate`, for the recorded snapshot\'s own run (Time 120.98, rank 60, the run an XML-only lifetime presents): a TCP row with only gate 13 changed to `value`.
+   */
+  restate120: (value: 0 | 2 | 50, ms: number): Unit => tcp(derived(R19.c4RowB, {
+    observedAt: new Date(ms).toISOString(),
+    edit: (d) => d.replace(/Gates="((?:...){12})(...)/, (_m, a) => `Gates="${a as string}${String(value).padStart(3, ' ')}`)
+      .replace(/ Pen="\d+"/, ` Pen="${value}"`).replace(/ Total="[^"]*"/, ` Total="${(120.98 + value).toFixed(2)}"`),
+  })),
   /** A later TCP row of bib 56 that states gate 13 as clean (the presented penalty moves 2 -> 0): a protest-style correction, a restatement of the presented run. */
   correction: (): Unit => ODP.restate(0, Date.parse(R19.rcXml.observedAt) + 60_000),
   /** RaceConfig with splits armed: the same recorded message with NrSplits changed (a derived case). */
