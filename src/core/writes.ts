@@ -9,12 +9,12 @@ export function submitWrite(s: CoreState, a: AttemptState, el: Element, field: s
   }));
   s.dirtyAttempts.add(a);
   if (assertion) return;
-  const cell = (el['value'] as Gate[])[0];
   const w = {
     // the caller names the write when it has an id of its own (a durable one, or a re-adopted one); the counter's is unique within one core only
     writeId: typeof el['writeId'] === 'string' ? el['writeId'] : `write-${seq}`,
     target: { phaseId: a.phaseId, bib: a.bib, run: a.gen.n, field: 'gate-penalty' as const },
-    requestedValue: { gate: cell?.number, value: cell?.penalty }, submittedAt: el.observedAt, status: 'pending' as const, attempt: a, fieldName: field,
+    requestedValue: el['value'], submittedAt: el.observedAt, status: 'pending' as const, attempt: a, fieldName: field,
+    ...(el['resumed'] === true ? { resumed: true } : {}),
   };
   s.writes.push(w);
   s.dirtyWrites.add(w);
@@ -41,7 +41,9 @@ export function resolveEcho(s: CoreState, a: AttemptState, fs: FieldSlots, field
   const requested = (op.value as Gate[])[0];
   const cell = cellOf(slot.value, requested?.number);
   const matches = cell === requested?.penalty;
-  if (!matches && prior !== undefined && cell === cellOf(prior.value, requested?.number)) return;
+  // a re-delivery of the cell is no echo; nor, for a write resumed after a restart, is a TCP first delivery of it (the rotation re-sending
+  // upstream's table): unequal, it is retained as the baseline and the write waits for the cell to change (§6, ADR-010's lost echo)
+  if (!matches && (prior === undefined ? w?.resumed === true && slot.source !== 'xml' : cell === cellOf(prior.value, requested?.number))) return;
   delete fs.operator;
   s.dirtyAttempts.add(a);
   if (w === undefined) return;
@@ -62,4 +64,4 @@ export function displaceOperator(s: CoreState, a: AttemptState, fs: FieldSlots, 
   s.dirtyWrites.add(w);
 }
 
-export const wireWrite = ({ attempt: _attempt, fieldName: _field, ...wire }: CoreState['writes'][number]): unknown => wire;
+export const wireWrite = ({ attempt: _attempt, fieldName: _field, resumed: _resumed, ...wire }: CoreState['writes'][number]): unknown => wire;

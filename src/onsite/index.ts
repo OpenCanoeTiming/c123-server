@@ -115,9 +115,8 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     return ws;
   }
   let wstore: WritesStore | undefined = event === undefined ? undefined : await writesFor(event.eventId);
-  /** Writes the core holds in this lifetime (created here or re-adopted), and the Attempts seen on the on-course list while a write waited. */
+  /** Writes the core holds in this lifetime (created here or re-adopted). */
   const adopted = new Set<string>();
-  const listedSeen = new Set<string>();
   /** §7.2: the statuses hydration already serves are the ones pushed; seeded at startup and at `startNewEvent`. */
   function seedCheckStatuses(s: ChecksStore): void {
     checkStatuses.clear();
@@ -242,16 +241,15 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     return run.state === 'known' && typeof run.value === 'number' ? run.value : undefined;
   };
   /**
-   * Pending writes the store holds from an earlier lifetime resume waiting for their echo (round 28 item 8): once the Attempt is known
-   * and has left the on-course list again, the write is put back into the core as the operator's provisional value; a write whose run
-   * has moved on is superseded. Before that the stream is still re-establishing the table, and its rows would read as the echo.
+   * Pending writes the store holds from an earlier lifetime resume at load (round 28-3b, DERIVATIONS §6): each is put back into the core as
+   * the operator's provisional value as soon as the core knows its Attempt (the restarted core starts empty), with no on-course condition.
+   * From then the echo rule of any lifetime applies: a first TCP delivery of the cell stating another value is the baseline, not an answer.
+   * A write whose generation the core has passed is superseded; one whose generation it does not present yet waits (item 25).
    */
   async function adoptPending(): Promise<void> {
     if (wstore === undefined) return;
     const waiting = wstore.pending().filter((w) => !adopted.has(w['writeId'] as string));
     if (waiting.length === 0) return;
-    const on = new Set(core.oncourse().attemptIds);
-    for (const id of on) listedSeen.add(id);
     const known = new Set(core.attempts());
     for (const w of waiting) {
       const t = w['target'] as { phaseId: string; bib: string; run: number };
@@ -264,12 +262,12 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
         const done = { ...w, status: 'superseded' };
         await wstore.put([done]);
         await emit([{ type: 'write.updated', write: done }]);
-      } else if (run === t.run && listedSeen.has(aid) && !on.has(aid)) {
+      } else if (run === t.run) {
         adopted.add(id);
         const v = w['requestedValue'] as { gate: number; value: number };
         await processUnit([{
           ingestSeq: 0, attemptId: aid, field: 'gates', source: 'operator-write', kind: 'operator', observedAt: w['submittedAt'] as string,
-          value: [{ number: v.gate, penalty: v.value }], confidence: 'authoritative', run: t.run, writeId: id,
+          value: [{ number: v.gate, penalty: v.value }], confidence: 'authoritative', run: t.run, writeId: id, resumed: true,
         }]);
       }
     }
@@ -403,9 +401,9 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     checkStatuses.delete(keyOf(k));
     await emit([{ type: 'check.updated', attemptId: k.attemptId, run: k.run, gate: k.gate, check: null }]);
   }
-  async function doCreateFlag(input: Parameters<OnsiteHandle['checks']['createFlag']>[0]): Promise<J> {
+  async function doCreateFlag(input: Parameters<OnsiteHandle['checks']['createFlag']>[0], flagId?: string): Promise<J> {
     const i = flagInput(input);
-    const flag = await needStore().createFlag(i);
+    const flag = await needStore().createFlag(flagId === undefined ? i : { ...i, flagId });
     await emit([{ type: 'flag.updated', flag }]);
     return flag as unknown as J;
   }
@@ -552,8 +550,11 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     }
     if (issues.length > 0) return invalid(issues);
     const b = body as { gate: number; comment: string; suggestedValue?: number; createdBy?: string };
-    const flag = await doCreateFlag({ attemptId: aid, run: currentOf(aid), gate: b.gate, comment: b.comment, ...(b.suggestedValue !== undefined ? { suggestedValue: b.suggestedValue } : {}), ...(b.createdBy !== undefined ? { createdBy: b.createdBy } : {}) });
-    await wstore.bindFlag(key as string, flag['flagId'] as string);
+    // The key and the flag live in two files: the key is bound first, to an id chosen ahead, and the flag is created under that id.
+    // A kill between the two leaves a bound key with no flag; its retry creates the flag under the bound id, so there is never a second one.
+    const flagId = bound ?? opts.newId?.() ?? `flag-${randomUUID()}`;
+    if (bound === undefined) await wstore.bindFlag(key as string, flagId);
+    const flag = await doCreateFlag({ attemptId: aid, run: currentOf(aid), gate: b.gate, comment: b.comment, ...(b.suggestedValue !== undefined ? { suggestedValue: b.suggestedValue } : {}), ...(b.createdBy !== undefined ? { createdBy: b.createdBy } : {}) }, flagId);
     return { status: 201, body: flag };
   });
   const resolveFlag = (flagId: string, body: unknown): Promise<RestReply> => guard(async () => ({ status: 200, body: await doResolveFlag(flagId, (body === undefined ? {} : body) as { note?: string; resolvedBy?: string }) }));
@@ -639,7 +640,6 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
         store = next;
         wstore = await writesFor(e.eventId);
         adopted.clear();
-        listedSeen.clear();
         core = newCore();
         tracker = newTracker();
         classesSent.clear();

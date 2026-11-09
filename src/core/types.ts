@@ -151,6 +151,8 @@ export interface ClassificationState {
 export interface WriteState extends WriteRequest {
   attempt: AttemptState;
   fieldName: string;
+  /** A stored write the caller resumed after a restart (DERIVATIONS §6): a source's first delivery of the cell is its baseline. */
+  resumed?: boolean;
 }
 
 export interface Counters {
