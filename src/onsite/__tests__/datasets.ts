@@ -63,8 +63,15 @@ export const ODP = {
   hyphenRow: (): Unit => tcp(derived(R19.c4RowB, { edit: (d) => d.replace('ClassId="C1M"', 'ClassId="C1M-ST"') })),
   /** The snapshot first, then the listings and rows (§7.3 validates a gate against the Phase's course, which only the snapshot binds). */
   unitsXmlFirst: (): Unit[] => { const u = ODP.units(); return [u.find((x) => x.kind === 'xml')!, ...u.filter((x) => x.kind !== 'xml')]; },
-  /** The recorded snapshot with gate 13 of bib 56 stated as `value` in its Results row (a derived case): a snapshot that restates the target cell. */
-  xmlWithGate13: (value: 0 | 2 | 50): Unit => ({ kind: 'xml', rec: derived(R19.rcXml, { edit: (d) => d.replace(/<Gates>((?:...){12})(...)/, (_m, a) => `<Gates>${a as string}${String(value).padStart(3, ' ')}`) }) }),
+  /**
+   * The recorded snapshot restating the presented run of bib 56 (Time 81.62, rank 11, as the TCP row C4RowA) with only gate 13 changed to `value`, Pen and Total following:
+   * a snapshot written after the correction. (The recorded snapshot\'s own row, Time 120.98, is another state and would be held against the TCP row.)
+   */
+  xmlWithGate13: (value: 0 | 2 | 50): Unit => ({ kind: 'xml', rec: derived(R19.rcXml, { edit: (d) => d
+    .replace(/<Gates>((?:...){12})(...)/, (_m, a) => `<Gates>${a as string}${String(value).padStart(3, ' ')}`)
+    .replace(/<Time>120980<\/Time>/, '<Time>81620</Time>').replace(/<Pen>2<\/Pen>/, `<Pen>${value}</Pen>`)
+    .replace(/<Total>122980<\/Total>/, `<Total>${81620 + value * 1000}</Total>`)
+    .replace(/<Rnk>\d+<\/Rnk>/, '<Rnk>11</Rnk>').replace(/<RnkOrder>\d+<\/RnkOrder>/, '<RnkOrder>11</RnkOrder>') }) }),
   /** The recorded snapshot with bib 56 a team boat (`IsTeam` true): a derived case, the recorded text is otherwise unchanged. */
   teamXml: (): Unit => ({ kind: 'xml', rec: derived(R19.rcXml, { edit: (d) => d.replace('<IsTeam>false</IsTeam>', '<IsTeam>true</IsTeam>') }) }),
   /** The row an echo is: the presented run restated with gate 13 stated as `value`, received at `ms` (see `restate`). */

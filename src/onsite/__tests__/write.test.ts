@@ -606,9 +606,13 @@ describe('round 28-2: the key in flight, the creating step, key replay first, no
   });
 });
 
-describe('round 28-3: a stored pending write is adopted at load (CONTRACTS §2.9, DERIVATIONS §6)', () => {
-  /** A pending write on a closed run, the process stopped, a new process over the same data dir; only the snapshot is read, no on-course listing in the new lifetime. */
-  async function adopted(over: { rerunFirst?: boolean } = {}): Promise<{ env2: Env; ws: Awaited<ReturnType<typeof openWs>>; first: J }> {
+describe('round 28-3b: a pending write resolves by DERIVATIONS §6 in every lifetime, restart or none (the invariant)', () => {
+  type Scenario = { env: Env; ws: Awaited<ReturnType<typeof openWs>>; first: J };
+  /**
+   * A pending write on a closed run. `restart: true`: the process is stopped and a new one started over the same data dir, its only read being the snapshot (stating gate 13
+   * as `xmlValue`, a first read, changedAfter null), no on-course listing in the new lifetime. `restart: false`: the same process goes on.
+   */
+  async function scenario(restart: boolean, over: { rerunFirst?: boolean; xmlValue?: 0 | 2 | 50 } = {}): Promise<Scenario> {
     const env1 = await closedRun();
     await setInstance(env1, 'Main');
     if (over.rerunFirst === true) {
@@ -616,52 +620,85 @@ describe('round 28-3: a stored pending write is adopted at load (CONTRACTS §2.9
       await feed(env1, ODP.emptyAt(env1.clock.now() + 1000)); // the re-run is closed again: generation 2
     }
     const first = await write(env1, GOOD, 'adopt');
-    expect(first.status, 'precondition: the write is stored').toBe(202);
-    await env1.h.stop();
-    const env2 = await boot({ startAt: ODP.startAt, eventDate: ODP.day, fs: env1.fs, clock: virtualClock(env1.clock.now() + 60_000) });
-    await feed(env2, ODP.unitsXmlFirst()[0]!); // the snapshot binds the course: the only thing the new lifetime has read
-    const ws = await openWs(env2);
+    expect(first.status, 'precondition: the write is accepted').toBe(202);
+    let env = env1;
+    if (restart) {
+      await env1.h.stop();
+      env = await boot({ startAt: ODP.startAt, eventDate: ODP.day, fs: env1.fs, clock: virtualClock(env1.clock.now() + 60_000) });
+      await feed(env, over.xmlValue === undefined ? ODP.unitsXmlFirst()[0]! : ODP.xmlWithGate13(over.xmlValue)); // the first and only read of the new lifetime
+    }
+    const ws = await openWs(env);
     await ws.barrier(); ws.take();
-    return { env2, ws, first: first.body };
+    return { env, ws, first: first.body };
   }
   const state = async (env: Env, id: string): Promise<J> => (await get(env, `/api/writes/${id}`)).body;
   const pushed = (ws: { messages: J[] }): J[] => ws.messages.filter((m) => m.type === 'write.updated').map((m) => m.write);
+  const xmlRead = async (env: Env, value: 0 | 2 | 50, ms: number): Promise<void> => {
+    const u = ODP.xmlWithGate13(value);
+    await feed(env, { kind: 'xml', rec: { observedAt: new Date(ms).toISOString(), data: u.rec.data } });
+  };
 
-  it('a TCP Results row stating the requested cell: confirmed, confirmedValue { gate, value }, pushed as write.updated', async () => {
-    const { env2, ws, first } = await adopted();
-    expect((await state(env2, first.writeId)).status, 'the snapshot alone resolves nothing').toBe('pending');
-    await feed(env2, ODP.echo(50, env2.clock.now() + 1000));
-    await ws.barrier();
-    const w = await state(env2, first.writeId);
-    expect(w.status).toBe('confirmed');
-    expect(w.confirmedValue).toEqual({ gate: ODP.gate, value: 50 });
-    expect(pushed(ws).at(-1)).toEqual(w);
-  });
+  for (const restart of [true, false]) {
+    const life = restart ? 'after a stop and start over the same data dir' : 'in the same process (no restart)';
 
-  it('a TCP Results row stating another cell: mismatched, with the value upstream holds, pushed', async () => {
-    const { env2, ws, first } = await adopted();
-    await feed(env2, ODP.echo(0, env2.clock.now() + 1000));
-    await ws.barrier();
-    const w = await state(env2, first.writeId);
-    expect(w.status).toBe('mismatched');
-    expect(w.confirmedValue).toEqual({ gate: ODP.gate, value: 0 });
-    expect(pushed(ws).at(-1)).toEqual(w);
-  });
+    describe(life, () => {
+      it('(a) the first TCP row stating the requested value: confirmed, confirmedValue { gate, value }, pushed as write.updated', async () => {
+        const { env, ws, first } = await scenario(restart);
+        await feed(env, ODP.echo(50, env.clock.now() + 1000));
+        await ws.barrier();
+        const w = await state(env, first.writeId);
+        expect(w.status).toBe('confirmed');
+        expect(w.confirmedValue).toEqual({ gate: ODP.gate, value: 50 });
+        expect(pushed(ws).at(-1)).toEqual(w);
+      });
 
-  it('an XML snapshot whose changedAfter is not later than submittedAt resolves nothing, even when it states the requested cell (the first read has changedAfter null)', async () => {
-    const { env2, ws, first } = await adopted();
-    await feed(env2, ODP.xmlWithGate13(50));
-    await ws.barrier();
-    expect((await state(env2, first.writeId)).status).toBe('pending');
-    expect(pushed(ws)).toEqual([]);
-  });
+      it('(b) a row re-sending the old value leaves it pending with no push; a row with a different value then gives mismatched with that value', async () => {
+        const { env, ws, first } = await scenario(restart);
+        await feed(env, ODP.restate(2, env.clock.now() + 1000)); // upstream\'s table as it was: a re-delivery, not an answer
+        await ws.barrier();
+        expect((await state(env, first.writeId)).status).toBe('pending');
+        expect(pushed(ws)).toEqual([]);
+        await feed(env, ODP.restate(0, env.clock.now() + 1000));
+        await ws.barrier();
+        const w = await state(env, first.writeId);
+        expect(w.status).toBe('mismatched');
+        expect(w.confirmedValue).toEqual({ gate: ODP.gate, value: 0 });
+        expect(pushed(ws).at(-1)).toEqual(w);
+      });
 
-  it('a row of another generation resolves nothing: a write stored for generation 2 stays pending when the restarted core presents generation 1', async () => {
-    const { env2, ws, first } = await adopted({ rerunFirst: true });
+      it('(c) after the old value was re-sent, a row with the requested value gives confirmed', async () => {
+        const { env, ws, first } = await scenario(restart);
+        await feed(env, ODP.restate(2, env.clock.now() + 1000));
+        await feed(env, ODP.echo(50, env.clock.now() + 1000));
+        await ws.barrier();
+        const w = await state(env, first.writeId);
+        expect(w.status).toBe('confirmed');
+        expect(w.confirmedValue).toEqual({ gate: ODP.gate, value: 50 });
+        expect(pushed(ws).at(-1)).toEqual(w);
+      });
+
+      it('(d) an XML read whose changedAfter is not later than submittedAt resolves nothing even when it states the requested cell; a later read, changed after submittedAt, resolves', async () => {
+        const { env, ws, first } = await scenario(restart, { xmlValue: 50 });
+        if (!restart) await xmlRead(env, 50, env.clock.now() + 1000); // changed right after the write: the reader\'s last stat before it is not later than submittedAt
+        await ws.barrier();
+        expect((await state(env, first.writeId)).status, 'a first read, or one dated before the write, is no answer').toBe('pending');
+        expect(pushed(ws)).toEqual([]);
+        await env.clock.advance(6000); // polls: the reader\'s last stat is now later than submittedAt
+        await xmlRead(env, 50, env.clock.now() + 2000); // a read of content that changed after that stat
+        await ws.barrier();
+        const w = await state(env, first.writeId);
+        expect(w.status).toBe('confirmed');
+        expect(pushed(ws).at(-1)).toEqual(w);
+      });
+    });
+  }
+
+  it('(e) a row of another generation resolves nothing: a write stored for generation 2 stays pending when the restarted core presents generation 1', async () => {
+    const { env, ws, first } = await scenario(true, { rerunFirst: true });
     expect(first.target.run, 'precondition: the write targets generation 2').toBe(2);
-    await feed(env2, ODP.echo(50, env2.clock.now() + 1000));
+    await feed(env, ODP.echo(50, env.clock.now() + 1000));
     await ws.barrier();
-    expect((await state(env2, first.writeId)).status).toBe('pending');
+    expect((await state(env, first.writeId)).status).toBe('pending');
     expect(pushed(ws)).toEqual([]);
   });
 });
