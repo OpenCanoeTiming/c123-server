@@ -11,7 +11,9 @@
  * the on-course list, the diagnostics, the writes), updated from what each step touched; keys are sorted before hashing.
  *
  * Determinism (CONTRACTS §4): time is the recording's alone (chunk `startTime` + record `ts`); no clock is read. Inputs the recordings
- * lack (TEST-ARCHITECTURE §9): one `tcp-connected` at the first TCP record, unless `--events` states its own. `--events` is a JSON
+ * lack (TEST-ARCHITECTURE §9): one `tcp-connected` at the first TCP record, unless `--events` states its own or the recording has
+ * its own. A recording's `_event` lines (`tcp-connected`, `tcp-disconnected`, the recorder-stop one included) are emitted at chunk
+ * `startTime` + `ts` as the same units, in stream order, and merge with the stated ones; a recorded outage drops TCP records like a stated one. `--events` is a JSON
  * array of `{ event, observedAt, scope?, changedAfter? }` (tcp-connected, tcp-disconnected, rebaseline), merged by `observedAt`,
  * before a record of the same instant, those inside the window only. TCP records inside a stated outage, `tcp-disconnected` to the next
  * `tcp-connected` or the end, are dropped; a stated `rebaseline` is CONTRACTS §4's unit, the event then the last snapshot re-read
@@ -165,6 +167,7 @@ const injectUntil = (at: number): void => {
   }
 };
 
+let recordedConnect = false; // the recording has its own tcp-connected: no default one
 const defaultConnect = !stated.some((e) => e.event === 'tcp-connected');
 
 for (const chunk of files) {
@@ -175,6 +178,18 @@ for (const chunk of files) {
     lineNo++;
     if (lineNo === 1) {
       base = Date.parse((JSON.parse(line) as { _meta: { startTime: string } })._meta.startTime);
+      continue;
+    }
+    if (line.includes('"_event"')) {
+      // a recorded connection event (recordings/README.md): the same unit as a stated one, in stream order after the stated ones due by then
+      const rec = JSON.parse(line) as { ts: number; _event?: { event?: string } };
+      const kind = rec._event?.event;
+      const evAt = base + rec.ts;
+      if ((kind !== 'tcp-connected' && kind !== 'tcp-disconnected') || evAt < from) continue;
+      if (evAt > to) break;
+      injectUntil(evAt);
+      if (kind === 'tcp-connected') { tcpDown = false; recordedConnect = true; } else tcpDown = true;
+      step([{ ingestSeq: 0, event: kind, observedAt: new Date(evAt).toISOString() }]);
       continue;
     }
     const isXml = line.includes('"type":"XmlSnapshot"');
@@ -196,7 +211,7 @@ for (const chunk of files) {
       step([{ ingestSeq: 0, event: 'xml-rewrite-detected', observedAt: ctx.observedAt, changedAfter }, ...els]);
       learn(els, true);
     } else if (!tcpDown) {
-      if (!tcpSeen && defaultConnect) step([{ ingestSeq: 0, event: 'tcp-connected', observedAt: ctx.observedAt }]);
+      if (!tcpSeen && defaultConnect && !recordedConnect) step([{ ingestSeq: 0, event: 'tcp-connected', observedAt: ctx.observedAt }]);
       tcpSeen = true;
       const els = parseTcp(text, ctx);
       if (els.length > 0) step(els);
