@@ -22,6 +22,9 @@ export function submitWrite(s: CoreState, a: AttemptState, el: Element, field: s
   };
   s.writes.push(w);
   s.dirtyWrites.add(w);
+  // a resumed write whose Attempt this lifetime first learned from a TCP row: that row is the first delivery after the restart, judged
+  // against the retained value like any later one (DERIVATIONS §6 "After a restart")
+  if ('retainedCell' in el && fs.tcp !== undefined) resolveEcho(s, a, fs, field, fs.tcp, undefined, true);
 }
 
 const retainedOf = (v: unknown): WriteState['retainedCell'] =>

@@ -58,7 +58,12 @@ export function putCells(s: CoreState, a: AttemptState, channel: 'tcp' | 'xml' |
   if (value === null) return;
   const bound: Slot = { ...slot, state: 'known', value, judgingComplete: judgingComplete(cells, slots) };
   delete bound.reason;
-  if (retain(fieldSlots(a.slots, field), channel, bound)) s.dirtyAttempts.add(a);
+  const fs = fieldSlots(a.slots, field);
+  const prior = fs[channel];
+  const changed = retain(fs, channel, bound);
+  if (changed) s.dirtyAttempts.add(a);
+  // rule 4 at the binding too: held results-table cells that meet the course are the observation an operator slot waits for (§6)
+  if (channel !== 'inference' && fs.operator !== undefined) resolveEcho(s, a, fs, field, bound, prior, changed);
 }
 
 /** "at a step that carries gate cells ... or at a scope snapshot of its race" (§4.6): retained cells meet the bound course. */
