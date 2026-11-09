@@ -142,8 +142,8 @@ failed; nothing sent, created or bound) and expects `200` with the same flag on 
 command's bytes and the no-op `DELETE` are the server's (CONTRACTS §1.5, §1.6, §7.3, §7.4). Its third
 pass (2026-11-08) moved none: `{ gate, value }` was already the wire shape of the lifecycle example,
 and a stored write's echo after a restart is the core's (CONTRACTS §7.3; CONFORMANCE-VECTORS §1;
-DERIVATIONS §6); its follow-up (2026-11-09) moved none: the baseline being a resumed write's alone is the
-core's (DERIVATIONS §6).
+DERIVATIONS §6); its follow-up (2026-11-09) moved none: the durable record keeping the cell's retained value at
+submission, so that §6's echo rule applies unchanged after a restart, is the core's (DERIVATIONS §6).
 
 ---
 
