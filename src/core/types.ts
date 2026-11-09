@@ -151,6 +151,8 @@ export interface ClassificationState {
 export interface WriteState extends WriteRequest {
   attempt: AttemptState;
   fieldName: string;
+  /** The TCP source's retained value of the target cell at submission, `null` when none was retained (DERIVATIONS §6); not on the wire. */
+  retainedCell: { penalty: Gate['penalty'] } | null;
 }
 
 export interface Counters {

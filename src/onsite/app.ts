@@ -27,16 +27,25 @@ export interface OnsiteApi {
   sources(): J;
   checksOf(phaseId: string): { checks: J[]; flags: J[] };
   rebaseline(scope: RebaselineScope): Promise<RebaselineOutcome>;
+  /** §7.3, §7.4: the write routes. Each answers with the status, body and `Location` the contract names; a refusal carries the error envelope. */
+  penalty(a: AttemptRoute, key: string | undefined, body: unknown): Promise<RestReply>;
+  writeOf(writeId: string): J | undefined;
+  putCheck(a: AttemptRoute, gate: string, body: unknown): Promise<RestReply>;
+  deleteCheck(a: AttemptRoute, gate: string): Promise<RestReply>;
+  createFlag(a: AttemptRoute, key: string | undefined, body: unknown): Promise<RestReply>;
+  resolveFlag(flagId: string, body: unknown): Promise<RestReply>;
 }
+export interface AttemptRoute { phaseId: string; bib: string }
+export interface RestReply { status: number; body?: J; location?: string }
 
-const errorBody = (code: string, message: string, details?: unknown): J => ({ error: { code, message, ...(details !== undefined ? { details } : {}) } });
+export const errorBody = (code: string, message: string, details?: unknown): J => ({ error: { code, message, ...(details !== undefined ? { details } : {}) } });
 
 export function createApp(api: OnsiteApi): express.Express {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
   app.use((_req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Idempotency-Key');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     next();
   });
@@ -118,6 +127,28 @@ export function createApp(api: OnsiteApi): express.Express {
       else res.status(409).json(errorBody(r.code, `the XML snapshot is ${r.reason}`, { reason: r.reason }));
     } catch (e) { next(e); }
   });
+
+  // ---- §7.3, §7.4: writes, checks and flags
+  const send = (res: Response, r: RestReply): void => {
+    if (r.location !== undefined) res.header('Location', r.location);
+    if (r.body === undefined) res.status(r.status).end();
+    else res.status(r.status).json(r.body);
+  };
+  const route = (req: Request): AttemptRoute => ({ phaseId: String(req.params['phaseId']), bib: String(req.params['bib']) });
+  const keyOf = (req: Request): string | undefined => { const k = req.get('Idempotency-Key'); return k === undefined || k.trim() === '' ? undefined : k; };
+  const handle = (fn: (req: Request) => Promise<RestReply>) => async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try { send(res, await fn(req)); } catch (e) { next(e); }
+  };
+  app.post('/api/attempts/:phaseId/:bib/penalty', handle((req) => api.penalty(route(req), keyOf(req), req.body)));
+  app.get('/api/writes/:writeId', (req, res) => {
+    const w = api.writeOf(String(req.params['writeId']));
+    if (w === undefined) res.status(404).json(errorBody('write-not-found', `no write ${String(req.params['writeId'])}`));
+    else res.json(w);
+  });
+  app.put('/api/attempts/:phaseId/:bib/checks/:gate', handle((req) => api.putCheck(route(req), String(req.params['gate']), req.body)));
+  app.delete('/api/attempts/:phaseId/:bib/checks/:gate', handle((req) => api.deleteCheck(route(req), String(req.params['gate']))));
+  app.post('/api/attempts/:phaseId/:bib/flags', handle((req) => api.createFlag(route(req), keyOf(req), req.body)));
+  app.post('/api/flags/:flagId/resolution', handle((req) => api.resolveFlag(String(req.params['flagId']), req.body)));
 
   app.get('/health', (_req, res) => { res.json({ status: 'ok' }); });
   app.use('/admin-ui', express.static(ADMIN_UI_DIR));

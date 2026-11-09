@@ -41,6 +41,8 @@ export interface MergeCore {
   oncourse(): { attemptIds: string[]; featuredByUpstream: string | null; asOf: string | null };
   diagnostics(): Diagnostic[];
   writeRequest(): unknown;
+  /** What the write recorded at submission as the TCP source's retained target cell (DERIVATIONS §6), for its durable record; not wire. */
+  retainedCell(writeId: string): { penalty: number | null } | null | undefined;
   notifications(): Message[];
   /** Hands over the messages so far and forgets them: a long run keeps no log (the sweep, later the WebSocket). */
   drainNotifications(): Message[];
@@ -350,6 +352,7 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
       const w = s.writes.at(-1);
       return w === undefined ? undefined : wireWrite(w);
     },
+    retainedCell: (id) => s.writes.find((w) => w.writeId === id)?.retainedCell,
     notifications: () => s.log,
     drainNotifications: () => s.log.splice(0),
     classification: (phaseId) => s.classifications.get(phaseId),

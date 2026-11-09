@@ -46,7 +46,8 @@ export interface ChecksStoreOptions {
 export interface ChecksStore {
   putCheck(input: GateKey & { valueAtCheck: number | null; checkedBy?: string }): Promise<StoredCheck>;
   deleteCheck(key: GateKey): Promise<void>;
-  createFlag(input: GateKey & { comment: string; suggestedValue?: number; createdBy?: string }): Promise<GateFlag>;
+  /** `flagId`: an id the caller chose ahead (the on-site key map binds it before the flag is created); otherwise `newId`. */
+  createFlag(input: GateKey & { comment: string; suggestedValue?: number; createdBy?: string; flagId?: string }): Promise<GateFlag>;
   resolveFlag(flagId: string, input: { note?: string; resolvedBy?: string }): Promise<GateFlag>;
   /** Copies: nothing a caller holds aliases what the store holds (#273 N3). */
   list(): ChecksState;
@@ -168,7 +169,7 @@ export async function openChecksStore(opts: ChecksStoreOptions): Promise<ChecksS
     deleteCheck: (k) => mutate((cur) => ({ next: { ...cur, checks: cur.checks.filter((c) => !sameKey(c, k)) }, value: undefined })),
     createFlag: (i) => mutate((cur) => {
       const flag: GateFlag = {
-        flagId: newId(), attemptId: i.attemptId, run: i.run, gate: i.gate, createdAt: iso(),
+        flagId: i.flagId ?? newId(), attemptId: i.attemptId, run: i.run, gate: i.gate, createdAt: iso(),
         ...(i.createdBy !== undefined ? { createdBy: i.createdBy } : {}),
         comment: i.comment,
         ...(i.suggestedValue !== undefined ? { suggestedValue: i.suggestedValue } : {}),

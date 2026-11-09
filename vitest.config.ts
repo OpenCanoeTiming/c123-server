@@ -19,6 +19,8 @@ const TOOLS = [
   'scripts/__tests__/rerun-paths.test.ts',
   // the on-site process fed by player.js over real sockets, compared with the direct-injection replay (issue #210)
   'scripts/__tests__/onsite-process.test.ts',
+  // the write path against player.js (issue #212)
+  'scripts/__tests__/onsite-write.test.ts',
   // the production clock wiring of the on-site entry, a real child process (issue #210)
   'src/onsite/__tests__/main-clock.real.test.ts',
 ];

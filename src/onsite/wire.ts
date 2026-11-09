@@ -24,6 +24,26 @@ export function onsiteEntry(entry: J): J {
 export const classWhole = (cls: J, eventId: string): J => ({ ...cls, eventId });
 export const courseWhole = (course: J, eventId: string): J => ({ ...course, eventId });
 
+type Cell = { number?: unknown; penalty?: unknown };
+/** The target cell of a core `gates` vector as §7.3's `{ gate, value }`; a value already in that shape passes unchanged. */
+function targetCell(value: unknown, gate: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  const cell = (value as Cell[]).find((c) => c.number === gate);
+  return { gate, value: cell?.penalty ?? null };
+}
+
+/**
+ * `WriteRequest` on REST and in `write.updated` (round 28-3): `requestedValue` and `confirmedValue` are the target cell `{ gate, value }`;
+ * the core keeps its cell vector (the merge port's value, CONFORMANCE-VECTORS §1).
+ */
+export function onsiteWrite(w: J): J {
+  const req = w['requestedValue'];
+  const gate = Array.isArray(req) ? (req as Cell[])[0]?.number : (req as { gate?: unknown } | undefined)?.gate;
+  const out: J = { ...w, requestedValue: targetCell(req, gate) };
+  if ('confirmedValue' in w) out['confirmedValue'] = targetCell(w['confirmedValue'], gate);
+  return out;
+}
+
 /**
  * A core message as a client receives it, before `seq`. `classesSent` holds the Classes whose creating message has gone out: that one
  * carries the `eventId` the process gives every Class (§2.3), later ones are partial.
@@ -40,6 +60,7 @@ export function toWire(m: Message, eventId: string, classesSent: Set<string>): J
       return { ...rest, fields: { ...(rest['fields'] as J), eventId } };
     }
     case 'course.updated': return { ...rest, course: courseWhole(rest['course'] as J, eventId) };
+    case 'write.updated': return { ...rest, write: onsiteWrite(rest['write'] as J) };
     default: return rest;
   }
 }
