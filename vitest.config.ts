@@ -17,6 +17,8 @@ const TOOLS = [
   'scripts/__tests__/replay-direct.test.ts',
   // data gate: committed re-run excerpts and one real window through replay-direct and the gate-2 checker (issue #207)
   'scripts/__tests__/rerun-paths.test.ts',
+  // data gate: synthetic outage recording and stated real outages through replay-direct and the gate-2 checker (issue #208)
+  'scripts/__tests__/outage.test.ts',
   // the on-site process fed by player.js over real sockets, compared with the direct-injection replay (issue #210)
   'scripts/__tests__/onsite-process.test.ts',
   // the write path against player.js (issue #212)

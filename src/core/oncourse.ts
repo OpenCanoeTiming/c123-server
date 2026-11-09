@@ -161,6 +161,9 @@ export function leave(s: CoreState, a: AttemptState, el: Element): void {
   if (fmtFor(s, a.phaseId).cross) return;
   const cur = streamStatus(a);
   if (cur === 'finished' || a.gen.finish !== undefined) return;
+  // §3.2, INV-1: a finish or a mark presented from a results table has no way back to `left-without-finish`
+  const shown = presentStatus(a.slots.get('status'));
+  if (shown?.kind === 'row' && (shown.value === 'finished' || isMark(shown.value))) return;
   const seq = tick(s);
   if (cur === 'on-course' || a.gen.start !== undefined) {
     setStream(s, a, el, 'left-without-finish', seq);

@@ -395,6 +395,56 @@ describe('round 24, code list "Stated events file" (TEST-ARCHITECTURE §3.2 gate
   })
 })
 
+/** recording() plus the recorder's own `_event` lines (protocol-docs recordings/README.md, PR #37): connected 50, outage 4000-6000, recorder-stop 17000. */
+function recordingWithEvents(): string {
+  const dir = recording()
+  const f = path.join(dir, '001-x.jsonl')
+  const rec = (ts: number, data: string): string => JSON.stringify({ ts, src: 'tcp', type: 'OnCourse', data, size: data.length })
+  const ev = (ts: number, event: string, reason?: string): string => JSON.stringify({ ts, _event: { event, host: '127.0.0.1', port: 27333, ...(reason ? { reason } : {}) } })
+  const lines = readFileSync(f, 'utf8').split('\n').filter((l) => l !== '')
+  lines.push(ev(50, 'tcp-connected'), rec(4000, oncourse('', 'N')), ev(4000, 'tcp-disconnected', 'close'), rec(6000, EMPTY), ev(6000, 'tcp-connected'), ev(17000, 'tcp-disconnected', 'recorder-stop'))
+  // the file is in recorded order (the recorder writes in arrival order): re-sort stably by ts, an event before a record of the same ts
+  const keyed = lines.map((l, n) => ({ l, n, o: JSON.parse(l) as { ts?: number; _event?: unknown } }))
+  const sorted = keyed.filter((k) => k.o.ts !== undefined).sort((a, b) => (a.o.ts! - b.o.ts!) || (Number(b.o._event !== undefined) - Number(a.o._event !== undefined)) || a.n - b.n)
+  writeFileSync(f, [keyed.find((k) => k.o.ts === undefined)!.l, ...sorted.map((k) => k.l)].join('\n') + '\n')
+  return dir
+}
+
+describe('#208 row 1: recorded _event lines (recordings/README.md; TEST-ARCHITECTURE §3 gate 1; ADR-017 Revision 6)', () => {
+  it('recorded _event lines become tcp-connected/tcp-disconnected events', () => {
+    const log = ok(['--recording', recordingWithEvents()])
+    const c = events(log.steps, 'tcp-connected').map((p) => p.element['observedAt'])
+    const d = events(log.steps, 'tcp-disconnected').map((p) => p.element['observedAt'])
+    // no default tcp-connected at the first TCP record (at(100)) when the recording has its own
+    expect(c).toEqual([at(50), at(6000)])
+    // the outage start and recorder-stop are both tcp-disconnected, at their instants
+    expect(d).toEqual([at(4000), at(17000)])
+    // an event is a unit of its own (CONTRACTS §1.6) and sits before a record of the same instant
+    const connectAt6000 = events(log.steps, 'tcp-connected').find((p) => p.element['observedAt'] === at(6000))!
+    const recordAt6000 = flat(log.steps).find((p) => p.element['observedAt'] === at(6000) && p.element['event'] === 'oncourse-empty')!
+    expect(connectAt6000.step.elements).toHaveLength(1)
+    expect(connectAt6000.step.i).toBeLessThan(recordAt6000.step.i)
+  })
+
+  it('recorded outage drops the TCP records inside it exactly as a stated one (records at 4000 after the disconnect and 5100 are dropped, 6000 after the connect stays)', () => {
+    const recorded = flat(ok(['--recording', recordingWithEvents()]).steps).map((p) => p.element)
+    expect(recorded.some((e) => e['source'] === 'tcp' && e['observedAt'] === at(4000))).toBe(false)
+    expect(recorded.some((e) => e['observedAt'] === at(5100))).toBe(false)
+    expect(recorded.some((e) => e['observedAt'] === at(100))).toBe(true)
+    expect(recorded.some((e) => e['event'] === 'oncourse-empty' && e['observedAt'] === at(6000))).toBe(true)
+  })
+
+  it('recorded events and --events merge by observedAt: a stated outage on top of a recorded one is logged too, in order', () => {
+    const f = writeEvents([{ event: 'tcp-disconnected', observedAt: at(9000) }, { event: 'tcp-connected', observedAt: at(10000) }])
+    const log = ok(['--recording', recordingWithEvents(), '--events', f])
+    const all = events(log.steps).filter((p) => String(p.element['event']).startsWith('tcp-')).map((p) => `${String(p.element['event'])}@${String(p.element['observedAt'])}`)
+    expect(all).toEqual([
+      `tcp-connected@${at(50)}`, `tcp-disconnected@${at(4000)}`, `tcp-connected@${at(6000)}`,
+      `tcp-disconnected@${at(9000)}`, `tcp-connected@${at(10000)}`, `tcp-disconnected@${at(17000)}`,
+    ])
+  })
+})
+
 describe('round 24 "Windows" (TEST-ARCHITECTURE §3.2): the log opens on a hydration when the replay starts where the raw stream starts', () => {
   it('without --from the replay starts at the first record: line 1 is the hydration of the cold (empty) core, asOfSeq 0, and step 1 is the first record\'s unit', () => {
     const log = ok(['--recording', recording()])
