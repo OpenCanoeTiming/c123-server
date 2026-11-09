@@ -1,0 +1,84 @@
+{
+  "version": 3,
+  "event": {
+    "name": "2026_NKZ_19so",
+    "date": "2026-09-19"
+  },
+  "recorder": "c123-recorder/3.0.0",
+  "host": "127.0.0.1",
+  "chunks": [
+    {
+      "seq": 1,
+      "file": "001-outage.jsonl",
+      "label": "Setup",
+      "startTime": "2026-09-19T09:29:58.537Z",
+      "endTime": "2026-09-19T09:55:03.454Z",
+      "startOffset": 4,
+      "duration": 1504917,
+      "races": [],
+      "messages": 9752,
+      "snapshots": 0,
+      "size": 61841309
+    }
+  ],
+  "totalDuration": 1504917,
+  "totalMessages": 9752,
+  "tcpStateAtStart": "unknown",
+  "fixture": {
+    "name": "outage-nkz19so-0930",
+    "synthetic": true,
+    "source": {
+      "recording": "2026-11-09-outage-nkz19so-0930",
+      "madeBy": "protocol-docs tools/player.js (1x, from 2026-09-19T09:30:00Z) into tools/recorder.js (protocol-docs#37), XML via --xml-out/--xml-path",
+      "originalRecording": "2026-09-19-2026-nkz-19so",
+      "window": {
+        "from": "2026-09-19T09:30:00Z",
+        "to": "2026-09-19T09:55:03.454Z"
+      },
+      "cuts": [
+        {
+          "at": "2026-09-19T09:35:00.000Z",
+          "seconds": 170,
+          "via": "player --cuts, TCP only; XML keeps flowing"
+        },
+        {
+          "at": "2026-09-19T09:45:00.000Z",
+          "seconds": 15,
+          "via": "player --cuts, TCP only; XML keeps flowing"
+        }
+      ],
+      "playerCutsLog": "TCP cut for 170s at wall-clock 15:19:42, recording instant 2026-09-19T09:35:00.000Z; TCP cut for 15s at wall-clock 15:29:42, recording instant 2026-09-19T09:45:00.000Z",
+      "recordedEventsWall": [
+        "2026-11-09T14:14:41.118Z tcp-connected",
+        "2026-11-09T14:19:42.606Z tcp-disconnected",
+        "2026-11-09T14:22:43.621Z tcp-connected",
+        "2026-11-09T14:29:42.580Z tcp-disconnected",
+        "2026-11-09T14:29:57.584Z tcp-connected",
+        "2026-11-09T14:39:46.020Z tcp-disconnected (recorder-stop)"
+      ]
+    },
+    "rebase": {
+      "offsetMs": -4423482567,
+      "rule": "one constant offset added to every instant (chunk startTime, manifest start/end); record ts stay chunk-relative. The anchor is the first TimeOfDay record (unique content, found in nkz-19so by content), which lands on its original instant. The literal rule of #208 (first TCP data record = its original) would anchor the player seek burst, whose originals lie up to 12 s before the player start: every instant would then be ~12 s off the data's own clock and gate-2 property 1 reports false violations (observed).",
+      "firstTcpRecordInstant": "2026-09-19T09:30:00.000Z",
+      "anchorRecord": {
+        "type": "TimeOfDay",
+        "data": "<Canoe123 System=\"Main\"><TimeOfDay>11:30:01</TimeOfDay></Canoe123>",
+        "syntheticInstantBeforeRebase": "2026-11-09T14:14:43.550Z",
+        "originalRecording": "2026-09-19-2026-nkz-19so",
+        "originalChunk": "006-0926-time-limit.jsonl",
+        "originalTs": 234589,
+        "originalInstant": "2026-09-19T09:30:00.983Z"
+      }
+    },
+    "edits": [
+      "51 recorder _snapshot lines dropped",
+      "123 base64 <ReportImageLeft|Right|Footer> elements emptied in the XML snapshots' <Events> (report logos; size fields adjusted)",
+      "instants rebased by offsetMs",
+      "manifest host/xml path neutralised, event.date 2026-09-19",
+      "fixture and tcpStateAtStart added",
+      "chunk gzipped"
+    ],
+    "birthdates": "year only, as recorded (YYYY-01-01); names, clubs, ICF ids as recorded"
+  }
+}
