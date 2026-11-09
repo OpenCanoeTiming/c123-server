@@ -363,11 +363,17 @@ describe('round 27g-2 B1: observedAt per arrival order (DERIVATIONS 4.11: the ro
 })
 
 // ---------------------------------------------------------------------------------------------------------------------
-describe('row 5: a mark standing when the start is listed records nothing (excerpt of nkz-19so K1W_BR1_19:53, a standing DNS; no DNF standing at a start is recorded)', () => {
-  const ID = 'K1W_BR1_19:53'
-  it('setup: the DNS stood on the table before the start was listed', () => {
-    const pts = trail(replay(fx('mark-at-start-then-correction')), ID)
-    expect(pts.some((p) => statusOf(p) === 'dns')).toBe(true)
+describe('row 5: a mark standing when the start is listed records nothing (excerpt of nkz-19so K1M_BR2_19:54, a DNS standing across the start; no DNF standing at a start is recorded)', () => {
+  const ID = 'K1M_BR2_19:54'
+  it('setup, DERIVATIONS 4.11 third pass E1 K1M_BR2_19:54: the DNS is presented at the step of the first start listing (the last presentation before it), not merely at some step', () => {
+    const steps = replay(fx('mark-at-start-then-correction'))
+    const startStep = steps.find((s) => s.elements.some((e) => e['attemptId'] === ID && e['field'] === 'onCourse' && (e['value'] as { dtStart?: unknown }).dtStart != null)) as Step
+    expect(startStep, 'a start was listed').toBeDefined()
+    const pts = trail(steps, ID)
+    const standing = [...pts].reverse().find((p) => p.i <= startStep.i) as Point // what a client shows when the start is listed
+    expect(standing, 'the Attempt was presented before the start').toBeDefined()
+    expect(statusOf(standing)).toBe('dns')
+    expect(pts.some((p) => p.i < startStep.i && statusOf(p) === 'dns'), 'the mark stood before the start listing').toBe(true)
   }, T)
 
   it('DERIVATIONS 4.11 "a mark standing at the recorded start records nothing": a later changed start with no finish is a start correction, run stays 1', () => {
@@ -376,9 +382,6 @@ describe('row 5: a mark standing when the start is listed records nothing (excer
     const starts = new Set(steps.flatMap((s) => s.elements).filter((e) => e['attemptId'] === ID && e['field'] === 'onCourse').map((e) => JSON.stringify((e['value'] as { dtStart?: unknown }).dtStart)).filter((v) => v !== 'null'))
     expect([...starts].length).toBe(2) // the start was listed, and then changed
     expect(pts.some((p) => runOf(p) !== undefined && runOf(p) !== 1)).toBe(false)
-    const last = pts[pts.length - 1] as Point
-    expect(statusOf(last)).toBe('finished')
-    expect(outcomeOf(last)?.runSeconds).toBe(103.86)
   }, T)
 
   it.skipIf(!haveChecker)('property 10: gate 2 reports 0, property 10 exercised', () => {

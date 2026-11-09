@@ -283,31 +283,32 @@ write(join(outRoot, 'dnf-rerun-row-after'), J, dnfAfter, {
 });
 
 // =====================================================================================================================
-// nkz-19so K1W_BR1_19 bib 53: a DNS standing on TCP when the start is listed; a later changed start is a correction (row 5)
+// nkz-19so K1M_BR2_19 bib 54: a DNS standing on TCP across the start; a later changed start is a correction (row 5)
 // =====================================================================================================================
-const M = { rec: '2026-09-19-2026-nkz-19so', race: 'K1W_BR1_19', bib: '53', id: null, classId: 'K1W', from: '2026-09-19T12:50:00.000Z', to: '2026-09-19T12:58:00.000Z' };
+const M = { rec: '2026-09-19-2026-nkz-19so', race: 'K1M_BR2_19', bib: '54', id: null, classId: 'K1M', from: '2026-09-19T09:45:00.000Z', to: '2026-09-19T09:52:00.000Z' };
 for (const r of records(M.rec, M.from, M.to)) {
   if (r.src === 'tcp' && r.type === 'OnCourse') { const oc = onCourseOf(r.data); if (oc && oc.bib === M.bib && oc.race === M.race) { M.id = attr(oc.tag, 'Id'); break; } }
 }
-const CORRECT_AT = P('2026-09-19T12:54:20.000Z');
-const NEW_START = '14:53:40.140';
+const CORRECT_AT = P('2026-09-19T09:47:30.000Z');
+const OLD_START = '11:46:59.980';
+const NEW_START = '11:46:59.920';
 let firstCorrected;
 const mark = excerpt(M, {
   onCourse: (r) => {
-    if (r.t < CORRECT_AT || !/dtStart="14:53:40.200"/.test(r.data)) return r;
+    if (r.t < CORRECT_AT || !r.data.includes(`dtStart="${OLD_START}"`)) return r;
     firstCorrected ??= r.t;
-    return { ...r, data: r.data.replace('dtStart="14:53:40.200"', `dtStart="${NEW_START}"`) };
+    return { ...r, data: r.data.replace(`dtStart="${OLD_START}"`, `dtStart="${NEW_START}"`) };
   },
 });
 write(join(outRoot, 'mark-at-start-then-correction'), M, mark.out, {
   name: 'mark-at-start-then-correction',
   synthetic: true,
   source: { recording: M.rec, window: [M.from, M.to], attempt: `${M.race}:${M.bib}` },
-  order: 'a TCP DNS row standing (2026-09-19T12:53:29.312Z) when the start is listed (12:53:49.355Z, dtStart 14:53:40.200); the athlete raced and finished 12:55:24Z',
-  note: 'no recording holds a DNF standing at a start; the eight recorded Attempts that reached their first start with a mark on the table all hold a DNS or CAP (DERIVATIONS 4.11, third pass). This is the closest recorded shape: the mark is a result mark that sets status (4.1)',
+  order: 'a TCP DNS row (IRM="DNS") standing at the start: first pushed 2026-09-19T09:46:35.827Z, on every push of the race that carries the Attempt\'s Row through 09:50:46Z, across the first start listing 09:46:59.844Z (dtStart 11:46:59.980); the Attempt is then on course until its last listing 09:48:11.034Z (no finish listing is recorded)',
+  note: 'no recording holds a DNF standing at a start; this is the recorded E1 Attempt DERIVATIONS 4.11 cites for a mark standing at the start (third pass). The mark is a result mark that sets status (4.1). It is a BR2 Attempt: its Row carries the run-1 fields (Pen, Total, Rank, Behind) and no Time',
   edits: [
     'trimmed to one Attempt as the other fixtures',
-    `edited: from ${iso(firstCorrected)} on, every on-course listing of the Attempt (running and the finish listing and the closure) carries dtStart="${NEW_START}" instead of "14:53:40.200": a start moved 60 ms earlier mid-run with no finish, the recorded shape of the seven start changes (DERIVATIONS 4.11 table: K1W_BR2_19:9, K1M_BR1_20:115, jarni-so-do K1M_BR1_18:138). Time and dtFinish cells are left as recorded (the 60 ms is inside the whole-second clock the running listings show; the finish Time 103.86 is not recomputed)`,
+    `edited: from ${iso(firstCorrected)} on, every on-course listing of the Attempt carries dtStart="${NEW_START}" instead of "${OLD_START}": a start moved 60 ms earlier mid-run with no finish, the recorded shape of the seven start changes (DERIVATIONS 4.11 table). Time cells are left as recorded (the 60 ms is inside the whole-second clock the running listings show). The XML Results row is left as recorded (its dtStart is not edited)`,
     'no row added, moved or removed',
   ],
 });

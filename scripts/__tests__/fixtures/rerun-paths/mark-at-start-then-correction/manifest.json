@@ -11,16 +11,16 @@
     "source": {
       "recording": "2026-09-19-2026-nkz-19so",
       "window": [
-        "2026-09-19T12:50:00.000Z",
-        "2026-09-19T12:58:00.000Z"
+        "2026-09-19T09:45:00.000Z",
+        "2026-09-19T09:52:00.000Z"
       ],
-      "attempt": "K1W_BR1_19:53"
+      "attempt": "K1M_BR2_19:54"
     },
-    "order": "a TCP DNS row standing (2026-09-19T12:53:29.312Z) when the start is listed (12:53:49.355Z, dtStart 14:53:40.200); the athlete raced and finished 12:55:24Z",
-    "note": "no recording holds a DNF standing at a start; the eight recorded Attempts that reached their first start with a mark on the table all hold a DNS or CAP (DERIVATIONS 4.11, third pass). This is the closest recorded shape: the mark is a result mark that sets status (4.1)",
+    "order": "a TCP DNS row (IRM=\"DNS\") standing at the start: first pushed 2026-09-19T09:46:35.827Z, on every push of the race that carries the Attempt's Row through 09:50:46Z, across the first start listing 09:46:59.844Z (dtStart 11:46:59.980); the Attempt is then on course until its last listing 09:48:11.034Z (no finish listing is recorded)",
+    "note": "no recording holds a DNF standing at a start; this is the recorded E1 Attempt DERIVATIONS 4.11 cites for a mark standing at the start (third pass). The mark is a result mark that sets status (4.1). It is a BR2 Attempt: its Row carries the run-1 fields (Pen, Total, Rank, Behind) and no Time",
     "edits": [
       "trimmed to one Attempt as the other fixtures",
-      "edited: from 2026-09-19T12:54:20.329Z on, every on-course listing of the Attempt (running and the finish listing and the closure) carries dtStart=\"14:53:40.140\" instead of \"14:53:40.200\": a start moved 60 ms earlier mid-run with no finish, the recorded shape of the seven start changes (DERIVATIONS 4.11 table: K1W_BR2_19:9, K1M_BR1_20:115, jarni-so-do K1M_BR1_18:138). Time and dtFinish cells are left as recorded (the 60 ms is inside the whole-second clock the running listings show; the finish Time 103.86 is not recomputed)",
+      "edited: from 2026-09-19T09:47:30.081Z on, every on-course listing of the Attempt carries dtStart=\"11:46:59.920\" instead of \"11:46:59.980\": a start moved 60 ms earlier mid-run with no finish, the recorded shape of the seven start changes (DERIVATIONS 4.11 table). Time cells are left as recorded (the 60 ms is inside the whole-second clock the running listings show). The XML Results row is left as recorded (its dtStart is not edited)",
       "no row added, moved or removed"
     ]
   },
@@ -29,9 +29,9 @@
       "seq": 1,
       "file": "001-excerpt.jsonl",
       "label": "mark-at-start-then-correction",
-      "startTime": "2026-09-19T12:50:00.000Z",
-      "endTime": "2026-09-19T12:58:00.000Z",
-      "duration": 480000,
+      "startTime": "2026-09-19T09:45:00.000Z",
+      "endTime": "2026-09-19T09:52:00.000Z",
+      "duration": 420000,
       "races": [],
       "messages": 620
     }
