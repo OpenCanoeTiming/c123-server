@@ -774,7 +774,8 @@ the latest cells per source and decides among three states:
   reused, and so is the cells' envelope: the vector carries the `source` and `observedAt` of the
   presented observation as `CONTRACTS.md` §1.2 states it — the latest cells of that source in the
   generation read on the course; the instant the later of the presented row's and the last cell
-  change's, a listing's included, an identical re-delivery moving nothing (round 27e) — never the
+  change's, a listing's included, an identical re-delivery — one restating the presented merged
+  cells, whatever that source's previous row said — moving nothing (rounds 27e, 29) — never the
   binding unit's: the course is the key to read a statement already captured (§1.2), and a
   vector of that source on the snapshot's instant is `TEST-ARCHITECTURE.md` §3.2 property 1's
   violation (round 27c; recorded: cp3-cross MX1_XT_26, 43 rows of 08:45:13.346Z read on the course
