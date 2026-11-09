@@ -1262,6 +1262,25 @@ review R16, E2: the spike applied the stale-mark check only to rows it had attri
   (`changedAfter`) is later than `submittedAt`; a save written before the correction is retained and
   settles nothing.
 - The echo arrives as an event-driven result push, because a correction recalculates the race.
+- **After a restart** a stored `pending` write resumes at load (`CONTRACTS.md` §1.5), keyed by its
+  target and generation, and its echo is the next results-table observation of the target cell for
+  that generation, under this section's rule unchanged, so that no outcome depends on the server's
+  uptime. What makes that possible: **the durable record of a write carries, from its submission,
+  the source's retained value of the target cell — or that none was retained** (a field of the
+  stored record, not of the wire's `WriteRequest`). A `pending` write's retained value cannot have
+  changed since its submission, a change having resolved it, so the persisted value is exactly the
+  one the core held at the restart; on resume it is the retained value again, and: a delivery equal
+  to it is a re-delivery, the write stays `pending` (`DECISIONS/ADR-010`'s lost echo); a change
+  resolves it, `mismatched`, or `confirmed` if it changes to the requested value; with none retained
+  the first delivery is a change and resolves it, as `operator-write-mismatched-echo-wins` pins in
+  any lifetime. On XML the content-age guard against `submittedAt` applies as always (the first read
+  after a restart has `changedAfter: null` and resolves nothing). (Round 28, third pass and its two
+  reviews: the first pass resolved every resumed write on its first delivery, the second made an
+  unequal first delivery a baseline for every resumed write — each a carve-out that left one
+  sub-case uptime-dependent.) No on-course condition applies:
+  the write was accepted when the Attempt had left the set, and acceptance is not re-judged. A target
+  generation the restarted core does not present waits on §10 item 25 (round 28, third pass and its
+  review).
 
 **When a write is accepted** (`CONTRACTS.md` §7.3). Let `listed` be whether the Attempt is currently
 on upstream's on-course list (§4.1). `listed` → refused, `run-not-closed`; a team-boat Attempt →
@@ -1515,3 +1534,13 @@ and 23 remain.
     at 08:27:51 — 7 s of `count 0`, `provisional: true`, the honest label. A merge would be a new
     rule (slot cells against captions, and which stamp property 11 reads); not taken on one 7 s
     instance. (Round 26.)
+25. **The generation across a server restart.** `CONTRACTS.md` §2.10 keys checks and flags by `run`,
+    and live-mini holds each Attempt at its pushed `run`; a restarted server that re-derives the
+    Attempt from upstream alone would present `1` for a re-run Attempt — the re-run's checks read
+    `stale`, run 1's are compared against run 2's gates, and the bridge's re-push (§8.2) sends `1`
+    over live's `2`, which property 10 forbids. Nothing persists the generation today. Options: persist
+    `run` per Attempt with §2.10's discipline, or seed it from the store's highest `run` for the
+    Attempt and from live's state. A rare conjunction (one recorded re-run in seven recordings, then a
+    restart inside the event) with a wrong-workflow, never a wrong-result, consequence on site
+    (`ADR-016`), and a decrease on live; to be ruled before penalty-check (M4) and the bridge (M5) rely
+    on it. (Round 27i, second pass.)

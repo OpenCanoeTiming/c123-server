@@ -415,7 +415,9 @@ invariants" means exactly this subset.
 - Keys may be prefixed by an `attemptId` (`K1M_BR1_6:9.outcome`).
 - `diagnostics` asserts the current diagnostics; a `stale-mark` is current only while the withheld
   mark is on the presented row.
-- `writeRequest` asserts the write status.
+- `writeRequest` asserts the write status, and `confirmedValue` as the merge port holds it — the
+  echo's cell vector; the wire's `{ gate, value }` is `CONTRACTS.md` §7.3's serialisation of the target
+  cell, outside the merge port (round 28, third pass).
 - `notifications` asserts the number of client-visible messages, one per changed resource: a
   second-run Phase has a `phase` and a `pair` standing (`CONTRACTS.md` §5), so one serialised change
   there is two `standing.updated`; a creation message counts once however many snapshots preceded it.

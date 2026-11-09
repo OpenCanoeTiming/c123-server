@@ -16,6 +16,23 @@ export function createRealClock(): Clock {
   };
 }
 
+/**
+ * The player's clock (ADR-017 Revision 7): `rate` seconds per wall second from `originMs`; timers wait `ms / rate` of wall time.
+ * With `held` it stands still at `originMs` until `start()`, else it runs from its creation.
+ */
+export function createScaledClock(rate: number, originMs: number, held = false): Clock & { start: () => void } {
+  let started: number | undefined = held ? undefined : Date.now();
+  const now = (): number => (started === undefined ? originMs : originMs + (Date.now() - started) * rate);
+  return {
+    now,
+    start: () => { started ??= Date.now(); },
+    setTimeout: (fn, ms) => setTimeout(fn, ms / rate),
+    clearTimeout: (h) => { clearTimeout(h); },
+    requestFrame: (fn) => setTimeout(() => { fn(now()); }, 16),
+    cancelFrame: (h) => { clearTimeout(h); },
+  };
+}
+
 export function createRealXmlFs(): XmlFs {
   return {
     stat: async (path) => { const s = await stat(path); return { mtimeMs: s.mtimeMs, size: s.size }; },

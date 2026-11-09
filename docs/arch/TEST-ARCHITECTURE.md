@@ -247,7 +247,10 @@ the step index, the Attempt, the field and the property number.
 1. **Sequence (INV-6) D.** `seq` strictly increases across deltas, and the first delta's `seq`
    exceeds the hydration step's `asOfSeq`. No `observedAt` in any delta is a replay-time clock
    value: each is the recorded `observedAt` of the element that produced that observation, at or
-   before the step (a creation message or a standing legitimately carries earlier envelopes; so
+   before the step **in ingest order** (INV-6: a real process applies an XML unit, stamped at its
+   detection, `DERIVATIONS.md` §0.3, after the TCP units it received during the read, so a log's
+   instants are not monotonic across sources, and a replay-time clock value is one that exceeds every
+   instant the log has seen up to the step; round 27h) (a creation message or a standing legitimately carries earlier envelopes; so
    does a row the merge held for the stream's finish, `DERIVATIONS.md` §4.11, presented at the
    listing that settled it with its own `observedAt` **and its own value** — the fields the row
    states, `outcome`, `placement`, `qualified` and the like, each at the instant of the row that
@@ -360,7 +363,11 @@ the step index, the Attempt, the field and the property number.
    reading, for a re-run on the published fixture only; before any row of the generation the
    stream's vector is an inference, `confidence: 'inferred'`, and once a row is presented the merged
    vector carries the row's envelope, `CONTRACTS.md` §1.2), a judged cell (`0`, `2`, `50`) never becomes
-   `null` at a results-table step — upstream's own withdrawal, the stream's listing blanking a cell
+   `null` at a results-table step — and at the listing that increments `run` the vector is the new
+   generation's, named `not-yet` or the listing's own cells in that delta (property 10, `ADR-013`),
+   the previous generation's row holding nothing of it, so (b) reads the generation the delta
+   presents (round 27g, a checker ordering gap, not a core finding: a checker that still held run 1's row
+   at the increment reported 11 cells of K1W_BR1_18:24) — upstream's own withdrawal, the stream's listing blanking a cell
    it judged, is presented wherever no presented row of the generation holds that cell judged: the
    presented row's cell blank, or no row of the generation yet (recorded: nkz-19so K1M_BR2_19:79,
    cells 14–17 judged 25 s into the run and blank 11 s later, mid-run, no row; round 23),
@@ -421,7 +428,13 @@ the step index, the Attempt, the field and the property number.
    differs from it only in `observedAt`. A re-delivered identical observation is not client-visible.
    The one exception is the run-increment delta, whose run-scoped fields property 10 requires
    explicitly even when already `not-yet`.
-10. **Run generation (`ADR-013`).** `run` never decreases. It increments only at an on-course listing
+10. **Run generation (`ADR-013`).** `run` never decreases; on a replay of an upstream stream — a
+    core with no durable state, which is what this property is evaluated on — a creating message
+    presents it as `1` (`CONTRACTS.md` §2.6, 1-based; `ADR-013` "it starts at 1"; a vector's `run`
+    observation states a generation directly, `CONFORMANCE-VECTORS.md` §1, and is outside this
+    clause; how a restarted server, whose §2.10 store and the live tier key by the generation, learns
+    the current one is open, `DERIVATIONS.md` §10 item 25), and it increments **by one** — each
+    trigger is one generation (round 27i) — only at an on-course listing
     of the Attempt that carries a start different from the generation's recorded start **and no
     finish, while the generation is recorded** (`DERIVATIONS.md` §4.11's two terms, tracked by the
     checker from the raw stream and the rows: the recorded start is the generation's first listed

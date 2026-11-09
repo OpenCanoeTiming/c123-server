@@ -53,6 +53,11 @@ export interface XmlReader {
   start(): void;
   stop(): void;
   setPath(path: string | undefined): void;
+  /**
+   * DERIVATIONS §0.3 for a read made outside the reader (a re-baseline, CONTRACTS §4 step 2): the time of the last successful stat
+   * since start or `setPath` that showed a signature other than `sig`, `null` when none did. Failed stats never count.
+   */
+  changedAfterFor(sig: { mtimeMs: number; size: number }): string | null;
 }
 
 /** Technical defaults (DERIVATIONS §0.3, §5). */
@@ -252,6 +257,12 @@ export function createXmlReader(opts: XmlReaderOptions): XmlReader {
       path = next;
       epoch++;
       if (running) begin();
+    },
+    changedAfterFor(sig: Sig): string | null {
+      if (prevStat === undefined) return null;
+      // `changedAfter` is the last stat before the current run of `prevStat`'s signature
+      const at = same(prevStat.sig, sig) ? changedAfter : prevStat.at;
+      return at === undefined ? null : iso(at);
     },
   };
 }

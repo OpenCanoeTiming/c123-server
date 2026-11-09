@@ -129,7 +129,21 @@ re-delivery's, is the core's and the checker's (DERIVATIONS §4.6; TEST-ARCHITEC
 pass (2026-11-08, review of PR #288) amended CONTRACTS §1.2's merged-vector instant to the later of
 the row's and the last cell change's and moved no duty: a client takes `observedAt` as given
 (CONTRACTS §1.2; DERIVATIONS §4.6). Round 27f (2026-11-08, the checker review) moved none: which step
-binds the course is the core's and the checker's (TEST-ARCHITECTURE §3.2; DERIVATIONS §4.6).
+binds the course is the core's and the checker's (TEST-ARCHITECTURE §3.2; DERIVATIONS §4.6). Round 27g
+(2026-11-08, #207 re-run paths) moved none: property 6(b) reading the new generation at an increment is
+the checker's (TEST-ARCHITECTURE §3.2; ADR-013). Round 27h (2026-11-08, #210 row 15) moved none:
+property 1's "at or before the step" read in ingest order is the checker's (TEST-ARCHITECTURE §3.2;
+CONTRACTS §4 INV-6). Round 27i (2026-11-08, the checker review) moved none: `run` incrementing by one is
+the core's and the checker's (TEST-ARCHITECTURE §3.2; CONTRACTS §2.6; ADR-013); its second pass opened
+the generation across a server restart as DERIVATIONS §10 item 25, no duty moving until it is ruled. Round 28 (2026-11-08, the write path, server#212) moved two duties: penalty-check renders `409
+write-not-possible` with the new reason `upstream-disconnected` (TCP not connected or the socket write
+failed; nothing sent, created or bound) and expects `200` with the same flag on a retried flag POST
+(CONTRACTS §1.4, §1.5, §7.3, §7.4); the order of refusal, the durable key map and `WriteRequest`s, the
+command's bytes and the no-op `DELETE` are the server's (CONTRACTS §1.5, §1.6, §7.3, §7.4). Its third
+pass (2026-11-08) moved none: `{ gate, value }` was already the wire shape of the lifecycle example,
+and a stored write's echo after a restart is the core's (CONTRACTS §7.3; CONFORMANCE-VECTORS §1;
+DERIVATIONS §6); its follow-up (2026-11-09) moved none: the durable record keeping the cell's retained value at
+submission, so that §6's echo rule applies unchanged after a restart, is the core's (DERIVATIONS §6).
 
 ---
 
@@ -297,8 +311,9 @@ binds the course is the core's and the checker's (TEST-ARCHITECTURE §3.2; DERIV
 - [ ] Handle `202` with `Location: /api/writes/{writeId}` and a pending `WriteRequest` on submit, and `200` with the current `WriteRequest` on a retry (CONTRACTS §7.3).
 - [ ] While the Attempt is in the on-course set — which lists a finisher as `finished` until upstream's closure, typically about 20 s after the finish and a venue setting — disable the write, or on `409 write-not-possible` with `reason: 'run-not-closed'` tell the judge (CONTRACTS §7.1, §7.3; ARCHITECTURE §6.B).
 - [ ] Retry a write refused as `run-not-closed` on the first `oncourse.updated` whose `attemptIds` no longer contain the Attempt; reusing the `Idempotency-Key` or taking a new one are both correct, since a `409` creates no `WriteRequest` (CONTRACTS §1.5, §7.3).
+- [ ] On `409 write-not-possible` with `reason: 'upstream-disconnected'` tell the judge the server has no connection to Canoe123 and let them retry later; nothing was sent, created or bound (CONTRACTS §1.4, §7.3).
 - [ ] Hide or disable the penalty write up front for an Attempt whose Entry has `isTeam: true`, since the operator corrects team boats in Canoe123; treat `409 write-not-possible` with `reason: 'team-boat'` only as the backstop (CONTRACTS §2.5, §7.3; ARCHITECTURE §6.B).
-- [ ] Handle `404 attempt-not-found` and `400 validation-failed` with `error.details: [{field, issue}]`: a value outside {0, 2, 50}, a gate outside the course, a course not configured; and `409 write-not-possible` with `error.details.reason` from `run-not-closed`, `team-boat`, `cross` (CONTRACTS §1.4, §7.3, §7.4).
+- [ ] Handle `404 attempt-not-found` and `400 validation-failed` with `error.details: [{field, issue}]`: a value outside {0, 2, 50}, a gate outside the course, a course not configured; and `409 write-not-possible` with `error.details.reason` from `run-not-closed`, `team-boat`, `cross`, `upstream-disconnected`; a missing `Idempotency-Key` is `400` with `field: 'Idempotency-Key'` (CONTRACTS §1.4, §1.5, §7.3, §7.4).
 - [ ] Allow writes against closed Phases; they are tracked identically (CONTRACTS §2.9, §7.3; ARCHITECTURE §3).
 - [ ] Send every write through the server and keep no terminal channel; nothing reacts to the operator's "reset scoring terminals" (CONTRACTS §7.3; ARCHITECTURE §3; ADR-011).
 - [ ] Read penalties only from `Attempt.gates`; delete its own gate parser, including the REST trim path (ARCHITECTURE §3; CONTRACTS §2.6).
@@ -320,7 +335,7 @@ binds the course is the core's and the checker's (TEST-ARCHITECTURE §3.2; DERIV
 - [ ] Apply `check.updated`, whole, where `check: null` means removed, and `flag.updated`, the whole `GateFlag` under `flag` (CONTRACTS §7.2).
 - [ ] Check a gate with `PUT /api/attempts/{phaseId}/{bib}/checks/{gate}`, body `{ checkedBy? }`; re-verify after a correction by repeating it (CONTRACTS §7.4).
 - [ ] Remove a check with `DELETE /api/attempts/{phaseId}/{bib}/checks/{gate}`, which returns `204` whether or not one existed (CONTRACTS §7.4).
-- [ ] Raise a flag with `POST /api/attempts/{phaseId}/{bib}/flags`, body `{ gate, comment, suggestedValue?, createdBy? }`, with an `Idempotency-Key`; expect `201` and an open `GateFlag` (CONTRACTS §1.5, §7.4).
+- [ ] Raise a flag with `POST /api/attempts/{phaseId}/{bib}/flags`, body `{ gate, comment, suggestedValue?, createdBy? }`, with an `Idempotency-Key`; expect `201` and an open `GateFlag`, and `200` with the same flag on a retry with the same key (CONTRACTS §1.5, §7.4).
 - [ ] Resolve a flag with `POST /api/flags/{flagId}/resolution`, body `{ note?, resolvedBy? }`; repeating it is safe; handle `404 flag-not-found` (CONTRACTS §1.4, §7.4).
 - [ ] Put no `run` in any path; check and flag writes target the Attempt's current generation (CONTRACTS §7.4).
 - [ ] Never change a penalty through a flag: apply a suggested value with a penalty write, and resolve the flag separately (CONTRACTS §7.4).

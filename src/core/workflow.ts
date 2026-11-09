@@ -52,3 +52,14 @@ export function gateStatus(given: WorkflowGiven): WorkflowResult {
   }
   return { gateStatus: result, checks: given.checks };
 }
+
+/**
+ * One check's own status (CONTRACTS §2.10), apart from the gate's display state: `verified` when `valueAtCheck` equals the presented
+ * penalty of that gate for that Attempt and generation, `stale` otherwise. A generation that is not the presented one has nothing
+ * presented to equal, so it is `stale`; `null` and `0` stay distinct.
+ */
+export function checkStatus(check: { attemptId: string; run: number; gate: number; valueAtCheck: number | null }, presented: WorkflowGiven['presented']): 'verified' | 'stale' {
+  const p = presented[check.attemptId];
+  if (p === undefined || p.run !== check.run) return 'stale';
+  return check.valueAtCheck === (presentedPenalties(p.gates).get(check.gate) ?? null) ? 'verified' : 'stale';
+}
