@@ -274,7 +274,12 @@ the step index, the Attempt, the field and the property number.
    after a retraction the last cell-changing listing's (round 26) — an identical re-delivery after either
    moving nothing (INV-5) — recorded: MX1_XT_26:8, listings 08:45:13.218–17.961 and the row of
    13.346 all stating nine clean cells, the vector at 13.346 (round 27e, which withdrew round 27c's
-   "latest delivery" and amended §1.2); the vector's `source` is the presented observation's: the
+   "latest delivery" and amended §1.2); "identical" is to the presented merged cells, never to that
+   source's previous row (§1.2, round 29) — recorded: K1M_BR2_19:81, the row of 09:30:05.720 with
+   cell 23 blank, the listing of 06.150 judging it clean, the row of 12.812 restating the merged
+   cells, the vector at 06.150 whether the course binds at 11.556 (nkz-19so) or at 13.551 (the #208
+   fixture cut from it), the checker rejecting 12.812 on a late binding as the planted defect it
+   already names; the vector's `source` is the presented observation's: the
    cells are its statement and the course the key
    to read them (`CONTRACTS.md` §1.2, `provisional`: `observedAt` is the later of the presented row's
    element and "the element's that last changed the presented cells", and a binding changes no

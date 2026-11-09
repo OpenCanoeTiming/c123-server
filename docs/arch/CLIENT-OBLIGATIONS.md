@@ -144,6 +144,9 @@ pass (2026-11-08) moved none: `{ gate, value }` was already the wire shape of th
 and a stored write's echo after a restart is the core's (CONTRACTS §7.3; CONFORMANCE-VECTORS §1;
 DERIVATIONS §6); its follow-up (2026-11-09) moved none: the durable record keeping the cell's retained value at
 submission, so that §6's echo rule applies unchanged after a restart, is the core's (DERIVATIONS §6).
+Round 29 (2026-11-09, #208 row 4) moved none: a late-bound vector's "equal cells" read against the
+presented merged vector, never against that source's previous row, is the core's and the checker's
+(CONTRACTS §1.2; DERIVATIONS §4.6; TEST-ARCHITECTURE §3.2); a client takes `observedAt` as given.
 
 ---
 
