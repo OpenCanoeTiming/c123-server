@@ -229,12 +229,11 @@ describe('#208 rows 3-4: fixture A (recorded outages 09:35:00 for 170 s and 09:4
     expect(finalHash(two)).toBe(finalHash(one))
   }, T)
 
-  it.skipIf(!haveChecker)('fixture A: gate-2 checker reports 0 violations, properties 8 and 13 exercised', () => {
+  it.skipIf(!haveChecker)('fixture A: gate-2 checker reports 0 violations, property 8 exercised (an outage makes no re-baseline: P13 not claimed)', () => {
     const g = gate2(replay(A), A)
     expect(g.violations.length, shown(g)).toBe(0)
     expect(g.exit).toBe(0)
     expect(g.exercised['8'], 'property 8 exercised').toBeGreaterThan(0)
-    expect(g.exercised['13'], 'property 13 exercised').toBeGreaterThan(0)
   }, T)
 
   it('fixture A: each reconnect starts with RaceConfig then Schedule (the player emulation of Canoe123 accept; scout-tcp-connect-burst E1)', () => {
@@ -249,8 +248,11 @@ describe('#208 rows 3-4: fixture A (recorded outages 09:35:00 for 170 s and 09:4
   })
 })
 
-describe('#208 row 5: jarni-ne-do 08:55-09:10 with the two ~168 s TCP gaps stated', () => {
-  const extra = ['--from', B_FROM, '--to', B_TO, '--events', B_EVENTS]
+describe('#208 row 5: jarni-ne-do from the stream start to 09:10 with the two ~168 s TCP gaps stated, judged on 08:55-09:10', () => {
+  // A cold-start --from cut would be checked against raw records the core never saw (TEST-ARCHITECTURE §3.2, round 24): replay from the
+  // stream start and let the checker's --window judge 08:55-09:10. The stated events are the four outage events only (no connect at 08:55).
+  const extra = ['--to', B_TO, '--events', B_EVENTS]
+  const baselineArgs = ['--to', B_TO]
 
   it.skipIf(!haveJarni)('the stated events are the raw TCP gaps: each disconnect 1 ms after the last record before a gap over 20 s, each connect at the first record after', () => {
     const man = JSON.parse(readFileSync(path.join(JARNI, 'manifest.json'), 'utf8')) as { chunks: { file: string; startTime: string }[] }
@@ -262,7 +264,7 @@ describe('#208 row 5: jarni-ne-do 08:55-09:10 with the two ~168 s TCP gaps state
       const t = base + (JSON.parse(l) as { ts: number }).ts
       if (t >= Date.parse(B_FROM) && t <= Date.parse(B_TO)) times.push(t)
     }
-    const want: { event: string; observedAt: string }[] = [{ event: 'tcp-connected', observedAt: new Date(Date.parse(B_FROM)).toISOString() }]
+    const want: { event: string; observedAt: string }[] = []
     times.forEach((t, n) => {
       if (n > 0 && t - times[n - 1]! > 20_000) {
         want.push({ event: 'tcp-disconnected', observedAt: new Date(times[n - 1]! + 1).toISOString() }, { event: 'tcp-connected', observedAt: new Date(t).toISOString() })
@@ -271,7 +273,7 @@ describe('#208 row 5: jarni-ne-do 08:55-09:10 with the two ~168 s TCP gaps state
     expect(statedB().map((e) => [e.event, e.observedAt])).toEqual(want.map((e) => [e.event, e.observedAt]))
   })
 
-  it.skipIf(!haveJarni)('jarni-ne-do 08:55-09:10 with stated outages: deterministic, 0 violations', () => {
+  it.skipIf(!haveJarni)('jarni-ne-do stream start to 09:10, window 08:55-09:10, with stated outages: deterministic, 0 violations', () => {
     const one = path.join(tmp(), 'one.jsonl')
     const two = path.join(tmp(), 'two.jsonl')
     replayTo(JARNI, extra, one)
@@ -283,8 +285,7 @@ describe('#208 row 5: jarni-ne-do 08:55-09:10 with the two ~168 s TCP gaps state
     expect(g.violations.length, shown(g)).toBe(0)
     expect(g.exit).toBe(0)
     expect(g.exercised['8'], 'property 8 exercised').toBeGreaterThan(0)
-    expect(g.exercised['13'], 'property 13 exercised').toBeGreaterThan(0)
-  }, T)
+  }, 2 * T)
 })
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -314,16 +315,23 @@ describe('#208 row 6: re-hydration', () => {
 })
 
 describe('#208 row 7: no flicker on reconnect', () => {
-  it('A and B: no flicker across each reconnect (from the disconnect to 60 s after the reconnect; A->B->A and cleared-then-restored, read from the deltas)', () => {
+  /** Flickers of the outage replay that do not occur (same interval, same field) in the no-outage replay of the same interval. */
+  const outageOnly = (outage: string, baseline: string, iv: { from: number; to: number; label: string }[]): { interval: string; key: string; values: string[] }[] => {
+    const seen = new Set(flicker(baseline, iv).map((x) => `${x.interval}|${x.key}`))
+    return flicker(outage, iv).filter((x) => !seen.has(`${x.interval}|${x.key}`))
+  }
+  const listed = (name: string, f: { interval: string; key: string; values: string[] }[]): string[] => f.map((x) => `${name} ${x.interval} ${x.key}: ${x.values.join(' -> ')}`)
+
+  it.skipIf(!haveNkz)('A and B: no flicker across each reconnect that the no-outage replay of the same interval lacks (INV-1 status monotonic, CONTRACTS §3.2; amended #208 row 7)', () => {
     const found: string[] = []
-    const a = flicker(replay(A), intervals(recordedEvents()))
-    found.push(...a.map((x) => `A ${x.interval} ${x.key}: ${x.values.join(' -> ')}`))
+    const aEnd = manifestA().chunks[0]!.endTime
+    found.push(...listed('A', outageOnly(replay(A), replay(NKZ, ['--from', '2026-09-19T09:30:00Z', '--to', aEnd]), intervals(recordedEvents()))))
     if (haveJarni) {
-      const b = flicker(replay(JARNI, ['--from', B_FROM, '--to', B_TO, '--events', B_EVENTS]), intervals(statedB().map((e) => ({ event: e.event, at: Date.parse(e.observedAt) }))))
-      found.push(...b.map((x) => `B ${x.interval} ${x.key}: ${x.values.join(' -> ')}`))
+      const iv = intervals(statedB().map((e) => ({ event: e.event, at: Date.parse(e.observedAt) })))
+      found.push(...listed('B', outageOnly(replay(JARNI, ['--to', B_TO, '--events', B_EVENTS]), replay(JARNI, ['--to', B_TO]), iv)))
     }
-    expect(found.length, `${found.length} flickers:\n${found.slice(0, 12).join('\n')}`).toBe(0)
-  }, T)
+    expect(found.length, `${found.length} outage-only flickers (by Attempt):\n${found.slice(0, 12).join('\n')}`).toBe(0)
+  }, 3 * T)
 
   it('A: the intervals are the two recorded reconnects (guards the test: two intervals, each holding steps)', () => {
     const iv = intervals(recordedEvents())
