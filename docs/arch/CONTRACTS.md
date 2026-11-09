@@ -164,7 +164,14 @@ The fields, precisely:
     vector is that row's observation: `confidence: 'authoritative'`, `source` the presented row's,
     `observedAt` the **later** of the presented observation's own element — the row whose
     observation of the field became presented; a later row restating equal cells is an INV-5
-    re-delivery and moves nothing — and the element's that last changed the presented cells, a
+    re-delivery and moves nothing — equal to the **presented** merged cells, INV-5's own test being
+    the value already presented from that source, never the row's difference from that source's
+    previous row: a row that fills a cell the stream had already judged into the presented vector
+    differs from the previous row and changes nothing presented, so it moves nothing, and whether a
+    course was bound when it arrived changes nothing of this (round 29; `TEST-ARCHITECTURE.md` §3.2
+    property 1 records the case); a row that first supersedes the stream's inference presents, equal
+    cells or not, since rule 1's supersession is a change of what is presented (round 27e) — and the
+    element's that last changed the presented cells, a
     listing's included (round 27e, an amendment:
     round 24's text took the instant from the last cell change alone and so dated an `authoritative`
     claim at an inference's instant where a row restated the stream's cells equal; `observedAt` is
