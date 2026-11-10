@@ -24,8 +24,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const SCRIPT = path.join(ROOT, 'scripts/replay-direct.ts')
 const TSX = path.join(ROOT, 'node_modules/.bin/tsx')
 const FIXTURES = path.join(ROOT, 'scripts/__tests__/fixtures/rerun-paths')
-const CHECKER = '/workspace/timing/c123-protocol-docs/tools/gate2/check.js'
-const NKZ = '/workspace/timing/c123-protocol-docs/recordings/.cache/2026-09-19-2026-nkz-19so'
+const PD = process.env.C123_PROTOCOL_DOCS ?? '/workspace/timing/c123-protocol-docs'
+const CHECKER = path.join(PD, 'tools/gate2/check.js')
+const NKZ = path.join(PD, 'recordings/.cache/2026-09-19-2026-nkz-19so')
 const T = 900_000
 
 const dirs: string[] = []

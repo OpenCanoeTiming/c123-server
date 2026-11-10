@@ -22,7 +22,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const PD = '/workspace/timing/c123-protocol-docs';
+const PD = process.env.C123_PROTOCOL_DOCS ?? '/workspace/timing/c123-protocol-docs';
 const REC = path.join(PD, 'recordings/.cache/2026-09-19-2026-nkz-19so');
 const PLAYER = path.join(PD, 'tools/player.js');
 const EXTRACT = path.join(PD, 'tools/extract-excerpt.js');
