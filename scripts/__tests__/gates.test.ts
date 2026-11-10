@@ -33,6 +33,14 @@
  *     step 1 data-gate tests: PASS|FAIL
  *     step 2 gate 2: PASS|FAIL
  *     step 3 gate 3: PASS|FAIL
+ *   round 3 additions (review of #317, B1-B4, C1):
+ *     recording <name> sha256 <hex> covers the manifest AND every chunk file the manifest lists (any change to a chunk changes it)
+ *     known-differences: <abs path> sha256 <64 hex>              (always printed, also for an empty file)
+ *     tolerated: <recording> <attemptId> <field> <issue>         (one line per tolerated difference)
+ *     override: <flag-or-env> <value>                            (one line per override in effect: --replay-script, --data-gate-tests,
+ *                                                                 --known-differences, env C123_GATES_DATA_TESTS; none for the defaults)
+ *   a gate-3 summary not written by this run is never read; a comparator that exits 1 without a fresh summary, or exits other than 0/1,
+ *   fails step 3. A known-differences entry without a non-blank `issue` is refused (exit 2, names the entry).
  *   exit codes: 0 all steps pass; 1 a step FAILS (all steps still run and report); 2 a prerequisite is missing (protocol-docs dir,
  *     checker, comparator, a recording): stderr names the missing piece, no step line says PASS.
  *
@@ -67,7 +75,9 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 const i = process.argv.indexOf('--recording')
 if (i < 0) { console.error('no --recording'); process.exit(2) }
-process.exit(existsSync(path.join(process.argv[i + 1], 'FAIL_GATE2')) ? 1 : 0)
+const d = process.argv[i + 1]
+if (existsSync(path.join(d, 'EXIT2_GATE2'))) process.exit(2)
+process.exit(existsSync(path.join(d, 'FAIL_GATE2')) ? 1 : 0)
 `
 // stub comparator: differences come from <pd>/stub-gate3.json { "<name>": [ { attemptId, field, xml, presented } ] }
 const FINAL_STUB = `import { readFileSync, writeFileSync, existsSync } from 'node:fs'
@@ -79,14 +89,20 @@ if (!a.includes('--summary') || !a.includes('--recording') || !existsSync(a[2]))
 const cfg = JSON.parse(readFileSync(path.join(import.meta.dirname, '../../stub-gate3.json'), 'utf8'))
 const base = path.basename(rec)
 const name = Object.keys(cfg).find((n) => base === n || base.endsWith('-' + n))
-const differences = (name ? cfg[name] : []).map((d) => ({ recording: name, ...d }))
+const mode = name ? cfg[name] : []
+if (mode === 'crash') { console.error('stub comparator crashed'); process.exit(1) } // like an uncaught exception: exit 1, no summary
+if (mode === 'exit2') process.exit(2)
+if (mode === 'exit3') process.exit(3)
+const differences = mode.map((d) => ({ recording: name, ...d }))
 writeFileSync(summary, JSON.stringify({ differences }))
 process.exit(differences.length ? 1 : 0)
 `
-const REPLAY_STUB = `import { writeFileSync } from 'node:fs'
+const REPLAY_STUB = `import { existsSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 const a = process.argv
-const rec = path.basename(a[a.indexOf('--recording') + 1])
+const dir = a[a.indexOf('--recording') + 1]
+if (existsSync(path.join(dir, 'FAIL_REPLAY'))) { console.error('stub replay failed'); process.exit(3) }
+const rec = path.basename(dir)
 writeFileSync(a[a.indexOf('--out') + 1], 'stub steps for ' + rec + '\\n')
 `
 
@@ -96,9 +112,11 @@ interface World {
   out: string
   replay: string
   known: string
-  gate3: Record<string, Record<string, unknown>[]>
+  gate3: Record<string, Record<string, unknown>[] | string>
 }
 const recDir = (name: string): string => `2026-01-01-${name}`
+const manifest = (n: string): string => JSON.stringify({ stub: n, chunks: [{ file: '001-chunk.jsonl' }] })
+const chunk = (n: string): string => `{"stub-chunk":"${n}"}\n`
 const stepLog = (name: string): string => `stub steps for ${recDir(name)}\n`
 
 /** A fake protocol-docs checkout (a git repo with the stubs committed) and a recordings set of the 7 stub recordings. */
@@ -122,7 +140,8 @@ function world(opts: { omitChecker?: boolean; omitComparator?: boolean; omit?: s
   for (const n of NAMES) {
     if (opts.omit?.includes(n)) continue
     mkdirSync(path.join(rec, recDir(n)))
-    writeFileSync(path.join(rec, recDir(n), 'manifest.json'), JSON.stringify({ stub: n }))
+    writeFileSync(path.join(rec, recDir(n), 'manifest.json'), manifest(n))
+    writeFileSync(path.join(rec, recDir(n), '001-chunk.jsonl'), chunk(n))
   }
   return { pd, rec, out: path.join(root, 'out'), replay: path.join(root, 'replay.mjs'), known: path.join(root, 'known.json'), gate3: {} }
 }
@@ -207,7 +226,7 @@ describe('npm run gates (#313)', () => {
     expect(r.stdout).toContain(`protocol-docs path: ${w.pd}`)
     expect(r.stdout).toContain(`protocol-docs commit: ${git(w.pd, 'rev-parse', 'HEAD')} dirty: yes`)
     for (const n of NAMES) {
-      expect(r.stdout, n).toContain(`recording ${n} sha256 ${sha(JSON.stringify({ stub: n }))}`)
+      expect(r.stdout, n).toMatch(new RegExp(`^recording ${n} sha256 [0-9a-f]{64}$`, 'm'))
       expect(r.stdout, n).toContain(`step-log ${n} sha256 ${sha(stepLog(n))}`)
     }
     expect(r.stdout).toMatch(/step 1 data-gate tests: PASS/)
@@ -221,6 +240,19 @@ describe('npm run gates (#313)', () => {
     const r = run(w, [STUB_ENV], [], { C123_GATES_STUB_OUT: seen, C123_PROTOCOL_DOCS: '/nonexistent/other-protocol-docs' })
     expect(r.status, r.all).toBe(0)
     expect(readFileSync(seen, 'utf8')).toBe(w.pd)
+  }, T)
+
+  it('#313 C1: a changed chunk with an unchanged manifest changes that recording\'s printed sha256 and no other', () => {
+    const w = world()
+    const line = (out: string, n: string): string => new RegExp(`^recording ${n} sha256 [0-9a-f]{64}$`, 'm').exec(out)?.[0] ?? ''
+    const a = run(w)
+    expect(a.status, a.all).toBe(0)
+    writeFileSync(path.join(w.rec, recDir('nkz-19so'), '001-chunk.jsonl'), '{"stub-chunk":"edited"}\n')
+    const b = run(w)
+    expect(b.status, b.all).toBe(0)
+    expect(line(a.stdout, 'nkz-19so')).not.toBe('')
+    expect(line(b.stdout, 'nkz-19so')).not.toBe(line(a.stdout, 'nkz-19so'))
+    expect(line(b.stdout, 'cp3-cross')).toBe(line(a.stdout, 'cp3-cross'))
   }, T)
 
   it('#313 row 4: a clean protocol-docs checkout is reported dirty: no', () => {
@@ -279,5 +311,105 @@ describe('npm run gates (#313)', () => {
     const r = run(w)
     expect(r.status, r.all).toBe(1)
     expect(r.all).toContain('pen')
+  }, T)
+
+  const KNOWN = { recording: 'nkz-19so', attemptId: 'K1M_BR2_19:67', field: 'countingRun', issue: 'OpenCanoeTiming/c123-server#999' }
+  const DIFF = { attemptId: 'K1M_BR2_19:67', field: 'countingRun', xml: 1, presented: 'not-yet' }
+
+  it.each(['crash', 'exit3'])('#313 B1: comparator %s with an old listed-only summary in --out -> step 3 FAIL, never PASS', (mode) => {
+    const w = world()
+    w.gate3['nkz-19so'] = [DIFF]
+    writeFileSync(w.known, JSON.stringify([KNOWN]))
+    const first = run(w)
+    expect(first.status, first.all).toBe(0)
+    w.gate3 = { 'nkz-19so': mode }
+    const r = run(w)
+    expect(r.status, r.all).not.toBe(0)
+    expect(r.stdout).not.toMatch(/step 3 gate 3: PASS/)
+  }, T)
+
+  it('#313 B1: comparator exit 1 without writing any summary (fresh --out) -> step 3 FAIL', () => {
+    const w = world()
+    w.gate3 = { 'cp3-cross': 'crash' }
+    const r = run(w)
+    expect(r.status, r.all).not.toBe(0)
+    expect(r.stdout).not.toMatch(/step 3 gate 3: PASS/)
+  }, T)
+
+  it('#313 B2: gate-2 checker exit 2 -> not a pass: overall exit != 0, step 2 not PASS', () => {
+    const w = world()
+    writeFileSync(path.join(w.rec, recDir('cp3-cross'), 'EXIT2_GATE2'), '')
+    const r = run(w)
+    expect(r.status, r.all).not.toBe(0)
+    expect(r.stdout).not.toMatch(/step 2 gate 2: PASS/)
+    expect(r.stdout).not.toMatch(/step 3 gate 3: PASS/)
+  }, T)
+
+  it('#313 B2: gate-3 comparator exit 2 -> not a pass: overall exit != 0, step 3 not PASS', () => {
+    const w = world()
+    w.gate3 = { 'jarni-so-do': 'exit2' }
+    const r = run(w)
+    expect(r.status, r.all).not.toBe(0)
+    expect(r.stdout).not.toMatch(/step 3 gate 3: PASS/)
+  }, T)
+
+  it('#313 B2: a failed replay (non-zero, no step log) -> step 2 FAIL and step 3 not PASS', () => {
+    const w = world()
+    writeFileSync(path.join(w.rec, recDir('nkz-20ne'), 'FAIL_REPLAY'), '')
+    const r = run(w)
+    expect(r.status, r.all).not.toBe(0)
+    expect(r.stdout).toMatch(/step 2 gate 2: FAIL/)
+    expect(r.stdout).not.toMatch(/step 3 gate 3: PASS/)
+  }, T)
+
+  it.each([
+    ['missing', { recording: 'nkz-19so', attemptId: 'K1M_BR2_19:67', field: 'countingRun' }],
+    ['empty', { ...KNOWN, issue: '' }],
+    ['blank', { ...KNOWN, issue: '   ' }],
+  ])('#313 B3: a known-differences entry with %s issue is refused, exit != 0, names the entry', (_n, entry) => {
+    const w = world()
+    w.gate3['nkz-19so'] = [DIFF]
+    writeFileSync(w.known, JSON.stringify([entry]))
+    const r = run(w)
+    expect(r.status, r.all).not.toBe(0)
+    expect(r.all).toContain('K1M_BR2_19:67')
+    expect(r.stdout).not.toMatch(/step 3 gate 3: PASS/)
+  }, T)
+
+  it('#313 B4: the record lists every tolerated difference with its issue, and the known-differences path and sha256', () => {
+    const w = world()
+    w.gate3['nkz-19so'] = [DIFF]
+    const text = JSON.stringify([KNOWN])
+    writeFileSync(w.known, text)
+    const r = run(w)
+    expect(r.status, r.all).toBe(0)
+    expect(r.stdout).toContain(`known-differences: ${w.known} sha256 ${sha(text)}`)
+    expect(r.stdout).toMatch(/^tolerated: nkz-19so K1M_BR2_19:67 countingRun OpenCanoeTiming\/c123-server#999$/m)
+  }, T)
+
+  it('#313 B4: no tolerated lines when nothing is tolerated, and the known-differences sha256 is still printed', () => {
+    const w = world()
+    const r = run(w)
+    expect(r.stdout).toContain(`known-differences: ${w.known} sha256 ${sha('[]')}`)
+    expect(r.stdout).not.toMatch(/^tolerated:/m)
+  }, T)
+
+  it('#313 B4: every override in effect is listed (--replay-script, --data-gate-tests, --known-differences)', () => {
+    const w = world()
+    const r = run(w, [STUB_PASS])
+    expect(r.status, r.all).toBe(0)
+    expect(r.stdout).toMatch(new RegExp(`^override: --replay-script ${w.replay.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'))
+    expect(r.stdout).toMatch(/^override: --data-gate-tests .*stub-pass\.test\.ts/m)
+    expect(r.stdout).toContain(`override: --known-differences ${w.known}`)
+  }, T)
+
+  it('#313 B4: an override from env C123_GATES_DATA_TESTS is listed too', () => {
+    const w = world()
+    const env: NodeJS.ProcessEnv = { ...process.env, C123_GATES_DATA_TESTS: STUB_PASS }
+    delete env.C123_PROTOCOL_DOCS
+    const r = spawnSync(TSX, [SCRIPT, '--protocol-docs', w.pd, '--recordings', w.rec, '--out', w.out, '--replay-script', w.replay,
+      '--known-differences', w.known], { cwd: ROOT, encoding: 'utf8', timeout: T, env })
+    expect(r.status, r.stdout + r.stderr).toBe(0)
+    expect(r.stdout).toMatch(/^override: C123_GATES_DATA_TESTS .*stub-pass\.test\.ts/m)
   }, T)
 })
