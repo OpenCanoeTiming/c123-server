@@ -25,6 +25,11 @@ const TOOLS = [
   'scripts/__tests__/onsite-write.test.ts',
   // the production clock wiring of the on-site entry, a real child process (issue #210)
   'src/onsite/__tests__/main-clock.real.test.ts',
+  // `npm run gates` against a fake protocol-docs directory; its stub data-gate test files run only as children of it (issue #313)
+  'scripts/__tests__/gates.test.ts',
+  'scripts/__tests__/fixtures/gates/stub-pass.test.ts',
+  'scripts/__tests__/fixtures/gates/stub-skip.test.ts',
+  'scripts/__tests__/fixtures/gates/stub-env.test.ts',
 ];
 const EXCLUDE = ['dist/**', 'node_modules/**'];
 

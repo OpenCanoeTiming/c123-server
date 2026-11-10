@@ -43,7 +43,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { applyMessage, emptyModel, hydrate, view, type J } from '../../src/onsite/__tests__/model.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const PD = '/workspace/timing/c123-protocol-docs';
+const PD = process.env.C123_PROTOCOL_DOCS ?? '/workspace/timing/c123-protocol-docs';
 const REC = path.join(PD, 'recordings/.cache/2026-04-26-cp3-cross');
 const PLAYER = path.join(PD, 'tools/player.js');
 const EXTRACT = path.join(PD, 'tools/extract-excerpt.js');
@@ -285,7 +285,8 @@ describe.skipIf(!HAVE)('rows 14 and 15: a real process fed by player.js (ADR-017
       }, 900_000);
 
       // Round 27 Q1.3: the 1x log only; at 10x the latency is outside the leave margin and the log is no gate-2 evidence.
-      it.skipIf(w.speed !== 1)(`TEST-ARCHITECTURE §3.2, ${w.speed}x: the gate-2 checker with --recording reports 0 violations on the log`, async () => {
+      // Declared only for 1x (not skipped at 10x): `npm run gates` fails on any skip (#313).
+      if (w.speed === 1) it(`TEST-ARCHITECTURE §3.2, ${w.speed}x: the gate-2 checker with --recording reports 0 violations on the log`, async () => {
         await start();
         const c = spawnSync(process.execPath, [CHECKER, run.log, '--recording', dir], { encoding: 'utf8', timeout: 600_000 });
         expect(c.status, `checker: ${c.stdout.slice(0, 600)} ${c.stderr.slice(0, 300)}`).toBe(0);

@@ -17,6 +17,7 @@ C123 Server — smart middleware layer between Canoe123 and web clients for cano
 - **Work items:** one issue each in project "Rebuild 2026/27" (https://github.com/orgs/OpenCanoeTiming/projects/3), milestones M0 Spike, freeze, merge · M1 Server core · M2 Tooling · M3 Scoreboard · M4 Penalty-check · M5 Live · M6 Release 1.0 (Jarní slalom). Implementation is on hold until the maintainer releases M1.
 - **Test-first:** failing tests from the vectors or obligations land before the code that passes them. Tiers and the `Clock` rule: `TEST-ARCHITECTURE.md` §3, §5.
 - **Upstream provenance** stays in the private c123-protocol-docs repo; public repos state behaviour only, never how it was established.
+- **Gates:** `npm run gates` must pass, and its output is posted on the PR as the verification record, on every PR touching `src/core`, `src/ingest`, `scripts/replay-direct.ts` or the gate-2 checker (maintainer-approved, #313).
 - **Git:** conventional commits; Release Please owns versions and CHANGELOG; squash merges; `git add <file>`, never commit `.claude/` or `.superpowers/`. Czech with the maintainer, English in code, commits and docs.
 
 ---

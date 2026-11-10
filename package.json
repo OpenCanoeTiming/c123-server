@@ -17,6 +17,7 @@
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "onsite": "tsx src/onsite/main.ts",
+    "gates": "tsx scripts/gates.ts",
     "replay:direct": "tsx --max-old-space-size=3072 scripts/replay-direct.ts",
     "sweep:parse": "tsx scripts/sweep-parse.ts",
     "sweep:merge": "tsx --max-old-space-size=3072 scripts/sweep-merge.ts",
