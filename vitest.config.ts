@@ -29,6 +29,7 @@ const TOOLS = [
   'scripts/__tests__/gates.test.ts',
   'scripts/__tests__/fixtures/gates/stub-pass.test.ts',
   'scripts/__tests__/fixtures/gates/stub-skip.test.ts',
+  'scripts/__tests__/fixtures/gates/stub-env.test.ts',
 ];
 const EXCLUDE = ['dist/**', 'node_modules/**'];
 

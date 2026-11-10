@@ -31,8 +31,9 @@ import { afterAll, describe, expect, it } from 'vitest'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const SCRIPT = path.join(ROOT, 'scripts/replay-direct.ts')
 const TSX = path.join(ROOT, 'node_modules/.bin/tsx')
-const CHECKER = '/workspace/timing/c123-protocol-docs/tools/gate2/check.js'
-const CACHE = '/workspace/timing/c123-protocol-docs/recordings/.cache'
+const PD = process.env.C123_PROTOCOL_DOCS ?? '/workspace/timing/c123-protocol-docs'
+const CHECKER = path.join(PD, 'tools/gate2/check.js')
+const CACHE = path.join(PD, 'recordings/.cache')
 const T = 120_000
 
 const dirs: string[] = []

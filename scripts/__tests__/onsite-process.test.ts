@@ -43,7 +43,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { applyMessage, emptyModel, hydrate, view, type J } from '../../src/onsite/__tests__/model.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const PD = '/workspace/timing/c123-protocol-docs';
+const PD = process.env.C123_PROTOCOL_DOCS ?? '/workspace/timing/c123-protocol-docs';
 const REC = path.join(PD, 'recordings/.cache/2026-04-26-cp3-cross');
 const PLAYER = path.join(PD, 'tools/player.js');
 const EXTRACT = path.join(PD, 'tools/extract-excerpt.js');

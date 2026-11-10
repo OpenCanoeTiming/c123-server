@@ -40,7 +40,7 @@
  */
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -50,6 +50,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const SCRIPT = path.join(ROOT, 'scripts/gates.ts')
 const TSX = path.join(ROOT, 'node_modules/.bin/tsx')
 const STUB_PASS = 'scripts/__tests__/fixtures/gates/stub-pass.test.ts'
+const STUB_ENV = 'scripts/__tests__/fixtures/gates/stub-env.test.ts'
 const STUB_SKIP = 'scripts/__tests__/fixtures/gates/stub-skip.test.ts'
 const NAMES = ['nkz-19so', 'cp3-cross', 'jarni-ne-odp', 'jarni-ne-do', 'jarni-so-do', 'jarni-so-odp', 'nkz-20ne']
 const T = 240_000
@@ -125,11 +126,12 @@ function world(opts: { omitChecker?: boolean; omitComparator?: boolean; omit?: s
   }
   return { pd, rec, out: path.join(root, 'out'), replay: path.join(root, 'replay.mjs'), known: path.join(root, 'known.json'), gate3: {} }
 }
-function run(w: World, tests: string[] = [STUB_PASS], extra: string[] = []) {
-  writeFileSync(path.join(w.pd, 'stub-gate3.json'), JSON.stringify(w.gate3))
+function run(w: World, tests: string[] = [STUB_PASS], extra: string[] = [], extraEnv: Record<string, string> = {}) {
+  if (existsSync(w.pd)) writeFileSync(path.join(w.pd, 'stub-gate3.json'), JSON.stringify(w.gate3))
   const env: NodeJS.ProcessEnv = { ...process.env }
   delete env.C123_PROTOCOL_DOCS
   delete env.C123_GATES_DATA_TESTS
+  Object.assign(env, extraEnv)
   const r = spawnSync(
     TSX,
     [SCRIPT, '--protocol-docs', w.pd, '--recordings', w.rec, '--out', w.out, '--data-gate-tests', tests.join(','),
@@ -211,6 +213,14 @@ describe('npm run gates (#313)', () => {
     expect(r.stdout).toMatch(/step 1 data-gate tests: PASS/)
     expect(r.stdout).toMatch(/step 2 gate 2: PASS/)
     expect(r.stdout).toMatch(/step 3 gate 3: PASS/)
+  }, T)
+
+  it('#313 finding 311: step 1 runs the data-gate files with C123_PROTOCOL_DOCS set to the --protocol-docs dir, overriding an inherited value', () => {
+    const w = world()
+    const seen = path.join(path.dirname(w.pd), 'env-seen.txt')
+    const r = run(w, [STUB_ENV], [], { C123_GATES_STUB_OUT: seen, C123_PROTOCOL_DOCS: '/nonexistent/other-protocol-docs' })
+    expect(r.status, r.all).toBe(0)
+    expect(readFileSync(seen, 'utf8')).toBe(w.pd)
   }, T)
 
   it('#313 row 4: a clean protocol-docs checkout is reported dirty: no', () => {
