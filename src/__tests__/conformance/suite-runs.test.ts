@@ -39,15 +39,15 @@ describe('the real vectors.test.ts in a child vitest (issue #200 rows 1, 2, 5; r
   const ids = serverVectors().map((v) => `vector ${v.id}`);
   const suite = (strict: boolean) => child(resolve(here, 'fixtures/suite-vitest.config.ts'), root, strict);
 
-  it('normal run: exactly the 98 server vectors, each one reads passed, exit 0', () => {
+  it('normal run: exactly the 99 server vectors, each one reads passed, exit 0', () => {
     const { exit, results } = suite(false);
     expect(results.map((r) => r.title).sort()).toEqual([...ids].sort());
-    expect(results.length).toBe(98);
+    expect(results.length).toBe(99);
     expect(results.filter((r) => r.status !== 'passed').map((r) => r.title)).toEqual([]);
     expect(exit).toBe(0);
   }, 120_000);
 
-  it('VECTORS_STRICT=1: exactly the 98 titles again, the ledger is empty so nothing differs from a normal run: all passed, exit 0', () => {
+  it('VECTORS_STRICT=1: exactly the 99 titles again, the ledger is empty so nothing differs from a normal run: all passed, exit 0', () => {
     expect(loadExpectedRed()).toEqual([]);
     const { exit, results } = suite(true);
     expect(results.map((r) => r.title).sort()).toEqual([...ids].sort());

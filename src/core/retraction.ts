@@ -92,6 +92,7 @@ export function carriesContradicted(a: AttemptState, row: Row): boolean {
   return a.held.some((c) => (finish !== undefined && c.finishTime !== null ? finish === c.finishTime : time !== undefined && time === c.runSeconds));
 }
 
+const XML_ONLY_CONTRADICTED: ReadonlySet<string> = new Set(['countingRun']);
 const CONTRADICTED_FIELDS = ['outcome', 'placement', 'pairTotal', 'countingRun'] as const;
 
 /**
@@ -111,8 +112,11 @@ export function contradict(s: CoreState, a: AttemptState, el: Element, seq: numb
     const fs = a.slots.get(f);
     if (fs === undefined) continue;
     delete fs.xml;
+    delete fs.tcp;
     delete fs.inference;
-    fs.tcp = marker(s, el, 'tcp', seq, null);
+    // an xml-only field (INV-2 rule 3) is never a tcp observation: its not-yet is the xml source's own latest observation
+    const source: Source = XML_ONLY_CONTRADICTED.has(f) ? 'xml' : 'tcp';
+    fs[source] = marker(s, el, source, seq, null);
   }
   const st = fieldSlots(a.slots, 'status');
   delete st.xml;
