@@ -52,8 +52,8 @@ as recorded), the INV-2d lift, placement only when ranked, no standing re-send o
 fields provisional while run 2 runs, `status` never provisional, an Attempt unstaged before its start,
 and a first-run row wiped in place (the recorded jury re-run).
 
-**104 vectors:** 91 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
-needed, not a target. **c123-server runs 98 of them, live-mini-server 23** (§1, "Which vectors each
+**105 vectors:** 92 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
+needed, not a target. **c123-server runs 99 of them, live-mini-server 23** (§1, "Which vectors each
 component runs"); 17 run in both suites.
 
 **Round 14** (2026-11-05, server#200) stated that split, made the two live lists total over every tag,
@@ -475,7 +475,7 @@ check, readable under its own `run`) is not asserted.
 | `left-without-finish` | `left-without-finish-observed-not-dnf` | 1 |
 | INV-7 (retraction) | `retraction-vanished-row-first-run`, `-dns-cleared-then-races`, `-start-list-mode-clears-all`, `-does-not-touch-inference`, `-second-run-time-empty-keeps-placement`, `-from-xml-row-cleared`, `-first-run-row-present-empty`; the guard: `retraction-xml-guard-rewrite-before-push`; round 20: `inv7-guard-against-redelivered-tcp-row` | 9 |
 | INV-1 against retraction (omission is not absence) | `retraction-not-from-fragment`, `retraction-not-in-other-race-snapshot` | 2 |
-| INV-2d (contradiction by the on-course stream; the lift) | `contradiction-oncourse-running-again`, `contradiction-lift-keeps-stale-rows-unpresented` | 2 |
+| INV-2d (contradiction by the on-course stream; the lift) | `contradiction-oncourse-running-again`, `contradiction-lift-keeps-stale-rows-unpresented`; #314: `contradiction-leaves-no-tcp-marker-on-xml-only-field` | 3 |
 | Marks over time; half-corrections | `status-overrides-time`, `half-correction-snapshot-duplicate-finish` | 2 |
 | Re-baseline | `rebaseline-discards-stale-tcp-and-rebuilds-from-xml`, `rebaseline-keeps-writes-and-generation` | 2 |
 | Live tier: explicit reset, bare values wrapped, deletion, on-course set and running state, classification rows | `live-explicit-not-yet-resets-field`, `live-bare-value-wrapped-as-bridge`, `live-attempt-deleted`, `live-oncourse-set-replaced-whole`, `live-running-then-finished-latest-wins`, `live-classification-rows-replaced-whole` | 6 |
