@@ -163,7 +163,10 @@ export function leave(s: CoreState, a: AttemptState, el: Element): void {
   if (cur === 'finished' || a.gen.finish !== undefined) return;
   // §3.2, INV-1: a finish or a mark presented from a results table has no way back to `left-without-finish`
   const shown = presentStatus(a.slots.get('status'));
-  if (shown?.kind === 'row' && (shown.value === 'finished' || isMark(shown.value))) return;
+  if (shown?.kind === 'row' && (shown.value === 'finished' || isMark(shown.value))) {
+    delete fieldSlots(a.slots, 'outcome').inference; // the stream's `running` goes with the listing; `status` stays
+    return;
+  }
   const seq = tick(s);
   if (cur === 'on-course' || a.gen.start !== undefined) {
     setStream(s, a, el, 'left-without-finish', seq);
