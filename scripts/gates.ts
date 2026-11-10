@@ -93,7 +93,7 @@ const verdicts: boolean[] = []
 out('running step 1: data-gate tests')
 const jsonFile = path.join(outDir, 'data-gate-tests.json')
 const t = spawnSync(TSX.replace(/tsx$/, 'vitest'), ['run', '--project', 'tools', ...testFiles, '--reporter=default', '--reporter=json', `--outputFile.json=${jsonFile}`],
-  { cwd: ROOT, stdio: ['ignore', 'inherit', 'inherit'] })
+  { cwd: ROOT, stdio: ['ignore', 'inherit', 'inherit'], env: { ...process.env, C123_PROTOCOL_DOCS: pd } })
 let skips = -1
 try {
   const j = JSON.parse(readFileSync(jsonFile, 'utf8')) as { numPendingTests?: number; numTodoTests?: number }
