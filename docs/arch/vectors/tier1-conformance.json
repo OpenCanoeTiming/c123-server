@@ -3852,6 +3852,463 @@
       }
     },
     {
+      "id": "contradiction-leaves-no-tcp-marker-on-xml-only-field",
+      "invariant": "INV-2d",
+      "description": "A contradicted finish takes countingRun to not-yet (INV-2d); countingRun is XML-only (INV-2 rule 3), so no tcp observation of it exists for rule 2 to prefer: it stays not-yet through the lift by the real TCP row, and the next XML row that does not carry the contradicted finish presents it again, source xml. Recorded nkz-19so K1M_BR2_19:67 (#314, opponent finding 13): XML BetterRunNr 1 restated at 09:37:12.135Z (first stated 07:50:23.567Z), false TCP finish 9.16 at 09:37:48.972Z, stream finish at 09:37:49.229Z, contradiction at 09:38:00.824Z, snapshot of 09:38:22.255Z carrying the false finish and BetterRunNr 2 (unpresented whole), re-pushed false row at 09:39:05.373Z, real finish 91.83 at 09:39:11.621Z, snapshot of 09:39:32.365Z with the real finish and BetterRunNr 1. The run-2 penalty the later snapshot carries is elided so the vector pins countingRun alone.",
+      "context": {
+        "attemptId": "K1M_BR2_19:67",
+        "phase": "K1M_BR2_19",
+        "tcpConnectedThroughout": true,
+        "xmlPollIntervalSeconds": 5
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR2_19",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "67",
+                "placement": {
+                  "rank": 25,
+                  "order": 25
+                },
+                "pairTotal": 89.82,
+                "countingRun": 1,
+                "timeEmpty": true
+              }
+            ]
+          },
+          "observedAt": "2026-09-19T09:37:12.135Z"
+        },
+        {
+          "ingestSeq": 2,
+          "attemptId": "K1M_BR2_19:67",
+          "field": "onCourse",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-19T09:37:29.973Z",
+          "value": {
+            "dtStart": null,
+            "dtFinish": null
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 3,
+          "attemptId": "K1M_BR2_19:67",
+          "field": "onCourse",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-19T09:37:39.298Z",
+          "value": {
+            "dtStart": "2026-09-19T09:37:39.440Z",
+            "dtFinish": null
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 4,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR2_19",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "67",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 9.16,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 9.16
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "pairTotal": 9.16,
+                "judgingComplete": true
+              }
+            ]
+          },
+          "observedAt": "2026-09-19T09:37:48.972Z"
+        },
+        {
+          "ingestSeq": 5,
+          "attemptId": "K1M_BR2_19:67",
+          "field": "onCourse",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-19T09:37:49.229Z",
+          "value": {
+            "dtStart": "2026-09-19T09:37:39.440Z",
+            "dtFinish": "2026-09-19T09:37:48.600Z"
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 6,
+          "attemptId": "K1M_BR2_19:67",
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-19T09:37:49.229Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 9.16,
+            "penaltySeconds": 0,
+            "totalSeconds": 9.16
+          },
+          "confidence": "inferred",
+          "eventTime": "2026-09-19T09:37:48.600Z"
+        },
+        {
+          "ingestSeq": 7,
+          "attemptId": "K1M_BR2_19:67",
+          "field": "onCourse",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-19T09:38:00.824Z",
+          "value": {
+            "dtStart": "2026-09-19T09:37:39.440Z",
+            "dtFinish": null
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 8,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR2_19",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "67",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 9.16,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 9.16
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "pairTotal": 9.16,
+                "judgingComplete": true,
+                "countingRun": 2,
+                "finishTime": "2026-09-19T09:37:48.600Z"
+              }
+            ]
+          },
+          "observedAt": "2026-09-19T09:38:22.255Z"
+        },
+        {
+          "ingestSeq": 9,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR2_19",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "67",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 9.16,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 9.16
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "pairTotal": 9.16,
+                "judgingComplete": true
+              }
+            ]
+          },
+          "observedAt": "2026-09-19T09:39:05.373Z"
+        },
+        {
+          "ingestSeq": 10,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR2_19",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "67",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 91.83,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 91.83
+                },
+                "placement": {
+                  "rank": 25,
+                  "order": 25
+                },
+                "pairTotal": 89.82,
+                "judgingComplete": true
+              }
+            ]
+          },
+          "observedAt": "2026-09-19T09:39:11.621Z"
+        },
+        {
+          "ingestSeq": 11,
+          "attemptId": "K1M_BR2_19:67",
+          "field": "onCourse",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-19T09:39:11.876Z",
+          "value": {
+            "dtStart": "2026-09-19T09:37:39.440Z",
+            "dtFinish": "2026-09-19T09:39:11.270Z"
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 12,
+          "attemptId": "K1M_BR2_19:67",
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-19T09:39:11.876Z",
+          "value": {
+            "kind": "duration",
+            "runSeconds": 91.83,
+            "penaltySeconds": 0,
+            "totalSeconds": 91.83
+          },
+          "confidence": "inferred",
+          "eventTime": "2026-09-19T09:39:11.270Z"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 0,
+          "expect": {
+            "countingRun": {
+              "state": "known",
+              "value": 1,
+              "source": "xml",
+              "provisional": false
+            },
+            "placement": {
+              "state": "known",
+              "value": {
+                "rank": 25,
+                "order": 25
+              }
+            },
+            "pairTotal": {
+              "state": "known",
+              "value": 89.82
+            }
+          }
+        },
+        {
+          "afterGivenIndex": 2,
+          "expect": {
+            "status": {
+              "state": "known",
+              "value": "on-course"
+            },
+            "countingRun": {
+              "state": "known",
+              "value": 1,
+              "source": "xml",
+              "provisional": true
+            }
+          }
+        },
+        {
+          "afterGivenIndex": 3,
+          "expect": {
+            "status": {
+              "state": "known",
+              "value": "finished"
+            },
+            "outcome": {
+              "state": "known",
+              "value": {
+                "kind": "duration",
+                "totalSeconds": 9.16
+              }
+            },
+            "placement": {
+              "state": "known",
+              "value": {
+                "rank": 1,
+                "order": 1
+              },
+              "provisional": false
+            },
+            "pairTotal": {
+              "state": "known",
+              "value": 9.16
+            },
+            "countingRun": {
+              "state": "known",
+              "value": 1,
+              "source": "xml",
+              "provisional": true
+            }
+          }
+        },
+        {
+          "afterGivenIndex": 6,
+          "expect": {
+            "status": {
+              "state": "known",
+              "value": "on-course"
+            },
+            "placement": {
+              "state": "not-yet"
+            },
+            "pairTotal": {
+              "state": "not-yet"
+            },
+            "countingRun": {
+              "state": "not-yet"
+            },
+            "diagnostics": [
+              {
+                "kind": "contradicted-finish",
+                "attemptId": "K1M_BR2_19:67",
+                "finishTime": "2026-09-19T09:37:48.600Z",
+                "runSeconds": 9.16
+              }
+            ]
+          }
+        },
+        {
+          "afterGivenIndex": 7,
+          "expect": {
+            "status": {
+              "state": "known",
+              "value": "on-course"
+            },
+            "placement": {
+              "state": "not-yet"
+            },
+            "countingRun": {
+              "state": "not-yet"
+            }
+          }
+        },
+        {
+          "afterGivenIndex": 8,
+          "expect": {
+            "status": {
+              "state": "known",
+              "value": "on-course"
+            },
+            "countingRun": {
+              "state": "not-yet"
+            }
+          }
+        },
+        {
+          "afterGivenIndex": 11,
+          "expect": {
+            "status": {
+              "state": "known",
+              "value": "finished"
+            },
+            "outcome": {
+              "state": "known",
+              "value": {
+                "kind": "duration",
+                "totalSeconds": 91.83
+              }
+            },
+            "placement": {
+              "state": "known",
+              "value": {
+                "rank": 25,
+                "order": 25
+              },
+              "provisional": false
+            },
+            "pairTotal": {
+              "state": "known",
+              "value": 89.82,
+              "provisional": false
+            },
+            "countingRun": {
+              "state": "not-yet"
+            },
+            "diagnostics": []
+          }
+        }
+      ],
+      "then": [
+        {
+          "ingestSeq": 13,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR2_19",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "67",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 91.83,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 91.83
+                },
+                "placement": {
+                  "rank": 25,
+                  "order": 25
+                },
+                "pairTotal": 89.82,
+                "judgingComplete": true,
+                "countingRun": 1,
+                "finishTime": "2026-09-19T09:39:11.270Z"
+              }
+            ]
+          },
+          "observedAt": "2026-09-19T09:39:32.365Z"
+        }
+      ],
+      "expect": {
+        "countingRun": {
+          "state": "known",
+          "value": 1,
+          "source": "xml",
+          "provisional": false
+        },
+        "status": {
+          "state": "known",
+          "value": "finished"
+        },
+        "outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "totalSeconds": 91.83
+          }
+        },
+        "placement": {
+          "state": "known",
+          "value": {
+            "rank": 25,
+            "order": 25
+          }
+        },
+        "pairTotal": {
+          "state": "known",
+          "value": 89.82
+        },
+        "diagnostics": []
+      }
+    },
+    {
       "id": "status-overrides-time",
       "invariant": "marks",
       "description": "A row carrying a mark and a time presents no-result: a duplicate finish was resolved upstream by a DNF while both rows kept the time.",
