@@ -1,1 +1,50 @@
-[]
+[
+  {
+    "recording": "jarni-ne-do",
+    "attemptId": "K1M_BR2_19:65",
+    "field": "TotalRnk",
+    "issue": "OpenCanoeTiming/c123-protocol-docs#43"
+  },
+  {
+    "recording": "jarni-ne-do",
+    "attemptId": "K1M_BR2_19:67",
+    "field": "TotalRnk",
+    "issue": "OpenCanoeTiming/c123-protocol-docs#43"
+  },
+  {
+    "recording": "jarni-ne-do",
+    "attemptId": "K1M_BR2_19:76",
+    "field": "TotalRnk",
+    "issue": "OpenCanoeTiming/c123-protocol-docs#43"
+  },
+  {
+    "recording": "jarni-ne-do",
+    "attemptId": "K1M_BR2_19:77",
+    "field": "TotalRnk",
+    "issue": "OpenCanoeTiming/c123-protocol-docs#43"
+  },
+  {
+    "recording": "jarni-ne-do",
+    "attemptId": "K1M_BR2_19:87",
+    "field": "TotalTotal",
+    "issue": "OpenCanoeTiming/c123-protocol-docs#43"
+  },
+  {
+    "recording": "jarni-ne-do",
+    "attemptId": "K1M_BR2_19:87",
+    "field": "TotalRnk",
+    "issue": "OpenCanoeTiming/c123-protocol-docs#43"
+  },
+  {
+    "recording": "jarni-ne-do",
+    "attemptId": "K1M_BR2_19:114",
+    "field": "TotalRnk",
+    "issue": "OpenCanoeTiming/c123-protocol-docs#43"
+  },
+  {
+    "recording": "jarni-ne-do",
+    "attemptId": "K1M_BR2_19:125",
+    "field": "TotalRnk",
+    "issue": "OpenCanoeTiming/c123-protocol-docs#43"
+  }
+]
