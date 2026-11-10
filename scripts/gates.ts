@@ -9,7 +9,7 @@
  */
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -43,6 +43,48 @@ const git = (cwd: string, ...a: string[]): { sha: string; dirty: string } => {
   return { sha: head.status === 0 ? head.stdout.trim() : 'unknown', dirty: st.status === 0 && st.stdout.trim() === '' ? 'no' : 'yes' }
 }
 const out = (s: string): void => void process.stdout.write(s + '\n')
+// Generous per-child limits (RPi): a child that runs past its limit is killed and its step FAILS, naming the child.
+const LIMIT_TESTS_MS = 3600_000
+const LIMIT_CHILD_MS = 1800_000
+const BUF = 1 << 28
+type Run = ReturnType<typeof spawnSync>
+/** Runs a child with a time limit; prints its elapsed time; returns the result and, when it timed out or died on a signal, why. */
+const child = (what: string, cmd: string, a: string[], opts: Parameters<typeof spawnSync>[2], limit = LIMIT_CHILD_MS): { r: Run; killed?: string } => {
+  const t0 = Date.now()
+  const r = spawnSync(cmd, a, { ...opts, timeout: limit, maxBuffer: BUF })
+  out(`  ${what}: exit ${String(r.status)} after ${((Date.now() - t0) / 1000).toFixed(1)} s`)
+  if (r.status !== null) return { r }
+  const code = (r.error as NodeJS.ErrnoException | undefined)?.code
+  const killed = code === 'ETIMEDOUT' ? `timed out after ${limit / 1000} s` : `ended without an exit code (${code ?? `signal ${String(r.signal)}`})`
+  process.stderr.write(`gates: ${what} ${killed}\n`)
+  return { r, killed }
+}
+/** sha256 of a recording: its manifest, then each chunk file the manifest lists (name and content), streamed. */
+const recordingSha = (dir: string): string => {
+  const h = createHash('sha256')
+  const m = readFileSync(path.join(dir, 'manifest.json'))
+  h.update(m)
+  let chunks: { file?: unknown }[] = []
+  try {
+    const parsed = (JSON.parse(m.toString('utf8')) as { chunks?: unknown }).chunks
+    if (!Array.isArray(parsed)) throw new Error('manifest lists no chunks')
+    chunks = parsed as { file?: unknown }[]
+  } catch (e) {
+    missing(`readable manifest in ${dir} (${(e as Error).message})`)
+  }
+  const buf = Buffer.alloc(8 << 20)
+  for (const c of chunks) {
+    if (typeof c.file !== 'string') missing(`chunk file name in ${path.join(dir, 'manifest.json')}`)
+    const f = path.join(dir, c.file as string)
+    if (!existsSync(f)) missing(`chunk ${c.file as string} of ${dir}`)
+    h.update(`\0${c.file as string}\0`)
+    const fd = openSync(f, 'r')
+    try {
+      for (let n = readSync(fd, buf); n > 0; n = readSync(fd, buf)) h.update(buf.subarray(0, n))
+    } finally { closeSync(fd) }
+  }
+  return h.digest('hex')
+}
 const missing = (what: string): never => {
   process.stderr.write(`gates: prerequisite missing: ${what}\n`)
   process.exit(2)
@@ -74,9 +116,20 @@ try {
   known = []
   missing(`known-differences file ${knownFile} (${(e as Error).message})`)
 }
+for (const k of known) {
+  if (typeof k !== 'object' || k === null || typeof k.issue !== 'string' || k.issue.trim() === '') {
+    missing(`tracking issue in known-differences entry ${JSON.stringify(k)} (${knownFile}); every entry names the issue tracking it`)
+  }
+}
 const outDir = path.resolve(args.get('--out') ?? mkdtempSync(path.join(tmpdir(), 'c123-gates-')))
 mkdirSync(outDir, { recursive: true })
 const testFiles = (args.get('--data-gate-tests') ?? process.env.C123_GATES_DATA_TESTS ?? DATA_GATE_TESTS.join(',')).split(',').filter((s) => s !== '')
+const overrides: string[] = []
+if (args.has('--replay-script') && replayScript !== path.join(ROOT, 'scripts/replay-direct.ts')) overrides.push(`--replay-script ${replayScript}`)
+if (testFiles.join(',') !== DATA_GATE_TESTS.join(',')) {
+  overrides.push(args.has('--data-gate-tests') ? `--data-gate-tests ${testFiles.join(',')}` : `C123_GATES_DATA_TESTS ${testFiles.join(',')}`)
+}
+if (knownFile !== path.join(ROOT, 'scripts/gates/known-differences.json')) overrides.push(`--known-differences ${knownFile}`)
 
 // ---- header
 const server = git(ROOT)
@@ -84,7 +137,13 @@ const pdGit = git(pd)
 out(`server commit: ${server.sha} dirty: ${server.dirty}`)
 out(`protocol-docs path: ${pd}`)
 out(`protocol-docs commit: ${pdGit.sha} dirty: ${pdGit.dirty}`)
-for (const n of NAMES) out(`recording ${n} sha256 ${sha(readFileSync(path.join(recDirs.get(n)!, 'manifest.json')))}`)
+out(`recordings path: ${recRoot}`)
+for (const n of NAMES) out(`recording ${n} sha256 ${recordingSha(recDirs.get(n)!)}`)
+out(`known-differences: ${knownFile} sha256 ${sha(readFileSync(knownFile))}`)
+out(`data-gate tests: ${testFiles.join(',')}`)
+out(`replay script: ${replayScript}`)
+for (const o of overrides) out(`override: ${o}`)
+if (overrides.length > 0) out('inputs: NON-DEFAULT (see override lines)')
 out(`output dir: ${outDir}`)
 
 const verdicts: boolean[] = []
@@ -92,8 +151,9 @@ const verdicts: boolean[] = []
 // ---- step 1: data-gate tests, no skips
 out('running step 1: data-gate tests')
 const jsonFile = path.join(outDir, 'data-gate-tests.json')
-const t = spawnSync(TSX.replace(/tsx$/, 'vitest'), ['run', '--project', 'tools', ...testFiles, '--reporter=default', '--reporter=json', `--outputFile.json=${jsonFile}`],
-  { cwd: ROOT, stdio: ['ignore', 'inherit', 'inherit'], env: { ...process.env, C123_PROTOCOL_DOCS: pd } })
+rmSync(jsonFile, { force: true })
+const { r: t } = child('vitest', TSX.replace(/tsx$/, 'vitest'), ['run', '--project', 'tools', ...testFiles, '--reporter=default', '--reporter=json', `--outputFile.json=${jsonFile}`],
+  { cwd: ROOT, stdio: ['ignore', 'inherit', 'inherit'], env: { ...process.env, C123_PROTOCOL_DOCS: pd } }, LIMIT_TESTS_MS)
 let skips = -1
 try {
   const j = JSON.parse(readFileSync(jsonFile, 'utf8')) as { numPendingTests?: number; numTodoTests?: number }
@@ -111,18 +171,23 @@ for (const n of NAMES) {
   const dir = recDirs.get(n)!
   const log = path.join(outDir, `${n}.steps.jsonl`)
   out(`step 2: replaying ${n} (${new Date().toISOString()})`)
-  const r = spawnSync(TSX, ['--max-old-space-size=3072', replayScript, '--recording', dir, '--out', log], { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] })
+  rmSync(log, { force: true })
+  const { r, killed: rk } = child(`replay of ${n}`, TSX, ['--max-old-space-size=3072', replayScript, '--recording', dir, '--out', log], { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] })
   if (r.status !== 0 || !existsSync(log)) {
-    out(`step 2: replay of ${n} failed (exit ${String(r.status)})`)
+    out(`step 2: replay of ${n} failed (${rk ?? `exit ${String(r.status)}`})`)
     gate2Failed.push(n)
     continue
   }
   logs.set(n, log)
   out(`step 2: checking ${n}`)
-  const c = spawnSync('node', [checker, log, '--recording', dir], { cwd: ROOT, encoding: 'utf8' })
-  process.stdout.write(c.stdout ?? '')
-  process.stderr.write(c.stderr ?? '')
-  if (c.status === 2 || c.status === null) {
+  // Streamed (not buffered): a run with many violations must still report a FAIL, not overflow into "checker unusable".
+  const { r: c, killed: ck } = child(`gate-2 checker on ${n}`, 'node', [checker, log, '--recording', dir], { cwd: ROOT, stdio: ['ignore', 'inherit', 'inherit'] })
+  if (ck !== undefined) {
+    out(`step 2: gate-2 checker on ${n} ${ck}`)
+    gate2Failed.push(n)
+    continue
+  }
+  if (c.status === 2) {
     process.stderr.write(`gates: gate-2 checker unusable on ${n} (exit ${String(c.status)})\n`)
     out('step 2 gate 2: NOT RUN (checker exit 2)')
     process.exit(2)
@@ -148,12 +213,16 @@ for (const n of NAMES) {
   const base = path.basename(dir)
   const summary = path.join(outDir, `${n}.gate3.json`)
   out(`step 3: comparing ${n}`)
-  const c = spawnSync('node', [comparator, log, '--recording', dir, '--summary', summary], { cwd: ROOT, encoding: 'utf8', maxBuffer: 1 << 28 })
-  if (c.status === 2 || c.status === null) {
-    process.stderr.write(`gates: gate-3 comparator unusable on ${n} (exit ${String(c.status)}): ${c.stderr ?? ''}\n`)
+  rmSync(summary, { force: true }) // a summary not written by this run is never read
+  const { r: c, killed: mk } = child(`gate-3 comparator on ${n}`, 'node', [comparator, log, '--recording', dir, '--summary', summary], { cwd: ROOT, encoding: 'utf8' })
+  if (c.status !== 0 && c.stderr) process.stderr.write(`gates: gate-3 comparator stderr on ${n}:\n${String(c.stderr)}\n`)
+  if (mk !== undefined) { problems.push(`${n}: gate-3 comparator ${mk}`); continue }
+  if (c.status === 2) {
+    process.stderr.write(`gates: gate-3 comparator unusable on ${n} (exit 2)\n`)
     out('step 3 gate 3: NOT RUN (comparator exit 2)')
     process.exit(2)
   }
+  if (c.status !== 0 && c.status !== 1) { problems.push(`${n}: comparator exit ${String(c.status)} (neither 0 nor 1)`); continue }
   let diffs: Diff[] = []
   try {
     diffs = (JSON.parse(readFileSync(summary, 'utf8')) as { differences: Diff[] }).differences
@@ -165,8 +234,10 @@ for (const n of NAMES) {
   for (const d of diffs) {
     const hit = known.find((k) => (k.recording === n || k.recording === base || k.recording === d.recording) && k.attemptId === d.attemptId && k.field === d.field &&
       (d.field !== 'Gates' || k.gate === undefined || k.gate === d.gate))
-    if (hit) used.add(hit)
-    else problems.push(`${n}: unlisted difference attempt ${d.attemptId} field ${d.field}${d.gate !== undefined ? ` gate ${d.gate}` : ''} xml ${JSON.stringify(d.xml)} presented ${JSON.stringify(d.presented)}`)
+    if (hit) {
+      used.add(hit)
+      out(`tolerated: ${n} ${d.attemptId} ${d.field} ${hit.issue}`)
+    } else problems.push(`${n}: unlisted difference attempt ${d.attemptId} field ${d.field}${d.gate !== undefined ? ` gate ${d.gate}` : ''} xml ${JSON.stringify(d.xml)} presented ${JSON.stringify(d.presented)}`)
   }
 }
 for (const k of known) if (!used.has(k)) problems.push(`stale known-differences entry no longer differs: ${k.recording} ${k.attemptId} ${k.field} (${k.issue})`)
