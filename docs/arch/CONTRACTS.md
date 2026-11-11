@@ -141,8 +141,9 @@ The fields, precisely:
 **Condition 1 in full: the stream's cells and the merged vector.** `gates` is merged cell by cell
 (§4 rule 1), so its envelope needs a rule of its own.
 - **Before a row.** The stream's own gate cells — in Kayak Cross the `faults` built from them —
-  are an inference while no row of the generation stating a result is presented: `confidence: 'inferred'`, never retracted (INV-7). A row states
-  a result by a time or a mark, INV-7's test; cells alone state none.
+  are an inference while no row of the generation stating a result is presented:
+  `confidence: 'inferred'`, never retracted (INV-7). A row states a result by a time or a mark,
+  INV-7's test; cells alone state none.
 - **Once such a row is presented,** the merged vector is that row's observation:
   `confidence: 'authoritative'`, `source` the presented row's. A cell merged in from the stream
   under rule 1's exception does not make the row's vector an inference.

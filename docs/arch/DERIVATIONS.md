@@ -439,7 +439,7 @@ which may be a start-list row a day ahead; its `status` is `not-started` from th
 - A bare `<OnCourse Total="0" Position="0"/>` with no children is upstream's explicit "course empty".
 - An Attempt leaves the list when upstream stops listing it, or on "course empty". **Upstream has
   stopped listing an Attempt when no on-course message names it for `onCourseLeaveAfterSeconds` of
-  ingest time while other TCP messages keep arriving.** The constant is **4 s** (E1; confirmed by the maintainer, 2026-11-06:
+  ingest time while other TCP messages keep arriving.** The constant is **4 s** (E1:
   the whole distribution of unchanged-listing gaps over all seven recordings with no cut-off,
   557,883 pairs, closing §10 item 16). What the distribution shows: 99.87 % of re-listings come
   under 1.5 s; the longest pause with the stream alive that was not a removal is **2.59 s** — eight
