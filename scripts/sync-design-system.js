@@ -1,51 +1,41 @@
 #!/usr/bin/env node
 
 /**
- * Sync timing.css from timing-design-system to admin-ui
+ * Copy the design system's built CSS and fonts into src/admin-ui/vendor/.
+ *
+ * The copy is not committed (see .gitignore). Both servers serve src/admin-ui (dev)
+ * or dist/admin-ui (build, copied by scripts/copy-admin-ui.js) as static files, so the
+ * design system is a build-time input and never a runtime dependency.
  *
  * Runs on:
- * - postinstall (after npm install)
- * - prebuild (before build)
- *
- * Fallback: if timing-design-system not found, keeps existing file (offline mode)
+ * - postinstall: a missing package is a warning (e.g. `npm ci --omit=dev`)
+ * - prebuild (--strict): a missing package fails the build
  */
 
-import { copyFileSync, existsSync, mkdirSync } from 'fs';
+import { cpSync, existsSync, mkdirSync, rmSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = join(__dirname, '..');
+const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+const strict = process.argv.includes('--strict');
 
-// Primary: from npm package (GitHub Packages)
-const SOURCE_PKG = join(projectRoot, 'node_modules', '@opencanoetiming', 'timing-design-system', 'dist', 'timing.css');
-// Fallback: from sibling folder (local development without npm install)
-const SOURCE_LOCAL = join(projectRoot, '..', 'timing-design-system', 'dist', 'timing.css');
-const SOURCE = existsSync(SOURCE_PKG) ? SOURCE_PKG : SOURCE_LOCAL;
-const TARGET = join(projectRoot, 'src', 'admin-ui', 'timing.css');
+// Primary: the npm package (GitHub Packages). Fallback: a sibling checkout that has been built.
+const candidates = [
+  join(projectRoot, 'node_modules', '@opencanoetiming', 'timing-design-system', 'dist'),
+  join(projectRoot, '..', 'timing-design-system', 'dist'),
+];
+const source = candidates.find((dir) => existsSync(join(dir, 'timing.css')));
+const target = join(projectRoot, 'src', 'admin-ui', 'vendor');
 
-function sync() {
-  // Check if source exists
-  if (!existsSync(SOURCE)) {
-    console.log('⚠️  timing-design-system not found at:', SOURCE);
-    console.log('   Keeping existing timing.css (offline mode)');
-    return;
-  }
-
-  // Ensure target directory exists
-  const targetDir = dirname(TARGET);
-  if (!existsSync(targetDir)) {
-    mkdirSync(targetDir, { recursive: true });
-  }
-
-  // Copy file
-  try {
-    copyFileSync(SOURCE, TARGET);
-    console.log('✓ Synced timing.css from timing-design-system');
-  } catch (err) {
-    console.error('✗ Failed to sync timing.css:', err.message);
-    process.exit(1);
-  }
+if (!source) {
+  console.error('timing-design-system dist not found in:\n  ' + candidates.join('\n  '));
+  if (strict) process.exit(1);
+  console.error('Skipping: the admin UI is unstyled until `npm install` provides the package.');
+  process.exit(0);
 }
 
-sync();
+rmSync(target, { recursive: true, force: true });
+mkdirSync(target, { recursive: true });
+cpSync(join(source, 'timing.css'), join(target, 'timing.css'));
+cpSync(join(source, 'fonts'), join(target, 'fonts'), { recursive: true });
+console.log('✓ Synced timing.css and fonts from timing-design-system to src/admin-ui/vendor/');

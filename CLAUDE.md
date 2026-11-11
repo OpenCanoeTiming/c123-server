@@ -164,8 +164,8 @@ Application saves user settings to file to survive restart:
 4. Consider contributing missing components back to design system
 
 ```
-../timing-design-system/dist/timing.css  # Source
-src/admin-ui/timing.css                   # Auto-synced copy
+node_modules/@opencanoetiming/timing-design-system/dist/  # Source (devDependency, ^1.1)
+src/admin-ui/vendor/                                      # timing.css + fonts, copied by scripts/sync-design-system.js on postinstall/prebuild; gitignored
 ```
 
 ---
