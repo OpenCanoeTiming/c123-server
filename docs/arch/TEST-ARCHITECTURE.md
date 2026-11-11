@@ -118,8 +118,8 @@ cover:
 - run generations;
 - §5's standing assembly.
 
-The count is 104 as of round 20 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
-a thin adapter that feeds the vectors `CONFORMANCE-VECTORS.md` §1 assigns to it (98 and 23; 17 are in
+The count is 105 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
+a thin adapter that feeds the vectors `CONFORMANCE-VECTORS.md` §1 assigns to it (99 and 23; 17 are in
 both) into its own merge function and asserts the result — proving
 both satisfy the same data-defined contract without either depending on the other's code.
 
@@ -185,10 +185,9 @@ window inside it opens with a hydration step holding the core's state at that in
 log gate 2 reads begins where the raw stream begins, not at the hydration** — the checker's memory
 (the generation's recorded row, the carry, properties 5, 10 and 11) is built from the steps before
 the window, which the hydration's GET bodies do not hold — and the hydration step and the window
-bound the published fixture's steps and its `violations` and `exercised` counts (§4; round 24,
-second pass); a window is never a cold start at a later instant of a stream the checker reads from its beginning, since closure,
+bound the published fixture's steps and its `violations` and `exercised` counts (§4); a window is never a cold start at a later instant of a stream the checker reads from its beginning, since closure,
 content age and the carry (properties 5, 8, 11) would then be read over records the core never saw
-(round 24: 9,072 such violations in one window). A cold start at a chosen instant is an excerpt cut
+(9,072 such violations in one window). A cold start at a chosen instant is an excerpt cut
 there, log and raw stream alike. The result is a
 **candidate** domain-state fixture: candidate, not golden, until it passes the three gates below. A
 `/ws` capture of a player-driven server is **not** a candidate (spike S2-6): its `observedAt` values are
@@ -210,11 +209,10 @@ and no recording holds a re-baseline), a stated outage or re-baseline is declare
 inside a stated outage and plays a stated re-baseline as `CONTRACTS.md` §4's unit, the `rebaseline`
 event with the last snapshot read; **the raw stream the gate-2 checker reads omits the same records**,
 the interval taken from the log's `tcp-disconnected`/`tcp-connected` pair, which `source.events`
-restates, so no property is read over records the core was told never arrived (round 24, second
-pass: a cp3-cross outage of 139 records otherwise raised property 8 on a snapshot inside it). Such a fixture is evidence for properties 8 and 13 (`exercised`)
+restates, so no property is read over records the core was told never arrived (a cp3-cross outage of 139
+records otherwise raised property 8 on a snapshot inside it). Such a fixture is evidence for properties 8 and 13 (`exercised`)
 and gate 2 judges it like any other; it is a candidate with a declared input the recording lacked,
-not a synthetic fixture (§4), which carries no raw stream and so exercises only the **D** properties
-(round 24). A non-empty diff fails the candidate outright: a real non-determinism bug (uninitialised
+not a synthetic fixture (§4), which carries no raw stream and so exercises only the **D** properties. A non-empty diff fails the candidate outright: a real non-determinism bug (uninitialised
 state, a race condition) that would otherwise poison every downstream tier silently. Passing proves
 only self-consistency.
 
@@ -227,9 +225,8 @@ re-baseline with its snapshot re-read) — its elements in ingest order, `elemen
 plural in the log, plus any `oncourse-left` the core derived at that message (`DERIVATIONS.md` §4.1,
 §4.8; listed after the message's own elements and verified against the raw stream, never trusted) —
 and the deltas (§7.2 shapes) the unit produced. Where a property names the step's element
-e<sub>i</sub>, the condition holds when one element of the unit satisfies it (round 24: the earlier
-"one ingested element" contradicted §1.6, and a unit's deltas cannot be attributed to one of its
-elements). Elements are classified in `CONFORMANCE-VECTORS.md` §1's own
+e<sub>i</sub>, the condition holds when one element of the unit satisfies it (a unit's deltas cannot be
+attributed to one of its elements). Elements are classified in `CONFORMANCE-VECTORS.md` §1's own
 vocabulary, which the direct-injection path emits beside each step's deltas: an **observation**
 (`attemptId`, `source`, `kind: inference | result-row | operator | fragment`, the fields it carries,
 `run`, `observedAt`, optional `eventTime`); an **event** (`tcp-connected`, `tcp-disconnected`,
@@ -308,7 +305,7 @@ the step index, the Attempt, the field and the property number.
    and, for the stream's own `running` outcome alone, an `oncourse-left` or `oncourse-empty`
    covering the Attempt or a listing of it with `dtStart` empty — the stream withdrawing what it
    alone stated (`DERIVATIONS.md` §4.3, §4.1; `ADR-015` Revision 4), `status` the leave's
-   `left-without-finish` or the listing's `at-start`, every other field unchanged (round 26).
+   `left-without-finish` or the listing's `at-start`, every other field unchanged.
    `unavailable` appears only with a closed reason, and only at a step that carries the field for the
    Attempt (property 3) or at a scope snapshot of its race, never at a connection event, a `fragment`
    or by itself (INV-3): a `not-configured` decided from `SourceStatus` or the snapshot
@@ -371,16 +368,16 @@ the step index, the Attempt, the field and the property number.
    `null` at a results-table step — and at the listing that increments `run` the vector is the new
    generation's, named `not-yet` or the listing's own cells in that delta (property 10, `ADR-013`),
    the previous generation's row holding nothing of it, so (b) reads the generation the delta
-   presents (round 27g, a checker ordering gap, not a core finding: a checker that still held run 1's row
-   at the increment reported 11 cells of K1W_BR1_18:24) — upstream's own withdrawal, the stream's listing blanking a cell
+   presents (a checker that still held run 1's row at the increment reported 11 cells of
+   K1W_BR1_18:24: its own ordering gap, not a core finding) — upstream's own withdrawal, the stream's listing blanking a cell
    it judged, is presented wherever no presented row of the generation holds that cell judged: the
    presented row's cell blank, or no row of the generation yet (recorded: nkz-19so K1M_BR2_19:79,
-   cells 14–17 judged 25 s into the run and blank 11 s later, mid-run, no row; round 23),
+   cells 14–17 judged 25 s into the run and blank 11 s later, mid-run, no row),
    `provisional` recomputed; a row's judged cell stands against the stream blank (INV-2 rule 1; recorded:
    jarni-so-odp C1M_BR1_18:26 cell 19 at 12:17:19.030, the row `0`) (D4; property 11's list;
    recorded: nkz-19so C1W_BR1_19:40 cell 16 at 08:38:18.181, the presented TCP row — the row rule 2
    presents, not the latest row of either source — blank while the
-   XML row still holds `0`; round 21, second pass); after it has left, and until a
+   XML row still holds `0`); after it has left, and until a
    re-listing of the generation, cells change only at a results-table
    step. (c) A field presented from `tcp` flips to `xml` only: after a `tcp-disconnected` that
    followed the step that ingested the presented `tcp` observation; by rule 2's mark exception
@@ -438,8 +435,8 @@ the step index, the Attempt, the field and the property number.
     presents it as `1` (`CONTRACTS.md` §2.6, 1-based; `ADR-013` "it starts at 1"; a vector's `run`
     observation states a generation directly, `CONFORMANCE-VECTORS.md` §1, and is outside this
     clause; how a restarted server, whose §2.10 store and the live tier key by the generation, learns
-    the current one is open, `DERIVATIONS.md` §10 item 25), and it increments **by one** — each
-    trigger is one generation (round 27i) — only at an on-course listing
+    the current one is not solved, an accepted risk, `DERIVATIONS.md` §10 item 25), and it increments
+    **by one** — each trigger is one generation — only at an on-course listing
     of the Attempt that carries a start different from the generation's recorded start **and no
     finish, while the generation is recorded** (`DERIVATIONS.md` §4.11's two terms, tracked by the
     checker from the raw stream and the rows: the recorded start is the generation's first listed
@@ -450,11 +447,11 @@ the step index, the Attempt, the field and the property number.
     stream alone). In that same delta
     every run-scoped field is named — none omitted — `not-yet`, or the value the same unit's listing
     gives it (`courseOrder`, a `running` outcome, the stream's cells; `CONTRACTS.md` §1.6: one
-    message per unit; round 24), and `status` is `at-start` or
+    message per unit), and `status` is `at-start` or
     `on-course`. **A listing that changes the start otherwise is a start correction:** `run`, every
     presented results-table value and `placement` are unchanged at that step (value and `source`,
     as property 5 reads "changes"; the finish `eventTime` `DERIVATIONS.md` §4.4 lets the listing
-    attach to the row's unchanged outcome is no change; round 26); `status` and the
+    attach to the row's unchanged outcome is no change); `status` and the
     on-course inferences are the listing's, as at any listing (`DERIVATIONS.md` §4.1, §4.3:
     `running` takes its `Time`); and the generation's recorded start is the listing's from then
     on. A listing with an empty start changes neither `run` nor the recorded start; with `dtFinish`
@@ -547,17 +544,16 @@ the step index, the Attempt, the field and the property number.
     message of a first-Phase scope does not carry), the heat's, and for an age category that
     category's placed entries (`CONTRACTS.md` §5 steps 2–4; the checker assembles them from its own
     held Attempts, not from the message alone; recorded: cp3-cross at a stated 09:05Z re-baseline,
-    `heat:WX1_XS_26:1/all` with its heat's placements in no XML row, rebuilt by the next TCP push;
-    round 25 and its second pass). Across it, `entry`, `bib`, `run`,
+    `heat:WX1_XS_26:1/all` with its heat's placements in no XML row, rebuilt by the next TCP push). Across it, `entry`, `bib`, `run`,
     `startOrder`, `heat`, `startLane`, every check and flag, and every `WriteRequest` are unchanged;
     afterwards every presented value of a field §4 step 1 discards has `source` `tcp` or `xml`, and
     none of those has `source: tcp` until a `tcp` observation of it follows (`courseOrder`, `timeToBeat`
     and `status`'s lifecycle values survive the re-baseline with their `tcp` source; `splits` and a
-    `running` outcome are on step 1's list and do not; round 24).
+    `running` outcome are on step 1's list and do not).
 14. **On-course set (§7.1).** The set is upstream's list. An `attemptId` enters `oncourse.updated` only
     at an on-course listing of that Attempt and leaves only at an `oncourse-left` or `oncourse-empty`
     element — the `oncourse-left` being the one the core derived at that step's TCP message, checked
-    against the raw stream by `DERIVATIONS.md` §4.1's rule (round 24) — never because its `status`
+    against the raw stream by `DERIVATIONS.md` §4.1's rule — never because its `status`
     became `finished` or a mark, which keep it listed until
     closure. **D:** every listed Attempt has a presented status other than `not-started` and
     `left-without-finish`; the list is ordered by presented `courseOrder` ascending, Attempts without
@@ -739,7 +735,7 @@ display bug that slipped through the earlier tiers.
 **The real process against the replay** (`DECISIONS/ADR-017` item 5, Revision 7): the process runs
 on the player's clock, rate and origin given at start; the comparison strips the stamps and `source`
 on `run`, nothing else; its step log is a tier-4 artefact, gate 2 run on it with
-`--recording` at 1× only (round 27).
+`--recording` at 1× only.
 
 **The one thing today's tooling cannot yet give this tier:** a realistic write-echo. Checked directly
 against prior research in this engagement — `player.js` explicitly does not emulate the write-side
@@ -821,7 +817,7 @@ directly from a `CONTRACTS.md` clause or an invariant, the same way tier 1's vec
 `source.sha256` is the excerpt's `data.jsonl` checksum, which must not include free text such as a
 label (spike S2-3). Where the replay began before the window (§3.2), `source.input` names the stream
 replayed, `<recording>#<fromMs>-<toMs>` from the recording's first record to the window's end, with
-its own `sha256`; like `events`, prose only until the schema names it (round 24, second pass).
+its own `sha256`; like `events`, prose only until the schema names it.
 
 **`domainLayerVersion` has two axes** (`DECISIONS/ADR-017` D5). `contract` is the version of the §7/§8
 wire shapes: the server's wire-protocol `VERSION` once the new contract is implemented (it leaves

@@ -19,49 +19,10 @@ The decisions behind it are `DECISIONS/ADR-011` to `ADR-014`, plus dated revisio
 Review history that used to live inline in this document now lives in those ADRs. This document
 states the contract as it now stands.
 
-**Revision, 2026-11-05 (contract round 13, server#199).** Pins shapes only; no behaviour changes.
-Every wire shape that was prose now has a `ts` block, so the contract package's drift test covers it:
-`ErrorEnvelope` with `details` per code (§1.4), `ResultMark` (§2.6), `PhaseStatus` (§3.1),
-`Diagnostic` (§4), the on-site serialisations `OnsitePerson`/`OnsiteEntry`/`OnsiteEvent` (§7), the §7.1
-response types, `WsMessage` (§7.2), the §7.3/§7.4 request bodies, the §8.3 push bodies and responses,
-`LivePhase`, and the §8.4 public response, stream and heartbeat types. `error.schema.json` now
-enforces the per-code `details`; `fixture-admitted.schema.json` compiles under a strict validator.
-
-**Revision, 2026-11-05 (contract round 14, server#200).** One behavioural rule, stated where it was
-implied: **the unit of ingest is one upstream message** (§1.6). Every observation one TCP message,
-XML snapshot, operator write, connection event or re-baseline yields (on live, one §8.3 request) is
-merged before anything is emitted, and then at most one message per changed resource is sent; a core
-may apply observations one at a time but notifies per unit. No wire shape changed.
-
-**Revision, 2026-11-05 (contract round 17, findings server#240, #243, #247 and the #201 review).**
-Rulings the parsers and the gate-2 checker needed before the merge core (#203). Three shapes move:
-`PairRole.siblingPhaseId` and `ClassificationRow.decidedIn` (so `StandingEntry.decidedIn`) become
-nullable (§2.4, §2.7, §8.3), and a member's `externalId: null` is served as `null` on both tiers,
-never as a per-member envelope (§1.2, §2.5, §8.3). Two rules are stated where they were implied: an
-untimed placed row is `finished`, and a Kayak Cross time trial's `duration` carries
-`penaltySeconds: 0` (§2.6). INV-2 rule 3 names its fields (§4); TCP's course refresh is scoped
-(§2.12). `DERIVATIONS.md` §0.5 states which derivations are the parser's and which the core's.
-
-**Revision, 2026-11-05 (contract round 18, the #202 and #201 reviews).** Rulings the XML reader and
-the merge core (#203) needed. **Content age is no longer "detection minus the poll interval":** an
-`xml` observation's content age is the last moment the reader saw the file in its previous state,
-carried on the `xml-rewrite-detected` event as `changedAfter` (§4 INV-2c, INV-7; defined in
-`DERIVATIONS.md` §0.3). In the steady state that is the previous poll, one interval before
-detection, so nothing already asserted changes; `null` when no stat since start or `setPath` showed
-a different signature, and **`null` fails every content-age comparison** (INV-2c). The file's
-modification time is never an input. `xml.lastRewriteDetectedAt` and the `xml` states are defined
-for an invalid and for an empty file (§2.8). A table with no rows is a scope snapshot in start-list
-mode; an empty XML table or an absent XML row states nothing (§4 INV-7); a classification snapshot
-carrying rows replaces rows whole under INV-2c's guard alone, and one carrying none leaves the last
-built Standing as it is (`DERIVATIONS.md` §4.10; maintainer, 2026-11-06); `sectorEndsAfterGate` is
-strictly increasing (§2.12). No wire shape changed. (Second pass, 2026-11-06, after review.)
-
-**Revision, 2026-11-06 (contract round 22, from implementing the Standing, server#205).** Two
-rulings in §5. The ranked value an entry is compared on, in `behindSeconds` and in the
-`order-disagreement` check, is the value its placement is based on: `pairTotal` in both standings of
-a second-run Phase, `result.totalSeconds` otherwise (steps 6, 7). A `pair` standing's "known"
-first run is the Phase's stated `pair`; a Phase no element has described reads from its id, a
-harness convention of `CONFORMANCE-VECTORS.md` §1 (step 1). No wire shape changed.
+**Revisions since** (contract rounds 13 to 29, 2026-11-05 to 2026-11-09, and the maintainer's
+decisions that followed) are recorded in `DECISIONS/LOG.md`: one row per round, with the question,
+the case that raised it and what it changed. This document states the contract as it now stands and
+carries no ruling history; where a clause's provenance matters to a reader, it names its row.
 
 ---
 
@@ -368,9 +329,10 @@ discipline: a same-key retry "never submits a second command upstream" (above), 
 "persists until an echo … is ingested" (§2.9), neither of which a restart may undo — a key forgotten
 at a restart would let the retry send a second command or raise a second flag, and a forgotten
 `pending` write would be settled by nothing. The map may be dropped after the 24 hours, a later retry
-being a new correction. A durable `WriteRequest` carries `target.run`, so its survival across a restart
-is sound once `DERIVATIONS.md` §10 item 25 (the generation across a restart) is ruled. A missing header is
-`400 validation-failed`, `details: [{ field: 'Idempotency-Key', issue: 'missing' }]` (round 28).
+being a new correction. A durable `WriteRequest` carries `target.run`, and the generation itself
+is not persisted: a restart during a re-run is an accepted risk, the operator resolving a pending
+correction by hand (`DERIVATIONS.md` §10 item 25; maintainer, 2026-11-10). A missing header is
+`400 validation-failed`, `details: [{ field: 'Idempotency-Key', issue: 'missing' }]`.
 
 ### 1.6 Snapshot and subscription ordering
 
@@ -383,7 +345,7 @@ re-baseline with the snapshot it re-reads (§4); on the live tier, one §8.3 req
 anything is emitted, and then at most one message per changed resource is sent: §7.2's
 `attempt.updated` carries every field that unit changed, never one message per field. A core may
 apply observations one at a time, but it notifies per unit (`CONFORMANCE-VECTORS.md` §1, "Ingest
-units"), and a replay step is one unit (`TEST-ARCHITECTURE.md` §3.2; round 24). **The one message without `seq` is
+units"), and a replay step is one unit (`TEST-ARCHITECTURE.md` §3.2). **The one message without `seq` is
 §8.4's `heartbeat`:** it carries `asOfSeq` instead, since it carries no state; a client neither buffers
 nor applies it, and steps 2 and 4 below concern only messages that carry `seq`. On site the heartbeat is
 `sources.updated`, which does carry `seq` (§7.2). It is the same number on every connection and in every `asOfSeq` a REST response
@@ -424,11 +386,11 @@ carry no class, `Results` and the snapshot do): an on-course listing creates the
 `phaseId` names the Phase, and not yet the Phase. Hydration stays complete meanwhile:
 `/api/events/current` names every such `phaseId` in `pendingPhaseIds`, and a hydrating client requests
 `/api/phases/{phaseId}/attempts` for each as it does for a listed Phase, so an Attempt that left the
-course before the client connected is held too and its later partial messages apply (round 27b, the
-review). The window lasts about one poll with the snapshot configured, and without it until the race's
+course before the client connected is held too and its later partial messages apply (accepted by
+the maintainer, 2026-11-10; `DECISIONS/LOG.md`, round 27b). The window lasts about one poll with the snapshot configured, and without it until the race's
 `Results` message — its first push or its turn in the rotation (§4 INV-2). `/api/classes/{classId}/phases`
 lists created Phases only; a client renders what such an Attempt carries until its Phase arrives,
-whole, `classId` included (round 27).
+whole, `classId` included.
 
 Both on-site client applications and the public spectator client are required to implement this; §7
 and §8.4 each restate only the connection-specific detail, not this sequence.
@@ -505,7 +467,7 @@ across days (Scenario E, `ARCHITECTURE.md`). A future central registry could iss
 - **The event title** defaults to the snapshot's own title. It is organiser-authored text (§1.3).
 - **`details`** is the snapshot's `Events` table: `SubTitle`, `Location` as `venue`, `Facility`, and
   the date parts of `StartDate` and `EndDate`; `not-yet` until the snapshot states it, and the XML
-  parser's element to emit (round 27; E1, the XML layout).
+  parser's element to emit (E1, the XML layout).
 - **Upstream's own event id** in the snapshot is **not** exposed. It is an input to the operational
   check "is this still the same Canoe123 event" (`ARCHITECTURE.md` Scenario E), never an identity.
 
@@ -522,7 +484,7 @@ Starting a genuinely new competition on the same laptop is a deliberate operator
 inferred from a changed source. Returning to an earlier event is not reuse — the same competition
 under its own id: its §2.10 store reopens as left, `event.changed` carries it and clients re-hydrate
 (§7.2). The action and the return are the admin UI's own, not §7 paths; whether the UI offers the
-return is the maintainer's (round 27).
+return is the maintainer's.
 
 ### 2.3 Class
 
@@ -882,7 +844,7 @@ ever being recorded. `status` is then `left-without-finish`. This is an observed
 removed the athlete, and no finish exists.
 - **The reason is not yet known**, and `outcome` stays pending — `not-yet`, the stream's `running`
   inference withdrawn with the listing (`DERIVATIONS.md` §4.3; `{ kind: 'pending' }` is a
-  Standing's `result`, §2.7; round 26). It is **never** inferred as `dnf`.
+  Standing's `result`, §2.7). It is **never** inferred as `dnf`.
 - **Why a separate status.** Upstream enters DNF or DSQ mid-run, and DNS from the start judge's
   terminal, on paths that push nothing on TCP (observed upstream behaviour). Of 145 recorded status
   transitions, 45% reached TCP only on another athlete's push or by rotation: median 20–52 s, worst
@@ -921,12 +883,12 @@ presented `status`, not a field of the row:** `outcome` is `{ kind: 'no-result',
 when the presented `status` is a result mark other than `non-ranked`, with that status's envelope;
 the row's time, where it has one, is retained in the `outcome` slot and presented only where the
 mark is not (a withheld stale mark, below). A mark refused for `status` — §4 rule 2's guard, INV-2c
-— therefore shows in no field (round 20; recorded nine times as a `dns` or `dnf` beside
+— therefore shows in no field (recorded nine times as a `dns` or `dnf` beside
 `not-started` or `left-without-finish`), **and nor does the rest of its row:** the guard refuses the
 observation, not one field of it, so the time such a row carries is retained with the mark and
 presented, if ever, by the next snapshot that restates it with a later content age; rule 1 does not
-reach a row whose mark rule 2's guard refused, and `left-without-finish` keeps `outcome: pending` (round 20,
-second pass; 0 such presentations in seven recordings).
+reach a row whose mark rule 2's guard refused, and `left-without-finish` keeps `outcome: pending`
+(0 such presentations in seven recordings).
 
 **Duplicate finishes are surfaced, never resolved by us.** Two Attempts of one Phase presenting the
 same finish `eventTime` raise a `duplicate-finish` diagnostic. A TCP row carries no finish time and
@@ -1008,7 +970,7 @@ assembly precisely.
 ```ts
 type Standing = {
   standingKey: string          // stable key of (scope, ageCategoryId) — §5
-  classId: string              // the Phase's classId (§2.4), never the RaceId prefix (§2.3); on site published no earlier than its Phase (§5 step 1), on live carried by §8.3's PhasePut — round 27d
+  classId: string              // the Phase's classId (§2.4), never the RaceId prefix (§2.3); on site published no earlier than its Phase (§5 step 1), on live carried by §8.3's PhasePut
   scope: { kind: 'phase'; phaseId: string }
        | { kind: 'pair'; firstPhaseId: string; secondPhaseId: string }
        | { kind: 'heat'; phaseId: string; heat: number }
@@ -1188,7 +1150,7 @@ Attempt and generation, and `stale` otherwise, where:
 - when `gates` is not `known`, the presented value is `null`;
 - a team's penalty is the sum over its members, compared as a sum;
 - a check whose `run` is not the Attempt's presented generation (`DECISIONS/ADR-013`) has nothing
-  presented to equal and is `stale`, `valueAtCheck: null` included (round 27).
+  presented to equal and is `stale`, `valueAtCheck: null` included.
 
 A gate's display state is then a lookup, the same on every tablet: `flagged` if an open flag exists,
 else the check's `status` if a check exists, else `plain`.
@@ -1352,7 +1314,7 @@ reliable signal that a Phase's results changed is ordinary field-level change: a
   - `not-started` is presented from the first results-table row that names the Attempt, a
     start-list row included, with that row's envelope (`provisional: false`): the floor every later
     status is read against, and what a retraction or an unstaging returns to. `status` is `not-yet`
-    only for an Attempt no row and no listing has named (round 20).
+    only for an Attempt no row and no listing has named.
   - `at-start`: staged in the start gate, armed for the start impulse and not yet started. It is 8% of
     on-course traffic in recordings, and #166 had no status for it.
   - `not-started → on-course` directly is legal too, when staging is not observed.
@@ -1464,7 +1426,7 @@ implementation must satisfy, not an algorithm.
      connected (`xml-mark-does-not-override-tcp-finish`); the row's other fields follow rule 1
      (`no-result` is none of them: it is `status`'s presentation, §2.6). **A listing's `entry` is
      likewise rule 2's `tcp` side:** an `xml` row restating it changes nothing presented, its
-     `source` included (round 24).
+     `source` included.
 
      **The one exception is a result mark set on a silent path.** Upstream sends no TCP push for:
      - a DNS entered from the start judge's terminal;
@@ -1479,13 +1441,13 @@ implementation must satisfy, not an algorithm.
      newer than the `tcp` observation it displaces — and that observation is delivered by every
      listing that states it (INV-2c), so on an Attempt upstream still lists `at-start` the mark
      waits for TCP's row or for the first rewrite whose content age postdates the last listing
-     (round 20, second pass, E1: on five recordings this costs 1.1 s once and removes a 2.6 s `dns`
+     (E1: on five recordings this costs 1.1 s once and removes a 2.6 s `dns`
      flash and a 10 s cleared `dns`); a mark the guard refused holds back its whole row (§2.6). **Otherwise the later-ingested observation wins,
      under the same guard,** decided at a step that ingests an observation of the field: a
      connection event presents nothing by itself (`TEST-ARCHITECTURE.md` §3.2 property 3), so a
      candidate refused while TCP was connected is presented at the first snapshot of its race after
      the disconnect that restates it (INV-5 advances its content age, INV-2c settles it), not at the
-     disconnect (round 20). This covers two cases:
+     disconnect. This covers two cases:
      - During an outage, a snapshot rewrite *detected after the disconnect* takes over, provided its
        content age postdates TCP's last observation of the field (INV-2c); a rewrite that happened in
        the seconds before the disconnect does not, and the next one does.
@@ -1516,7 +1478,8 @@ implementation must satisfy, not an algorithm.
        observation of every field it retracts:** it changes its source's retained value, so it
        displaces the write's presentation and an assertion alike, and resolves a pending write
        `mismatched` with no `confirmedValue` — upstream's table holds no result where one was
-       requested (round 20; #212 implements). **The presented value under this rule is a whole
+       requested (kept by the maintainer, 2026-11-11, to be revisited in M4; `DECISIONS/LOG.md`).
+       **The presented value under this rule is a whole
        `gates` vector:** the vector presented from rules 1–3 with the target cell replaced by the
        requested one, `source: operator-write` on the envelope (`gates` keeps the course's count,
        §2.6; the vectors' one-cell `gates` are one-gate courses). What is presented when no vector
@@ -1533,8 +1496,7 @@ implementation must satisfy, not an algorithm.
   comparison is made at every step that ingests either source's observation of the field, a
   re-delivery included, since INV-5 advances the content age and can be what first meets the second
   condition; an INV-5 re-delivery — a rotation, a connect burst, a re-read file — clears none, so a
-  standing disagreement stands until a value changes (round 20, second pass; third pass: raised at
-  any step, cleared only by a value change). Such
+  standing disagreement stands until a value changes. Such
   a disagreement is surfaced as an
   admin diagnostic, `source-disagreement`, served by
   `GET /api/diagnostics` (§7.1), the same audience as `SourceStatus`. Five further diagnostic kinds
@@ -1561,10 +1523,10 @@ implementation must satisfy, not an algorithm.
   value is already presented — since a push is upstream's table at the moment of sending. **Every
   guard compares content age, never the presented envelope's `observedAt`,** and every field a
   re-delivered row carries takes the re-delivery's age, so one snapshot cannot retract some of a
-  row's fields and keep others (round 20). The on-course stream's inference, rule 2's `tcp` side
+  row's fields and keep others. The on-course stream's inference, rule 2's `tcp` side
   for `status`, is delivered by every listing of the Attempt that states it; an inference drawn at
   the leave (§3.2) is delivered once, at the TCP message where the leave is evaluated, since the
-  Attempt's absence from later messages states nothing (INV-1; round 20, second pass). A candidate whose content age is earlier than the
+  Attempt's absence from later messages states nothing (INV-1). A candidate whose content age is earlier than the
   presented observation's content age is
   retained and not presented, whatever rule 2 would otherwise allow; the next observation from that
   source settles it. It is a guard, never a grant: it lets nothing supersede that rule 2 refuses.
@@ -1613,12 +1575,12 @@ implementation must satisfy, not an algorithm.
     run 2 are retracted (recorded: a second-run `dns` cleared in place, the athlete then raced);
     `placement` and `pairTotal` follow the row, since an athlete with only a first-run result is
     listed that way — `not-yet` where its `Rank` or `Total` is empty (recorded: jarni-ne-odp
-    C1M_BR2_19:64 at 11:40:07, run 1 marked `dnf`, no combined result left; round 26).
+    C1M_BR2_19:64 at 11:40:07, run 1 marked `dnf`, no combined result left).
     **`countingRun` is outside a present TCP row's statement:** no TCP column carries it
     (`DERIVATIONS.md` §4.4), so the row leaves it standing (INV-1) until the XML row — its sole
     carrier — restates it, `BetterRunNr` `0` being `not-yet`; the retraction reaches it only with
     the row absent (recorded: the same Attempt, `BetterRunNr` `1` → `0` in the snapshot of
-    11:40:25.507, 18 s after the push; round 26, second pass).
+    11:40:25.507, 18 s after the push).
   - **XML:** a first-run or single-run row carrying no time, no finish time and no mark: as the TCP
     first-run case. A second-run row so carrying: as the TCP time-empty case, and `countingRun` is
     the row's as `BetterRunNr` states it, `0` being `not-yet` — before run 2, every
@@ -1663,7 +1625,7 @@ implementation must satisfy, not an algorithm.
 - **INV-6 (ordering is a monotonic ingest sequence, never the wall clock).** Every "later" or "newer"
   above is defined over an internal, strictly increasing sequence, assigned at the ingest boundary
   together with `observedAt` (for an XML unit `observedAt` is its detection, `DERIVATIONS.md` §0.3,
-  and its sequence its apply, so the two need not run together; round 27h). It is never defined by
+  and its sequence its apply, so the two need not run together). It is never defined by
   comparing `observedAt` values. A clock jump
   cannot reorder a merge decision. The sequence is exposed on the wire only as `seq` (§1.6), for
   reconciliation.
@@ -1693,9 +1655,9 @@ re-baseline, per Phase or per Event:
    sequence — a unit like the reader's, its `changedAfter` by the same definition
    (`DERIVATIONS.md` §0.3): the time of the last **successful** stat — the reader's polls and reads,
    or this read's own retry stats — that showed a signature other than the one this read returns,
-   `null` when none (round 27d; its second pass withdrew a gloss that read "the last poll's", which
-   after a run of failed polls dates the read too late and lets a pending write resolve against an
-   older save, INV-2 rule 4) — met by nothing step 1 discarded. If no valid snapshot can be read, the
+   `null` when none (never "the last poll's", which after a run of failed polls dates the read too
+   late and lets a pending write resolve against an older save, INV-2 rule 4) — met by nothing
+   step 1 discarded. If no valid snapshot can be read, the
    action fails with `409 source-unavailable` and changes nothing: the read precedes step 1, and
    steps 1 and 2 reach the core as one ingest unit, the `rebaseline` event followed by the snapshot's
    elements, so the discard and the rebuild are one step and `scope.replaced` goes with it;
@@ -1743,19 +1705,19 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    Phase: a parser states `pair` with the `format`, `siblingPhaseId: null` until the schedule names
    the first run (`DERIVATIONS.md` §2.1), and the `pair` standing waits. A Phase no element has
    described — a stream of Attempt observations alone, as the conformance vectors are — reads from
-   its id, `format` and first run alike (`CONFORMANCE-VECTORS.md` §1, a harness convention; round 22).
+   its id, `format` and first run alike (`CONFORMANCE-VECTORS.md` §1, a harness convention; `DECISIONS/LOG.md`, round 22).
    **`asOf`** is the ingest time of the latest observation that changed the standing as serialised;
    for a classification, the latest scope snapshot that changed its rows (§2.4,
    `DERIVATIONS.md` §4.10), not a snapshot re-sending the same rows and not an emptied table, which
    leaves the Standing as last built (maintainer, 2026-11-06). **A standing is first published at
    its first entry:** before one, its key is known and nothing is sent, and §7.1's hydration lists
    it only once it has been published — a standing emptied afterwards (a retraction, a re-run) stays
-   published, empty, its emptying being a change (round 25, second pass). **On site, no earlier than
+   published, empty, its emptying being a change (`DECISIONS/LOG.md`, round 25). **On site, no earlier than
    its Phase:** a Phase exists once its class is known (§1.6) and the standing's `classId` is the
    Phase's (§2.7), so a standing whose first entry is a running athlete at a TCP cold start waits for
    the race's `Results` message or the snapshot (§1.6's window), and within that unit the Phase's
    creating message precedes its standing's; a vector's Phase has its class by convention from its
-   first observation (`CONFORMANCE-VECTORS.md` §1), so nothing waits there (round 27d, second pass).
+   first observation (`CONFORMANCE-VECTORS.md` §1), so nothing waits there.
    **A standing is pushed only when its serialised form changes:** an entry added or removed, or an entry's `rank`, `order`, `result`,
    `pairTotalSeconds`, `behindSeconds`, `provisional`, `underReview` or `decidedIn`, or `anomalies`.
 2. **Whole-class entries.**
@@ -1802,8 +1764,7 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    is the combined one, step 2, `DERIVATIONS.md` §4.7), and `result.totalSeconds` otherwise. It is
    `null` otherwise, and `null` for entries without a numeric ranked value. Compared on `result`, a
    second-run Phase's `phase` standing sets a combined order against run 2's own times: negative
-   `behindSeconds`, and 118–285 false step-7 anomalies per recording, every one of them there
-   (round 22).
+   `behindSeconds`, and 118–285 false step-7 anomalies per recording, every one of them there.
 7. **Anomaly check, the one mechanical comparison** (`order-disagreement`). It applies in a
    duration-scored `phase` or `pair` standing, among placed entries with a numeric ranked value
    (step 6) and no no-result mark. An anomaly is recorded when an entry is ordered ahead of another
@@ -1879,7 +1840,7 @@ Every response except `/api/sources` carries `asOfSeq: number` (§1.6) at the to
 | `GET /api/classes/{classId}/entries` | `{ asOfSeq, entries: OnsiteEntry[] }` | `404 class-not-found` |
 | `GET /api/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }`: every Attempt of the `phaseId`, a Phase whose class is not yet known included (§1.6) | `404 phase-not-found`: a `phaseId` never observed |
 | `GET /api/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`: every published scope of §5 (step 1: from its first entry), for the whole class and per age category | `404 class-not-found` |
-| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null, asOf: Timestamp \| null }`: **every Attempt upstream currently lists on its on-course list**, across every running Phase, whatever its `status`: `at-start`, `on-course`, and, between a finish and upstream's closure of the run — upstream's auto-complete setting, measured over seven recordings and 1,995 closures: about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % of closures in [18, 20) s), about 47 s at one (medians 47 s, p90 57 s), a minority of manual closes under 5 s (12.6 % and 34.9 % on two days) and a long tail to 126–781 s. **No client may assume a fixed value.** Meanwhile the Attempt is listed as `finished` or a mark. The set is upstream's list; `status` says where each Attempt is. `asOf` is the ingest time of the unit at which the set last changed — membership, order or `featuredByUpstream`: a listing, `oncourse-empty`, or the TCP message at which a leave was derived (`DERIVATIONS.md` §4.1) — `null` before any; a listing that changes nothing moves it no more than a running tick moves a Standing's (§5), so this response and the last `oncourse.updated` agree (§1.6; round 27); an unchanged set reads as old as its last change, and liveness is §7.2's heartbeat, never `asOf`. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8). Kept current by `oncourse.updated` (§7.2) | — |
+| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null, asOf: Timestamp \| null }`: **every Attempt upstream currently lists on its on-course list**, across every running Phase, whatever its `status`: `at-start`, `on-course`, and, between a finish and upstream's closure of the run — upstream's auto-complete setting, measured over seven recordings and 1,995 closures: about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % of closures in [18, 20) s), about 47 s at one (medians 47 s, p90 57 s), a minority of manual closes under 5 s (12.6 % and 34.9 % on two days) and a long tail to 126–781 s. **No client may assume a fixed value.** Meanwhile the Attempt is listed as `finished` or a mark. The set is upstream's list; `status` says where each Attempt is. `asOf` is the ingest time of the unit at which the set last changed — membership, order or `featuredByUpstream`: a listing, `oncourse-empty`, or the TCP message at which a leave was derived (`DERIVATIONS.md` §4.1) — `null` before any; a listing that changes nothing moves it no more than a running tick moves a Standing's (§5), so this response and the last `oncourse.updated` agree (§1.6); an unchanged set reads as old as its last change, and liveness is §7.2's heartbeat, never `asOf`. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8). Kept current by `oncourse.updated` (§7.2) | — |
 | `GET /api/phases/{phaseId}/checks` | `{ asOfSeq, checks: GateCheck[], flags: GateFlag[] }`: every check and flag of the Phase, all run generations, `status` derived at serialisation (§2.10) | `404 phase-not-found`: a `phaseId` never observed, as the attempts row |
 | `GET /api/sources` | `SourceStatus`, unwrapped | — |
 | `GET /api/diagnostics` | `{ asOfSeq, diagnostics: Diagnostic[] }`: every current diagnostic of the six kinds in §4 (source disagreement, contradicted finish, duplicate finish, stale mark, member-sum mismatch, unparseable cell). Admin audience only | — |
@@ -1981,8 +1942,7 @@ Every message carries `seq` (§1.6).
   for an age category the placed entries of that category (step 4) — judged on the state after the
   message's Attempts are applied: the rebuilt state is a fresh one, and a Standing is published from
   its first entry (§5 step 1), so the client's replace removes one it held and `standing.updated`
-  creates it again when an entry returns, whole as always (round 25; the Attempts named in its
-  second pass).
+  creates it again when an entry returns, whole as always.
 
 The message set, normatively; `type` is the discriminant and every message carries `seq`:
 
@@ -2037,7 +1997,7 @@ target a closed Phase (§2.9), targets the Attempt's run generation current at s
 accepted only once the Attempt has left upstream's on-course list (below). "Closed" here, and in
 `reason: 'run-not-closed'`, is that test alone — the Attempt has left the on-course set (§7.1), the
 write's own precondition — and is narrower than `DERIVATIONS.md` §4.4's closure of a run, which
-`Completed` reaches while the Attempt is still listed (round 20, second pass).
+`Completed` reaches while the Attempt is still listed.
 
 **There is no status write.** No inbound command can set or clear a result mark (DNS, DNF, DSQ, CAP)
 on a closed run (observed upstream behaviour, 2026-09-25): upstream's only status command targets an
@@ -2082,7 +2042,7 @@ closure, not the finish, since a finisher stays listed as `finished` until upstr
 tablet may also simply disable the write while the Attempt is listed, which is the same rule applied
 before the request.
 
-**The key first, then the order of refusal, then the send** (round 28, its second pass). A request
+**The key first, then the order of refusal, then the send.** A request
 whose `Idempotency-Key` is already bound — to a `WriteRequest`, or to a write in flight — is
 answered from it before any refusal: `200` with the `WriteRequest`, whatever its status (§1.5), or,
 while the first request's socket write is still pending, its outcome once known. A missing header
@@ -2150,7 +2110,7 @@ No field ever encodes a timeout or a deadline. On the wire `requestedValue` and 
 `{ gate, value }`, the target cell, as the example shows (§2.9 leaves them `unknown` because the live
 tier's §8.5 assertion has its own shape); a tier-1 vector's `writeRequest.confirmedValue` is the merge
 port's cell vector, the harness shape of `CONFORMANCE-VECTORS.md` §1, which this serialisation maps to
-the target cell (round 28, third pass).
+the target cell.
 
 ### 7.4 Gate checks and flags (REST)
 
