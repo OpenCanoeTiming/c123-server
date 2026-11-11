@@ -115,74 +115,102 @@ The fields, precisely:
   It is deliberately not a numeric score. A numeric score would invite each client to choose its own
   threshold, which is exactly the kind of domain decision this design removes from clients.
 - **`provisional`.** `true` while **the value may still move**. That is the case while any of these
-  holds:
-  - it is an on-course inference not yet superseded by a results-table observation of the same run
-    (a `gates` cell merged in from the stream under §4 rule 1's exception does not make the row's
-    vector an inference). **The stream's own gate cells — in Kayak Cross the `faults` built from
-    them — are such an inference while no row of the generation stating a result — a time or a mark,
-    INV-7's test; cells alone state none — is presented:** `confidence:
-    'inferred'`, never retracted (INV-7). Once such a row is presented, the merged
-    vector is that row's observation: `confidence: 'authoritative'`, `source` the presented row's,
-    `observedAt` the **later** of the presented observation's own element — the row whose
-    observation of the field became presented; a later row restating equal cells is an INV-5
-    re-delivery and moves nothing — equal to the **presented** merged cells, INV-5's own test being
-    the value already presented from that source, never the row's difference from that source's
-    previous row: a row that fills a cell the stream had already judged into the presented vector
-    differs from the previous row and changes nothing presented, so it moves nothing, and whether a
-    course was bound when it arrived changes nothing of this (round 29; `TEST-ARCHITECTURE.md` §3.2
-    property 1 records the case); a row that first supersedes the stream's inference presents, equal
-    cells or not, since rule 1's supersession is a change of what is presented (round 27e) — and the
-    element's that last changed the presented cells, a
-    listing's included (round 27e, an amendment:
-    round 24's text took the instant from the last cell change alone and so dated an `authoritative`
-    claim at an inference's instant where a row restated the stream's cells equal; `observedAt` is
-    when the presented observation was captured, and rule 1's supersession presents a new one, as
-    INV-5's regained precedence does); after
-    the row's retraction the stream's vector is an inference again (round 24), the envelope of the
-    retained listing with it — the last listing that changed the presented cells, never a later
-    identical delivery, INV-5 (`TEST-ARCHITECTURE.md` §3.2 property 1, round 26);
-  - it is a result whose judging is incomplete — a presented gate cell is still blank (§4 rule 1
-    merges the cells) — or whose completeness cannot be judged yet because no course is bound, and
-    whose run is not yet closed; closed is `DERIVATIONS.md` §4.4's one definition, stated there
-    alone (round 20, second pass: no list here). **The clause reaches every field a row states
-    for the run:** `outcome`, `gates` (in Kayak Cross `faults`), `placement`, `pairTotal`,
-    `countingRun`, `underReview` and `qualified`; `status` is outside it (below), and the on-course
-    facts (`courseOrder`, `timeToBeat`, `splits`) are asserted, not judged. **Two exemptions, stated
-    here:** an Attempt with no run yet — `status` absent or `not-started`, its row carrying neither
-    time nor mark — has no run to judge, its values being the previous run's, settled there, until
-    the carry below begins (round 21); and in a Kayak Cross heat the `placement`, the ordinal built from it, and the
-    `qualified` and `underReview` the row states with it are upstream's whole result, asserted after
-    the judging, and leave this clause at the step the placement is presented; the heat's `faults`
-    stays under it until the heat leaves the list (`DERIVATIONS.md` §4.2, §4.7; round 21, placed
-    here in round 24, both named in its second pass);
-  - it is a second run's `placement`, `pairTotal` or `countingRun` carried over from run 1, from the
-    Attempt's first on-course listing in run 2 — staged or started: the stream saying the run is
-    about to happen — until a row of run 2 — one carrying its time or its mark — restates that
-    field (a row of run 2 without either restates run 1's values and leaves them carried; so does a
-    row whose mark INV-7's guard refused — refused by the guard's own content-age comparison, the
-    snapshot's `changedAfter` against the `tcp` observation's latest delivery, never by whether a
-    presentation followed; the comparison is made only where the row's mark would change a `status`
-    presented from `tcp`, rule 2's mark exception, so a row with no mark and a row whose mark the
-    presented `status` already is are never refused — the snapshot being ignored for that field and the time held back with
-    the mark, §2.6; a row the guard admits restates the field whether or not it is then presented,
-    so a row withheld after admission leaves nothing carried; round 25, second pass; a retraction
-    of the restating row — its mark cleared in place, the row gone, INV-7 — ends its restatement,
-    and the row of run 2 without either that follows leaves the fields carried again, the run
-    being about to happen once more; round 26): field by
-    field, since `placement` and `pairTotal` come with the TCP row and `countingRun`
-    only with the XML row (`DERIVATIONS.md` §4.4; the TCP row usually arrives before the on-course
-    finish message, §2.6);
-  - it is an optimistic write still awaiting its echo (§2.9).
+  four conditions holds; the first three are stated in full below the list of fields, each as a
+  rule with its examples.
+  1. **An inference.** It is an on-course inference not yet superseded by a results-table
+     observation of the same run.
+  2. **Judging open.** It is a result whose judging is incomplete — a presented gate cell is still
+     blank (§4 rule 1 merges the cells) — or whose completeness cannot be judged yet because no
+     course is bound, and whose run is not yet closed. Closed is `DERIVATIONS.md` §4.4's one
+     definition, stated there alone.
+  3. **Carried from run 1.** It is a second run's `placement`, `pairTotal` or `countingRun`
+     carried over from run 1, from the Attempt's first on-course listing in run 2 until a row of
+     run 2 restates that field.
+  4. **A write awaiting its echo.** It is an optimistic write still awaiting its echo (§2.9).
 
   Otherwise it is `false`. **`status` is never provisional:** that the run started or finished is a
-  fact even while its outcome may move (`DERIVATIONS.md` §4.1). This marks the state honestly in either mode of Canoe123's "ranking with
-  incomplete penalties" setting:
+  fact even while its outcome may move (`DERIVATIONS.md` §4.1). This marks the state honestly in
+  either mode of Canoe123's "ranking with incomplete penalties" setting:
   - **setting on:** the first result push can precede the last gate's judgement, and the value stays
     provisional until judging completes;
   - **setting off:** the first push already follows the last gate.
 
   `provisional` answers "might this still move". `confidence` answers "how was this produced". A
   client needs both and must not conflate them.
+
+**Condition 1 in full: the stream's cells and the merged vector.** `gates` is merged cell by cell
+(§4 rule 1), so its envelope needs a rule of its own.
+- **Before a row.** The stream's own gate cells — in Kayak Cross the `faults` built from them —
+  are an inference while no row of the generation stating a result is presented: `confidence: 'inferred'`, never retracted (INV-7). A row states
+  a result by a time or a mark, INV-7's test; cells alone state none.
+- **Once such a row is presented,** the merged vector is that row's observation:
+  `confidence: 'authoritative'`, `source` the presented row's. A cell merged in from the stream
+  under rule 1's exception does not make the row's vector an inference.
+- **Its `observedAt` is the later of two instants:** the presented observation's own element — the
+  row whose observation of the field became presented — and the element's that last changed the
+  presented cells, a listing's included. `observedAt` is when the presented observation was
+  captured, and rule 1's supersession presents a new one, as INV-5's regained precedence does.
+- **What moves it.** A row that first supersedes the stream's inference presents, equal cells or
+  not: the supersession is a change of what is presented. A later row restating equal cells is
+  an INV-5 re-delivery and moves nothing. Equal is to the **presented** merged cells — INV-5's
+  own test is the value already presented from that source — never to that source's previous
+  row, and whether a course was bound when the row arrived changes nothing of this.
+- **After the row's retraction** the stream's vector is an inference again, with the envelope of
+  the retained listing: the last listing that changed the presented cells, never a later
+  identical delivery (INV-5).
+
+*Examples* (recorded; `TEST-ARCHITECTURE.md` §3.2 property 1 gives the instants). A row and the
+listings around it all state nine clean cells (cp3-cross MX1_XT_26:8): the vector carries the
+row's instant, since the row superseded the inference and every later listing is identical. A row
+arrives with cell 23 blank, a listing then judges the cell clean, and a second row fills it with
+`0` (nkz-19so K1M_BR2_19:81): the vector carries the listing's instant; the second row differs
+from the first and changes nothing presented, so it moves nothing.
+
+**Condition 2 in full: the judging clause.**
+- **It reaches every field a row states for the run:** `outcome`, `gates` (in Kayak Cross
+  `faults`), `placement`, `pairTotal`, `countingRun`, `underReview` and `qualified`. `status` is
+  outside it (above), and the on-course facts (`courseOrder`, `timeToBeat`, `splits`) are asserted,
+  not judged.
+- **First exemption: an Attempt with no run yet** — `status` absent or `not-started`, its row
+  carrying neither time nor mark — has no run to judge. Its values are the previous run's,
+  settled there, until the carry of condition 3 begins.
+- **Second exemption: a Kayak Cross heat's placement.** The `placement`, the ordinal built from
+  it, and the `qualified` and `underReview` the row states with it are upstream's whole result,
+  asserted after the judging, and leave this clause at the step the placement is presented. The
+  heat's `faults` stays under it until the heat leaves the list (`DERIVATIONS.md` §4.2, §4.7).
+
+*Examples.* A first result push with gate 14 still blank is provisional until the judge enters
+the gate (§2.11). A row pushed at a cold start, before the first snapshot binds a course, is
+provisional until the course binds and shows no blank cell, or the run closes. Before run 2 a
+second-run row carries the combined placement and total with no time: those values are run 1's,
+and the clause does not reach them.
+
+**Condition 3 in full: the second-run carry.**
+- **It begins** at the Attempt's first on-course listing in run 2, staged or started: the stream
+  saying the run is about to happen.
+- **It ends field by field** when a row of run 2 — one carrying its time or its mark — restates
+  the field: `placement` and `pairTotal` come with the TCP row, `countingRun` only with the XML
+  row (`DERIVATIONS.md` §4.4; the TCP row usually arrives before the on-course finish message,
+  §2.6). A row of run 2 without either restates run 1's values and leaves them carried.
+- **A row whose mark INV-7's guard refused restates nothing:** the snapshot is ignored for that
+  field and the time is held back with the mark (§2.6), so the values stay carried. Refused means
+  refused by the guard's own content-age comparison, the snapshot's `changedAfter` against the
+  `tcp` observation's latest delivery, never by whether a presentation followed. The comparison
+  is made only where the row's mark would change a `status` presented from `tcp` (rule 2's mark
+  exception), so a row with no mark, and a row whose mark the presented `status` already is, are
+  never refused.
+- **A row the guard admits restates the field** whether or not it is then presented, so a row
+  withheld after admission leaves nothing carried.
+- **A retraction of the restating row** — its mark cleared in place, or the row gone (INV-7) —
+  ends its restatement: the row of run 2 without time or mark that follows leaves the fields
+  carried again, the run being about to happen once more.
+
+*Examples* (recorded; property 11 gives the instants). An athlete is staged for run 2 with
+no start yet (nkz-19so C1W_BR2_19:35): `placement` and `pairTotal` are provisional from that
+listing. An XML `dns` row is refused by the guard against a leave two seconds earlier (jarni-ne-do
+K1M_BR2_19:62) and the carry stands; the TCP `dns` row that follows restates `placement` and
+`pairTotal`, and the next XML read restates `countingRun`. A run-2 `dns` cleared in place before
+the athlete raced (jarni-so-odp C1M_BR2_18:51): the values are carried again.
 
 **Wire encoding.** `state` is a JSON string discriminant, present on every envelope.
 - A `known` envelope always carries `value`, `observedAt`, `source`, `confidence` and `provisional`,

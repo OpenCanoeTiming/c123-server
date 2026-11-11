@@ -241,52 +241,62 @@ to `not-yet` or `unavailable`. Unless stated, everything is per Attempt and per 
 "result fields" are the run-scoped fields `CONTRACTS.md` §2.6 lists. A violation is reported with
 the step index, the Attempt, the field and the property number.
 
-1. **Sequence (INV-6) D.** `seq` strictly increases across deltas, and the first delta's `seq`
-   exceeds the hydration step's `asOfSeq`. No `observedAt` in any delta is a replay-time clock
-   value: each is the recorded `observedAt` of the element that produced that observation, at or
-   before the step **in ingest order** (INV-6: a real process applies an XML unit, stamped at its
-   detection, `DERIVATIONS.md` §0.3, after the TCP units it received during the read, so a log's
-   instants are not monotonic across sources, and a replay-time clock value is one that exceeds every
-   instant the log has seen up to the step; round 27h) (a creation message or a standing legitimately carries earlier envelopes; so
-   does a row the merge held for the stream's finish, `DERIVATIONS.md` §4.11, presented at the
-   listing that settled it with its own `observedAt` **and its own value** — the fields the row
-   states, `outcome`, `placement`, `qualified` and the like, each at the instant of the row that
-   stated the presented value, never a new value on an old instant; `status` is not among them: a
-   row's `finished` over the unit's own listing of the finish is the listing's element, INV-5,
-   and keeps the listing's envelope — recorded: nkz-19so C1M_BR1_19:7, the row of 12:41:44.250
-   presented at the listing of 12:41:44.358, `outcome` the row's, `status` the listing's; round 25
-   and its second pass; a retraction's fallback to the retained stream inference keeps that
-   listing's envelope, property 5 — recorded: jarni-so-odp K1W_BR2_18:16, `at-start` of
-   14:11:39.886 presented at the clearing of 14:12:08; and a mark a snapshot re-delivers after the
-   guard refused its first read is the re-delivery's element and instant, INV-5, the `no-result`
-   outcome with it (`CONTRACTS.md` §2.6), never the refused read's; round 26; and a `gates` or
-   `faults` vector the core builds at the scope snapshot of the race that binds the course
-   (`DERIVATIONS.md` §4.6 "no course bound yet": the step at which §4.6's `known` condition —
-   `courseId` known and that Course's `gates` known — is first met for the Phase, or met again after
-   `unavailable{not-configured}`; a later snapshot naming another course finds no retained cells,
-   every cell since the binding having been read at its own step; at no other step, round 27f) from the cells retained for the
-   Attempt — the latest cells of that source in the **generation**, §4.6 — carries the instant
-   `CONTRACTS.md` §1.2 gives the merged vector: the **later** of the presented row's own element and
-   the element's that last changed the presented cells on the bound course, a listing's included —
-   after a retraction the last cell-changing listing's (round 26) — an identical re-delivery after either
-   moving nothing (INV-5) — recorded: MX1_XT_26:8, listings 08:45:13.218–17.961 and the row of
-   13.346 all stating nine clean cells, the vector at 13.346 (round 27e, which withdrew round 27c's
-   "latest delivery" and amended §1.2); "identical" is to the presented merged cells, never to that
-   source's previous row (§1.2, round 29) — recorded: K1M_BR2_19:81, the row of 09:30:05.720 with
-   cell 23 blank, the listing of 06.150 judging it clean, the row of 12.812 restating the merged
-   cells, the vector at 06.150 whether the course binds at 11.556 (nkz-19so) or at 13.551 (the #208
-   fixture cut from it), the checker rejecting 12.812 on a late binding as the planted defect it
-   already names; the vector's `source` is the presented observation's: the
-   cells are its statement and the course the key
-   to read them (`CONTRACTS.md` §1.2, `provisional`: `observedAt` is the later of the presented row's
-   element and "the element's that last changed the presented cells", and a binding changes no
-   cell), so the envelope is the one an earlier
-   binding would have given — recorded: cp3-cross MX1_XT_26:52, the row of 08:45:13.346 read on the
-   course of the snapshot at 08:45:18.057; round 27c). **The reject half, stated once for every
-   field:** an envelope on the step's own instant must have a producer of its own `source` among the
-   unit's elements; a `tcp` vector on an `xml` unit's instant is the violation the acceptance above
-   would otherwise let through (round 27c, review: a replay with the 43 vectors restamped at the
-   binding instant passed the checker as it stood).
+1. **Sequence (INV-6) D.** Three rules, then the cases in which an envelope older than its step is
+   right.
+   - **(a) `seq`.** `seq` strictly increases across deltas, and the first delta's `seq` exceeds the
+     hydration step's `asOfSeq`.
+   - **(b) No replay-time clock value.** Every `observedAt` in a delta is the recorded `observedAt`
+     of the element that produced that observation, at or before the step **in ingest order**
+     (INV-6). Ingest order is not clock order: a real process applies an XML unit, stamped at its
+     detection (`DERIVATIONS.md` §0.3), after the TCP units it received during the read, so a
+     log's instants are not monotonic across sources. A replay-time clock value is one that
+     exceeds every instant the log has seen up to the step.
+   - **(c) The reject half, for every field.** An envelope on the step's own instant has a
+     producer of its own `source` among the unit's elements; a `tcp` vector on an `xml` unit's
+     instant is a violation. Without this clause the cases below would let through a core that
+     restamps at the step: a replay with 43 late-bound vectors restamped at the binding instant
+     once passed the checker. What each kind of element produces is listed in
+     `DECISIONS/LOG.md`, round 27f.
+
+   **An earlier instant is legitimate in these cases, and only with the envelope stated here.**
+   - **A creation message or a standing** carries earlier envelopes.
+   - **A row the merge held for the stream's finish** (`DERIVATIONS.md` §4.11) is presented at the
+     listing that settled it, with its own `observedAt` **and its own value**: the fields the row
+     states — `outcome`, `placement`, `qualified` and the like — each at the instant of the row
+     that stated the presented value, never a new value on an old instant. `status` is not among
+     them: a row's `finished` over the unit's own listing of the finish is the listing's element
+     (INV-5) and keeps the listing's envelope. *Recorded:* nkz-19so C1M_BR1_19:7, the row of
+     12:41:44.250 presented at the listing of 12:41:44.358; `outcome` the row's, `status` the
+     listing's.
+   - **A retraction's fallback** to the retained stream inference keeps that listing's envelope
+     (property 5). *Recorded:* jarni-so-odp K1W_BR2_18:16, the `at-start` of 14:11:39.886
+     presented at the clearing of 14:12:08.
+   - **A mark the guard refused at its first read** and a later snapshot re-delivers is the
+     re-delivery's element and instant (INV-5), the `no-result` outcome with it (`CONTRACTS.md`
+     §2.6), never the refused read's.
+   - **A late-bound `gates` or `faults` vector.** The binding step is the scope snapshot of the
+     race at which `DERIVATIONS.md` §4.6's `known` condition — `courseId` known and that Course's
+     `gates` known — is first met for the Phase, or met again after `unavailable{not-configured}`,
+     and no other step: a later snapshot naming another course finds no retained cells, every
+     cell since the binding having been read at its own step. At the binding step the core builds
+     the vector from the cells retained for the Attempt, the latest cells of that source in the
+     **generation** (§4.6), and the envelope is the one an earlier binding would have given:
+     - `source` is the presented observation's. The cells are its statement and the course the
+       key to read them; a binding changes no cell.
+     - `observedAt` is the instant `CONTRACTS.md` §1.2 gives the merged vector: the **later** of
+       the presented row's own element and the element's that last changed the presented cells on
+       the bound course, a listing's included; after a retraction, the last cell-changing
+       listing's.
+     - An identical re-delivery after either moves nothing (INV-5). Identical is to the presented
+       merged cells, never to that source's previous row (§1.2).
+
+     *Recorded:* cp3-cross MX1_XT_26:52, the row of 08:45:13.346 read on the course of the
+     snapshot at 08:45:18.057: the vector is `tcp` at 13.346. MX1_XT_26:8, listings
+     08:45:13.218–17.961 and the row of 13.346 all stating nine clean cells: the vector at 13.346.
+     nkz-19so K1M_BR2_19:81, the row of 09:30:05.720 with cell 23 blank, the listing of 06.150
+     judging it clean, the row of 12.812 restating the merged cells: the vector at 06.150, whether
+     the course binds at 11.556 (nkz-19so) or at 13.551 (the #208 fixture cut from it); a core
+     that stamps 12.812 on a late binding is the planted defect the checker rejects.
 2. **Envelopes (§1.2) D.** Every presented envelope validates against `schemas/observed.schema.json`:
    `eventTime` omitted when absent, never `null`; `unavailable.reason` in the closed set; `source`
    never `bridge` on site.
@@ -312,50 +322,59 @@ the step index, the Attempt, the field and the property number.
    (`DERIVATIONS.md` §4.6; a `RaceConfig` decides none), and the `not-applicable` a `RaceConfig`'s
    `NrSplits` decides for `splits` (`DERIVATIONS.md` §4.8), are presented at the Attempt's next such
    step.
-5. **Retraction is scoped and guarded (INV-7).** At a scope-snapshot step for race R, a regression
-   of an Attempt of R touches only the fields INV-7 names for the case — first or single run:
-   `outcome`, `gates` (in Kayak Cross `faults`), `placement`, `underReview`, `qualified` and a mark
-   in `status`; paired second
-   run with the row absent: those plus `pairTotal` and `countingRun`; second run with an empty time:
-   `outcome` and `gates` (`faults`) only, `placement` and `pairTotal` being the row's, `known` or
-   `not-yet` as its `Rank` and `Total` state them (INV-7 "follow the row"; `DERIVATIONS.md` §4.7,
-   §4.12) — a change there is the row's statement, not this property's regression, and so is the
-   `not-yet` an empty `Rank` states on a row carrying a mark (round 26) — `countingRun` standing at
-   a present `tcp` row, which has no column for it, and being the row's at an `xml` row,
-   `BetterRunNr` `0` as `not-yet` (INV-7; recorded: jarni-ne-odp C1M_BR2_19:64, the snapshot of
-   11:40:25.507; round 26, second pass) — and never `entry`, `bib`, `startOrder`, `heat`,
-   `startLane` or `run`. It never touches a field whose presented value is an on-course inference
-   (`kind: inference`, or `outcome.kind: 'running'`). Afterwards `status` is what the on-course
-   listing shows for the Attempt (`at-start`, `on-course`, or an inferred `finished` that still
-   stands), else `not-started`; a `finished → on-course` at this step is this property's, not
-   property 7's. For an `xml` snapshot
-   retracting or displacing a `tcp`-presented field, the snapshot's content age
-   (`CONFORMANCE-VECTORS.md` §1: the latest `xml-rewrite-detected`'s `changedAfter`, `null` never
-   qualifying; without the key, its time minus the poll interval) is later than that field's
-   presented `tcp` observation's content age (INV-2c: the `observedAt` of its latest delivery, a
-   rotation's re-send included, read from the raw stream; for the stream's `status` inference, the
-   latest listing stating it, or the message at which the leave was evaluated); otherwise the field
-   is unchanged at that step, and so is every other field that re-delivery carried — a mark the guard
-   refused holds back its row's time too (`CONTRACTS.md` §2.6). The guard's refusal is rule 2's
-   mark exception only — a mark over a `tcp` `status` of `not-started`, `at-start` or
-   `left-without-finish`; a mark over `on-course` or `finished` is refused by rule 2's continuity,
-   and that row's other fields reach rule 1 as §2.6 says (recorded: jarni-so-odp C1M_BR2_18:65 at
-   14:02:47.758, running, `gates` the row's; round 26). An `xml` row that makes the Attempt
-   untimed (`CONTRACTS.md` §2.6; `DERIVATIONS.md` §4.4: placed, no `dtFinish` on the row and none
-   on the raw stream for the Attempt) asserts `outcome: unavailable{not-applicable}` over the TCP
-   row's presumed-timed duration outside the guard — an INV-3 determination no `tcp` row can
-   contradict, a TCP row carrying no finish time — and is no retraction: `status` stays
-   `finished` and every other field stands (recorded: cp3-cross WX1J_XT_26_JUN, the snapshot of
-   06:12:22.482 over pushes to 06:12:23.908; round 26). Where the replay log carries the snapshot's rows, as the vector format does, the
-   checker also asserts completeness: every Attempt of R presenting results-table values whose row
-   states no result is retracted in that step — for a `tcp` snapshot an absent row and a start-list
-   table included; for an `xml` snapshot a present row only, since an absent XML row and an empty
-   XML table state nothing (INV-7); `countingRun` is asked of an `xml` row and of an absent `tcp`
-   row, never of a present `tcp` row, which cannot state it (round 26, second pass). A refusal holds the field's value and `source`; `provisional`,
-   recomputed when the course binds (property 11), and an `eventTime` the Phase date first lets
-   `DERIVATIONS.md` §0.2 build (§0.5, §4.4: from the on-course finish, never from the refused row)
-   may change at the snapshot step that supplies them, and "changes" and "flips" here, in 6(c) and
-   in property 8 mean a change of value or `source` (round 24).
+5. **Retraction is scoped and guarded (INV-7).** Five rules about a scope-snapshot step for race R.
+   - **(a) Scope.** A regression of an Attempt of R touches only the fields INV-7 names for the
+     case:
+     - first or single run: `outcome`, `gates` (in Kayak Cross `faults`), `placement`,
+       `underReview`, `qualified` and a mark in `status`;
+     - paired second run with the row absent: those plus `pairTotal` and `countingRun`;
+     - second run with an empty time: `outcome` and `gates` (`faults`) only. `placement` and
+       `pairTotal` are the row's, `known` or `not-yet` as its `Rank` and `Total` state them (INV-7
+       "follow the row"; `DERIVATIONS.md` §4.7, §4.12): a change there is the row's statement,
+       not this property's regression, and so is the `not-yet` an empty `Rank` states on a row
+       carrying a mark. `countingRun` stands at a present `tcp` row, which has no column for it,
+       and is the row's at an `xml` row, `BetterRunNr` `0` as `not-yet` (INV-7). *Recorded:*
+       jarni-ne-odp C1M_BR2_19:64, the snapshot of 11:40:25.507.
+
+     It never touches `entry`, `bib`, `startOrder`, `heat`, `startLane` or `run`, and never a
+     field whose presented value is an on-course inference (`kind: inference`, or
+     `outcome.kind: 'running'`).
+   - **(b) `status` afterwards** is what the on-course listing shows for the Attempt (`at-start`,
+     `on-course`, or an inferred `finished` that still stands), else `not-started`; a
+     `finished → on-course` at this step is this property's, not property 7's.
+   - **(c) The content-age guard.** For an `xml` snapshot retracting or displacing a
+     `tcp`-presented field, the snapshot's content age is later than that field's presented `tcp`
+     observation's content age; otherwise the field is unchanged at that step, and so is every
+     other field that re-delivery carried — a mark the guard refused holds back its row's time
+     too (`CONTRACTS.md` §2.6).
+     - The snapshot's content age (`CONFORMANCE-VECTORS.md` §1) is the latest
+       `xml-rewrite-detected`'s `changedAfter`, `null` never qualifying; without the key, its
+       time minus the poll interval.
+     - The `tcp` observation's content age (INV-2c) is the `observedAt` of its latest delivery,
+       a rotation's re-send included, read from the raw stream; for the stream's `status`
+       inference, the latest listing stating it, or the message at which the leave was evaluated.
+     - The guard's refusal is rule 2's mark exception only: a mark over a `tcp` `status` of
+       `not-started`, `at-start` or `left-without-finish`. A mark over `on-course` or `finished`
+       is refused by rule 2's continuity, and that row's other fields reach rule 1 as §2.6 says.
+       *Recorded:* jarni-so-odp C1M_BR2_18:65 at 14:02:47.758, running, `gates` the row's.
+     - A refusal holds the field's value and `source`. `provisional`, recomputed when the course
+       binds (property 11), and an `eventTime` the Phase date first lets `DERIVATIONS.md` §0.2
+       build (§0.5, §4.4: from the on-course finish, never from the refused row) may change at
+       the snapshot step that supplies them. "Changes" and "flips" here, in 6(c) and in
+       property 8 mean a change of value or `source`.
+   - **(d) An untimed row is no retraction.** An `xml` row that makes the Attempt untimed
+     (`CONTRACTS.md` §2.6; `DERIVATIONS.md` §4.4: placed, no `dtFinish` on the row and none on the
+     raw stream for the Attempt) asserts `outcome: unavailable{not-applicable}` over the TCP
+     row's presumed-timed duration, outside the guard: an INV-3 determination no `tcp` row can
+     contradict, a TCP row carrying no finish time. `status` stays `finished` and every other
+     field stands. *Recorded:* cp3-cross WX1J_XT_26_JUN, the snapshot of 06:12:22.482 over pushes
+     to 06:12:23.908.
+   - **(e) Completeness.** Where the replay log carries the snapshot's rows, as the vector format
+     does, every Attempt of R presenting results-table values whose row states no result is
+     retracted in that step: for a `tcp` snapshot an absent row and a start-list table included;
+     for an `xml` snapshot a present row only, since an absent XML row and an empty XML table
+     state nothing (INV-7). `countingRun` is asked of an `xml` row and of an absent `tcp` row,
+     never of a present `tcp` row, which cannot state it.
 6. **Precedence (INV-2 rules 1–3).** (a) Once a result field presents a `result-row` observation, it
    never afterwards presents an `inference` for the same generation, except through a contradiction
    (property 7) or after a retraction (property 5). (b) `gates` is merged cell by cell: while
@@ -466,72 +485,85 @@ the step index, the Attempt, the field and the property number.
     eight Attempts that reached their first start with a mark on the table (`DERIVATIONS.md`
     §4.11), K1M_BR2_19:54 included, whose XML copy of the standing `DNS` arrives 3.1 s after the
     start; the correct replay keeps `run` at 1 in all of them.
-11. **Provisional (§1.2).** `status` is never provisional. Every other presented result value — the
-    judging clause reaching the fields `CONTRACTS.md` §1.2 names, `underReview` and `qualified`
-    included — has
-    `provisional: true` exactly when: it is an inference (`kind: inference`, or
-    `outcome.kind: 'running'`); or the run is not closed (`DERIVATIONS.md` §4.4, read from the
-    raw stream at admission: no `Completed="Y"` listing of it carrying a `dtFinish`, no
-    `oncourse-left` for it in this generation that a later `oncourse.updated` of the generation has
-    not undone by listing it again (§4.1's false leave; round 21) — in a **D** re-run, listed in an earlier
-    `oncourse.updated` and absent from the latest, so an Attempt never listed is not closed by
-    that — and no presented no-result mark, `non-ranked` closing nothing) and either a presented
-    `gates` cell is `null`, a Kayak Cross Attempt's `faults` carries `judgingComplete: false` (the
-    parser reads it over the slot cells and stamps the `faults` observation alone, and only a `known`
-    one; the observation is the presented one — the row's once a row stating a result is presented,
-    INV-2 rule 1 having no cell exception for `faults`, the stream's listing after it retained and
-    never read (recorded: cp3-cross MX1_XT_26:41 at 08:12:38.051; round 26) — a `not-yet` `faults` with a course bound, every slot blank, carries no stamp and is not under
-    this clause, `CONTRACTS.md` §1.2; the row's other observations carry no
-    judging stamp, `runClosed` at most, `DERIVATIONS.md` §4.4, §4.6(d); the Cross branch never reads
-    `gates`, which is `unavailable{not-applicable}` there; round 23), or `gates`, in Cross `faults`, is
-    not `known` because no course is bound — the Attempt's Phase has no `known` `courseId`, or that
-    Course no `known` `gates`, the binding the `false → true` sentence below names; `not-yet` is the
-    state of this case, `DERIVATIONS.md` §4.6, not only `unavailable{not-configured}` (round 24) —
-    and the observation's `judgingComplete` is not `true` (the
-    parser stamps `null`, or nothing, without a course, CONFORMANCE-VECTORS §1; a `true` stamp is its judgement
-    against a course and settles the value; round 21) — this judging clause does not reach an Attempt
-    with no run yet (`status` absent or `not-started`, its row carrying neither time nor mark: the values
-    are run 1's, settled there, until the carry below begins; `CONTRACTS.md` §1.2's first exemption) nor what a heat's row asserts with its
-    `placement`: the placement, the ordinal built from it, and its `qualified` and `underReview` from
-    the step the placement is presented — upstream's whole result asserted after the judging
-    (`CONTRACTS.md` §1.2 states the exemption; `DERIVATIONS.md` §4.2, §4.7; round 21); before that step they are under the clause like any
-    value, and a heat's `faults` stays under it until the heat leaves the list (§4.2, §4.4's
-    closure; round 23); or it is a second run's `placement`,
-    `pairTotal` or `countingRun` carried over from run 1, from the Attempt's first on-course listing
-    in run 2, staged or started, until a
-    row of run 2 carrying its time or its mark restates that field — unless the content-age guard
-    refused its mark **by the checker's own comparison** (property 5's reading: the snapshot's
-    `changedAfter` against the presented `tcp` observation's latest delivery, made only where the
-    row's mark would change the presented `tcp` `status`, rule 2's mark exception — one of
-    `not-started`, `at-start`, `left-without-finish`, property 5 — as property 8
-    reads it; a row with no mark, and a row whose mark the presented `status` already is, are never
-    refused; never by whether a presentation followed), in which case the row restates nothing (INV-7
-    "ignored for that field", the time held back with the mark, `CONTRACTS.md` §2.6) and the carry
-    stands; a retraction of the restating row (property 5: its mark cleared in place, the row gone)
-    ends its restatement, and the row of run 2 with no time and no mark that follows leaves the
-    fields carried again, the regression property 4 names having come first (recorded: jarni-so-odp
-    C1M_BR2_18:51, `dns` at 13:48:30 cleared at 13:54:15, its start 13:54:59; round 26); a row the
-    guard admits restates the field whether or not the system under test presents
-    it, so a `provisional` left `true` after an admitted row is this property's report (recorded:
-    jarni-ne-do K1M_BR2_19:62, the XML `dns` row of 08:55:33 refused against the leave of 08:55:31,
-    the TCP `dns` row of 08:55:39 restating `placement` and `pairTotal`, the next XML read
-    `countingRun` — its `dns` already presented, nothing to guard; and K1M_BR2_19:50's XML time row
-    of 08:50:12 with no mark, read while the Attempt was still listed, restating `countingRun`;
-    round 25, the comparison named in its second pass, its reach in the third)
-    — judged field by field, since
-    `countingRun` arrives only with the XML row; or its `source` is `operator-write` with a pending
-    `WriteRequest`. It goes `false → true` only through a regression first (property 4), at the
-    Attempt's first on-course listing of a generation (staged or started; recorded: nkz-19so
-    C1W_BR2_19:35 staged at 10:28:09.809) or one that lists it while no course is bound (a
-    cold start: the results push precedes the first snapshot), at a re-listing within the generation
-    that undoes a leave (`DERIVATIONS.md` §4.4; round 21), at upstream's withdrawal of a judged cell
-    while it is listed — the stream's own listing blanking the cell, no presented row of the generation
-    holding it judged (its cell blank, or no row yet),
-    a row's judged cell standing (INV-2 rule 1), property 6(b); D4 recomputes on the
-    presented cells (recorded: nkz-19so C1W_BR1_19:40 cell 16, the row blank at 08:38:18.153, the stream
-    at .181, back at .562; round 21, second pass) — or when a course binds — the first
-    step after which the Attempt's Phase has a `known` `courseId` and that Course a `known` `gates`
-    (`phase.updated`, `course.updated`; **D**) — and shows a blank cell. A `standing.updated` entry's `provisional` is the disjunction over its Attempt's `outcome`,
+11. **Provisional (§1.2).** `status` is never provisional. Every other presented result value —
+    the judging clause reaching the fields `CONTRACTS.md` §1.2 names, `underReview` and
+    `qualified` included — has `provisional: true` **exactly when** one of (a)–(d) holds.
+    - **(a) Inference.** It is an inference (`kind: inference`, or `outcome.kind: 'running'`).
+    - **(b) Judging open.** The run is not closed, and its judging is incomplete or cannot be
+      judged.
+      - *Not closed* (`DERIVATIONS.md` §4.4, read from the raw stream at admission): no
+        `Completed="Y"` listing of it carrying a `dtFinish`; no `oncourse-left` for it in this
+        generation that a later `oncourse.updated` of the generation has not undone by listing it
+        again (§4.1's false leave) — in a **D** re-run, listed in an earlier `oncourse.updated`
+        and absent from the latest, so an Attempt never listed is not closed by that; and no
+        presented no-result mark, `non-ranked` closing nothing.
+      - *Incomplete, slalom:* a presented `gates` cell is `null`.
+      - *Incomplete, Kayak Cross:* the Attempt's `faults` carries `judgingComplete: false`. The
+        parser reads it over the slot cells and stamps the `faults` observation alone, and only a
+        `known` one; the row's other observations carry no judging stamp, `runClosed` at most
+        (`DERIVATIONS.md` §4.4, §4.6(d)), and the Cross branch never reads `gates`, which is
+        `unavailable{not-applicable}` there. The observation read is the presented one: the row's
+        once a row stating a result is presented, INV-2 rule 1 having no cell exception for
+        `faults`, the stream's listing after it retained and never read (*recorded:* cp3-cross
+        MX1_XT_26:41 at 08:12:38.051). A `not-yet` `faults` with a course bound, every slot
+        blank, carries no stamp and is not under this clause (`CONTRACTS.md` §1.2).
+      - *Cannot be judged:* `gates`, in Cross `faults`, is not `known` because no course is
+        bound — the Attempt's Phase has no `known` `courseId`, or that Course no `known`
+        `gates`, the binding the `false → true` rule below names; `not-yet` is the state of this
+        case (`DERIVATIONS.md` §4.6), not only `unavailable{not-configured}` — and the
+        observation's `judgingComplete` is not `true`. The parser stamps `null`, or nothing,
+        without a course (`CONFORMANCE-VECTORS.md` §1); a `true` stamp is its judgement against
+        a course and settles the value.
+      - *Two exemptions* (`CONTRACTS.md` §1.2). The clause does not reach an Attempt with no run
+        yet — `status` absent or `not-started`, its row carrying neither time nor mark: the
+        values are run 1's, settled there, until the carry of (c) begins. Nor does it reach what
+        a heat's row asserts with its `placement` — the placement, the ordinal built from it,
+        and its `qualified` and `underReview` — from the step the placement is presented:
+        upstream's whole result, asserted after the judging (`DERIVATIONS.md` §4.2, §4.7).
+        Before that step they are under the clause like any value, and a heat's `faults` stays
+        under it until the heat leaves the list (§4.2, §4.4's closure).
+    - **(c) Carried from run 1.** It is a second run's `placement`, `pairTotal` or `countingRun`
+      carried over from run 1, from the Attempt's first on-course listing in run 2, staged or
+      started, until a row of run 2 carrying its time or its mark restates that field — judged
+      field by field, since `countingRun` arrives only with the XML row.
+      - *A refused mark restates nothing* (INV-7 "ignored for that field", the time held back
+        with the mark, `CONTRACTS.md` §2.6), and the carry stands. Refused means refused **by
+        the checker's own comparison**, property 5's reading as property 8 reads it: the
+        snapshot's `changedAfter` against the presented `tcp` observation's latest delivery,
+        made only where the row's mark would change the presented `tcp` `status` — rule 2's
+        mark exception, one of `not-started`, `at-start`, `left-without-finish`. A row with no
+        mark, and a row whose mark the presented `status` already is, are never refused; and
+        never by whether a presentation followed.
+      - *An admitted row restates* the field whether or not the system under test presents it,
+        so a `provisional` left `true` after an admitted row is this property's report.
+      - *A retraction of the restating row* (property 5: its mark cleared in place, the row
+        gone) ends its restatement, and the row of run 2 with no time and no mark that follows
+        leaves the fields carried again, the regression property 4 names having come first.
+
+      *Recorded:* jarni-ne-do K1M_BR2_19:62, the XML `dns` row of 08:55:33 refused against the
+      leave of 08:55:31, the TCP `dns` row of 08:55:39 restating `placement` and `pairTotal`,
+      the next XML read `countingRun`, its `dns` already presented and nothing to guard.
+      K1M_BR2_19:50, the XML time row of 08:50:12 with no mark, read while the Attempt was still
+      listed, restating `countingRun`. jarni-so-odp C1M_BR2_18:51, `dns` at 13:48:30 cleared at
+      13:54:15, its start 13:54:59.
+    - **(d) A pending write.** Its `source` is `operator-write` with a pending `WriteRequest`.
+
+    **It goes `false → true` only** through a regression first (property 4), or at one of these
+    steps:
+    - the Attempt's first on-course listing of a generation, staged or started (*recorded:*
+      nkz-19so C1W_BR2_19:35 staged at 10:28:09.809), or one that lists it while no course is
+      bound (a cold start: the results push precedes the first snapshot);
+    - a re-listing within the generation that undoes a leave (`DERIVATIONS.md` §4.4);
+    - upstream's withdrawal of a judged cell while it is listed, property 6(b): the stream's own
+      listing blanking the cell, no presented row of the generation holding it judged (its cell
+      blank, or no row yet), a row's judged cell standing (INV-2 rule 1). D4 recomputes on the
+      presented cells (*recorded:* nkz-19so C1W_BR1_19:40 cell 16, the row blank at 08:38:18.153,
+      the stream at .181, back at .562);
+    - a course binding — the first step after which the Attempt's Phase has a `known`
+      `courseId` and that Course a `known` `gates` (`phase.updated`, `course.updated`; **D**) —
+      and showing a blank cell.
+
+    A `standing.updated` entry's `provisional` is the disjunction over its Attempt's `outcome`,
     `placement` and `pairTotal` (§5 step 5).
 12. **Marks (§2.6) D.** `outcome` is `{ kind: 'no-result' }` **exactly when** `status` is a result
     mark other than `non-ranked`, with the same status and the status's envelope, whatever time the
@@ -591,7 +623,13 @@ but wrong" merge bugs that violate the contract's own stated structure, which is
 does not catch a bug that is invariant-conformant and still numerically wrong (a unit error, a
 misparsed field, a wrong gate cell) — gate 3 is what catches that. Nor does it see the retained,
 non-presented observations: INV-2b's `source-disagreement` diagnostics are its only trace of them,
-and whether such a disagreement *should* have been raised is a tier-1 question. A property that a
+and whether such a disagreement *should* have been raised is a tier-1 question. And it is blind to
+a stale mark presented over a running athlete after a re-run (`DERIVATIONS.md` §4.12, opponent
+review R16): with the stale-mark rule removed from a core, the step logs of the DNF re-run fixtures
+change and the checker reports nothing. That defect is caught by the vector
+`rerun-stale-mark-not-presented` and by the re-run data gate's own assertions
+(`scripts/__tests__/rerun-paths.test.ts`); no property clause is added for it (accepted,
+`DECISIONS/LOG.md` 2026-11-11). A property that a
 correct replay cannot satisfy is a finding against the contract, not against the replay: it is
 reported to the design authority, never relaxed in the checker.
 
