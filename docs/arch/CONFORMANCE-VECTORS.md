@@ -315,7 +315,7 @@ Each vector has:
   `${phaseId}:${bib}` (§2.6), and where both are present they agree. Reading the Phase off the id is
   a convention of this file alone, for a harness: a deployable finds a Phase through `Attempt.phaseId`
   and parses no identifier (`CONTRACTS.md` §1.1). The same convention describes a Phase no element
-  has described: its `format` is the id's token, its `classId` the id's class part — a convention of
+  has described: its `format` is the id's token, its `classId` the part of the id before the format token — a convention of
   this file alone, so that a vector's Phase has a class from its first observation and `CONTRACTS.md`
   §5 step 1's on-site precondition, a standing no earlier than its Phase, holds without a `classId`
   element (round 27d, second pass; `standing-not-resent-on-running-tick`,

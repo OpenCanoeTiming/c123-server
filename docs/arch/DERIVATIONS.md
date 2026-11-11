@@ -1432,8 +1432,9 @@ but no code path or recording ever filled it.
 
 Items 1–7 and 13 were answered on 2026-09-25 (#179; E1, verified upstream behaviour); item 8 was closed by INV-2c
 on 2026-10-14; items 15 and 17 were answered by the spike and the exit-delay measurement; item 16 by
-the round-20 measurement; item 22 by the maintainer (2026-11-06). Items 9, 11, 12, 18, 19, 20, 21
-and 23 remain.
+the round-20 measurement; item 22 by the maintainer (2026-11-06); items 23 and 25 are accepted
+risks and item 5 is closed (maintainer, 2026-11-11 and 2026-11-10; `DECISIONS/LOG.md`). Items 9,
+11, 12, 18, 19, 20, 21 and 24 remain.
 
 1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
    hardware judge terminals on their own port and raises a flag on the scoring service for about
@@ -1445,9 +1446,10 @@ and 23 remain.
 4. ~~Combination for the super-final and the legacy final.~~ **Answered:** sum of two runs, tie
    broken by the better run; relayed, never computed (`CONTRACTS.md` §2.4).
 5. ~~The base class of an attribute sub-class.~~ **Answered:** none is stored; an ordinary separate
-   class (§2.1). The maintainer's reading of what these classes were is pending; nothing speculative
-   is added. Their operator-typed time-trial rows are handled as untimed rows (§4.4), whatever the
-   reading turns out to be.
+   class (§2.1). **Closed (maintainer, 2026-11-11; `DECISIONS/LOG.md`):** such classes were a
+   workaround for several races of a day in one XML; they stay separate classes until one race =
+   one XML is solved in the live ingest (M5), and more such tricks are to be expected. Their
+   operator-typed time-trial rows are handled as untimed rows (§4.4).
 6. ~~Per-gate marks in Kayak Cross on TCP.~~ **Answered:** fault marks in the cells, never `Pen`
    (§4.6(d)).
 7. ~~Does a re-run clear the row at staging or at the new finish?~~ **Answered:** the wizard wipes it
@@ -1519,12 +1521,14 @@ and 23 remain.
     maintainer says whether an empty Standing or the last built one is wanted. (Round 18.)~~
     **Decided (maintainer, 2026-11-06):** the last built Standing is kept, `asOf` showing its age
     (§4.10; `CONTRACTS.md` §5, §8.3, §8.6).
-23. **A re-run inside a TCP outage.** A re-run whose start and finish both fall in an outage arrives
+23. **A re-run inside a TCP outage.** **Closed as an accepted risk (maintainer, 2026-11-11;
+    `DECISIONS/LOG.md`, #261): no admin action, the defaults below stand and the operator resolves
+    by hand.** A re-run whose start and finish both fall in an outage arrives
     as one listing with a new start and a new finish, which §4.11 reads as a start correction:
     `run` stays, the newest row is presented, a pending write of the old run is resolved by the new
     run's row and the old run's checks compare against the new gates. Nothing upstream distinguishes
     it from a start and a finish both corrected. The safer default is the correction (nothing is
-    hidden); whether an admin action to mark a re-run by hand is wanted is the maintainer's. The
+    hidden). The
     mirror shape (second pass): a mark attributed while the athlete is still listed records the
     generation, so a later start change with no finish reads as a re-run; a slip of a mark followed
     by a start correction would therefore increment. Not recorded either way. (Round 19.)
@@ -1535,7 +1539,9 @@ and 23 remain.
     at 08:27:51 — 7 s of `count 0`, `provisional: true`, the honest label. A merge would be a new
     rule (slot cells against captions, and which stamp property 11 reads); not taken on one 7 s
     instance. (Round 26.)
-25. **The generation across a server restart.** `CONTRACTS.md` §2.10 keys checks and flags by `run`,
+25. **The generation across a server restart.** **Closed as an accepted risk (maintainer,
+    2026-11-10; `DECISIONS/LOG.md`, #294): the server stores nothing extra, and the operator
+    resolves mismatched checks and pending corrections by hand.** `CONTRACTS.md` §2.10 keys checks and flags by `run`,
     and live-mini holds each Attempt at its pushed `run`; a restarted server that re-derives the
     Attempt from upstream alone would present `1` for a re-run Attempt — the re-run's checks read
     `stale`, run 1's are compared against run 2's gates, and the bridge's re-push (§8.2) sends `1`
@@ -1543,5 +1549,4 @@ and 23 remain.
     `run` per Attempt with §2.10's discipline, or seed it from the store's highest `run` for the
     Attempt and from live's state. A rare conjunction (one recorded re-run in seven recordings, then a
     restart inside the event) with a wrong-workflow, never a wrong-result, consequence on site
-    (`ADR-016`), and a decrease on live; to be ruled before penalty-check (M4) and the bridge (M5) rely
-    on it. (Round 27i, second pass.)
+    (`ADR-016`), and a decrease on live. (Round 27i, second pass.)
