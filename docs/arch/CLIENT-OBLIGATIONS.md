@@ -10,143 +10,10 @@ For each deployable other than c123-server, as named in `ARCHITECTURE.md`'s "The
 its own section plus the Common section is the definition of done for its migration to the new
 contract. Nothing here adds an obligation. Disagreements between documents, and duties implied but
 not stated, are listed unresolved under "Gaps and conflicts". Derived at 0c199af, plus the working
-tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not tested"; round 17
-(2026-11-05) added the nullable `siblingPhaseId` and `decidedIn`, the member `externalId` as `null`, the
-untimed row's `status`, the Cross time trial's `duration` and the fixture's `gate2.exercised`; its review added
-the deferred `pair` standing, `StandingEntry.result: null` and `not-started → finished`. Round 18
-(2026-11-05) changed no client duty: content age, the `xml` states and the classification snapshot
-are the server's reader and core (CONTRACTS §2.8, §4; DERIVATIONS §0.3, §0.5, §4.10, §5;
-CONFORMANCE-VECTORS §1; TEST-ARCHITECTURE §3.2), and `sectorEndsAfterGate` being strictly
-increasing narrows, never widens, what a client receives (CONTRACTS §2.12). Its second pass
-(2026-11-06) changed none either: `null` content age, INV-7 on an empty XML table, classification
-precedence and INV-5's no-op are the core's (CONTRACTS §4; DERIVATIONS §0.3, §4.10, §4.12), and a
-classification `Standing.asOf` is now worded as the latest snapshot that changed its rows
-(CONTRACTS §2.4, §5), which is what a client already compared. Its third pass (2026-11-06) changed
-none: INV-5's content age on a later re-delivery and `decidedIn` from an admitted XML row are the
-core's (CONTRACTS §4; DERIVATIONS §4.10; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §1). Round 19
-(2026-11-06) changed none: the generation trigger and the start correction, the stream withdrawing its
-own finish, the `RaceConfig` match by layout, the echo rule, INV-5 on a reconnect burst and the reader's
-stamps are the core's and the reader's (CONTRACTS §2.6, §2.12, §3.2, §4; DERIVATIONS §0.3, §2.1, §2.3,
-§4.1, §4.4, §4.6, §4.11, §4.12, §5, §6; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §1, §2, §5;
-ADR-010; ADR-013; ADR-015); a client sees a start correction as the ordinary field-level change it
-already handles, and a withdrawn stream finish as `status` leaving `finished`, which it never treated as
-final. Its second pass (2026-11-06) changed none: "recorded" and the recorded start are the core's terms,
-and `on-course → at-start` for a deleted start impulse is `status` leaving `on-course`, on which a
-client's local clock already stops (CONTRACTS §2.6, §2.12, §3.2, §4; DERIVATIONS §2.1, §2.3, §4.1, §4.3,
-§4.11, §6, §10; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §1, §2, §5; ADR-011; ADR-013; ADR-015). Its third pass (2026-11-06) changed none: `at-start → finished` is a
-finish like any other, a mark standing at the recorded start recording nothing is the core's term, and the
-provenance rewording states behaviour only (CONTRACTS §2.6, §3.2; DERIVATIONS §4.1, §4.4, §4.6, §4.11,
-§8, §10; TEST-ARCHITECTURE §3.2; ADR-011; ADR-013; ADR-015). Round 20 (2026-11-06) changed none: the
-leave constant, `no-result` as the presented `status`'s presentation, the `tcp` content age, closure's
-one definition, `not-started` from the first row, the carry from the first listing in run 2, the
-within-kind cell merge and a `Gates=""` row are the core's (CONTRACTS §1.2, §2.6, §3.2, §4;
-DERIVATIONS §4, §4.1, §4.4, §4.6, §4.11, §4.12, §8, §10; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §1,
-§2; ADR-017); a client already handles `not-started`, `no-result` beside its mark and `provisional`
-moving, and the on-course set's membership rule is unchanged — except one duty: a `WriteRequest`
-may now resolve `mismatched` **without** `confirmedValue`, when a retraction removed the result the
-write targeted (CONTRACTS §2.9, §4 rule 4, §7.3), so penalty-check renders that case (below). Its
-second pass (2026-11-06, after review) changed two more: live-mini-server refuses
-`PUT …/classification` with `rows: []` (CONTRACTS §8.3, §8.6; the maintainer's decision that an
-emptied classification keeps the last built Standing, DERIVATIONS §4.10), and the bridge never
-sends one; the rest — a listing as a delivery of the stream's `status`, INV-2b raised at any step and
-cleared only by a value change (third pass), a mark rule 2's guard refused holding back its row,
-`Completed` closing only with a finish, `non-ranked` closing
-nothing, a `Gates=""` row stating a result by a time or a mark, the leave margin at the worst
-phase — is the core's and the checker's (CONTRACTS §1.2, §2.6, §4, §5, §7.3; DERIVATIONS §0.3,
-§4.1, §4.3, §4.4, §4.6, §4.10, §10; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §1, §2; ADR-017);
-§7.3's "closed run" is the on-course-set test the client already applies. Its third pass
-(2026-11-06, the closure review) moved no duty. Round 21 (2026-11-06) moved none: a `judgingComplete:
-true` stamp settling a cold-start row, an Attempt with no run yet and a heat's placement outside the
-judging clause, and a false leave's closure undone by its re-listing are the core's and the checker's
-(DERIVATIONS §4.4; TEST-ARCHITECTURE §3.2); a client already handles `provisional` moving either way. Its
-second pass (2026-11-06, after review) moved none: the re-listing's evidence corrected to one recorded
-flip, P11's judging clause back in its causal form, P6(b) brought to P11's re-listing reading, upstream's
-withdrawal of a judged cell while listed named as admitted, and round 20's landed vectors no longer
-"owed" — the core's and the checker's (DERIVATIONS §4.4; TEST-ARCHITECTURE §3.2; CONFORMANCE-VECTORS §2). Round 22 (2026-11-06) moved none: the ranked value behind `behindSeconds` and the
-`order-disagreement` check being the value the placement is based on (`pairTotal` in both standings of a
-second-run Phase), and a Phase no element has described reading its `pair` from its id, are the core's and
-a harness convention (CONTRACTS §5; CONFORMANCE-VECTORS §1); a client shows `behindSeconds` as delivered
-and expects the `pair` standing, on a real stream, once the stated `siblingPhaseId` is known as before.
-Round 23 (2026-11-06) moved none: the stream's withdrawal of a judged cell reaching an Attempt with no
-row of the generation, the Cross judging stamp being the `faults` observation's, and a heat row's
-`qualified` and `underReview` settling with its `placement` (and, after review, a `not-yet` `faults`
-carrying no stamp, so an untimed Cross row stays settled), are the core's and the checker's
-(DERIVATIONS §4.6; TEST-ARCHITECTURE §3.2); a client already handles `provisional` moving either way.
-Round 24 (2026-11-07, the first gate-2 run on real windows) moved none: a replay step being one ingest
-unit, the stream's gate cells `inferred` until a row is presented and the merged vector the row's,
-the judging clause naming its fields and the heat exemption stated in §1.2, a listing's `entry` as
-rule 2's `tcp` side, the Phase's structural fields with its first message, the leave as the core's
-derivation, a window opening on a hydration step, and stated outages and re-baselines as declared
-inputs are the core's, the driver's and the checker's (CONTRACTS §1.2, §1.6, §4; DERIVATIONS §2.1,
-§4.6, §4.7, §4.8; TEST-ARCHITECTURE §3.2; ADR-017). Its second pass (2026-11-07, after review) moved
-none: the checker's raw stream omitting a stated outage's records, the step log read from the raw
-stream's start with the window bounding the counts, §1.2 naming both exemptions and "a row stating a
-result", and P13 naming `courseOrder` and `timeToBeat` are the checker's, the driver's and the
-test document's (CONTRACTS §1.2; TEST-ARCHITECTURE §3.2, §4); a client already reads `confidence` and
-`provisional` as two facts and receives a Phase whole on its first message. Round 25 (2026-11-07,
-verdicts on the gate-2 reports of #242) moved none: a row the content-age guard refused leaving the
-second-run carry standing, a row held for the stream's finish keeping its own `observedAt`, and
-`scope.replaced` carrying no Standing whose own Attempts give no entry are the core's and the checker's
-(CONTRACTS §1.2, §7.2; TEST-ARCHITECTURE §3.2; DERIVATIONS §4.11); a client already applies
-`scope.replaced` as a replace and takes a `standing.updated` whole, a first one included. Its second
-pass moved none either: that a Standing is first published at its first entry and hydration lists
-only published ones (CONTRACTS §5 step 1, §7.1) states what the core already did, and a client
-already receives each Standing by `standing.updated` and may not assume a Standing per scope before
-one is sent. Its third pass moved none: that the guard's comparison reaches only a mark that would
-change a `tcp`-presented `status` (CONTRACTS §1.2; TEST-ARCHITECTURE §3.2) is the checker's reading of
-`provisional`, which a client takes as given. Round 26 (2026-11-07, whole recordings through gate 2)
-moved none: the stream withdrawing its own `running` outcome at a leave or a deleted start, the
-untimed flip as an INV-3 assertion, the second-run carry resuming after its restating row is
-retracted, a time-empty second-run row's empty `Rank` and `Total` reading `not-yet`, the Cross
-`faults` stamp being the presented observation's and the run-2 outcome's `observedAt` are the core's
-and the checker's (CONTRACTS §1.2, §2.6, §4; DERIVATIONS §4.4, §4.12, §10; TEST-ARCHITECTURE §3.2);
-a client already treats `not-yet` and `unavailable` as states and `provisional` as given, and
-`left-without-finish` as a status whose outcome it never showed as settled. Its second pass
-(2026-11-08) moved none: a present TCP row leaving `countingRun` standing and the XML row's
-`BetterRunNr` `0` reading `not-yet` are the core's and the checker's (CONTRACTS §4; DERIVATIONS
-§4.12; TEST-ARCHITECTURE §3.2); a client receives `not-yet` either way. Round 27 (2026-11-08, the
-on-site process, server#210) moved one duty: a Phase is created at the first observation stating its
-class, so at a TCP cold start a client hydrates the Attempts of `pendingPhaseIds` and may hold an
-Attempt whose Phase it does not yet hold (CONTRACTS §1.6, §2.4, §7.1; DERIVATIONS §2.1, below; the
-`pendingPhaseIds` field and the gate-5 `source` strip narrowed to `run` are round 27b, the review);
-the rest — the on-course set's `asOf` as the instant of its last
-change (what a client already read as the set's age), a check of a superseded generation reading
-`stale`, `Event.details`' source, the new-event action and the return to an earlier event being the
-admin UI's own, the real process's clock and comparison — is the server's, the parsers' and the
-tier-4 harness's (CONTRACTS §2.2, §2.10, §7.1, §7.2; DERIVATIONS §1, §3; TEST-ARCHITECTURE §3.4;
-ADR-017). Round 27c (2026-11-08, the gate-2 verdict on a cold-start cut) moved none: a gate vector
-bound late carrying the envelope of the row that stated its cells is the core's and the checker's
-(DERIVATIONS §4.6; TEST-ARCHITECTURE §3.2); a client receives an ordinary `known` envelope. Round 27d
-(2026-11-08, the #210 review) moved none: a re-baseline read's `changedAfter` and `Standing.classId`
-being the Phase's, a Standing published no earlier than its Phase, are the reader's and the core's
-(CONTRACTS §2.7, §4, §5); a client already keys standings by the `classId` it hydrates them under. Its
-second pass (2026-11-08, review of PR #286) moved none: the re-baseline's `changedAfter` restated as
-§0.3's last successful stat, the standing precondition scoped to on-site and placed in §5 step 1, and
-the vector Phase's conventional class are the reader's, the core's and the harness's (CONTRACTS §2.7,
-§4, §5; CONFORMANCE-VECTORS §1). Round 27e (2026-11-08, the checker implementer's question) moved
-none: a late-bound vector's instant being the element's that last changed it, not the latest identical
-re-delivery's, is the core's and the checker's (DERIVATIONS §4.6; TEST-ARCHITECTURE §3.2). Its second
-pass (2026-11-08, review of PR #288) amended CONTRACTS §1.2's merged-vector instant to the later of
-the row's and the last cell change's and moved no duty: a client takes `observedAt` as given
-(CONTRACTS §1.2; DERIVATIONS §4.6). Round 27f (2026-11-08, the checker review) moved none: which step
-binds the course is the core's and the checker's (TEST-ARCHITECTURE §3.2; DERIVATIONS §4.6). Round 27g
-(2026-11-08, #207 re-run paths) moved none: property 6(b) reading the new generation at an increment is
-the checker's (TEST-ARCHITECTURE §3.2; ADR-013). Round 27h (2026-11-08, #210 row 15) moved none:
-property 1's "at or before the step" read in ingest order is the checker's (TEST-ARCHITECTURE §3.2;
-CONTRACTS §4 INV-6). Round 27i (2026-11-08, the checker review) moved none: `run` incrementing by one is
-the core's and the checker's (TEST-ARCHITECTURE §3.2; CONTRACTS §2.6; ADR-013); its second pass opened
-the generation across a server restart as DERIVATIONS §10 item 25, no duty moving until it is ruled. Round 28 (2026-11-08, the write path, server#212) moved two duties: penalty-check renders `409
-write-not-possible` with the new reason `upstream-disconnected` (TCP not connected or the socket write
-failed; nothing sent, created or bound) and expects `200` with the same flag on a retried flag POST
-(CONTRACTS §1.4, §1.5, §7.3, §7.4); the order of refusal, the durable key map and `WriteRequest`s, the
-command's bytes and the no-op `DELETE` are the server's (CONTRACTS §1.5, §1.6, §7.3, §7.4). Its third
-pass (2026-11-08) moved none: `{ gate, value }` was already the wire shape of the lifecycle example,
-and a stored write's echo after a restart is the core's (CONTRACTS §7.3; CONFORMANCE-VECTORS §1;
-DERIVATIONS §6); its follow-up (2026-11-09) moved none: the durable record keeping the cell's retained value at
-submission, so that §6's echo rule applies unchanged after a restart, is the core's (DERIVATIONS §6).
-Round 29 (2026-11-09, #208 row 4) moved none: a late-bound vector's "equal cells" read against the
-presented merged vector, never against that source's previous row, is the core's and the checker's
-(CONTRACTS §1.2; DERIVATIONS §4.6; TEST-ARCHITECTURE §3.2); a client takes `observedAt` as given.
+tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not tested", and kept
+in step with every contract round since. Which round moved which duty, and which moved none, is
+recorded in `DECISIONS/LOG.md` (each round's row, and the round C part 1 row that lists the duties
+moved since this derivation); the duties themselves are the lines below.
 
 ---
 
@@ -455,11 +322,11 @@ the client's own receipt (rendering clients), the live-tier vector subset is lis
 (live-mini-server), and classification rows have an ingest shape (live-mini-server,
 live-mini-client).
 
-Open since round 13 (2026-11-05), returned to the maintainer: no §8.3 push carries `Event.name`,
+Open since 2026-11-05 (`DECISIONS/LOG.md`, round 13), returned to the maintainer: no §8.3 push carries `Event.name`,
 `Event.details` or a Course's `layout`, `slots` and `captions`, yet §8.4 serves `Event` and `Course`
 whole. Until settled, live-mini-server has no stated source for those fields (CONTRACTS §8.3, §8.4).
 
-Open since round 14 (2026-11-05), returned to the maintainer: nothing names when the on-site bridge
+Open since 2026-11-05 (`DECISIONS/LOG.md`, round 14), returned to the maintainer: nothing names when the on-site bridge
 sends `DELETE /ingest/v2/attempts/{phaseId}/{bib}`. On site an Attempt is never removed: a retraction
 is field-level (INV-7) and a re-baseline reaches live as a Phase replace, which removes absent
 Attempts by itself; so today only a §8.5 organiser correction has a reason to call `DELETE`, and no

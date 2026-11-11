@@ -17,7 +17,7 @@ is intended to become permanent documentation.
 | `inputs/CONSTRAINTS.md` | What is fixed, what is open, operating reality |
 | `ARCHITECTURE.md` | Target state — domain model, deployable boundaries, data flow, principles traced to `EVIDENCE.md`, nine scenario walkthroughs (A–I) |
 | `CONTRACTS.md` | The primary deliverable — domain entities, the observation envelope, merge invariants, ranking, the derivability ledger, the on-site and live-ingest contracts |
-| `DECISIONS/` | Seventeen ADRs, `ADR-001` through `ADR-017`. `ADR-004` and `ADR-008` are superseded by `ADR-011` and `ADR-012`; their original text is kept. `ADR-017` records what the M0 spike changed |
+| `DECISIONS/` | Seventeen ADRs, `ADR-001` through `ADR-017`. `ADR-004` and `ADR-008` are superseded by `ADR-011` and `ADR-012`; their original text is kept. `ADR-017` records what the M0 spike changed. `LOG.md` is the decision log: the maintainer's decisions, the defaults taken without the maintainer, and the ruling history of every contract round since 13 |
 | `TEST-ARCHITECTURE.md` | Four test tiers, the fixture format, and the clock-control requirement that makes presentation-layer timing assertable |
 | `DERIVATIONS.md` | For every value `CONTRACTS.md` asserts: the exact upstream source field, transformation, conditionality, and resulting envelope. §9 lists every upstream field deliberately *not* modelled, and why; §10 lists open technical questions |
 | `schemas/` | JSON Schema for the two wire shapes reused everywhere — the observation envelope and the error response — and for a fixture's admission block |
@@ -109,6 +109,14 @@ reader can see the whole set at once.
   cited sections win. `scripts/check-obligations.js` runs in CI (`.github/workflows/docs-arch.yml`)
   and fails in two cases: a citation no longer resolves, or a cited section or ADR changed while the
   checklist did not. Label the PR `obligations-unchanged` when the change affects no obligation.
+- **The normative documents state each rule as it stands; the ruling history lives in
+  `DECISIONS/LOG.md`.** Who ruled what in which contract round, and the case that raised it, is a
+  LOG row. A clause names its row only where a reader needs the provenance, and a rule that took
+  several rulings is restated as one rule with its examples, never as layered amendments.
+- **A core/checker disagreement that moves no client obligation gets a default and a
+  `DERIVATIONS.md` §10 item, not a round** (maintainer, 2026-11-11). The design authority states the
+  default, records it as a LOG row and as the §10 item, and the core and the gate-2 checker follow
+  it; a round is kept for a disagreement that moves what a client must do.
 
 ## Implementation sequence
 
