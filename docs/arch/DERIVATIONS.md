@@ -1751,8 +1751,10 @@ it.
     it is best effort: the directory entry is flushed where the platform offers it, and on
     Windows it does not, so a write acknowledged in the last moments before the power fails
     may roll back to the previous complete state. Nothing acknowledged is ever half-written.
-    The venue-laptop check (#198) measures what Windows does. Reopens if the maintainer wants
-    power loss covered; that needs a write-through the check would have to verify.
+    The venue-laptop check (#198) measures what Windows does. **Settled (maintainer, 2026-11-12):
+    accepted.** The venue documentation tells the operator to run the laptop on a charged
+    battery. Covering power loss would need a write-through store the check would have to
+    verify.
 35. **A Kayak Cross leave and the stream's `running` outcome** (#318). A Cross Attempt that
     leaves the list keeps `status: on-course` (§4.2; `CONTRACTS.md` §7.1), and it keeps the
     stream's `running` outcome with it: `running` is the outcome of an Attempt on course
