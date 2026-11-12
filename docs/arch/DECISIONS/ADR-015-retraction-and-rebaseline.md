@@ -241,8 +241,8 @@ the same file been a first read (`changedAfter: null`), nothing would move until
 - A competitor deleted upstream stays on our start list as a `not-started` Attempt, on site and on
   live. Whether a removal should remove the Attempt is the open maintainer question recorded in
   `CLIENT-OBLIGATIONS.md`, "Gaps and conflicts".
-- The level of `xml-table-emptied` is a default: the admin log. Making it a wire `Diagnostic`,
-  visible in the admin UI, is a contract-package change (`DERIVATIONS.md` §10 item 26).
+- The level of `xml-table-emptied` is the admin log, no wire diagnostic (a default, confirmed by
+  the maintainer on 2026-11-12; `DERIVATIONS.md` §10 item 26).
 
 **Vectors.** `inv2c-first-read-unknown-age-refused` pinned Revision 3's sentence in its last step;
 its expected outcome for the absent row is now `not-yet`. Four vectors are added:

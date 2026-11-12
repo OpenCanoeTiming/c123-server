@@ -358,3 +358,5 @@ Round C part 4 (2026-11-12; `DECISIONS/LOG.md`) wrote the maintainer's answers o
 that changed a cited section and moved no obligation above:
 - `NHT1` and `NHT2` are single runs, `pair: null`; a client takes structure from `Phase.pair` as
   before (CONTRACTS §2.4).
+- a store file set aside at load is reported in the admin log only, and `xml-table-emptied` stays
+  ingest-only: nothing reaches a client (CONTRACTS §2.10, §4).

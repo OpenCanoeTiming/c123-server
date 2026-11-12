@@ -1676,8 +1676,9 @@ it.
     The decision says "raises a diagnostic" and not where. Default: ingest-only, the admin log, as
     the parser's own kinds are (§0.5), so no wire shape moves. The alternative is a seventh
     `Diagnostic` kind on `GET /api/diagnostics`, visible in the admin UI: a change of the contract
-    package and of one admin obligation. Reopens if operators need to see it without reading the
-    log; the maintainer's to say.
+    package and of one admin obligation. **Settled (maintainer, 2026-11-12): the admin log, no
+    wire diagnostic.** The Canoe123 operator watches the admin UI and receives the system
+    notifications about problems.
 27. **What a per-Phase re-baseline replaces on a paired Phase.** `CONTRACTS.md` §7.2 sends the
     Attempts of the named Phase and every Standing whose scope names it, a `pair` Standing on
     either side included. The gate-2 checker's scope added the sibling Phase and so reported the
@@ -1742,8 +1743,8 @@ it.
     rule still binds: `seq` never regresses across a restart (`CONTRACTS.md` §1.6), so the
     counter restarts above any value the server can have issued, never at zero. What is lost is
     workflow state: checks and flags read as never made, a pending write is forgotten and the
-    operator resolves it by hand, as after §10 item 25. Reopens if an operator must see the
-    failure without reading the log; that goes with item 26's question.
+    operator resolves it by hand, as after §10 item 25. **Settled (maintainer, 2026-11-12), with
+    item 26:** the admin log entry is the report; nothing goes on the wire.
 34. **What "durable" covers** (#273). `CONTRACTS.md` §2.10 states the guarantee against a crash:
     "a crash at any point leaves the previous complete state". That is a crash of the server
     process, on every platform: a temporary file, flushed, then a rename. Against a power loss

@@ -1250,7 +1250,8 @@ is recoverable from the XML snapshot in one read. So:
 - a write is acknowledged (§7.4) and pushed (§7.2) only after it is durable;
 - the store is validated on load, and a file that fails validation is reported to the admin
   audience and never silently replaced: it is set aside under another name, the store opens
-  empty and the server starts (a default; `DERIVATIONS.md` §10 item 33);
+  empty and the server starts; the report is an admin log entry, nothing on the wire
+  (maintainer, 2026-11-12; `DERIVATIONS.md` §10 item 33);
 - `TEST-ARCHITECTURE.md` §3.5 is the verification path (#168).
 
 ### 2.11 Worked example: the envelope through a finish
