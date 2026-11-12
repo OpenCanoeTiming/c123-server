@@ -425,6 +425,10 @@ the maintainer, 2026-11-10; `DECISIONS/LOG.md`, round 27b). The window lasts abo
 lists created Phases only; a client renders what such an Attempt carries until its Phase arrives,
 whole, `classId` included.
 
+**Removal over the push.** Outside `scope.replaced`'s replace, an Attempt is the one entity a
+message removes: `attempt.deleted` names it (§2.6; §7.2, §8.4), and the client removes the Attempt and its standing entries. A later
+`attempt.updated` for the same `attemptId` creates a new Attempt, whole, as above.
+
 Both on-site client applications and the public spectator client are required to implement this; §7
 and §8.4 each restate only the connection-specific detail, not this sequence.
 
@@ -753,7 +757,12 @@ type Entry = {
 
 ### 2.6 Attempt
 
-One Entry's participation in one race Phase: the unit with a lifecycle.
+One Entry's participation in one race Phase: the unit with a lifecycle. An Attempt exists from the
+first observation that names it, a start-list row included, until upstream removes it: a
+competitor deleted, moved to another race or class, or given another bib upstream is removed with
+its Attempt, at the first admitted XML snapshot of the race without its row (§4 INV-7; maintainer,
+2026-11-12). A retraction never removes an Attempt; a removal is sent as `attempt.deleted` (§7.2,
+§8.4).
 
 ```ts
 type Attempt = {
@@ -1232,6 +1241,11 @@ else the check's `status` if a check exists, else `plain`.
 - **A result moved to another bib** leaves the check with the bib it was made on. The paper protocol
   is per bib as raced; the receiving bib has no check. Re-pointing `entry` (INV-4) does not move a
   check either: it belongs to the Attempt, not the person.
+- **An Attempt removed upstream** (§2.6, §4 INV-7) keeps its checks and flags in the store; nothing
+  deletes them. While the Attempt does not exist they are not served (`/checks` lists none for it,
+  a check or flag write is `404 attempt-not-found`) and no `check.updated` is sent. If a row with
+  the same `attemptId` returns, the new Attempt's reads serve them again, `status` derived as above
+  (a default; `DERIVATIONS.md` §10 item 38).
 - **The re-baseline** (§4) keeps every check and flag and recomputes `status` against the rebuilt
   values.
 - **A late correction** (a protest 30 minutes on) changes the presented penalty; every check on that
@@ -1552,6 +1566,8 @@ implementation must satisfy, not an algorithm.
        displaces the write's presentation and an assertion alike, and resolves a pending write
        `mismatched` with no `confirmedValue` — upstream's table holds no result where one was
        requested (kept by the maintainer, 2026-11-11, to be revisited in M4; `DECISIONS/LOG.md`).
+       A removal of the Attempt (INV-7, an absent XML row) resolves it the same way, in the
+       removal's unit and before it.
        **The presented value under this rule is a whole
        `gates` vector:** the vector presented from rules 1–3 with the target cell replaced by the
        requested one, `source: operator-write` on the envelope (`gates` keeps the course's count,
@@ -1661,17 +1677,30 @@ implementation must satisfy, not an algorithm.
     every second-run row in the snapshot already carries the combined placement and total with no
     time. This is how a deleted result, or a DNS, DNF or DSQ taken back, shows in the file: the
     row stays and its fields go empty.
-  - **XML, the row is absent** from a table that carries other rows: as the TCP absent-row case,
-    `pairTotal` and `countingRun` included in a paired second run (maintainer, 2026-11-11;
-    `DECISIONS/ADR-015` Revision 5). Upstream rewrites the file whole from its current tables at
-    every save, and a competitor deleted, moved to another race or class, or given another bib is
-    gone from the race's next file; so is a row a redrawn start list no longer holds (observed
-    upstream behaviour, `DERIVATIONS.md` §4.12; no recording holds a removal).
+  - **XML, the row is absent** from a table that carries other rows: **the Attempt is removed**
+    (maintainer, 2026-11-12; `DECISIONS/ADR-015` Revision 6). Upstream rewrites the file whole
+    from its current tables at every save, and a competitor deleted, moved to another race or
+    class, or given another bib is gone from the race's next file; so is a row a redrawn start
+    list no longer holds (observed upstream behaviour, `DERIVATIONS.md` §4.12; no recording holds a
+    removal). The row is the race's row in the snapshot's results table, the one row per Attempt,
+    start-list rows included; a deleted result keeps it, blanked (the present-row case above).
+    The removal applies to an Attempt a results-table row of its race has named, when the
+    snapshot is admitted for the Attempt: its `changedAfter` is later than the latest delivery of
+    every `tcp` observation of the Attempt, an on-course listing included (INV-2c; `null` never
+    qualifies), and the Attempt is not in the on-course set. Where the snapshot is not admitted,
+    the row is retracted instead, as the TCP absent-row case (`pairTotal` and `countingRun`
+    included in a paired second run), under the guard below field by field, and a later snapshot
+    settles the removal. TCP's absent row only retracts, never removes. A removed Attempt is gone from every read and every Standing; on site
+    it is sent as `attempt.deleted` (§7.2), to live as `DELETE` (§8.3). A pending `WriteRequest`
+    of it resolves `mismatched` without `confirmedValue`, as on a retraction; its checks and
+    flags stay in the store (§2.10). The Entry is not removed. A moved competitor's row in the
+    other race, or under the new bib, creates that Attempt by the ordinary rule; a row that
+    returns creates a new Attempt, `run` 1, carrying nothing of the removed one.
     *Example:* bib 11 holds a TCP result of 10:40:59 and the operator deletes the competitor. The
-    next save lists the race without bib 11. Its content age, 10:41:32, is later than the push, so
-    bib 11's `outcome`, `gates` and `placement` go `not-yet` and its `status` `not-started`. The
-    Attempt stays, with its `entry`, `bib` and `startOrder`. A row that returns later is a new
-    observation and is presented by rules 1–2 like any other.
+    next save lists the race without bib 11. Its content age, 10:41:32, is later than the push
+    and bib 11 is off course, so the Attempt `K1M_BR1_6:11` is removed: one `attempt.deleted`,
+    and the race's Standings without its entry. Had the save's content age been 10:40:55, bib
+    11's TCP fields would stand until the next save.
   - **XML, a wholly empty table retracts nothing.** That is a race the snapshot's schedule names
     with no result row at all. It is not a table whose rows are all blank: there each row
     retracts as a present row. One read of the lagging source does not clear a whole race: a
@@ -1679,14 +1708,15 @@ implementation must satisfy, not an algorithm.
     start-list mode. Where the race holds at least one result an absent row would have retracted
     — the guard below applied, so a table read before the results it lacks raises nothing —
     the core raises `xml-table-emptied`, once per emptying. It is an ingest-only diagnostic: it
-    reaches the admin log and never `GET /api/diagnostics` (`DERIVATIONS.md` §0.5, §4.12). If the
-    race really was emptied, the re-baseline below is the remedy. A classification Phase's
+    reaches the admin log and never `GET /api/diagnostics` (`DERIVATIONS.md` §0.5, §4.12). Such a
+    table removes no Attempt either. If the race really was emptied, the re-baseline below is
+    the remedy. A classification Phase's
     emptied table is `DERIVATIONS.md` §4.10's case. Not recorded: no table lost its rows in any
     recording.
   - **Never retracted:** an on-course inference, `entry`, `bib`, `startOrder`, `heat`, `startLane`,
     `run`, or a field whose Attempt was never present in a results-table observation.
   - **XML retractions are guarded by content age (INV-2c),** a present row's and an absent row's
-    alike. The snapshot lags TCP by up to a save cycle, so a snapshot written before a result push
+    alike, and an absent row's removal by the Attempt-wide form above. The snapshot lags TCP by up to a save cycle, so a snapshot written before a result push
     must not undo it. An XML retraction, and the mark exception of rule 2, apply to a `tcp`
     observation only when the snapshot's content age — its `changedAfter`, INV-2c — is later than
     that observation's content age (its latest delivery's `observedAt`, INV-2c). A first read,
@@ -1956,7 +1986,7 @@ Every response except `/api/sources` carries `asOfSeq: number` (§1.6) at the to
 | `GET /api/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }`: every Attempt of the `phaseId`, a Phase whose class is not yet known included (§1.6) | `404 phase-not-found`: a `phaseId` never observed |
 | `GET /api/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`: every published scope of §5 (step 1: from its first entry), for the whole class and per age category | `404 class-not-found` |
 | `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null, asOf: Timestamp \| null }`: **every Attempt upstream currently lists on its on-course list**, across every running Phase, whatever its `status`: `at-start`, `on-course`, and, between a finish and upstream's closure of the run — upstream's auto-complete setting, measured over seven recordings and 1,995 closures: about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % of closures in [18, 20) s), about 47 s at one (medians 47 s, p90 57 s), a minority of manual closes under 5 s (12.6 % and 34.9 % on two days) and a long tail to 126–781 s. **No client may assume a fixed value.** Meanwhile the Attempt is listed as `finished` or a mark. The set is upstream's list; `status` says where each Attempt is. `asOf` is the ingest time of the unit at which the set last changed — membership, order or `featuredByUpstream`: a listing, `oncourse-empty`, or the TCP message at which a leave was derived (`DERIVATIONS.md` §4.1) — `null` before any; a listing that changes nothing moves it no more than a running tick moves a Standing's (§5), so this response and the last `oncourse.updated` agree (§1.6); an unchanged set reads as old as its last change, and liveness is §7.2's heartbeat, never `asOf`. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8). Kept current by `oncourse.updated` (§7.2) | — |
-| `GET /api/phases/{phaseId}/checks` | `{ asOfSeq, checks: GateCheck[], flags: GateFlag[] }`: every check and flag of the Phase, all run generations, `status` derived at serialisation (§2.10) | `404 phase-not-found`: a `phaseId` never observed, as the attempts row |
+| `GET /api/phases/{phaseId}/checks` | `{ asOfSeq, checks: GateCheck[], flags: GateFlag[] }`: every check and flag of the Phase's existing Attempts, all run generations, `status` derived at serialisation (§2.10) | `404 phase-not-found`: a `phaseId` never observed, as the attempts row |
 | `GET /api/sources` | `SourceStatus`, unwrapped | — |
 | `GET /api/diagnostics` | `{ asOfSeq, diagnostics: Diagnostic[] }`: every current diagnostic of the six kinds in §4 (source disagreement, contradicted finish, duplicate finish, stale mark, member-sum mismatch, unparseable cell). Admin audience only | — |
 | `POST /api/rebaseline` | body `{ "scope": { "kind": "phase", "phaseId": string } \| { "kind": "event" } }`. `200 { asOfSeq, scope, snapshotWrittenAt, snapshotDetectedAt, attempts: number }`: the operator re-baseline (§4). `snapshotWrittenAt` is the snapshot file's modification time as the filesystem reports it, `snapshotDetectedAt` the ingest time of the re-baseline's own read of the file (§4 step 2: a read with its own ingest sequence, so not `xml.lastRewriteDetectedAt`, which may predate it when the file changed since the last poll, `DERIVATIONS.md` §0.3); both are present on `200`, since the action fails without a readable snapshot. `attempts` counts the Attempts of the scope after the re-baseline. Admin audience only; safe to repeat | `404 phase-not-found`; `409 source-unavailable` with `details.reason` (§1.4) |
@@ -2028,6 +2058,12 @@ Every message carries `seq` (§1.6).
   `GateFlag` under `flag`. Neither is ever sent on the live tier (§8.4).
 - **A retraction** (§4 INV-7) or a contradiction (INV-2d) is sent as `attempt.updated` with explicit
   `not-yet` values, never by omission.
+- **`attempt.deleted`** carries `{ attemptId }`: upstream removed the Attempt (§2.6, §4 INV-7), and
+  the client removes it and its standing entries. It is the only message for that Attempt in its
+  unit; the unit's `write.updated` of a pending write of it (resolved `mismatched`) precedes it and
+  the `standing.updated` of each Standing that held it follows it. It sends no `check.updated`: a
+  client drops the Attempt's checks and flags with it, and the store keeps them (§2.10). The
+  shape is §8.4's (maintainer, 2026-11-12; an additive message).
 - **`oncourse.updated`** carries the whole on-course set: `{ attemptIds: string[], featuredByUpstream:
   string | null, asOf: Timestamp }`, `attemptIds` in `courseOrder` (§7.1), `asOf` the ingest time of
   the unit at which the set last changed, as §7.1 defines it, so it equals what `/api/oncourse`
@@ -2065,6 +2101,7 @@ The message set, normatively; `type` is the discriminant and every message carri
 type WsMessage = { seq: number } & WsPayload
 type WsPayload =
   | { type: 'attempt.updated'; attemptId: string; fields: Partial<Omit<Attempt, 'attemptId'>> }
+  | { type: 'attempt.deleted'; attemptId: string }
   | { type: 'phase.updated'; phaseId: string; fields: Partial<Omit<Phase, 'phaseId'>> }
   | { type: 'entry.updated'; entryId: string; fields: Partial<Omit<OnsiteEntry, 'entryId'>> }
   | { type: 'class.updated'; classId: string; fields: Partial<Omit<Class, 'classId'>> }
@@ -2101,6 +2138,7 @@ type WsPayload =
 { "seq": 1051, "type": "oncourse.updated", "attemptIds": ["K1M_BR1_19:57", "K1M_BR1_19:58"],
   "featuredByUpstream": "K1M_BR1_19:57", "asOf": "2026-09-15T10:00:01.500Z" }
 { "seq": 1052, "type": "event.changed", "event": { ...Event... } }
+{ "seq": 1053, "type": "attempt.deleted", "attemptId": "K1M_BR1_6:11" }
 ```
 
 Clients **must** follow §1.6's subscribe-before-snapshot sequence.
@@ -2303,7 +2341,7 @@ setting applies to public reads and the stream, not to this response, so `EntryP
 | `PUT /ingest/v2/attempts/{phaseId}/{bib}` | any non-empty subset of the `Observed` fields of §2.6, each wrapped per §1.2. **An explicit `{ "state": "not-yet" }` resets that field** |
 | `PUT /ingest/v2/phases/{phaseId}/classification` | `{ "rows": [ { "entryId": string, "bib": string, "rank": number \| null, "order": number, "decidedIn": string \| null } ], "asOf": Timestamp }`: **the rows of a classification Phase (§2.4), whole, replaced on every push**, as upstream last built them. The store assembles the `classification` Standing from them and emits `standing.updated`. The Phase must have `kind: 'classification'` and `rows` must be non-empty, else `400 validation-failed` (§8.6; the bridge never sends an emptied classification: on site an emptied table leaves the last built Standing as it is, `DERIVATIONS.md` §4.10) |
 | `PUT /ingest/v2/oncourse` | `{ "attemptIds": string[], "featuredByUpstream": string \| null }`: **the whole on-course set, in course order**, replaced on every push. An `attemptId` not yet pushed is stubbed (forward reference). Emits `oncourse.updated` |
-| `DELETE /ingest/v2/attempts/{phaseId}/{bib}` | no body. `204` whether or not the Attempt existed; the Attempt and its standing entries are removed |
+| `DELETE /ingest/v2/attempts/{phaseId}/{bib}` | no body. `204` whether or not the Attempt existed; the Attempt and its standing entries are removed. The bridge sends it for every Attempt the on-site domain layer removes (§2.6, §4 INV-7), in its ingest order |
 | `PUT /ingest/v2/phases/{phaseId}/attempts` | `{ "attempts": [ { "bib": string, ...the Observed fields of §2.6 } ] }`: **replaces every Attempt of the Phase**; Attempts absent from the body are removed. This is what an on-site re-baseline (§4) emits |
 
 The bodies and the `200` responses, normatively. `LivePhase` is §2.4's `Phase` without `format`, the

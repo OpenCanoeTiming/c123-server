@@ -106,9 +106,11 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Replace the whole resource on `standing.updated` (under `standing`) and `course.updated` (under `course`) (CONTRACTS §7.2).
 - [ ] Replace the whole on-course set, in the message's order, on every `oncourse.updated` (CONTRACTS §7.2, §8.4).
 - [ ] Apply `scope.replaced` as a replace, never a merge: remove every Attempt and Standing of the scope absent from the message, and leave Phases, Entries, Classes and Courses untouched (CONTRACTS §7.2, §8.4; ADR-015).
+- [ ] On `attempt.deleted` — on site over `/ws`, on live over the stream — remove the Attempt and its standing entries; keep its Entry; expect the Standings that held it as `standing.updated` in the same unit; a later `attempt.updated` for the same `attemptId` creates a new Attempt, whole, which may sit in another Phase or under another bib for the same competitor (CONTRACTS §1.6, §2.6, §7.2, §8.4; ADR-015).
 
 **Retraction and re-run**
 - [ ] Show a retraction at once: `status` back to what the on-course stream shows or `not-started`, the retracted fields `not-yet`, the entry out of the placed standing (CONTRACTS §2.6, §3.2; ARCHITECTURE §6.I).
+- [ ] Tell a removal from a retraction: a competitor deleted, moved or given another bib upstream arrives as `attempt.deleted`, and the Attempt leaves every list the client shows, start lists included (CONTRACTS §2.6, §4, §7.2).
 - [ ] Show a contradicted finish as running again: `status: on-course`, `outcome: running`, no placement (CONTRACTS §2.6, §4; ARCHITECTURE §6.I).
 - [ ] On a new run generation, stop showing the old result and show the athlete as if that run had not happened; to say "re-run", read `run > 1` with the current status (CONTRACTS §2.6; ADR-013; ARCHITECTURE §6.F).
 
@@ -167,6 +169,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Decide how long a finisher stays in the on-course display as display policy (`FINISHED_GRACE_PERIOD` today), from `status: finished` and the injected `Clock`; never from the Attempt leaving the set, which is upstream's closure, typically about 20 s later and a venue setting (CONTRACTS §7.1; ARCHITECTURE §2; TEST-ARCHITECTURE §3.3).
 - [ ] Route today's timing sites (`context/constants.ts`, `useDeparting.ts`, `useAutoScroll.ts`, `useHighlight.ts`) through the `Clock` (TEST-ARCHITECTURE §5).
 - [ ] Do not expose the re-baseline on a venue board (CONTRACTS §4).
+- [ ] Drop an Attempt named by `attempt.deleted` from every start list, result list and on-course view the board holds; a removed Attempt is never in the on-course set when the message arrives (CONTRACTS §4, §7.2).
 - [ ] Keep client configuration and remote control (ConfigPush, `clientId`, per-IP records) on today's mechanism, outside the contract, pinned by regression tests (ARCHITECTURE §8).
 
 ---
@@ -215,6 +218,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Key checks and flags by `(attemptId, run, gate)`; a new run generation starts with no checks and no open flags, and a check never carries to a re-run (CONTRACTS §2.10; ADR-013; ADR-016).
 - [ ] Keep a check with the Attempt it was made on: a retraction, a contradiction, a result moved to another bib or a re-pointed `entry` never moves or deletes it (CONTRACTS §2.10; ADR-016).
 - [ ] Expect checks, flags and pending writes to survive a re-baseline, with each check's `status` recomputed (CONTRACTS §2.10, §4).
+- [ ] On `attempt.deleted`, drop the Attempt with its checks and flags from the tablet's view; no `check.updated` comes for them and the server keeps them; a pending write of it arrives first as `mismatched` without `confirmedValue`, to be shown as "competitor removed in Canoe123"; a later check, flag or penalty write for it is `404 attempt-not-found`; if the same `attemptId` returns, its checks are served again with its hydration (CONTRACTS §2.10, §4, §7.1, §7.2).
 - [ ] Drop its own event fingerprint; the server keys the store by `eventId` (CONTRACTS §2.10; ARCHITECTURE §3; ADR-016).
 - [ ] Follow the rendering clients' Phase-choice default in the race selector and let the judge override it (ARCHITECTURE §2).
 
@@ -328,17 +332,13 @@ Open since 2026-11-05 (`DECISIONS/LOG.md`, round 13), returned to the maintainer
 `Event.details` or a Course's `layout`, `slots` and `captions`, yet §8.4 serves `Event` and `Course`
 whole. Until settled, live-mini-server has no stated source for those fields (CONTRACTS §8.3, §8.4).
 
-Open since 2026-11-05 (`DECISIONS/LOG.md`, round 14), returned to the maintainer: nothing names when the on-site bridge
-sends `DELETE /ingest/v2/attempts/{phaseId}/{bib}`. On site an Attempt is never removed: a retraction
-is field-level (INV-7) and a re-baseline reaches live as a Phase replace, which removes absent
-Attempts by itself; so today only a §8.5 organiser correction has a reason to call `DELETE`, and no
-server vector covers a bridge trigger. Whether an upstream start-list removal should become one is a
-maintainer question (CONTRACTS §4, §8.3, §8.5). By the maintainer's decision of 2026-11-11 the
-server sees such a removal: a competitor deleted, moved or given another bib upstream is gone from
-the race's XML table, and the absent row retracts the Attempt's result fields (CONTRACTS §4;
-ADR-015). The Attempt itself stays, `not-started`, with its entry, on site and on live. No
-obligation above changes by this: the retraction arrives as the explicit `not-yet` values a client
-already applies.
+Open since 2026-11-05 (round 14) and answered by the maintainer on 2026-11-12 (round C part 4;
+`DECISIONS/LOG.md`): when the on-site bridge sends `DELETE /ingest/v2/attempts/{phaseId}/{bib}`.
+A competitor deleted, moved or given another bib upstream has their Attempt removed at the first
+admitted XML snapshot without its row; on site that is `attempt.deleted`, and the bridge sends
+`DELETE` for it (CONTRACTS §4, §7.2, §8.3). The duties above moved with it: every rendering client
+removes an Attempt on `attempt.deleted`, on site as on live, and penalty-check drops the Attempt's
+checks and flags from view. live-mini-server's `DELETE` duty is unchanged; it now has a trigger.
 
 Round C part 3 (2026-11-12; `DECISIONS/LOG.md`) ruled or ratified the questions the M1 reviews had
 left open. It changed cited sections and moved no obligation above:

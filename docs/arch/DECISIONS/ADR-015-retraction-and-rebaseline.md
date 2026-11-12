@@ -214,7 +214,8 @@ competitor's result stood in every XML-fed value until an operator re-baseline.
    superseded: the same source, later ingested.
 3. **What is never retracted stays so:** an on-course inference, `entry`, `bib`, `startOrder`,
    `heat`, `startLane`, `run`, and any field of an Attempt never present in a results-table
-   observation. The Attempt itself is not removed.
+   observation. The Attempt itself is not removed (replaced by Revision 6: an absent row removes
+   it).
 4. **A row that returns** is a new observation of upstream's table and is presented by the
    ordinary rules, as Revision 4 says of a TCP row after an XML retraction.
 5. **A wholly empty table retracts nothing.** That is an XML snapshot naming a race in its
@@ -238,9 +239,8 @@ the same file been a first read (`changedAfter: null`), nothing would move until
 **What it costs.**
 - A save that lands between the two halves of a move shows the result in neither race for one
   save cycle. That is upstream's own table at that instant, like every half-correction.
-- A competitor deleted upstream stays on our start list as a `not-started` Attempt, on site and on
-  live. Whether a removal should remove the Attempt is the open maintainer question recorded in
-  `CLIENT-OBLIGATIONS.md`, "Gaps and conflicts".
+- A competitor deleted upstream stayed on our start list as a `not-started` Attempt, on site and on
+  live. Revision 6 removes the Attempt instead (maintainer, 2026-11-12).
 - The level of `xml-table-emptied` is the admin log, no wire diagnostic (a default, confirmed by
   the maintainer on 2026-11-12; `DERIVATIONS.md` §10 item 26).
 
@@ -250,3 +250,61 @@ its expected outcome for the absent row is now `not-yet`. Four vectors are added
 `retraction-xml-absent-row-then-returns` and `retraction-xml-empty-table-retracts-nothing`. The
 core follows in the M2 server batch; until then the changed vector and the first three new ones
 are on the expected-red ledger (`CONFORMANCE-VECTORS.md` §2). The fourth passes today.
+
+## Revision 6 — an absent row removes the Attempt (decided and written 2026-11-12)
+
+**Decision (maintainer, 2026-11-12; extends Revision 5 from the result to the Attempt):** "A
+competitor removed upstream (deleted, moved or re-bibbed) has their Attempt REMOVED." Removal
+applies when the row is absent from an admitted XML snapshot under the content-age guard. A moved
+competitor appears as a new Attempt in the other Phase. The bridge sends `DELETE` for it to live.
+
+**Why.** Revision 5's table shows what the next file holds after each action: the row is gone
+exactly for a competitor deleted, moved or re-bibbed (and for a redrawn start list), and stays,
+blanked, for a deleted result or a mark. So the absent row is a statement that the Attempt no
+longer exists upstream, not that its result was cleared. Under Revision 5 the Attempt stayed as
+a `not-started` ghost on every start list, on site and on live.
+
+**The rule** (`CONTRACTS.md` §2.6, §4 INV-7, §7.2, §8.3; `DERIVATIONS.md` §4.12, §10 item 38). The
+decision fixes the trigger and the guard; the rest are defaults taken inside it:
+1. **The trigger is the race's row in the snapshot's results table**, the one row per Attempt,
+   start-list rows included: the row upstream drops on a delete, a move or a re-bib and keeps,
+   blanked, on a result delete. The class's participants table carries the Entry, not the
+   Attempt, and removes nothing. Only an Attempt a results-table row of its race has named is
+   removed; one only the on-course stream has named is TCP's.
+2. **The guard is decision 4's, over the whole Attempt.** The snapshot is admitted for the Attempt
+   when its `changedAfter` is later than the latest delivery of every `tcp` observation of the
+   Attempt, an on-course listing included; `null` never qualifies; and an Attempt in the on-course
+   set is never removed. Where the snapshot is not admitted, Revision 5's per-field retraction
+   applies as written, and a later snapshot settles the removal.
+3. **TCP's absent row still retracts and never removes.** The decision names the XML snapshot; the
+   next save follows a removal within a save cycle.
+4. **What the removal does.** The Attempt is gone from every read and every Standing (the
+   Standings that held it are pushed whole where they changed). On site it is one
+   `attempt.deleted { seq, attemptId }`, §8.4's shape, a new on-site message (additive), and no
+   `attempt.updated` for that Attempt in the unit. A pending `WriteRequest` of it resolves
+   `mismatched` without `confirmedValue`, as on a retraction, in the same unit, before the
+   removal. Its checks and flags stay in the store and are not served while it does not exist
+   (`CONTRACTS.md` §2.10). The Entry is not removed. The bridge sends
+   `DELETE /ingest/v2/attempts/{phaseId}/{bib}`.
+5. **A row that reappears** creates a new Attempt by the ordinary rule, `run` 1, carrying nothing
+   of the removed one. A moved or re-bibbed competitor's new row creates its Attempt the same
+   way, in the same unit as the old one's removal when one snapshot carries both.
+6. **Unchanged:** a wholly empty table removes and retracts nothing (Revision 5 rule 5); a
+   classification table holds no Attempts; a race the file does not name states nothing.
+
+**Example.** Bib 11 of `K1M_BR1_6` holds a TCP result of 10:40:59 and is off course. The operator
+moves the competitor to `K1M_BR1_7`. The file saved next, content age 10:41:32, lists `K1M_BR1_6`
+without bib 11 and `K1M_BR1_7` with it. In that unit `K1M_BR1_6:11` is removed
+(`attempt.deleted`, its Standings re-pushed) and `K1M_BR1_7:11` is created by its row.
+
+**What it costs.** A save that lands between the two halves of an operator's move shows the
+competitor in neither race for one save cycle, as Revision 5 already noted for the result; now the
+Attempt goes and comes back as a new one, so a client shows it as new. A judge's check on a
+removed Attempt is not shown until the Attempt returns. One wire message and one client duty are
+added. The guard can hold a removal back for one save cycle while TCP keeps listing the Attempt.
+
+**Vectors.** `inv2c-first-read-unknown-age-refused`, `retraction-xml-absent-row`,
+`retraction-xml-absent-row-guard` and `retraction-xml-absent-row-then-returns` now expect the
+removal; `attempt-removed-xml-absent-start-list-row` and `attempt-removed-not-while-on-course`
+are added. All but the last are on the expected-red ledger until the core change (P3); the last
+passes on today's core, which removes nothing.

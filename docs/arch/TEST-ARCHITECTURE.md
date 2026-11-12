@@ -118,8 +118,8 @@ cover:
 - run generations;
 - §5's standing assembly.
 
-The count is 110 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
-a thin adapter that feeds the vectors `CONFORMANCE-VECTORS.md` §1 assigns to it (104 and 24; 18 are in
+The count is 112 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
+a thin adapter that feeds the vectors `CONFORMANCE-VECTORS.md` §1 assigns to it (106 and 24; 18 are in
 both) into its own merge function and asserts the result — proving
 both satisfy the same data-defined contract without either depending on the other's code.
 
@@ -403,10 +403,14 @@ the step index, the Attempt, the field and the property number.
      table. One exception: an `xml` snapshot of R with no row at all retracts nothing (INV-7);
      the `xml-table-emptied` diagnostic it may raise goes to the admin log, which the checker
      does not read. `countingRun` is asked of an `xml` row, present or absent, and of an absent
-     `tcp` row, never of a present `tcp` row, which cannot state it. *Example:* bib 11 presents a
-     `tcp` result; an `xml` snapshot of the race lists bibs 9 and 10 only and its content age is
-     later than bib 11's push: bib 11 is retracted in that step. The same snapshot with
-     `changedAfter: null` leaves it, by (c).
+     `tcp` row, never of a present `tcp` row, which cannot state it. **An absent `xml` row removes
+     the Attempt** where the snapshot is admitted for the whole Attempt (`CONTRACTS.md` §4
+     INV-7: every `tcp` observation of it, listings included, older than `changedAfter`, and the
+     Attempt not in the on-course set): in that step the Attempt is gone and one
+     `attempt.deleted` names it; where not admitted, (e) applies field by field. *Example:* bib 11
+     presents a `tcp` result and is off course; an `xml` snapshot of the race lists bibs 9 and 10
+     only and its content age is later than bib 11's push: bib 11's Attempt is removed in that
+     step. The same snapshot with `changedAfter: null` leaves it, by (c).
 6. **Precedence (INV-2 rules 1–3).** (a) Once a result field presents a `result-row` observation, it
    never afterwards presents an `inference` for the same generation, except through a contradiction
    (property 7) or after a retraction (property 5). (b) `gates` is merged cell by cell: while

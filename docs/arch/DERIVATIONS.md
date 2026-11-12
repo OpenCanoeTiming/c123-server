@@ -85,7 +85,8 @@ results table, and only these two:
 - **An XML snapshot**, for every race in it. Upstream rewrites the file whole from its current
   tables at every save. A retraction shows in one of two ways: the row stays with its result
   fields empty (a result deleted, a mark taken back), or the row is gone (a competitor deleted,
-  moved or given another bib; a redrawn start list). Both retract (§4.12).
+  moved or given another bib; a redrawn start list). The first retracts; the second removes the
+  Attempt, the guard permitting (§4.12).
 - **Mode is read the same way for every table**, classification Phases included, and **a table with
   no rows is a scope snapshot in start-list mode** (TCP: a `Results` message with no row; XML: a
   Schedule race with no `Results` row). The parser emits it like any other (`RXER` excepted: a title
@@ -427,7 +428,8 @@ the parser's four it reaches the admin log and never `GET /api/diagnostics`.
 **Identity.** `bib` is `Results.Participant@Bib`, `OnCourse.Participant@Bib` or `XML.Results.Bib`,
 trimmed. `attemptId` is `${phaseId}:${bib}`. The Attempt exists from the first row that names it,
 which may be a start-list row a day ahead; its `status` is `not-started` from that row
-(`CONTRACTS.md` §3.2).
+(`CONTRACTS.md` §3.2). It exists until an admitted XML snapshot of its race no longer carries its
+row (§4.12; `CONTRACTS.md` §2.6).
 
 ### 4.1 `status` and result marks
 
@@ -1216,10 +1218,20 @@ previously known from a results-table observation:
   single-run row, retract as the TCP first-run case; for a second-run row, as the TCP time-empty
   case — before run 2 every second-run row already carries `TotalRnk` and `TotalTotal` with no
   time.
-- **The row is absent** from a table that carries other rows: retract as the TCP absent-row case,
-  `pairTotal` and `countingRun` included in a paired second run. A re-bibbed competitor is
-  another Attempt (`phaseId:bib`): the old bib's Attempt is retracted and stays, `not-started`,
-  and the new bib's is created by its own row.
+- **The row is absent** from a table that carries other rows: **the Attempt is removed**
+  (maintainer, 2026-11-12; `DECISIONS/ADR-015` Revision 6), when the snapshot is admitted for
+  it. The row is the race's row of the XML `Results` table, start-list rows included; the
+  `Participants` table carries the Entry and removes nothing. Only an Attempt a results-table
+  row of its race has named is removed. Admitted: the snapshot's `changedAfter` is later than
+  the latest delivery of every `tcp` observation of the Attempt, an on-course listing included
+  (`null` never qualifies), and the Attempt is not in the on-course set. Not admitted: retract
+  as the TCP absent-row case, `pairTotal` and `countingRun` included in a paired second run,
+  under the guard below field by field; a later snapshot settles the removal. In the removal's
+  unit a pending write of the Attempt resolves `mismatched` without `confirmedValue` (`CONTRACTS.md` §4 rule 4), the
+  Attempt leaves every Standing, and `attempt.deleted` is its one message. A re-bibbed or
+  moved competitor is another Attempt (`phaseId:bib`): the old one is removed and the new one
+  is created by its own row, in the same unit when one snapshot carries both. TCP's absent row
+  retracts and never removes. Defaults: §10 item 38.
 - **The table has no rows at all:** nothing is retracted. Where at least one Attempt of the race
   holds a result the absent-row case would retract — the guard below included: a result held
   from `tcp` counts only where the snapshot's `changedAfter` is later than its latest delivery,
@@ -1232,6 +1244,8 @@ previously known from a results-table observation:
   re-baselines.
 - **A row that returns** after an absent-row retraction is a new `xml` observation and is
   presented by the ordinary rules: at once where no `tcp` observation stands, else under rule 2.
+  After a removal it creates a new Attempt, `run` 1, carrying nothing of the removed one (no
+  generation, contradiction record or remembered mark).
 
 **Guard (INV-2c, content age),** for the present row and the absent row alike: apply the
 retraction against a `tcp` observation only when the snapshot's
@@ -1535,7 +1549,9 @@ by the maintainer's `NHT1`/`NHT2` decision (2026-11-11), which item 31's closure
 remain. Items 26 to 37 are defaults taken on 2026-11-12, in round C parts 2 and 3, under the
 maintainer's rule of 2026-11-11 that a disagreement moving no client obligation gets a default
 and an item here, not a contract round (`README.md`, ground rules); each says what would reopen
-it.
+it. Round C part 4 (maintainer, 2026-11-12) closed item 31, settled items 26, 33 and 34, added
+the live side to item 25's closure, and added item 38, the defaults inside the removal
+decision.
 
 1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
    hardware judge terminals on their own port and raises a flag on the scoring service for about
@@ -1787,3 +1803,24 @@ it.
     Phase's `format` from its first statement on, and a later TCP message's token does not
     displace it. Not recorded, and whether upstream allows such an edit is not established
     (E4). Reopens on a recording where a Phase's token and its `DisId` differ.
+38. **An upstream removal and the Attempt** (maintainer, 2026-11-12; `DECISIONS/ADR-015`
+    Revision 6; §4.12). The decision: an Attempt whose row is absent from an admitted XML
+    snapshot is removed; a moved competitor is a new Attempt in the other Phase; the bridge sends
+    `DELETE`. Defaults taken inside it, each the smallest that fits:
+    (a) the trigger is the race's `Results` row, never the `Participants` row, since a deleted
+    result keeps the first blanked and a move between races of one class keeps the second;
+    (b) only an Attempt a results-table row of its race has named is removed;
+    (c) the guard covers the whole Attempt: every `tcp` observation, listings included, must
+    predate the snapshot's `changedAfter`, and an Attempt in the on-course set is never removed;
+    where it refuses, Revision 5's per-field retraction applies;
+    (d) TCP's absent row only retracts (the decision names the XML; the next save follows);
+    (e) on site the removal is `attempt.deleted { seq, attemptId }`, §8.4's shape, a new
+    message, and the unit sends no `attempt.updated` for the Attempt;
+    (f) a pending write resolves `mismatched` without `confirmedValue`, before the removal;
+    (g) checks and flags stay in the store, unserved while the Attempt does not exist, served
+    again if the same `attemptId` returns;
+    (h) the Entry stays; (i) a returning row creates a new Attempt, `run` 1;
+    (j) a wholly empty table removes nothing.
+    No recording holds a removal (E2: a scan of every pair of consecutive snapshots in the
+    recordings found no row dropped). Reopens on a recording of a removal that these defaults present
+    wrongly, or if the TCP push is to remove as well.
