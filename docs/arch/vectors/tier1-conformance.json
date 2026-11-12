@@ -1315,7 +1315,7 @@
     {
       "id": "inv2c-first-read-unknown-age-refused",
       "invariant": "INV-2c",
-      "description": "A snapshot whose content age is unknown (changedAfter null: a first read) never displaces or retracts a tcp observation, even after a tcp outage; it presents what no tcp observation presents. The next rewrite, whose changedAfter follows the outage, settles the rest, a repeated refused value included.",
+      "description": "A snapshot whose content age is unknown (changedAfter null: a first read) never displaces or retracts a tcp observation, even after a tcp outage; it presents what no tcp observation presents. The next rewrite, whose changedAfter follows the outage, settles the rest: a repeated refused value is presented, and the Attempt whose row is absent from that table is retracted (INV-7, an absent XML row; maintainer, 2026-11-11).",
       "context": {
         "xmlPollIntervalSeconds": 5,
         "attemptId": "K1M_BR1_6:9",
@@ -1511,14 +1511,9 @@
           "source": "xml"
         },
         "K1M_BR1_6:11.outcome": {
-          "state": "known",
-          "value": {
-            "kind": "duration",
-            "totalSeconds": 90.12
-          },
-          "source": "tcp"
+          "state": "not-yet"
         },
-        "note": "first snapshot: changedAfter null fails the guard, so A (84 vs 86) and C (retraction) stay tcp; B has no tcp observation and is presented from xml. second: changedAfter 10:41:32 follows the outage and the tcp pushes, A's repeated value is presented; C is absent from the XML table and states nothing."
+        "note": "first snapshot: changedAfter null fails the guard, so A (84 vs 86) and C (a retraction by a present, empty row) stay tcp; B has no tcp observation and is presented from xml. second: changedAfter 10:41:32 follows the outage and the tcp pushes, A's repeated value is presented; C's row is absent from a table that carries other rows, which retracts under the same guard."
       }
     },
     {
@@ -3517,6 +3512,480 @@
       "expect": {
         "C1M_BR1_19:7.outcome": {
           "state": "not-yet"
+        }
+      }
+    },
+    {
+      "id": "retraction-xml-absent-row",
+      "invariant": "INV-7",
+      "description": "An XML snapshot that lists other rows of the race and not this Attempt's retracts it, as TCP's absent row does, when its content age is later than the tcp observation (ADR-015 Revision 5).",
+      "context": {
+        "tcpConnectedThroughout": true,
+        "xmlPollIntervalSeconds": 5,
+        "attemptId": "K1M_BR1_6:11"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR1_6",
+            "mode": "results",
+            "rows": [
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 84,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 84
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "judgingComplete": true,
+                "bib": "9"
+              },
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 90.12,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 90.12
+                },
+                "placement": {
+                  "rank": 2,
+                  "order": 2
+                },
+                "judgingComplete": true,
+                "bib": "11"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:40:59.500Z"
+        },
+        {
+          "ingestSeq": 2,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:41:37.000Z",
+          "changedAfter": "2026-09-15T10:41:32.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "results",
+            "rows": [
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 84,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 84
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "judgingComplete": true,
+                "bib": "9"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:41:37.000Z"
+        }
+      ],
+      "expect": {
+        "K1M_BR1_6:11.outcome": {
+          "state": "not-yet"
+        },
+        "K1M_BR1_6:11.placement": {
+          "state": "not-yet"
+        },
+        "K1M_BR1_6:11.status": {
+          "state": "known",
+          "value": "not-started"
+        },
+        "K1M_BR1_6:9.outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "totalSeconds": 84
+          },
+          "source": "tcp"
+        },
+        "notifications": {
+          "attempt.updated": {
+            "count": 1,
+            "afterGivenIndex": 1,
+            "attemptId": "K1M_BR1_6:11"
+          }
+        }
+      }
+    },
+    {
+      "id": "retraction-xml-absent-row-guard",
+      "invariant": "INV-7 guard",
+      "description": "An absent XML row is under the same content-age guard as an emptied one: a rewrite that may predate the push does not retract; a later rewrite does.",
+      "context": {
+        "tcpConnectedThroughout": true,
+        "xmlPollIntervalSeconds": 5,
+        "attemptId": "C1M_BR1_19:7"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "C1M_BR1_19",
+            "mode": "results",
+            "rows": [
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 96.69,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 96.69
+                },
+                "placement": {
+                  "rank": 5,
+                  "order": 5
+                },
+                "judgingComplete": true,
+                "bib": "7"
+              },
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 95.01,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 95.01
+                },
+                "placement": {
+                  "rank": 4,
+                  "order": 4
+                },
+                "judgingComplete": true,
+                "bib": "8"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:48:36.900Z"
+        },
+        {
+          "ingestSeq": 2,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:48:39.000Z",
+          "changedAfter": "2026-09-15T10:48:34.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "C1M_BR1_19",
+            "mode": "results",
+            "rows": [
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 95.01,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 95.01
+                },
+                "placement": {
+                  "rank": 4,
+                  "order": 4
+                },
+                "judgingComplete": true,
+                "bib": "8"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:48:39.000Z"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 2,
+          "expect": {
+            "C1M_BR1_19:7.outcome": {
+              "state": "known",
+              "value": {
+                "kind": "duration",
+                "totalSeconds": 96.69
+              },
+              "source": "tcp"
+            }
+          }
+        }
+      ],
+      "then": [
+        {
+          "ingestSeq": 4,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:49:20.000Z",
+          "changedAfter": "2026-09-15T10:49:15.000Z"
+        },
+        {
+          "ingestSeq": 5,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "C1M_BR1_19",
+            "mode": "results",
+            "rows": [
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 95.01,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 95.01
+                },
+                "placement": {
+                  "rank": 4,
+                  "order": 4
+                },
+                "judgingComplete": true,
+                "bib": "8"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:49:20.000Z"
+        }
+      ],
+      "expect": {
+        "C1M_BR1_19:7.outcome": {
+          "state": "not-yet"
+        },
+        "C1M_BR1_19:7.status": {
+          "state": "known",
+          "value": "not-started"
+        }
+      }
+    },
+    {
+      "id": "retraction-xml-empty-table-retracts-nothing",
+      "invariant": "INV-7",
+      "description": "An XML table with no rows at all retracts nothing, whatever its content age: one read of the lagging source does not clear a race (ADR-015 Revision 5). The core raises xml-table-emptied in the admin log, which no vector reads.",
+      "context": {
+        "tcpConnectedThroughout": true,
+        "xmlPollIntervalSeconds": 5,
+        "attemptId": "K1M_BR1_6:11"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR1_6",
+            "mode": "results",
+            "rows": [
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 90.12,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 90.12
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "judgingComplete": true,
+                "bib": "11"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:40:59.500Z"
+        },
+        {
+          "ingestSeq": 2,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:41:37.000Z",
+          "changedAfter": "2026-09-15T10:41:32.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "start-list",
+            "rows": []
+          },
+          "observedAt": "2026-09-15T10:41:37.000Z"
+        }
+      ],
+      "expect": {
+        "K1M_BR1_6:11.outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "totalSeconds": 90.12
+          },
+          "source": "tcp"
+        },
+        "K1M_BR1_6:11.placement": {
+          "state": "known",
+          "value": {
+            "rank": 1,
+            "order": 1
+          },
+          "source": "tcp"
+        },
+        "notifications": {
+          "attempt.updated": {
+            "count": 0,
+            "afterGivenIndex": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "retraction-xml-absent-row-then-returns",
+      "invariant": "INV-7",
+      "description": "A row that returns to the XML table after an absent-row retraction is a new observation and is presented: the retraction superseded the tcp observation, so nothing outranks it.",
+      "context": {
+        "tcpConnectedThroughout": true,
+        "xmlPollIntervalSeconds": 5,
+        "attemptId": "K1M_BR1_6:11"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR1_6",
+            "mode": "results",
+            "rows": [
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 84,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 84
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "judgingComplete": true,
+                "bib": "9"
+              },
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 90.12,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 90.12
+                },
+                "placement": {
+                  "rank": 2,
+                  "order": 2
+                },
+                "judgingComplete": true,
+                "bib": "11"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:40:59.500Z"
+        },
+        {
+          "ingestSeq": 2,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:41:37.000Z",
+          "changedAfter": "2026-09-15T10:41:32.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "results",
+            "rows": [
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 84,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 84
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "judgingComplete": true,
+                "bib": "9"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:41:37.000Z"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 2,
+          "expect": {
+            "K1M_BR1_6:11.outcome": {
+              "state": "not-yet"
+            }
+          }
+        }
+      ],
+      "then": [
+        {
+          "ingestSeq": 4,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:43:07.000Z",
+          "changedAfter": "2026-09-15T10:43:02.000Z"
+        },
+        {
+          "ingestSeq": 5,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "results",
+            "rows": [
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 84,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 84
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "judgingComplete": true,
+                "bib": "9"
+              },
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 90.12,
+                  "penaltySeconds": 2,
+                  "totalSeconds": 92.12
+                },
+                "placement": {
+                  "rank": 2,
+                  "order": 2
+                },
+                "judgingComplete": true,
+                "bib": "11"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:43:07.000Z"
+        }
+      ],
+      "expect": {
+        "K1M_BR1_6:11.outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "totalSeconds": 92.12
+          },
+          "source": "xml"
         }
       }
     },
