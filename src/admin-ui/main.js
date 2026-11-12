@@ -283,11 +283,6 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-// A file path as HTML that may wrap after each separator (a Windows path has no other break opportunity)
-function breakablePath(path) {
-  return escapeHtml(path).replace(/([\\/])/g, '$1<wbr>');
-}
-
 function truncate(str, len) {
   if (!str) return '';
   return str.length > len ? str.substring(0, len) + '...' : str;
@@ -422,14 +417,14 @@ async function loadXmlConfig() {
         const mainPath = data.availablePaths.main;
         const offlinePath = data.availablePaths.offline;
 
-        mainPathEl.innerHTML = breakablePath(mainPath.path
+        mainPathEl.textContent = mainPath.path
           ? (mainPath.exists ? mainPath.path : mainPath.path + ' (not found)')
-          : '(not configured)');
+          : '(not configured)';
         mainPathEl.className = 'choice-hint mono ' + (mainPath.exists ? 'text-success' : 'text-error');
 
-        offlinePathEl.innerHTML = breakablePath(offlinePath.path
+        offlinePathEl.textContent = offlinePath.path
           ? (offlinePath.exists ? offlinePath.path : offlinePath.path + ' (not found)')
-          : '(not configured)');
+          : '(not configured)';
         offlinePathEl.className = 'choice-hint mono ' + (offlinePath.exists ? 'text-success' : 'text-error');
       }
 

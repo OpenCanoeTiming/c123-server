@@ -291,14 +291,14 @@
         <div class="flex flex-col items-start gap-2">
           <label class="radio">
             <input type="radio" name="xmlMode" value="auto-offline" aria-labelledby="xmlModeOfflineLabel" aria-describedby="offlinePath">
-            <span class="flex-1">
+            <span>
               <span class="choice-label" id="xmlModeOfflineLabel">Auto - offline copy (recommended)</span>
               <span id="offlinePath" class="choice-hint mono"></span>
             </span>
           </label>
           <label class="radio">
             <input type="radio" name="xmlMode" value="auto-main" aria-labelledby="xmlModeMainLabel" aria-describedby="mainPath">
-            <span class="flex-1">
+            <span>
               <span class="choice-label" id="xmlModeMainLabel">Auto - main event file</span>
               <span id="mainPath" class="choice-hint mono"></span>
             </span>
@@ -414,31 +414,28 @@
   <!-- Logs Panel -->
   <section class="tab-panel active" id="panel-logs" role="tabpanel" aria-labelledby="tab-logs">
     <div id="logContainer" class="log-container">
-      <!-- The plain wrapper keeps the header at its content height when its controls wrap -->
-      <div>
-        <div class="log-header" role="group" aria-label="Log filters">
-          <div class="flex flex-wrap items-center gap-3" role="group" aria-label="Log levels">
-            <label class="checkbox">
-              <input type="checkbox" id="logLevelDebug" onchange="filterLogs()"> <span class="log-level-debug">debug</span>
-            </label>
-            <label class="checkbox">
-              <input type="checkbox" id="logLevelInfo" checked onchange="filterLogs()"> <span class="log-level-info">info</span>
-            </label>
-            <label class="checkbox">
-              <input type="checkbox" id="logLevelWarn" checked onchange="filterLogs()"> <span class="log-level-warn">warn</span>
-            </label>
-            <label class="checkbox">
-              <input type="checkbox" id="logLevelError" checked onchange="filterLogs()"> <span class="log-level-error">error</span>
-            </label>
-          </div>
-          <input type="text" id="logSearch" class="input input-sm log-search" placeholder="Search logs..." onkeyup="filterLogs()" aria-label="Search logs">
-          <div class="log-header-actions">
-            <span id="logStats" class="text-xs text-muted" role="status" aria-live="polite">0 entries</span>
-            <label class="checkbox">
-              <input type="checkbox" id="logAutoScroll" checked> Auto-scroll
-            </label>
-            <button class="btn btn-sm btn-ghost" onclick="clearLogDisplay()" aria-label="Clear log display">Clear</button>
-          </div>
+      <div class="log-header" role="group" aria-label="Log filters">
+        <div class="flex flex-wrap items-center gap-3" role="group" aria-label="Log levels">
+          <label class="checkbox">
+            <input type="checkbox" id="logLevelDebug" onchange="filterLogs()"> <span class="log-level-debug">debug</span>
+          </label>
+          <label class="checkbox">
+            <input type="checkbox" id="logLevelInfo" checked onchange="filterLogs()"> <span class="log-level-info">info</span>
+          </label>
+          <label class="checkbox">
+            <input type="checkbox" id="logLevelWarn" checked onchange="filterLogs()"> <span class="log-level-warn">warn</span>
+          </label>
+          <label class="checkbox">
+            <input type="checkbox" id="logLevelError" checked onchange="filterLogs()"> <span class="log-level-error">error</span>
+          </label>
+        </div>
+        <input type="text" id="logSearch" class="input input-sm log-search" placeholder="Search logs..." onkeyup="filterLogs()" aria-label="Search logs">
+        <div class="log-header-actions">
+          <span id="logStats" class="text-xs text-muted" role="status" aria-live="polite">0 entries</span>
+          <label class="checkbox">
+            <input type="checkbox" id="logAutoScroll" checked> Auto-scroll
+          </label>
+          <button class="btn btn-sm btn-ghost" onclick="clearLogDisplay()" aria-label="Clear log display">Clear</button>
         </div>
       </div>
       <div id="logEntries" class="log-entries" role="log" aria-live="polite" aria-atomic="false" aria-label="Log entries" tabindex="0"></div>
