@@ -354,3 +354,7 @@ otherwise: whether an age-category Standing should also list its unplaced entrie
 class Standing lists them, CONTRACTS §5), and whether entries tied on class rank may share the
 category rank where upstream's own list numbers them consecutively (CONTRACTS §5).
 
+Round C part 4 (2026-11-12; `DECISIONS/LOG.md`) wrote the maintainer's answers of that day. Those
+that changed a cited section and moved no obligation above:
+- `NHT1` and `NHT2` are single runs, `pair: null`; a client takes structure from `Phase.pair` as
+  before (CONTRACTS §2.4).

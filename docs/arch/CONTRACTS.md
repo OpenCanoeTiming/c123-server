@@ -585,9 +585,9 @@ pairing and combination behaviour.
 
 | Upstream format tokens | `kind` | `pair` | `scoringKind` | `heats` |
 |---|---|---|---|---|
-| `BR1`/`BR2` (best-run slalom), `HT1`/`HT2` (international heats), `NHT1`/`NHT2` (heats with direct qualification; see Pairing), `EL1`/`EL2`, `TR1`/`TR2` | race | first / second, `combination: 'best'` | duration | no |
+| `BR1`/`BR2` (best-run slalom), `HT1`/`HT2` (international heats), `EL1`/`EL2`, `TR1`/`TR2` | race | first / second, `combination: 'best'` | duration | no |
 | `SR1`/`SR2`, `TS1`/`TS2` and any other paired second run | race | first / second, `combination: 'sum'` | duration | no |
-| `QF`, `SF`, `SFB`, `FI`, `FIB`, `SP1`, `SP2`, `SPF`, `TSR`, `XT`, `XT1`, `XT2` and single-run tokens generally | race | `null` | duration | no |
+| `QF`, `SF`, `SFB`, `FI`, `FIB`, `SP1`, `SP2`, `SPF`, `TSR`, `XT`, `XT1`, `XT2`, `NHT1`, `NHT2` (heats with direct qualification; see Pairing) and single-run tokens generally | race | `null` | duration | no |
 | `X8`, `X4`, `XS`, `XF` (Kayak Cross head-to-head) | race | `null` | ordinal | yes |
 | `XER`, `SLER`, `WWER` (event-result classifications: "ER" = event result) | classification | `null` | ordinal | no |
 | `RXER` (a title only; upstream calculates nothing for it) | classification, never holding rows | `null` | ordinal | no |
@@ -600,11 +600,11 @@ pairing and combination behaviour.
   The first run is the Phase with the same `classId` whose `format` this table gives for the
   second run's:
 
-  | Second run | `BR2` | `HT2` | `NHT2` | `EL2` | `TR2` | `SR2` | `TS2` | `SUF` | `FI`, `FIB` | `TFI` |
-  |---|---|---|---|---|---|---|---|---|---|---|
-  | Its first run | `BR1` | `HT1` | `NHT1` | `EL1` | `TR1` | `SR1` | `TS1` | `BR2` | `SF` | `TSF` |
+  | Second run | `BR2` | `HT2` | `EL2` | `TR2` | `SR2` | `TS2` | `SUF` | `FI`, `FIB` | `TFI` |
+  |---|---|---|---|---|---|---|---|---|---|
+  | Its first run | `BR1` | `HT1` | `EL1` | `TR1` | `SR1` | `TS1` | `BR2` | `SF` | `TSF` |
 
-  A first-run token (`BR1`, `HT1`, `NHT1`, `EL1`, `TR1`, `SR1`, `TS1`) names its second by the
+  A first-run token (`BR1`, `HT1`, `EL1`, `TR1`, `SR1`, `TS1`) names its second by the
   same table read the other way. `BR2`, `SF` and `TSF` are only named, by the `SUF` or the final:
   their own `pair` is their row of the format table above. This is how upstream itself links two
   runs (observed upstream behaviour).
@@ -621,13 +621,15 @@ pairing and combination behaviour.
   after its first run started, and the second run's id is rebuilt. The Phases are `K1M_BR1_19`
   and `K1M-X_BR2_19`, both with `classId` `K1M-X`: they pair. Reading the prefix would not find
   the first run.
-- `combination` is `'best'` exactly for `BR2`, `HT2`, `NHT2`, `EL2` and `TR2`. Upstream sums both runs
+- `combination` is `'best'` exactly for `BR2`, `HT2`, `EL2` and `TR2`. Upstream sums both runs
   for every other second run.
-- **`NHT1`/`NHT2` are a pair like `HT1`/`HT2`, combination `'best'`** (maintainer, 2026-11-11):
-  the heats with direct qualification, whose second run gets a new start list seeded from the
-  first run's ranked qualifiers. `NHT2`'s first run is `NHT1`. Neither token is in any recording,
-  and whether upstream combines the two runs as it does `HT1`/`HT2` is not verified
-  (`DERIVATIONS.md` §10 item 31: to be checked before the first event that uses them).
+- **`NHT1` and `NHT2` are two single runs, `pair: null`** (maintainer, 2026-11-12;
+  `DECISIONS/LOG.md`): the heats with direct qualification. Upstream builds no combined result
+  for them: `NHT2` is ranked as its own run, and `NHT1` only qualifies its runners and seeds
+  `NHT2`'s start list (upstream behaviour). That link is a qualification and start-list relation,
+  which the contract does not model, so neither token is in the pairing table. *Example:* an
+  `NHT2` row's `Rank` and `Total` are run 2's own; they are its `placement` and `outcome`, and it
+  has no `pairTotal` and no `pair` standing. Neither token is in any recording.
 - `role` and `combination` come from the token alone; `siblingPhaseId` is `null` until the schedule
   names the other run — until a Phase with that class and format is known (a TCP-first cold start,
   `DERIVATIONS.md` §2.1). A second-run Phase reads its rows as a second run from its first row,

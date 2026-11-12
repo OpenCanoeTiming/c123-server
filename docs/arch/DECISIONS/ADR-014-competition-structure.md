@@ -113,3 +113,16 @@ therefore E4, not established; for `BR2`, `HT2`, `EL2` and `TR2` it is unchanged
 The decision itself is not changed here. `NHT1`/`NHT2` are a pair with `combination: 'best'` by
 the maintainer's decision of 2026-11-11 (`CONTRACTS.md` §2.4), which stands until it is verified
 on real `NHT` data or with the maintainer (`DERIVATIONS.md` §10 item 31).
+
+## Revision 2 — `NHT2` is not a pair (2026-11-12)
+
+The previous revision kept `NHT1`/`NHT2` as a pair combining as *best*, by the maintainer's
+decision of 2026-11-11, with the evidence class E4. The maintainer has replaced that decision
+(2026-11-12; `DECISIONS/LOG.md`): there is no NHT combination. Upstream's two-run total and
+better-run path takes `BR2`, `HT2`, `EL2` and `TR2` and excludes `NHT2`; `NHT2` is ranked as its own
+run, and `NHT1` only qualifies its runners and seeds `NHT2`'s start list (upstream behaviour).
+
+Decision 3's pairing bullet therefore reads: a second run combines as *best* for `BR2`, `HT2`,
+`EL2` and `TR2` (E1, unchanged), and as *sum* for every other paired second run. `NHT1` and `NHT2`
+are known single-run formats, `pair: null` (`CONTRACTS.md` §2.4). The qualification and start-list
+link between them is not modelled. `DERIVATIONS.md` §10 item 31 is closed.

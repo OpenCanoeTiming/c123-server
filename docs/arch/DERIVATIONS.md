@@ -274,9 +274,9 @@ the parser's four it reaches the admin log and never `GET /api/diagnostics`.
     when TCP states it.
   - `pair.siblingPhaseId` is found by two fields, never by the id (maintainer, 2026-11-11, #287;
     `CONTRACTS.md` §2.4). For a second run it is the Phase with the same `classId` whose `format`
-    is the first-run token of this one: `BR2`→`BR1`, `HT2`→`HT1`, `NHT2`→`NHT1`, `EL2`→`EL1`,
+    is the first-run token of this one: `BR2`→`BR1`, `HT2`→`HT1`, `EL2`→`EL1`,
     `TR2`→`TR1`, `SR2`→`SR1`, `TS2`→`TS1`, `SUF`→`BR2`, `FI` and `FIB`→`SF`, `TFI`→`TSF`. For a
-    first-run token (`BR1`, `HT1`, `NHT1`, `EL1`, `TR1`, `SR1`, `TS1`) it is the Phase the same
+    first-run token (`BR1`, `HT1`, `EL1`, `TR1`, `SR1`, `TS1`) it is the Phase the same
     table names the other way; `BR2`, `SF` and `TSF` are only named, and keep their own `pair`.
     This mirrors upstream's own lookup: by the schedule row's `ClassId` and a fixed token table,
     never by the `RaceId` string.
@@ -291,13 +291,10 @@ the parser's four it reaches the admin log and never `GET /api/diagnostics`.
   - Until a Phase with that class and token is known, `siblingPhaseId` is `null`; `role` and
     `combination` are the token's regardless, so §4.4's second-run reading applies from the first
     row.
-  - **`NHT1`/`NHT2`** are a pair with `combination: 'best'` (maintainer, 2026-11-11, closing §10
-    item 21). Upstream names `NHT1` as the heats' first run with direct qualification and `NHT2`
-    as their second run with a new start list; `NHT2`'s first run is `NHT1`, and `NHT1`'s second
-    is `NHT2`. The decision note wrote the entry `NHT1→NHT2`, which is the same pair read from the
-    first run. Evidence: neither token is in any of the seven recordings or the samples (E1,
-    absence), and whether upstream combines the two runs as it does `HT1`/`HT2` is not
-    established (E4; §10 item 31).
+  - **`NHT1` and `NHT2`** are known formats and single runs, `pair: null` (maintainer,
+    2026-11-12, closing §10 item 31). Upstream ranks `NHT2` as its own run; `NHT1` qualifies its
+    runners and seeds `NHT2`'s start list. That link is not a pairing and is not in the map.
+    Neither token is in any of the seven recordings or the samples (E1, absence).
 - **`date`.**
   - Source: the date part of `XML.Schedule.StartTime`, a full date-time with offset. Envelope:
     `source: 'xml'`, `confidence: 'authoritative'`.
@@ -1533,7 +1530,8 @@ Items 1–7 and 13 were answered on 2026-09-25 (#179; E1, verified upstream beha
 on 2026-10-14; items 15 and 17 were answered by the spike and the exit-delay measurement; item 16 by
 the round-20 measurement; item 22 by the maintainer (2026-11-06); items 23 and 25 are accepted
 risks and item 5 is closed (maintainer, 2026-11-11 and 2026-11-10; `DECISIONS/LOG.md`); item 21
-by the maintainer's `NHT1`/`NHT2` decision (2026-11-11). Items 9, 11, 12, 18, 19, 20 and 24
+by the maintainer's `NHT1`/`NHT2` decision (2026-11-11), which item 31's closure replaced
+(2026-11-12). Items 9, 11, 12, 18, 19, 20 and 24
 remain. Items 26 to 37 are defaults taken on 2026-11-12, in round C parts 2 and 3, under the
 maintainer's rule of 2026-11-11 that a disagreement moving no client obligation gets a default
 and an item here, not a contract round (`README.md`, ground rules); each says what would reopen
@@ -1620,7 +1618,8 @@ it.
     schedule token it pairs with is unstated, so until it is settled an `NHT2` has `pair: null`
     (§2.1). In no recording. (Round 17.)~~ **Decided (maintainer, 2026-11-11):** `NHT1`/`NHT2` are
     a pair like `HT1`/`HT2`, `combination: 'best'`; `NHT2`'s first run is `NHT1` (§2.1;
-    `CONTRACTS.md` §2.4). What the decision leaves to verify is item 31.
+    `CONTRACTS.md` §2.4). **Replaced (maintainer, 2026-11-12; item 31):** there is no NHT
+    combination; `NHT1` and `NHT2` are single runs, `pair: null`.
 17. ~~The finish → on-course-exit interval per recording.~~ **Measured (E1, seven recordings, 1,995
     closures):** about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % in [18, 20) s), about
     47 s at cp3-cross (p90 57 s), manual closes under 5 s on the two NKZ days (12.6 %, 34.9 %) — the
@@ -1722,15 +1721,12 @@ it.
     reader's state to the core as an ingest event would then be the change. The reason stays in
     the closed set although nothing on site produces it: removing it changes the schema and the
     contract package, a breaking change to weigh once, before 1.0, not in a round.
-31. **The combination of `NHT1`/`NHT2`.** The pair is `combination: 'best'` by the maintainer's
-    decision (2026-11-11). Whether upstream builds a combined result for these two runs as it
-    does for `HT1`/`HT2` is not established: no recording or sample holds either token, and what
-    is known of upstream's behaviour can be read both ways. `DECISIONS/ADR-014` decision 3 lists
-    `NHT2` with the `best` tokens; a later reading of upstream's behaviour did not confirm that,
-    and found the second run ranked as its own run, the first only seeding it. Neither reading
-    is taken as verified. If upstream does not combine them, an `NHT2` row's `Total` and `Rank`
-    are run 2's own and must not be relayed as `pairTotal` and a combined `placement`. To verify
-    on real `NHT` data, or with the maintainer, before the first event that uses these formats.
+31. ~~**The combination of `NHT1`/`NHT2`.** Whether upstream builds a combined result for these
+    two runs as it does for `HT1`/`HT2`.~~ **Closed (maintainer, 2026-11-12):** it does not.
+    Upstream's two-run total and better-run path includes `BR2`, `HT2`, `EL2` and `TR2` and
+    excludes `NHT2` (and `SP2`); `NHT2` is ranked as its own run, `NHT1` only qualifies and seeds
+    it (upstream behaviour, verified on the maintainer's side). Both are single runs, `pair:
+    null` (§2.1; `CONTRACTS.md` §2.4), and an `NHT2` row's `Total` and `Rank` are run 2's own.
 32. **Kayak Cross slot captions.** `faults.gates` names a faulted slot by the slot itself: the
     gate number, `ST`, `RZ` (§4.6(d)); `Course.slots` carries no `caption` on site and upstream's
     captions are `Course.captions` (§2.3). Every recorded `GateCaptions` equals those names
