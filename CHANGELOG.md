@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.13.0](https://github.com/OpenCanoeTiming/c123-server/compare/v0.12.2...v0.13.0) (2026-11-12)
+
+
+### Features
+
+* **admin-ui:** adopt timing-design-system 1.2 and drop the parallel stylesheet ([#221](https://github.com/OpenCanoeTiming/c123-server/issues/221)) ([#341](https://github.com/OpenCanoeTiming/c123-server/issues/341)) ([2bbe243](https://github.com/OpenCanoeTiming/c123-server/commit/2bbe243e4dc5c7509e76089de010eabc0da34da5))
+* **contract:** add the @opencanoetiming/c123-contract package ([#226](https://github.com/OpenCanoeTiming/c123-server/issues/226)) ([95b15fa](https://github.com/OpenCanoeTiming/c123-server/commit/95b15fa244798a6c38f43c90c601bec38a93f0de))
+* **core:** leave constant and round 20 rulings ([#264](https://github.com/OpenCanoeTiming/c123-server/issues/264)) ([5984795](https://github.com/OpenCanoeTiming/c123-server/commit/59847955740e5081389f7db5bcca3cb7eb757152))
+* **core:** merge core ([#257](https://github.com/OpenCanoeTiming/c123-server/issues/257)) ([22e39fa](https://github.com/OpenCanoeTiming/c123-server/commit/22e39fa67865fdb57665f36e26bed7d384f42cb3))
+* **core:** Standing assembly ([#269](https://github.com/OpenCanoeTiming/c123-server/issues/269)) ([dfbec28](https://github.com/OpenCanoeTiming/c123-server/commit/dfbec28ac166d3afaa2d275a8d52c2634565a28e))
+* **dev-env:** one-command player + server environment ([#219](https://github.com/OpenCanoeTiming/c123-server/issues/219)) ([8f464f0](https://github.com/OpenCanoeTiming/c123-server/commit/8f464f0a2591beb846c8e00ee2fe60d0ba812a7f))
+* **gates:** npm run gates, with data-gate tests, whole-recording gate 2 and gate 3, and no skips ([#313](https://github.com/OpenCanoeTiming/c123-server/issues/313)) ([#317](https://github.com/OpenCanoeTiming/c123-server/issues/317)) ([65e1e4f](https://github.com/OpenCanoeTiming/c123-server/commit/65e1e4fe89d60b78deed6c560471208fb5163337))
+* **ingest:** content age, xml states, classification snapshot per round 18 ([#254](https://github.com/OpenCanoeTiming/c123-server/issues/254)) ([71c22b4](https://github.com/OpenCanoeTiming/c123-server/commit/71c22b4be9b7b120683e3e2b0b744e25a65d7ac0))
+* **ingest:** TCP and XML parsers per DERIVATIONS ([#246](https://github.com/OpenCanoeTiming/c123-server/issues/246)) ([893ec70](https://github.com/OpenCanoeTiming/c123-server/commit/893ec70f08a34419855f20bec19d732e415e7a22))
+* **ingest:** XML snapshot reader ([#250](https://github.com/OpenCanoeTiming/c123-server/issues/250)) ([b1897e5](https://github.com/OpenCanoeTiming/c123-server/commit/b1897e5e15e9d682ba96b9c80de036aa6c32f669))
+* **onsite:** on-site REST/WS process, contract §7 ([#210](https://github.com/OpenCanoeTiming/c123-server/issues/210)) ([#285](https://github.com/OpenCanoeTiming/c123-server/issues/285)) ([af279f3](https://github.com/OpenCanoeTiming/c123-server/commit/af279f34c1d90d639936f8a6ae79721bc04066e3))
+* **onsite:** write path, penalty writes and checks with durable keys and one echo rule in every lifetime ([#212](https://github.com/OpenCanoeTiming/c123-server/issues/212)) ([#299](https://github.com/OpenCanoeTiming/c123-server/issues/299)) ([2e31f92](https://github.com/OpenCanoeTiming/c123-server/commit/2e31f9201c05f63b7c84ff4536e1ba67d632b5b4))
+* **store:** durable gate checks and flags ([#272](https://github.com/OpenCanoeTiming/c123-server/issues/272)) ([0cdd197](https://github.com/OpenCanoeTiming/c123-server/commit/0cdd19785b6a882a37a1a692bf1212f0ec9e1a39))
+* **tools:** direct-injection replay and round 24 and 25 core ([#277](https://github.com/OpenCanoeTiming/c123-server/issues/277)) ([6afef9a](https://github.com/OpenCanoeTiming/c123-server/commit/6afef9ae53f8e04358ee0d36afb039e50bd095b6))
+
+
+### Bug Fixes
+
+* **core:** a contradiction leaves no tcp marker on an xml-only field ([#314](https://github.com/OpenCanoeTiming/c123-server/issues/314)) ([#316](https://github.com/OpenCanoeTiming/c123-server/issues/316)) ([ac67e78](https://github.com/OpenCanoeTiming/c123-server/commit/ac67e78295a300740cb54225a23310ba4490d225))
+* **core:** a leave withdraws the stream's running outcome behind a table finish or mark ([#312](https://github.com/OpenCanoeTiming/c123-server/issues/312)) ([#315](https://github.com/OpenCanoeTiming/c123-server/issues/315)) ([86ed855](https://github.com/OpenCanoeTiming/c123-server/commit/86ed855d8a0b244d1fbdb908314ce80c86c0c72d))
+* **core:** rounds 26 and 26b ([#281](https://github.com/OpenCanoeTiming/c123-server/issues/281)) ([23b7537](https://github.com/OpenCanoeTiming/c123-server/commit/23b7537127a17b4021775998ca16c24b1d1d4f26))
+
 ## [0.12.2](https://github.com/OpenCanoeTiming/c123-server/compare/v0.12.1...v0.12.2) (2026-10-17)
 
 
