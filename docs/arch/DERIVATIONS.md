@@ -86,7 +86,7 @@ results table, and only these two:
   tables at every save. A retraction shows in one of two ways: the row stays with its result
   fields empty (a result deleted, a mark taken back), or the row is gone (a competitor deleted,
   moved or given another bib; a redrawn start list). The first retracts; the second removes the
-  Attempt, the guard permitting (§4.12).
+  Attempt, the guard permitting, when no row of the race carries its bib (§4.12).
 - **Mode is read the same way for every table**, classification Phases included, and **a table with
   no rows is a scope snapshot in start-list mode** (TCP: a `Results` message with no row; XML: a
   Schedule race with no `Results` row). The parser emits it like any other (`RXER` excepted: a title
@@ -1003,6 +1003,10 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
 - **Initial binding:** the row's `Id`, verbatim.
 - **A correction** (the wrong person raced under a bib) is an operator write (`CONTRACTS.md` §8.5). No
   upstream field flags it.
+- **Another `Id` under the same bib** in a later row of the race (upstream re-bibbed or swapped
+  competitors and the bib stayed in the race) re-points `entry` by the ordinary rules (INV-4): the
+  bib is the key of a run's data and the competitor's identity under it may change (maintainer,
+  2026-11-12). The Attempt, its `run` and its checks stay; nothing is removed (§4.12).
 
 ### 4.10 Classification rows (`XER`, `SLER`, `WWER`)
 
@@ -1218,10 +1222,13 @@ previously known from a results-table observation:
   single-run row, retract as the TCP first-run case; for a second-run row, as the TCP time-empty
   case — before run 2 every second-run row already carries `TotalRnk` and `TotalTotal` with no
   time.
-- **The row is absent** from a table that carries other rows: **the Attempt is removed**
-  (maintainer, 2026-11-12; `DECISIONS/ADR-015` Revision 6), when the snapshot is admitted for
-  it. The row is the race's row of the XML `Results` table, start-list rows included; the
-  `Participants` table carries the Entry and removes nothing. Only an Attempt a results-table
+- **The row is absent**, that is no row of a table that carries other rows carries the
+  Attempt's bib: **the Attempt is removed** (maintainer, 2026-11-12; `DECISIONS/ADR-015`
+  Revisions 6 and 7), when the snapshot is admitted for it. The row is the race's row of the XML
+  `Results` table that carries the bib, start-list rows included; the `Participants` table
+  carries the Entry and removes nothing. A row under the bib with another `Id` is present, not
+  absent: a re-bib or swap that leaves the bib in the race keeps the Attempt and re-points its
+  `entry` (§4.9). Only an Attempt a results-table
   row of its race has named is removed. Admitted: the snapshot's `changedAfter` is later than
   the latest delivery of every `tcp` observation of the Attempt, an on-course listing included
   (`null` never qualifies), and the Attempt is not in the on-course set. Not admitted: retract
@@ -1229,8 +1236,10 @@ previously known from a results-table observation:
   under the guard below field by field; a later snapshot settles the removal. In the removal's
   unit a pending write of the Attempt resolves `mismatched` without `confirmedValue` (`CONTRACTS.md` §4 rule 4), the
   Attempt leaves every Standing, and `attempt.deleted` is its one message. A re-bibbed or
-  moved competitor is another Attempt (`phaseId:bib`): the old one is removed and the new one
-  is created by its own row, in the same unit when one snapshot carries both. TCP's absent row
+  moved competitor is another Attempt (`phaseId:bib`): the old bib's Attempt is removed where no
+  row of its race carries that bib any more, and the new one is created by its own row, in the
+  same unit when one snapshot carries both. A swap of two bibs within a race keeps both
+  Attempts; their Entries swap. TCP's absent row
   retracts and never removes. Defaults: §10 item 38.
 - **The table has no rows at all:** nothing is retracted. Where at least one Attempt of the race
   holds a result the absent-row case would retract — the guard below included: a result held
@@ -1244,8 +1253,9 @@ previously known from a results-table observation:
   re-baselines.
 - **A row that returns** after an absent-row retraction is a new `xml` observation and is
   presented by the ordinary rules: at once where no `tcp` observation stands, else under rule 2.
-  After a removal it creates a new Attempt, `run` 1, carrying nothing of the removed one (no
-  generation, contradiction record or remembered mark).
+  After a removal it creates a new Attempt, `run` 1, carrying none of the removed one's result
+  state (no generation, contradiction record or remembered mark); the checks and flags of its
+  bib are served again (`CONTRACTS.md` §2.10).
 
 **Guard (INV-2c, content age),** for the present row and the absent row alike: apply the
 retraction against a `tcp` observation only when the snapshot's
@@ -1804,9 +1814,12 @@ decision.
     displace it. Not recorded, and whether upstream allows such an edit is not established
     (E4). Reopens on a recording where a Phase's token and its `DisId` differ.
 38. **An upstream removal and the Attempt** (maintainer, 2026-11-12; `DECISIONS/ADR-015`
-    Revision 6; §4.12). The decision: an Attempt whose row is absent from an admitted XML
-    snapshot is removed; a moved competitor is a new Attempt in the other Phase; the bridge sends
-    `DELETE`. Defaults taken inside it, each the smallest that fits:
+    Revisions 6 and 7; §4.12). The decision: an Attempt is removed when no row of its race in an
+    admitted XML snapshot carries its bib; a moved competitor is a new Attempt in the other Phase;
+    the bridge sends `DELETE`. Narrowed by #349 (maintainer, 2026-11-12, "The data belongs to the
+    bib"): the trigger is the bib, so a re-bib or swap that leaves the bib in the race keeps the
+    Attempt and re-points its `entry`; and checks and flags are the bib's. Defaults taken inside
+    it, each the smallest that fits:
     (a) the trigger is the race's `Results` row, never the `Participants` row, since a deleted
     result keeps the first blanked and a move between races of one class keeps the second;
     (b) only an Attempt a results-table row of its race has named is removed;
@@ -1818,9 +1831,19 @@ decision.
     message, and the unit sends no `attempt.updated` for the Attempt;
     (f) a pending write resolves `mismatched` without `confirmedValue`, before the removal;
     (g) checks and flags stay in the store, unserved while the Attempt does not exist, served
-    again if the same `attemptId` returns;
-    (h) the Entry stays; (i) a returning row creates a new Attempt, `run` 1;
+    again if the same `attemptId` returns, whoever the competitor under the bib then is (the
+    maintainer's, 2026-11-12, #349 CQ2; no longer a default);
+    (h) the Entry stays; (i) a returning row creates a new Attempt, `run` 1, carrying none of the
+    removed one's result state (generation, contradiction record, remembered mark); its checks
+    and flags are (g)'s, not (i)'s;
     (j) a wholly empty table removes nothing.
+    *Example (#349 CQ2):* bibs 11 (X) and 12 (Y) of `K1M_BR1_6` are swapped. Saved in one step,
+    both bibs stay: both Attempts stay, `entry` re-pointed, every check kept and served. Saved
+    through an intermediate bib, a save that leaves bib 11 out removes `K1M_BR1_6:11` (the guard
+    permitting); the next save that carries bib 11, now Y's, creates it again, `run` 1, and serves
+    X's run-1 checks under it, `status` derived against Y's presented gates (`CONTRACTS.md`
+    §2.10). That is the decision: the paper protocol is per bib as raced. Whether upstream allows
+    the one-step swap is not established (E4).
     No recording holds a removal (E2: a scan of every pair of consecutive snapshots in the
     recordings found no row dropped). Reopens on a recording of a removal that these defaults present
     wrongly, or if the TCP push is to remove as well.
