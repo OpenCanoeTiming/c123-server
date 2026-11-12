@@ -4164,6 +4164,105 @@
       }
     },
     {
+      "id": "attempt-kept-when-bib-stays-under-another-entry",
+      "invariant": "INV-7",
+      "description": "A re-bib or swap that leaves the bib in the race removes nothing: the bib is the key of a run's data (maintainer, 2026-11-12). The admitted snapshot still carries bib 11, now under another competitor's Id, so K1M_BR1_6:11 stays, run 1, and its entry pointer is re-pointed (INV-4); no attempt.deleted (ADR-015 Revision 7).",
+      "context": {
+        "xmlPollIntervalSeconds": 5,
+        "attemptId": "K1M_BR1_6:11"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T09:00:00.000Z",
+          "changedAfter": null
+        },
+        {
+          "ingestSeq": 2,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "start-list",
+            "rows": [
+              {
+                "bib": "9"
+              },
+              {
+                "bib": "11"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T09:00:00.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "field": "entry",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T09:00:00.000Z",
+          "value": {
+            "entryId": "30011.K1M"
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 4,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T09:10:05.000Z",
+          "changedAfter": "2026-09-15T09:10:00.000Z"
+        },
+        {
+          "ingestSeq": 5,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "start-list",
+            "rows": [
+              {
+                "bib": "9"
+              },
+              {
+                "bib": "11"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T09:10:05.000Z"
+        },
+        {
+          "ingestSeq": 6,
+          "field": "entry",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-09-15T09:10:05.000Z",
+          "value": {
+            "entryId": "30012.K1M"
+          },
+          "confidence": "authoritative"
+        }
+      ],
+      "expect": {
+        "attempts": [
+          "K1M_BR1_6:9",
+          "K1M_BR1_6:11"
+        ],
+        "entry": {
+          "state": "known",
+          "value": {
+            "entryId": "30012.K1M"
+          },
+          "source": "xml"
+        },
+        "run": {
+          "state": "known",
+          "value": 1
+        },
+        "notifications": {
+          "attempt.deleted": 0
+        }
+      }
+    },
+    {
       "id": "contradiction-oncourse-running-again",
       "invariant": "INV-2d",
       "description": "A finish taken away on the on-course grid: the on-course stream lists the bib running again, later pushes still carry the stale time, the real finish lifts it.",

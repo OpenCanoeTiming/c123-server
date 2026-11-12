@@ -106,11 +106,11 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Replace the whole resource on `standing.updated` (under `standing`) and `course.updated` (under `course`) (CONTRACTS §7.2).
 - [ ] Replace the whole on-course set, in the message's order, on every `oncourse.updated` (CONTRACTS §7.2, §8.4).
 - [ ] Apply `scope.replaced` as a replace, never a merge: remove every Attempt and Standing of the scope absent from the message, and leave Phases, Entries, Classes and Courses untouched (CONTRACTS §7.2, §8.4; ADR-015).
-- [ ] On `attempt.deleted` — on site over `/ws`, on live over the stream — remove the Attempt and its standing entries; keep its Entry; expect the Standings that held it as `standing.updated` in the same unit; a later `attempt.updated` for the same `attemptId` creates a new Attempt, whole, which may sit in another Phase or under another bib for the same competitor (CONTRACTS §1.6, §2.6, §7.2, §8.4; ADR-015).
+- [ ] On `attempt.deleted` — on site over `/ws`, on live over the stream — remove the Attempt and its standing entries; keep its Entry; expect the Standings that held it as `standing.updated` in the same unit; a later `attempt.updated` for the same `attemptId` creates a new Attempt, whole, which may carry another competitor's `entry`, and the same competitor may reappear in another Phase or under another bib (CONTRACTS §1.6, §2.6, §7.2, §8.4; ADR-015).
 
 **Retraction and re-run**
 - [ ] Show a retraction at once: `status` back to what the on-course stream shows or `not-started`, the retracted fields `not-yet`, the entry out of the placed standing (CONTRACTS §2.6, §3.2; ARCHITECTURE §6.I).
-- [ ] Tell a removal from a retraction: a competitor deleted, moved or given another bib upstream arrives as `attempt.deleted`, and the Attempt leaves every list the client shows, start lists included (CONTRACTS §2.6, §4, §7.2).
+- [ ] Tell a removal from a retraction: a bib that leaves the race upstream (a competitor deleted, moved, or given a bib the race does not otherwise hold) arrives as `attempt.deleted`, and the Attempt leaves every list the client shows, start lists included; a re-bib or swap that leaves the bib in the race arrives as `attempt.updated` with a re-pointed `entry`, never as a removal (CONTRACTS §2.6, §4, §7.2).
 - [ ] Show a contradicted finish as running again: `status: on-course`, `outcome: running`, no placement (CONTRACTS §2.6, §4; ARCHITECTURE §6.I).
 - [ ] On a new run generation, stop showing the old result and show the athlete as if that run had not happened; to say "re-run", read `run > 1` with the current status (CONTRACTS §2.6; ADR-013; ARCHITECTURE §6.F).
 
@@ -218,7 +218,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Key checks and flags by `(attemptId, run, gate)`; a new run generation starts with no checks and no open flags, and a check never carries to a re-run (CONTRACTS §2.10; ADR-013; ADR-016).
 - [ ] Keep a check with the Attempt it was made on: a retraction, a contradiction, a result moved to another bib or a re-pointed `entry` never moves or deletes it (CONTRACTS §2.10; ADR-016).
 - [ ] Expect checks, flags and pending writes to survive a re-baseline, with each check's `status` recomputed (CONTRACTS §2.10, §4).
-- [ ] On `attempt.deleted`, drop the Attempt with its checks and flags from the tablet's view; no `check.updated` comes for them and the server keeps them; a pending write of it arrives first as `mismatched` without `confirmedValue`, to be shown as "competitor removed in Canoe123"; a later check, flag or penalty write for it is `404 attempt-not-found`; if the same `attemptId` returns, its checks are served again with its hydration (CONTRACTS §2.10, §4, §7.1, §7.2).
+- [ ] On `attempt.deleted`, drop the Attempt with its checks and flags from the tablet's view; no `check.updated` comes for them and the server keeps them; a pending write of it arrives first as `mismatched` without `confirmedValue`, to be shown as "competitor removed in Canoe123"; a later check, flag or penalty write for it is `404 attempt-not-found`; if the same `attemptId` returns, its checks are served again with its hydration, whoever the competitor under the bib now is (CONTRACTS §2.10, §4, §7.1, §7.2).
 - [ ] Drop its own event fingerprint; the server keys the store by `eventId` (CONTRACTS §2.10; ARCHITECTURE §3; ADR-016).
 - [ ] Follow the rendering clients' Phase-choice default in the race selector and let the judge override it (ARCHITECTURE §2).
 
@@ -334,8 +334,9 @@ whole. Until settled, live-mini-server has no stated source for those fields (CO
 
 Open since 2026-11-05 (round 14) and answered by the maintainer on 2026-11-12 (round C part 4;
 `DECISIONS/LOG.md`): when the on-site bridge sends `DELETE /ingest/v2/attempts/{phaseId}/{bib}`.
-A competitor deleted, moved or given another bib upstream has their Attempt removed at the first
-admitted XML snapshot without its row; on site that is `attempt.deleted`, and the bridge sends
+An Attempt is removed when its bib leaves the race upstream (a competitor deleted, moved, or
+given a bib the race does not otherwise hold), at the first admitted XML snapshot in which no row
+carries the bib (round C part 5: the bib is the key of a run's data); on site that is `attempt.deleted`, and the bridge sends
 `DELETE` for it (CONTRACTS §4, §7.2, §8.3). The duties above moved with it: every rendering client
 removes an Attempt on `attempt.deleted`, on site as on live, and penalty-check drops the Attempt's
 checks and flags from view. live-mini-server's `DELETE` duty is unchanged; it now has a trigger.
@@ -362,3 +363,12 @@ that changed a cited section and moved no obligation above:
   before (CONTRACTS §2.4).
 - a store file set aside at load is reported in the admin log only, and `xml-table-emptied` stays
   ingest-only: nothing reaches a client (CONTRACTS §2.10, §4).
+
+Round C part 5 (2026-11-12; `DECISIONS/LOG.md`) wrote the maintainer's #349 answer, "The data
+belongs to the bib". It changed cited sections and moved no obligation above:
+- an Attempt is removed only when its bib leaves the race; a re-bib or swap that leaves the bib in
+  the race keeps the Attempt and re-points its `entry`, which arrives as `attempt.updated` and is
+  applied by the existing pointer duty (CONTRACTS §2.6, §4);
+- checks and flags stay the bib's: a re-pointed `entry` keeps them, and a recreated Attempt serves
+  them again whoever the competitor is, which penalty-check's existing duties already cover
+  (CONTRACTS §2.10).

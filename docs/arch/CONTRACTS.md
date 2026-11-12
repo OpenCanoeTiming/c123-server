@@ -758,11 +758,13 @@ type Entry = {
 ### 2.6 Attempt
 
 One Entry's participation in one race Phase: the unit with a lifecycle. An Attempt exists from the
-first observation that names it, a start-list row included, until upstream removes it: a
-competitor deleted, moved to another race or class, or given another bib upstream is removed with
-its Attempt, at the first admitted XML snapshot of the race without its row (§4 INV-7; maintainer,
-2026-11-12). A retraction never removes an Attempt; a removal is sent as `attempt.deleted` (§7.2,
-§8.4).
+first observation that names it, a start-list row included, until its bib leaves the race
+upstream: it is removed at the first admitted XML snapshot of the race in which no row carries its
+bib, as when a competitor is deleted, moved to another race or class, or given a bib the race does
+not otherwise hold (§4 INV-7; maintainer, 2026-11-12). **The bib is the key of a run's data; the
+competitor's identity under a bib may change** (maintainer, 2026-11-12): a re-bib or swap that
+leaves the bib in the race keeps the Attempt and re-points its `entry` (INV-4). A retraction never
+removes an Attempt; a removal is sent as `attempt.deleted` (§7.2, §8.4).
 
 ```ts
 type Attempt = {
@@ -1240,12 +1242,16 @@ else the check's `status` if a check exists, else `plain`.
   a value, still `verified` if it was made against `null`.
 - **A result moved to another bib** leaves the check with the bib it was made on. The paper protocol
   is per bib as raced; the receiving bib has no check. Re-pointing `entry` (INV-4) does not move a
-  check either: it belongs to the Attempt, not the person.
+  check either: it belongs to the Attempt, Phase and bib, not the person (maintainer, 2026-11-12:
+  "The data belongs to the bib"). A re-bib or swap that leaves a bib in the race keeps its Attempt
+  (§2.6), so the bib's checks and flags stay served under it, for whichever competitor the bib
+  now carries.
 - **An Attempt removed upstream** (§2.6, §4 INV-7) keeps its checks and flags in the store; nothing
   deletes them. While the Attempt does not exist they are not served (`/checks` lists none for it,
   a check or flag write is `404 attempt-not-found`) and no `check.updated` is sent. If a row with
-  the same `attemptId` returns, the new Attempt's reads serve them again, `status` derived as above
-  (a default; `DERIVATIONS.md` §10 item 38).
+  the same bib returns to the race, the recreated Attempt's reads serve them again, `status`
+  derived as above, whoever the competitor under the bib is (maintainer, 2026-11-12;
+  `DERIVATIONS.md` §10 item 38 (g)).
 - **The re-baseline** (§4) keeps every check and flag and recomputes `status` against the rebuilt
   values.
 - **A late correction** (a protest 30 minutes on) changes the presented penalty; every check on that
@@ -1677,13 +1683,19 @@ implementation must satisfy, not an algorithm.
     every second-run row in the snapshot already carries the combined placement and total with no
     time. This is how a deleted result, or a DNS, DNF or DSQ taken back, shows in the file: the
     row stays and its fields go empty.
-  - **XML, the row is absent** from a table that carries other rows: **the Attempt is removed**
-    (maintainer, 2026-11-12; `DECISIONS/ADR-015` Revision 6). Upstream rewrites the file whole
-    from its current tables at every save, and a competitor deleted, moved to another race or
-    class, or given another bib is gone from the race's next file; so is a row a redrawn start
-    list no longer holds (observed upstream behaviour, `DERIVATIONS.md` §4.12; no recording holds a
-    removal). The row is the race's row in the snapshot's results table, the one row per Attempt,
-    start-list rows included; a deleted result keeps it, blanked (the present-row case above).
+  - **XML, the row is absent** — no row of a table that carries other rows carries the
+    Attempt's bib: **the Attempt is removed** (maintainer, 2026-11-12; `DECISIONS/ADR-015`
+    Revisions 6 and 7). Upstream rewrites the file whole from its current tables at every save,
+    and a competitor deleted, moved to another race or class, or given another bib is gone from
+    the race's next file; so is a row a redrawn start list no longer holds (observed upstream
+    behaviour, `DERIVATIONS.md` §4.12; no recording holds a removal). The row is the race's row in
+    the snapshot's results table that carries the bib, the one row per Attempt, start-list rows
+    included; a deleted result keeps it, blanked (the present-row case above). **The trigger is
+    the bib, not the competitor** (the bib is the key of a run's data, maintainer, 2026-11-12): a
+    re-bib or swap that leaves the bib in the race removes nothing; the row that carries the bib
+    is the present-row case, and its `Id` re-points `entry` (INV-4). A moved competitor's bib
+    leaving race A removes A's Attempt; a swap of two bibs in one race keeps both Attempts and
+    swaps their Entries.
     The removal applies to an Attempt a results-table row of its race has named, when the
     snapshot is admitted for the Attempt: its `changedAfter` is later than the latest delivery of
     every `tcp` observation of the Attempt, an on-course listing included (INV-2c; `null` never
@@ -1695,7 +1707,8 @@ implementation must satisfy, not an algorithm.
     of it resolves `mismatched` without `confirmedValue`, as on a retraction; its checks and
     flags stay in the store (§2.10). The Entry is not removed. A moved competitor's row in the
     other race, or under the new bib, creates that Attempt by the ordinary rule; a row that
-    returns creates a new Attempt, `run` 1, carrying nothing of the removed one.
+    returns creates a new Attempt, `run` 1, carrying none of the removed one's result state; its
+    checks and flags, the bib's, are served again (§2.10).
     *Example:* bib 11 holds a TCP result of 10:40:59 and the operator deletes the competitor. The
     next save lists the race without bib 11. Its content age, 10:41:32, is later than the push
     and bib 11 is off course, so the Attempt `K1M_BR1_6:11` is removed: one `attempt.deleted`,
@@ -1730,7 +1743,9 @@ implementation must satisfy, not an algorithm.
   explicit determination that the fact cannot be supplied, or does not apply. It is never the default
   for "this message did not include the field".
 - **INV-4 (identity bindings carry the same envelope).** `Attempt.entry` is `Observed`, like any other
-  field. A correction to who raced under a bib is an ordinary `known → known` change.
+  field. A correction to who raced under a bib is an ordinary `known → known` change, whether
+  upstream's (a re-bib or swap that leaves the bib in the race, §2.6, INV-7) or an operator's
+  (§8.5). The Attempt, its run generation and its checks stay with the bib.
 - **INV-5 (idempotent supersession).** Re-delivering an identical observation, with the same `value`
   from the same source for the same run generation, is a no-op for what is presented and triggers no
   client-visible notification where that value is already presented from that source. **The
