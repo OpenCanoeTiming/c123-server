@@ -85,7 +85,8 @@ results table, and only these two:
 - **An XML snapshot**, for every race in it. Upstream rewrites the file whole from its current
   tables at every save. A retraction shows in one of two ways: the row stays with its result
   fields empty (a result deleted, a mark taken back), or the row is gone (a competitor deleted,
-  moved or given another bib; a redrawn start list). Both retract (§4.12).
+  moved or given another bib; a redrawn start list). The first retracts; the second removes the
+  Attempt, the guard permitting (§4.12).
 - **Mode is read the same way for every table**, classification Phases included, and **a table with
   no rows is a scope snapshot in start-list mode** (TCP: a `Results` message with no row; XML: a
   Schedule race with no `Results` row). The parser emits it like any other (`RXER` excepted: a title
@@ -274,9 +275,9 @@ the parser's four it reaches the admin log and never `GET /api/diagnostics`.
     when TCP states it.
   - `pair.siblingPhaseId` is found by two fields, never by the id (maintainer, 2026-11-11, #287;
     `CONTRACTS.md` §2.4). For a second run it is the Phase with the same `classId` whose `format`
-    is the first-run token of this one: `BR2`→`BR1`, `HT2`→`HT1`, `NHT2`→`NHT1`, `EL2`→`EL1`,
+    is the first-run token of this one: `BR2`→`BR1`, `HT2`→`HT1`, `EL2`→`EL1`,
     `TR2`→`TR1`, `SR2`→`SR1`, `TS2`→`TS1`, `SUF`→`BR2`, `FI` and `FIB`→`SF`, `TFI`→`TSF`. For a
-    first-run token (`BR1`, `HT1`, `NHT1`, `EL1`, `TR1`, `SR1`, `TS1`) it is the Phase the same
+    first-run token (`BR1`, `HT1`, `EL1`, `TR1`, `SR1`, `TS1`) it is the Phase the same
     table names the other way; `BR2`, `SF` and `TSF` are only named, and keep their own `pair`.
     This mirrors upstream's own lookup: by the schedule row's `ClassId` and a fixed token table,
     never by the `RaceId` string.
@@ -291,13 +292,10 @@ the parser's four it reaches the admin log and never `GET /api/diagnostics`.
   - Until a Phase with that class and token is known, `siblingPhaseId` is `null`; `role` and
     `combination` are the token's regardless, so §4.4's second-run reading applies from the first
     row.
-  - **`NHT1`/`NHT2`** are a pair with `combination: 'best'` (maintainer, 2026-11-11, closing §10
-    item 21). Upstream names `NHT1` as the heats' first run with direct qualification and `NHT2`
-    as their second run with a new start list; `NHT2`'s first run is `NHT1`, and `NHT1`'s second
-    is `NHT2`. The decision note wrote the entry `NHT1→NHT2`, which is the same pair read from the
-    first run. Evidence: neither token is in any of the seven recordings or the samples (E1,
-    absence), and whether upstream combines the two runs as it does `HT1`/`HT2` is not
-    established (E4; §10 item 31).
+  - **`NHT1` and `NHT2`** are known formats and single runs, `pair: null` (maintainer,
+    2026-11-12, closing §10 item 31). Upstream ranks `NHT2` as its own run; `NHT1` qualifies its
+    runners and seeds `NHT2`'s start list. That link is not a pairing and is not in the map.
+    Neither token is in any of the seven recordings or the samples (E1, absence).
 - **`date`.**
   - Source: the date part of `XML.Schedule.StartTime`, a full date-time with offset. Envelope:
     `source: 'xml'`, `confidence: 'authoritative'`.
@@ -430,7 +428,8 @@ the parser's four it reaches the admin log and never `GET /api/diagnostics`.
 **Identity.** `bib` is `Results.Participant@Bib`, `OnCourse.Participant@Bib` or `XML.Results.Bib`,
 trimmed. `attemptId` is `${phaseId}:${bib}`. The Attempt exists from the first row that names it,
 which may be a start-list row a day ahead; its `status` is `not-started` from that row
-(`CONTRACTS.md` §3.2).
+(`CONTRACTS.md` §3.2). It exists until an admitted XML snapshot of its race no longer carries its
+row (§4.12; `CONTRACTS.md` §2.6).
 
 ### 4.1 `status` and result marks
 
@@ -1219,10 +1218,20 @@ previously known from a results-table observation:
   single-run row, retract as the TCP first-run case; for a second-run row, as the TCP time-empty
   case — before run 2 every second-run row already carries `TotalRnk` and `TotalTotal` with no
   time.
-- **The row is absent** from a table that carries other rows: retract as the TCP absent-row case,
-  `pairTotal` and `countingRun` included in a paired second run. A re-bibbed competitor is
-  another Attempt (`phaseId:bib`): the old bib's Attempt is retracted and stays, `not-started`,
-  and the new bib's is created by its own row.
+- **The row is absent** from a table that carries other rows: **the Attempt is removed**
+  (maintainer, 2026-11-12; `DECISIONS/ADR-015` Revision 6), when the snapshot is admitted for
+  it. The row is the race's row of the XML `Results` table, start-list rows included; the
+  `Participants` table carries the Entry and removes nothing. Only an Attempt a results-table
+  row of its race has named is removed. Admitted: the snapshot's `changedAfter` is later than
+  the latest delivery of every `tcp` observation of the Attempt, an on-course listing included
+  (`null` never qualifies), and the Attempt is not in the on-course set. Not admitted: retract
+  as the TCP absent-row case, `pairTotal` and `countingRun` included in a paired second run,
+  under the guard below field by field; a later snapshot settles the removal. In the removal's
+  unit a pending write of the Attempt resolves `mismatched` without `confirmedValue` (`CONTRACTS.md` §4 rule 4), the
+  Attempt leaves every Standing, and `attempt.deleted` is its one message. A re-bibbed or
+  moved competitor is another Attempt (`phaseId:bib`): the old one is removed and the new one
+  is created by its own row, in the same unit when one snapshot carries both. TCP's absent row
+  retracts and never removes. Defaults: §10 item 38.
 - **The table has no rows at all:** nothing is retracted. Where at least one Attempt of the race
   holds a result the absent-row case would retract — the guard below included: a result held
   from `tcp` counts only where the snapshot's `changedAfter` is later than its latest delivery,
@@ -1235,6 +1244,8 @@ previously known from a results-table observation:
   re-baselines.
 - **A row that returns** after an absent-row retraction is a new `xml` observation and is
   presented by the ordinary rules: at once where no `tcp` observation stands, else under rule 2.
+  After a removal it creates a new Attempt, `run` 1, carrying nothing of the removed one (no
+  generation, contradiction record or remembered mark).
 
 **Guard (INV-2c, content age),** for the present row and the absent row alike: apply the
 retraction against a `tcp` observation only when the snapshot's
@@ -1533,11 +1544,14 @@ Items 1–7 and 13 were answered on 2026-09-25 (#179; E1, verified upstream beha
 on 2026-10-14; items 15 and 17 were answered by the spike and the exit-delay measurement; item 16 by
 the round-20 measurement; item 22 by the maintainer (2026-11-06); items 23 and 25 are accepted
 risks and item 5 is closed (maintainer, 2026-11-11 and 2026-11-10; `DECISIONS/LOG.md`); item 21
-by the maintainer's `NHT1`/`NHT2` decision (2026-11-11). Items 9, 11, 12, 18, 19, 20 and 24
+by the maintainer's `NHT1`/`NHT2` decision (2026-11-11), which item 31's closure replaced
+(2026-11-12). Items 9, 11, 12, 18, 19, 20 and 24
 remain. Items 26 to 37 are defaults taken on 2026-11-12, in round C parts 2 and 3, under the
 maintainer's rule of 2026-11-11 that a disagreement moving no client obligation gets a default
 and an item here, not a contract round (`README.md`, ground rules); each says what would reopen
-it.
+it. Round C part 4 (maintainer, 2026-11-12) closed item 31, settled items 26, 33 and 34, added
+the live side to item 25's closure, and added item 38, the defaults inside the removal
+decision.
 
 1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
    hardware judge terminals on their own port and raises a flag on the scoring service for about
@@ -1620,7 +1634,8 @@ it.
     schedule token it pairs with is unstated, so until it is settled an `NHT2` has `pair: null`
     (§2.1). In no recording. (Round 17.)~~ **Decided (maintainer, 2026-11-11):** `NHT1`/`NHT2` are
     a pair like `HT1`/`HT2`, `combination: 'best'`; `NHT2`'s first run is `NHT1` (§2.1;
-    `CONTRACTS.md` §2.4). What the decision leaves to verify is item 31.
+    `CONTRACTS.md` §2.4). **Replaced (maintainer, 2026-11-12; item 31):** there is no NHT
+    combination; `NHT1` and `NHT2` are single runs, `pair: null`.
 17. ~~The finish → on-course-exit interval per recording.~~ **Measured (E1, seven recordings, 1,995
     closures):** about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % in [18, 20) s), about
     47 s at cp3-cross (p90 57 s), manual closes under 5 s on the two NKZ days (12.6 %, 34.9 %) — the
@@ -1671,14 +1686,22 @@ it.
     `run` per Attempt with §2.10's discipline, or seed it from the store's highest `run` for the
     Attempt and from live's state. A rare conjunction (one recorded re-run in seven recordings, then a
     restart inside the event) with a wrong-workflow, never a wrong-result, consequence on site
-    (`ADR-016`), and a decrease on live. (Round 27i, second pass.)
+    (`ADR-016`). (Round 27i, second pass.) **The accepted risk covers on site only (maintainer,
+    2026-11-12): live never shows `run` decreasing.** The live store never lowers an Attempt's
+    `run`: a push carrying a lower `run` than the stored one leaves `run` as stored and applies
+    its other fields (a default; the restarted bridge has no memory of what it pushed, live
+    holds it; `CONTRACTS.md` §8.3). Upstream's current row is the re-run's, so the fields are
+    right and only the restarted server's label is low. *Example:* live holds
+    `K1M_BR1_19:9` at `run` 2; after a restart the bridge re-pushes it with `run` 1 and the
+    re-run's result; live keeps 2 and stores the result. M5 work.
 26. **The level of `xml-table-emptied`.** An XML table with no rows over a race that holds results
     retracts nothing and raises this diagnostic (`CONTRACTS.md` §4 INV-7; maintainer, 2026-11-11).
     The decision says "raises a diagnostic" and not where. Default: ingest-only, the admin log, as
     the parser's own kinds are (§0.5), so no wire shape moves. The alternative is a seventh
     `Diagnostic` kind on `GET /api/diagnostics`, visible in the admin UI: a change of the contract
-    package and of one admin obligation. Reopens if operators need to see it without reading the
-    log; the maintainer's to say.
+    package and of one admin obligation. **Settled (maintainer, 2026-11-12): the admin log, no
+    wire diagnostic.** The Canoe123 operator watches the admin UI and receives the system
+    notifications about problems.
 27. **What a per-Phase re-baseline replaces on a paired Phase.** `CONTRACTS.md` §7.2 sends the
     Attempts of the named Phase and every Standing whose scope names it, a `pair` Standing on
     either side included. The gate-2 checker's scope added the sibling Phase and so reported the
@@ -1722,15 +1745,12 @@ it.
     reader's state to the core as an ingest event would then be the change. The reason stays in
     the closed set although nothing on site produces it: removing it changes the schema and the
     contract package, a breaking change to weigh once, before 1.0, not in a round.
-31. **The combination of `NHT1`/`NHT2`.** The pair is `combination: 'best'` by the maintainer's
-    decision (2026-11-11). Whether upstream builds a combined result for these two runs as it
-    does for `HT1`/`HT2` is not established: no recording or sample holds either token, and what
-    is known of upstream's behaviour can be read both ways. `DECISIONS/ADR-014` decision 3 lists
-    `NHT2` with the `best` tokens; a later reading of upstream's behaviour did not confirm that,
-    and found the second run ranked as its own run, the first only seeding it. Neither reading
-    is taken as verified. If upstream does not combine them, an `NHT2` row's `Total` and `Rank`
-    are run 2's own and must not be relayed as `pairTotal` and a combined `placement`. To verify
-    on real `NHT` data, or with the maintainer, before the first event that uses these formats.
+31. ~~**The combination of `NHT1`/`NHT2`.** Whether upstream builds a combined result for these
+    two runs as it does for `HT1`/`HT2`.~~ **Closed (maintainer, 2026-11-12):** it does not.
+    Upstream's two-run total and better-run path includes `BR2`, `HT2`, `EL2` and `TR2` and
+    excludes `NHT2` (and `SP2`); `NHT2` is ranked as its own run, `NHT1` only qualifies and seeds
+    it (upstream behaviour, verified on the maintainer's side). Both are single runs, `pair:
+    null` (§2.1; `CONTRACTS.md` §2.4), and an `NHT2` row's `Total` and `Rank` are run 2's own.
 32. **Kayak Cross slot captions.** `faults.gates` names a faulted slot by the slot itself: the
     gate number, `ST`, `RZ` (§4.6(d)); `Course.slots` carries no `caption` on site and upstream's
     captions are `Course.captions` (§2.3). Every recorded `GateCaptions` equals those names
@@ -1746,16 +1766,18 @@ it.
     rule still binds: `seq` never regresses across a restart (`CONTRACTS.md` §1.6), so the
     counter restarts above any value the server can have issued, never at zero. What is lost is
     workflow state: checks and flags read as never made, a pending write is forgotten and the
-    operator resolves it by hand, as after §10 item 25. Reopens if an operator must see the
-    failure without reading the log; that goes with item 26's question.
+    operator resolves it by hand, as after §10 item 25. **Settled (maintainer, 2026-11-12), with
+    item 26:** the admin log entry is the report; nothing goes on the wire.
 34. **What "durable" covers** (#273). `CONTRACTS.md` §2.10 states the guarantee against a crash:
     "a crash at any point leaves the previous complete state". That is a crash of the server
     process, on every platform: a temporary file, flushed, then a rename. Against a power loss
     it is best effort: the directory entry is flushed where the platform offers it, and on
     Windows it does not, so a write acknowledged in the last moments before the power fails
     may roll back to the previous complete state. Nothing acknowledged is ever half-written.
-    The venue-laptop check (#198) measures what Windows does. Reopens if the maintainer wants
-    power loss covered; that needs a write-through the check would have to verify.
+    The venue-laptop check (#198) measures what Windows does. **Settled (maintainer, 2026-11-12):
+    accepted.** The venue documentation tells the operator to run the laptop on a charged
+    battery. Covering power loss would need a write-through store the check would have to
+    verify.
 35. **A Kayak Cross leave and the stream's `running` outcome** (#318). A Cross Attempt that
     leaves the list keeps `status: on-course` (§4.2; `CONTRACTS.md` §7.1), and it keeps the
     stream's `running` outcome with it: `running` is the outcome of an Attempt on course
@@ -1781,3 +1803,24 @@ it.
     Phase's `format` from its first statement on, and a later TCP message's token does not
     displace it. Not recorded, and whether upstream allows such an edit is not established
     (E4). Reopens on a recording where a Phase's token and its `DisId` differ.
+38. **An upstream removal and the Attempt** (maintainer, 2026-11-12; `DECISIONS/ADR-015`
+    Revision 6; §4.12). The decision: an Attempt whose row is absent from an admitted XML
+    snapshot is removed; a moved competitor is a new Attempt in the other Phase; the bridge sends
+    `DELETE`. Defaults taken inside it, each the smallest that fits:
+    (a) the trigger is the race's `Results` row, never the `Participants` row, since a deleted
+    result keeps the first blanked and a move between races of one class keeps the second;
+    (b) only an Attempt a results-table row of its race has named is removed;
+    (c) the guard covers the whole Attempt: every `tcp` observation, listings included, must
+    predate the snapshot's `changedAfter`, and an Attempt in the on-course set is never removed;
+    where it refuses, Revision 5's per-field retraction applies;
+    (d) TCP's absent row only retracts (the decision names the XML; the next save follows);
+    (e) on site the removal is `attempt.deleted { seq, attemptId }`, §8.4's shape, a new
+    message, and the unit sends no `attempt.updated` for the Attempt;
+    (f) a pending write resolves `mismatched` without `confirmedValue`, before the removal;
+    (g) checks and flags stay in the store, unserved while the Attempt does not exist, served
+    again if the same `attemptId` returns;
+    (h) the Entry stays; (i) a returning row creates a new Attempt, `run` 1;
+    (j) a wholly empty table removes nothing.
+    No recording holds a removal (E2: a scan of every pair of consecutive snapshots in the
+    recordings found no row dropped). Reopens on a recording of a removal that these defaults present
+    wrongly, or if the TCP push is to remove as well.

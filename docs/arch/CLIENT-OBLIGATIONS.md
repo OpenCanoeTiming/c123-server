@@ -87,6 +87,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Show a result without a rank until `placement` is known; never fill in a computed rank (CONTRACTS §5; ADR-012).
 - [ ] Render Standing entries in delivered order; unplaced entries (`rank: null`, `order: null`) come last, in an order with no ranking meaning (CONTRACTS §5).
 - [ ] Where standings are shown, show age-category standings alongside the class standing, not instead of it (CONTRACTS §2.3; ADR-014).
+- [ ] Render an age-category Standing as delivered: placed entries ranked as Canoe123 numbers them, so entries tied on class rank carry consecutive category ranks, then the category's unplaced entries with `rank: null` and `order: null`, as on a printed result list (CONTRACTS §5; ADR-012).
 - [ ] Render a `classification` Standing from its own entries, with `decidedIn` as upstream's own round token (`F`, `SF`, `1/2`, `1/4`, `T`), shown verbatim and absent while `null`, as upstream last built it; a classification Phase has no Attempts (CONTRACTS §2.4, §2.7; DERIVATIONS §4.10).
 - [ ] Expect `pair.siblingPhaseId` to be `null` until the schedule names the other run; `role` and `combination` are already final (CONTRACTS §2.4; DERIVATIONS §2.1).
 - [ ] Read a member's `externalId` inside the `known` `members` value, where `null` means no registry identity; expect no per-member envelope on either tier (CONTRACTS §1.2, §2.5, §8.3).
@@ -105,9 +106,11 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Replace the whole resource on `standing.updated` (under `standing`) and `course.updated` (under `course`) (CONTRACTS §7.2).
 - [ ] Replace the whole on-course set, in the message's order, on every `oncourse.updated` (CONTRACTS §7.2, §8.4).
 - [ ] Apply `scope.replaced` as a replace, never a merge: remove every Attempt and Standing of the scope absent from the message, and leave Phases, Entries, Classes and Courses untouched (CONTRACTS §7.2, §8.4; ADR-015).
+- [ ] On `attempt.deleted` — on site over `/ws`, on live over the stream — remove the Attempt and its standing entries; keep its Entry; expect the Standings that held it as `standing.updated` in the same unit; a later `attempt.updated` for the same `attemptId` creates a new Attempt, whole, which may sit in another Phase or under another bib for the same competitor (CONTRACTS §1.6, §2.6, §7.2, §8.4; ADR-015).
 
 **Retraction and re-run**
 - [ ] Show a retraction at once: `status` back to what the on-course stream shows or `not-started`, the retracted fields `not-yet`, the entry out of the placed standing (CONTRACTS §2.6, §3.2; ARCHITECTURE §6.I).
+- [ ] Tell a removal from a retraction: a competitor deleted, moved or given another bib upstream arrives as `attempt.deleted`, and the Attempt leaves every list the client shows, start lists included (CONTRACTS §2.6, §4, §7.2).
 - [ ] Show a contradicted finish as running again: `status: on-course`, `outcome: running`, no placement (CONTRACTS §2.6, §4; ARCHITECTURE §6.I).
 - [ ] On a new run generation, stop showing the old result and show the athlete as if that run had not happened; to say "re-run", read `run > 1` with the current status (CONTRACTS §2.6; ADR-013; ARCHITECTURE §6.F).
 
@@ -166,6 +169,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Decide how long a finisher stays in the on-course display as display policy (`FINISHED_GRACE_PERIOD` today), from `status: finished` and the injected `Clock`; never from the Attempt leaving the set, which is upstream's closure, typically about 20 s later and a venue setting (CONTRACTS §7.1; ARCHITECTURE §2; TEST-ARCHITECTURE §3.3).
 - [ ] Route today's timing sites (`context/constants.ts`, `useDeparting.ts`, `useAutoScroll.ts`, `useHighlight.ts`) through the `Clock` (TEST-ARCHITECTURE §5).
 - [ ] Do not expose the re-baseline on a venue board (CONTRACTS §4).
+- [ ] Drop an Attempt named by `attempt.deleted` from every start list, result list and on-course view the board holds; a removed Attempt is never in the on-course set when the message arrives (CONTRACTS §4, §7.2).
 - [ ] Keep client configuration and remote control (ConfigPush, `clientId`, per-IP records) on today's mechanism, outside the contract, pinned by regression tests (ARCHITECTURE §8).
 
 ---
@@ -214,6 +218,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Key checks and flags by `(attemptId, run, gate)`; a new run generation starts with no checks and no open flags, and a check never carries to a re-run (CONTRACTS §2.10; ADR-013; ADR-016).
 - [ ] Keep a check with the Attempt it was made on: a retraction, a contradiction, a result moved to another bib or a re-pointed `entry` never moves or deletes it (CONTRACTS §2.10; ADR-016).
 - [ ] Expect checks, flags and pending writes to survive a re-baseline, with each check's `status` recomputed (CONTRACTS §2.10, §4).
+- [ ] On `attempt.deleted`, drop the Attempt with its checks and flags from the tablet's view; no `check.updated` comes for them and the server keeps them; a pending write of it arrives first as `mismatched` without `confirmedValue`, to be shown as "competitor removed in Canoe123"; a later check, flag or penalty write for it is `404 attempt-not-found`; if the same `attemptId` returns, its checks are served again with its hydration (CONTRACTS §2.10, §4, §7.1, §7.2).
 - [ ] Drop its own event fingerprint; the server keys the store by `eventId` (CONTRACTS §2.10; ARCHITECTURE §3; ADR-016).
 - [ ] Follow the rendering clients' Phase-choice default in the race selector and let the judge override it (ARCHITECTURE §2).
 
@@ -225,10 +230,11 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Store exactly what the ingest contract asserts, per tenant, durable across on-site disconnection (ARCHITECTURE §3).
 - [ ] Apply INV-1, INV-3, INV-4, INV-5, INV-6 and INV-2 rule 4, and honour explicit `not-yet`, `DELETE` and the Phase replace; apply none of INV-2 rules 1 to 3, INV-2b, INV-2c, INV-2d or INV-7 (CONTRACTS §4, §8.3; ARCHITECTURE §3).
 - [ ] Among bridge observations of one field, present the later-ingested one (CONTRACTS §4, §8.3).
+- [ ] Never lower a stored Attempt's `run`: a push or a Phase replace carrying a lower `run` leaves `run` as stored and applies its other fields (CONTRACTS §8.3; DERIVATIONS §10).
 - [ ] Accept `stage` on the Phase push and serve it; it is structural, not a vendor token (CONTRACTS §2.4, §8.3; ADR-007).
 - [ ] Accept `pair.siblingPhaseId: null` on the Phase push and serve it as `null`; publish the `pair` standing only once it is non-null (CONTRACTS §2.4, §5, §8.3).
 - [ ] Expect the bridge to re-push the current state of every changed resource after an outage, a cleared rejection or a restart, and treat each as the idempotent `PUT` it is (CONTRACTS §1.5, §2.8, §8.3).
-- [ ] Assemble standings as c123-server does, from the pushed `placement` and `ageCategoryId`, without the category-rank check and without the order-anomaly check; rank nothing; emit `standing.updated` only when the standing's serialised form changed, never for a running athlete's ticks (CONTRACTS §5, §8, §8.3; ADR-012; ADR-017).
+- [ ] Assemble standings as c123-server does, from the pushed `placement` and `ageCategoryId`, without the category-rank check and without the order-anomaly check; rank nothing; in an age-category standing number the placed entries by their position in class order and list the category's unplaced entries after them with `rank: null` (CONTRACTS §5 step 4); emit `standing.updated` only when the standing's serialised form changed, never for a running athlete's ticks (CONTRACTS §5, §8, §8.3; ADR-012; ADR-017).
 - [ ] Set each Standing's `asOf` to the ingest time of the latest observation behind any of its entries (CONTRACTS §5).
 - [ ] Accept `PUT /ingest/v2/phases/{phaseId}/classification` for a Phase of `kind: 'classification'`, replace its rows whole (`decidedIn: string | null`, relayed as pushed), assemble the `classification` Standing from them as delivered and emit `standing.updated`; refuse Attempts on a classification Phase, classifications pushed as Attempts, and `rows: []` (`400 validation-failed`: an emptied classification is never shown; the bridge keeps the last built Standing and never sends one) (CONTRACTS §2.4, §5, §8.3, §8.6; DERIVATIONS §4.10).
 - [ ] Recompute nothing else: retire `EventLifecycleService`'s independent judgement, the independent ranking and the second XML parser (ARCHITECTURE §3; CONTRACTS §8).
@@ -287,7 +293,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Encode every envelope as the wire encoding requires, `eventTime` omitted rather than `null`, so that every envelope and error validates against the two wire schemas (CONTRACTS §1.2, §1.7).
 
 **Tests**
-- [ ] Run, through a thin adapter into its own merge function, the 23 tier-1 vectors CONFORMANCE-VECTORS §1 lists for the live tier, applying each vector's ingest units as §1 defines them, one ingest request being one unit, resolving each field name and `scope` to the Attempt, its Entry or its Phase as §1 defines ("Scope of a field"), matching `expect` as §1 defines (a `not-yet` or `unavailable` envelope whole, a `known` one as a subset), and asserting that count: `INV-1` except the two scope-snapshot ones, `INV-3`, `trichotomy`, `INV-4`, `INV-5`, `INV-6`, `under-review`, `phase-status-transition`, `live-ingest`, the two `operator-correction-*` vectors, and `standing-assembly` except the three anomaly vectors (CONFORMANCE-VECTORS §1, §2; CONTRACTS §1.6; TEST-ARCHITECTURE §3.1).
+- [ ] Run, through a thin adapter into its own merge function, the 24 tier-1 vectors CONFORMANCE-VECTORS §1 lists for the live tier, applying each vector's ingest units as §1 defines them, one ingest request being one unit, resolving each field name and `scope` to the Attempt, its Entry or its Phase as §1 defines ("Scope of a field"), matching `expect` as §1 defines (a `not-yet` or `unavailable` envelope whole, a `known` one as a subset), and asserting that count: `INV-1` except the two scope-snapshot ones, `INV-3`, `trichotomy`, `INV-4`, `INV-5`, `INV-6`, `under-review`, `phase-status-transition`, `live-ingest`, the two `operator-correction-*` vectors, and `standing-assembly` except the three anomaly vectors (CONFORMANCE-VECTORS §1, §2; CONTRACTS §1.6; TEST-ARCHITECTURE §3.1).
 - [ ] Add tier-1 time-window vectors for calendar `status`: just under, exactly at and just over 5 minutes (TEST-ARCHITECTURE §3.1).
 - [ ] Replay each admitted domain-state fixture's deltas as the §8.3 pushes they correspond to, check that values read back over the public reads match, and run the deltas-only gate-2 properties (those marked **D**) on the resulting public stream (TEST-ARCHITECTURE §3.2, §7).
 - [ ] Verify tenant isolation with the store's own integration tests: no leakage between two keys with equal local ids, no cross-event access, `403` for a revoked key, `404` for an unknown `eventId` (TEST-ARCHITECTURE §3.5; CONFORMANCE-VECTORS §3).
@@ -326,17 +332,13 @@ Open since 2026-11-05 (`DECISIONS/LOG.md`, round 13), returned to the maintainer
 `Event.details` or a Course's `layout`, `slots` and `captions`, yet §8.4 serves `Event` and `Course`
 whole. Until settled, live-mini-server has no stated source for those fields (CONTRACTS §8.3, §8.4).
 
-Open since 2026-11-05 (`DECISIONS/LOG.md`, round 14), returned to the maintainer: nothing names when the on-site bridge
-sends `DELETE /ingest/v2/attempts/{phaseId}/{bib}`. On site an Attempt is never removed: a retraction
-is field-level (INV-7) and a re-baseline reaches live as a Phase replace, which removes absent
-Attempts by itself; so today only a §8.5 organiser correction has a reason to call `DELETE`, and no
-server vector covers a bridge trigger. Whether an upstream start-list removal should become one is a
-maintainer question (CONTRACTS §4, §8.3, §8.5). By the maintainer's decision of 2026-11-11 the
-server sees such a removal: a competitor deleted, moved or given another bib upstream is gone from
-the race's XML table, and the absent row retracts the Attempt's result fields (CONTRACTS §4;
-ADR-015). The Attempt itself stays, `not-started`, with its entry, on site and on live. No
-obligation above changes by this: the retraction arrives as the explicit `not-yet` values a client
-already applies.
+Open since 2026-11-05 (round 14) and answered by the maintainer on 2026-11-12 (round C part 4;
+`DECISIONS/LOG.md`): when the on-site bridge sends `DELETE /ingest/v2/attempts/{phaseId}/{bib}`.
+A competitor deleted, moved or given another bib upstream has their Attempt removed at the first
+admitted XML snapshot without its row; on site that is `attempt.deleted`, and the bridge sends
+`DELETE` for it (CONTRACTS §4, §7.2, §8.3). The duties above moved with it: every rendering client
+removes an Attempt on `attempt.deleted`, on site as on live, and penalty-check drops the Attempt's
+checks and flags from view. live-mini-server's `DELETE` duty is unchanged; it now has a trigger.
 
 Round C part 3 (2026-11-12; `DECISIONS/LOG.md`) ruled or ratified the questions the M1 reviews had
 left open. It changed cited sections and moved no obligation above:
@@ -349,8 +351,14 @@ left open. It changed cited sections and moved no obligation above:
 - a store file that fails validation is set aside and the server starts with an empty store, so
   checks and flags read as never made; nothing new is on the wire (CONTRACTS §2.10).
 
-Put to the maintainer by that round, each of which would add or change a duty if decided
-otherwise: whether an age-category Standing should also list its unplaced entries (today only the
-class Standing lists them, CONTRACTS §5), and whether entries tied on class rank may share the
-category rank where upstream's own list numbers them consecutively (CONTRACTS §5).
+Put to the maintainer by that round and answered on 2026-11-12 (round C part 4), each moving the
+duties above: an age-category Standing lists its unplaced entries after the placed ones, and
+entries tied on class rank carry consecutive category ranks, as Canoe123 numbers them
+(CONTRACTS §5).
 
+Round C part 4 (2026-11-12; `DECISIONS/LOG.md`) wrote the maintainer's answers of that day. Those
+that changed a cited section and moved no obligation above:
+- `NHT1` and `NHT2` are single runs, `pair: null`; a client takes structure from `Phase.pair` as
+  before (CONTRACTS §2.4).
+- a store file set aside at load is reported in the admin log only, and `xml-table-emptied` stays
+  ingest-only: nothing reaches a client (CONTRACTS §2.10, §4).

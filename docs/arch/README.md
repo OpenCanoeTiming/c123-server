@@ -105,6 +105,10 @@ reader can see the whole set at once.
   answer, and repairing them piecemeal would destroy the evidence.
 - **Provenance of upstream behaviour stays in the private `c123-protocol-docs` repository.** This
   folder documents behaviour, not how it was established.
+- **Canoe123's results are the truth; the printed results come from there** (maintainer,
+  2026-11-12). Where the contract assembles or numbers what a result list prints — a rank, an
+  order, which entries a list shows — it follows what Canoe123 prints, and a difference from
+  Canoe123 is a defect of the assembly, never a choice of ours (`CONTRACTS.md` §5).
 - **`CLIENT-OBLIGATIONS.md` changes in the same PR as the sections it cites.** It is derived, so the
   cited sections win. `scripts/check-obligations.js` runs in CI (`.github/workflows/docs-arch.yml`)
   and fails in two cases: a citation no longer resolves, or a cited section or ADR changed while the

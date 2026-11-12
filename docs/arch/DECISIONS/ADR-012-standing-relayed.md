@@ -115,3 +115,23 @@ standing is pushed only when its serialised form changes, and a running athlete'
 `pending`: a second-run athlete's ticking run-2 time had re-sent the phase, pair and category standings
 25 times a second (37,168 pushes, 427 MB, in one 25-minute window). The relay principle is unchanged;
 what is relayed is now exactly what upstream has ranked, when it changes.
+
+## Revision 2 — a category standing numbers as Canoe123 prints, and lists its unplaced entries (2026-11-12)
+
+The maintainer's ground rule: "Canoe123's results are the truth; the printed results come from
+there" (2026-11-12; `README.md`). Two of decision 2's details are changed by it (maintainer,
+2026-11-12; `DECISIONS/LOG.md`):
+- **Category rank is the position among the category's placed entries, in class order.** Entries
+  tied on class rank get consecutive category ranks, as upstream numbers them (recorded once:
+  jarni-ne-odp C1M_BR1_19, two entries on class rank 43, upstream's category ranks 5 and 6). The
+  shared rank of decision 2's formula is withdrawn; outside a class tie the two give the same
+  numbers.
+- **A category standing lists its unplaced entries too,** after the placed ones, with no rank, as
+  on a printed result list.
+
+The mechanism stays an assembly, with upstream's category rank as the check. Relaying upstream's
+category rank was weighed and not taken: it reaches only the snapshot, about 20 s after the
+finish, and the live tier, which assembles from pushed placements (decision 5), would need a new
+pushed field. Since the assembly now follows upstream's numbering, a remaining disagreement is a
+defect of the assembly. The check compares placed entries only; an unplaced row's category rank
+is a list position. `CONTRACTS.md` §5 step 4 states the rule.

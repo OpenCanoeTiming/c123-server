@@ -1315,7 +1315,7 @@
     {
       "id": "inv2c-first-read-unknown-age-refused",
       "invariant": "INV-2c",
-      "description": "A snapshot whose content age is unknown (changedAfter null: a first read) never displaces or retracts a tcp observation, even after a tcp outage; it presents what no tcp observation presents. The next rewrite, whose changedAfter follows the outage, settles the rest: a repeated refused value is presented, and the Attempt whose row is absent from that table is retracted (INV-7, an absent XML row; maintainer, 2026-11-11).",
+      "description": "A snapshot whose content age is unknown (changedAfter null: a first read) never displaces or retracts a tcp observation, even after a tcp outage; it presents what no tcp observation presents. The next rewrite, whose changedAfter follows the outage, settles the rest: a repeated refused value is presented, and the Attempt whose row is absent from that table is removed (INV-7, an absent XML row; maintainer, 2026-11-11 and 2026-11-12).",
       "context": {
         "xmlPollIntervalSeconds": 5,
         "attemptId": "K1M_BR1_6:9",
@@ -1510,10 +1510,14 @@
           },
           "source": "xml"
         },
-        "K1M_BR1_6:11.outcome": {
-          "state": "not-yet"
-        },
-        "note": "first snapshot: changedAfter null fails the guard, so A (84 vs 86) and C (a retraction by a present, empty row) stay tcp; B has no tcp observation and is presented from xml. second: changedAfter 10:41:32 follows the outage and the tcp pushes, A's repeated value is presented; C's row is absent from a table that carries other rows, which retracts under the same guard."
+        "note": "first snapshot: changedAfter null fails the guard, so A (84 vs 86) and C (a retraction by a present, empty row) stay tcp; B has no tcp observation and is presented from xml. second: changedAfter 10:41:32 follows the outage and the tcp pushes, A's repeated value is presented; C's row is absent from a table that carries other rows, every tcp observation of C predates the content age and C is off course, so C's Attempt is removed.",
+        "attempts": [
+          "K1M_BR1_6:9",
+          "K1M_BR1_6:10"
+        ],
+        "notifications": {
+          "attempt.deleted": 1
+        }
       }
     },
     {
@@ -3518,7 +3522,7 @@
     {
       "id": "retraction-xml-absent-row",
       "invariant": "INV-7",
-      "description": "An XML snapshot that lists other rows of the race and not this Attempt's retracts it, as TCP's absent row does, when its content age is later than the tcp observation (ADR-015 Revision 5).",
+      "description": "An XML snapshot that lists other rows of the race and not this Attempt's removes the Attempt, when its content age is later than every tcp observation of it and it is off course (ADR-015 Revisions 5 and 6): one attempt.deleted, no attempt.updated for it.",
       "context": {
         "tcpConnectedThroughout": true,
         "xmlPollIntervalSeconds": 5,
@@ -3597,16 +3601,9 @@
         }
       ],
       "expect": {
-        "K1M_BR1_6:11.outcome": {
-          "state": "not-yet"
-        },
-        "K1M_BR1_6:11.placement": {
-          "state": "not-yet"
-        },
-        "K1M_BR1_6:11.status": {
-          "state": "known",
-          "value": "not-started"
-        },
+        "attempts": [
+          "K1M_BR1_6:9"
+        ],
         "K1M_BR1_6:9.outcome": {
           "state": "known",
           "value": {
@@ -3616,8 +3613,13 @@
           "source": "tcp"
         },
         "notifications": {
-          "attempt.updated": {
+          "attempt.deleted": {
             "count": 1,
+            "afterGivenIndex": 1,
+            "attemptId": "K1M_BR1_6:11"
+          },
+          "attempt.updated": {
+            "count": 0,
             "afterGivenIndex": 1,
             "attemptId": "K1M_BR1_6:11"
           }
@@ -3627,7 +3629,7 @@
     {
       "id": "retraction-xml-absent-row-guard",
       "invariant": "INV-7 guard",
-      "description": "An absent XML row is under the same content-age guard as an emptied one: a rewrite that may predate the push does not retract; a later rewrite does.",
+      "description": "An absent XML row is under the content-age guard: a rewrite that may predate the push neither removes nor retracts; a later rewrite removes the Attempt (ADR-015 Revisions 5 and 6).",
       "context": {
         "tcpConnectedThroughout": true,
         "xmlPollIntervalSeconds": 5,
@@ -3754,12 +3756,14 @@
         }
       ],
       "expect": {
-        "C1M_BR1_19:7.outcome": {
-          "state": "not-yet"
-        },
-        "C1M_BR1_19:7.status": {
-          "state": "known",
-          "value": "not-started"
+        "attempts": [
+          "C1M_BR1_19:8"
+        ],
+        "notifications": {
+          "attempt.deleted": {
+            "count": 1,
+            "attemptId": "C1M_BR1_19:7"
+          }
         }
       }
     },
@@ -3843,7 +3847,7 @@
     {
       "id": "retraction-xml-absent-row-then-returns",
       "invariant": "INV-7",
-      "description": "A row that returns to the XML table after an absent-row retraction is a new observation and is presented: the retraction superseded the tcp observation, so nothing outranks it.",
+      "description": "A row that returns to the XML table after its Attempt was removed creates a new Attempt, presented from xml by the ordinary rules, run 1 (ADR-015 Revision 6).",
       "context": {
         "tcpConnectedThroughout": true,
         "xmlPollIntervalSeconds": 5,
@@ -3925,9 +3929,9 @@
         {
           "afterGivenIndex": 2,
           "expect": {
-            "K1M_BR1_6:11.outcome": {
-              "state": "not-yet"
-            }
+            "attempts": [
+              "K1M_BR1_6:9"
+            ]
           }
         }
       ],
@@ -3986,6 +3990,176 @@
             "totalSeconds": 92.12
           },
           "source": "xml"
+        },
+        "K1M_BR1_6:11.run": {
+          "state": "known",
+          "value": 1
+        },
+        "attempts": [
+          "K1M_BR1_6:9",
+          "K1M_BR1_6:11"
+        ],
+        "notifications": {
+          "attempt.deleted": 1
+        }
+      }
+    },
+    {
+      "id": "attempt-removed-xml-absent-start-list-row",
+      "invariant": "INV-7",
+      "description": "An Attempt known only from a start-list row is removed when a later XML snapshot of its race lists other rows and not its own: a competitor deleted, moved or re-bibbed before starting (ADR-015 Revision 6). A retraction would have changed nothing; the removal is one attempt.deleted.",
+      "context": {
+        "xmlPollIntervalSeconds": 5,
+        "attemptId": "K1M_BR1_6:11"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T09:00:00.000Z",
+          "changedAfter": null
+        },
+        {
+          "ingestSeq": 2,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "start-list",
+            "rows": [
+              {
+                "bib": "9"
+              },
+              {
+                "bib": "11"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T09:00:00.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T09:10:05.000Z",
+          "changedAfter": "2026-09-15T09:10:00.000Z"
+        },
+        {
+          "ingestSeq": 4,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "start-list",
+            "rows": [
+              {
+                "bib": "9"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T09:10:05.000Z"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 1,
+          "expect": {
+            "attempts": [
+              "K1M_BR1_6:9",
+              "K1M_BR1_6:11"
+            ]
+          }
+        }
+      ],
+      "expect": {
+        "attempts": [
+          "K1M_BR1_6:9"
+        ],
+        "notifications": {
+          "attempt.deleted": {
+            "count": 1,
+            "afterGivenIndex": 1,
+            "attemptId": "K1M_BR1_6:11"
+          }
+        }
+      }
+    },
+    {
+      "id": "attempt-removed-not-while-on-course",
+      "invariant": "INV-7",
+      "description": "An Attempt in the on-course set is never removed by an XML snapshot that lacks its row, whatever the content age: TCP still lists it (ADR-015 Revision 6). It holds no result, so nothing is retracted either.",
+      "context": {
+        "tcpConnectedThroughout": true,
+        "xmlPollIntervalSeconds": 5,
+        "attemptId": "K1M_BR1_6:11"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T09:00:00.000Z",
+          "changedAfter": null
+        },
+        {
+          "ingestSeq": 2,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "start-list",
+            "rows": [
+              {
+                "bib": "9"
+              },
+              {
+                "bib": "11"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T09:00:00.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "field": "status",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T10:41:00.000Z",
+          "value": "on-course",
+          "confidence": "authoritative",
+          "attemptId": "K1M_BR1_6:11"
+        },
+        {
+          "ingestSeq": 4,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:41:37.000Z",
+          "changedAfter": "2026-09-15T10:41:32.000Z"
+        },
+        {
+          "ingestSeq": 5,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "start-list",
+            "rows": [
+              {
+                "bib": "9"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:41:37.000Z"
+        }
+      ],
+      "expect": {
+        "attempts": [
+          "K1M_BR1_6:9",
+          "K1M_BR1_6:11"
+        ],
+        "oncourse": [
+          "K1M_BR1_6:11"
+        ],
+        "status": {
+          "state": "known",
+          "value": "on-course",
+          "source": "tcp"
+        },
+        "notifications": {
+          "attempt.deleted": 0
         }
       }
     },
@@ -6957,7 +7131,7 @@
     {
       "id": "standing-age-category-assembled",
       "invariant": "standing-assembly",
-      "description": "Age-category standing: filter the class standing, rank = 1 + number of same-category entries with a strictly better class rank.",
+      "description": "Age-category standing: filter the class standing; a placed entry's rank and order are its position among the category's placed entries in class order, Canoe123's numbering, so entries tied on class rank get consecutive category ranks (maintainer, 2026-11-12).",
       "scope": {
         "kind": "phase",
         "phaseId": "K1M_BR1_6"
@@ -7062,10 +7236,104 @@
           },
           {
             "entryId": "D",
-            "rank": 2,
+            "rank": 3,
             "order": 3
           }
         ]
+      }
+    },
+    {
+      "id": "standing-age-category-unplaced-listed-after",
+      "invariant": "standing-assembly",
+      "description": "An age-category standing lists the category's unplaced entries after its placed ones, with null rank and order, in step 3's order, as on a printed result list (maintainer, 2026-11-12). Entries of another category are not listed.",
+      "scope": {
+        "kind": "phase",
+        "phaseId": "K1M_BR1_6"
+      },
+      "given": {
+        "entries": [
+          {
+            "entryId": "A",
+            "bib": "1",
+            "status": "finished",
+            "placement": {
+              "rank": 1,
+              "order": 1
+            },
+            "provisional": false,
+            "underReview": false,
+            "result": {
+              "kind": "duration",
+              "totalSeconds": 80
+            },
+            "ageCategoryId": "DS"
+          },
+          {
+            "entryId": "B",
+            "bib": "2",
+            "status": "finished",
+            "placement": {
+              "rank": 2,
+              "order": 2
+            },
+            "provisional": false,
+            "underReview": false,
+            "result": {
+              "kind": "duration",
+              "totalSeconds": 81
+            },
+            "ageCategoryId": "DM"
+          },
+          {
+            "entryId": "C",
+            "bib": "7",
+            "status": "dnf",
+            "placement": null,
+            "provisional": false,
+            "underReview": false,
+            "ageCategoryId": "DM"
+          },
+          {
+            "entryId": "D",
+            "bib": "4",
+            "status": "dns",
+            "placement": null,
+            "provisional": false,
+            "underReview": false,
+            "ageCategoryId": "DS"
+          },
+          {
+            "entryId": "E",
+            "bib": "3",
+            "status": "dns",
+            "placement": null,
+            "provisional": false,
+            "underReview": false,
+            "ageCategoryId": "DM"
+          }
+        ]
+      },
+      "ageCategoryId": "DM",
+      "expect": {
+        "ageCategoryId": "DM",
+        "standing": [
+          {
+            "entryId": "B",
+            "rank": 1,
+            "order": 1
+          },
+          {
+            "entryId": "E",
+            "rank": null,
+            "order": null
+          },
+          {
+            "entryId": "C",
+            "rank": null,
+            "order": null
+          }
+        ],
+        "note": "Recorded shape: jarni-ne-odp C1M_BR1_19, bib 64 DNF in category ZM after the placed entries; its upstream CatRnk 9 is a list position, not a rank. Unplaced entries order by status in AttemptStatus declaration order (dns before dnf), then bib."
       }
     },
     {
