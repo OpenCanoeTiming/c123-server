@@ -248,6 +248,9 @@ async function up(o) {
     console.log('dev-env: installing dependencies (npm ci)')
     if (!npmCi()) await abort('npm ci failed')
   }
+  // The server serves src/admin-ui as it is: refresh the design system copy, which a single-package
+  // `npm install <pkg>` leaves stale (it runs no postinstall). Not strict: a missing package only warns.
+  spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'sync-design-system.js')], { cwd: ROOT, stdio: 'inherit' })
 
   const cli = path.join(docs, 'tools', 'recordings-cli.js')
   const fetched = await run(process.execPath, [cli, 'fetch', o.recording])

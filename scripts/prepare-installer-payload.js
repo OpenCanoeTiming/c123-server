@@ -90,8 +90,8 @@ function stageApp() {
   cpSync(join(projectRoot, 'package.json'), join(APP_DIR, 'package.json'));
   cpSync(join(projectRoot, 'package-lock.json'), join(APP_DIR, 'package-lock.json'));
 
-  // Install prod deps only. --ignore-scripts skips sync-design-system postinstall
-  // which would fail here (it looks for ../timing-design-system/ relative to projectRoot).
+  // Install prod deps only. --ignore-scripts skips the sync-design-system postinstall: the design
+  // system is a devDependency, and its CSS and fonts are already in dist/admin-ui/vendor from the build.
   // Optional deps (node-windows, systray2) are kept because npm defaults to including them.
   log('Installing production dependencies in app/');
   execSync('npm ci --omit=dev --ignore-scripts --no-audit --no-fund', {

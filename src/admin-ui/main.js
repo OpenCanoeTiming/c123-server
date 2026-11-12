@@ -38,12 +38,8 @@ function showToast(message, type, duration) {
 
   toast.innerHTML =
     '<span class="toast-icon">' + (toastIcons[type] || toastIcons.info) + '</span>' +
-    '<span class="toast-message">' + escapeHtml(message) + '</span>' +
-    '<button class="toast-close" aria-label="Close notification">' +
-      '<svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">' +
-        '<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>' +
-      '</svg>' +
-    '</button>';
+    '<div class="toast-content"><div class="toast-message">' + escapeHtml(message) + '</div></div>' +
+    '<button class="toast-close" type="button" aria-label="Close notification">&times;</button>';
 
   const closeBtn = toast.querySelector('.toast-close');
   closeBtn.addEventListener('click', function() {
@@ -65,7 +61,7 @@ function showToast(message, type, duration) {
 function removeToast(toast) {
   if (!toast || !toast.parentNode) return;
 
-  toast.classList.add('toast-exit');
+  toast.classList.add('is-leaving');
   setTimeout(function() {
     if (toast.parentNode) {
       toast.parentNode.removeChild(toast);
@@ -138,10 +134,10 @@ function handleFocusTrap(e) {
 
 function setButtonLoading(button, loading) {
   if (loading) {
-    button.classList.add('loading');
+    button.classList.add('is-loading');
     button.disabled = true;
   } else {
-    button.classList.remove('loading');
+    button.classList.remove('is-loading');
     button.disabled = false;
   }
 }
@@ -246,15 +242,14 @@ function renderStatusBar(sources) {
     const statusCls = statusClass(s.status);
     // For XML source, show full path; for TCP/UDP show host:port
     const details = s.host ? s.host + ':' + s.port : (s.path || '-');
-    const isXml = s.type === 'xml';
-    return '<div class="status-bar-item' + (isXml ? ' status-bar-item-wide' : '') + '">' +
+    return '<dt class="status-item">' +
       '<span class="status-dot ' + statusCls + '"></span>' +
-      '<span class="status-bar-label">' + s.name + '</span>' +
-      '<span class="status-bar-value' + (isXml ? ' status-bar-value-path' : '') + '" title="' + escapeHtml(details) + '">' + escapeHtml(details) + '</span>' +
-      '</div>';
+      escapeHtml(s.name) +
+      '</dt>' +
+      '<dd class="mono" title="' + escapeHtml(details) + '">' + escapeHtml(details) + '</dd>';
   }).join('');
 
-  statusBar.innerHTML = html;
+  statusBar.innerHTML = '<dl class="kv">' + html + '</dl>';
 }
 
 // ===========================================
@@ -297,7 +292,7 @@ function showError(elementId, msg) {
   const el = document.getElementById(elementId);
   if (el) {
     el.textContent = msg;
-    el.style.display = 'block';
+    setErrorVisible(el, true);
   }
 }
 
@@ -305,7 +300,17 @@ function hideError(elementId) {
   const el = document.getElementById(elementId);
   if (el) {
     el.textContent = '';
-    el.style.display = 'none';
+    setErrorVisible(el, false);
+  }
+}
+
+// An error inside a modal is an alert in the .modal-message slot: the slot is shown and hidden with it.
+function setErrorVisible(el, visible) {
+  const slot = el.closest('.modal-message');
+  if (slot) {
+    slot.style.display = visible ? '' : 'none';
+  } else {
+    el.style.display = visible ? 'block' : 'none';
   }
 }
 
@@ -338,9 +343,9 @@ async function refresh() {
         sourcesBody.innerHTML = data.sources.map(s =>
           '<tr>' +
           '<td>' + escapeHtml(s.name) + '</td>' +
-          '<td>' + s.type.toUpperCase() + '</td>' +
-          '<td><span class="status-dot ' + statusClass(s.status) + '"></span>' + s.status + '</td>' +
-          '<td>' + escapeHtml(s.host ? s.host + ':' + s.port : (s.path || '-')) + '</td>' +
+          '<td class="col-muted">' + s.type.toUpperCase() + '</td>' +
+          '<td><span class="status-item"><span class="status-dot ' + statusClass(s.status) + '"></span>' + s.status + '</span></td>' +
+          '<td class="col-wrap mono">' + escapeHtml(s.host ? s.host + ':' + s.port : (s.path || '-')) + '</td>' +
           '</tr>'
         ).join('');
       }
@@ -348,7 +353,7 @@ async function refresh() {
 
     document.getElementById('lastUpdate').textContent = 'Last update: ' + new Date().toLocaleTimeString();
   } catch (e) {
-    document.getElementById('lastUpdate').innerHTML = '<span class="error">Error: ' + e.message + '</span>';
+    document.getElementById('lastUpdate').innerHTML = '<span class="text-error">Error: ' + escapeHtml(e.message) + '</span>';
   }
 }
 
@@ -415,12 +420,12 @@ async function loadXmlConfig() {
         mainPathEl.textContent = mainPath.path
           ? (mainPath.exists ? mainPath.path : mainPath.path + ' (not found)')
           : '(not configured)';
-        mainPathEl.style.color = mainPath.exists ? '#00ff88' : '#ff6b6b';
+        mainPathEl.className = 'choice-hint mono ' + (mainPath.exists ? 'text-success' : 'text-error');
 
         offlinePathEl.textContent = offlinePath.path
           ? (offlinePath.exists ? offlinePath.path : offlinePath.path + ' (not found)')
           : '(not configured)';
-        offlinePathEl.style.color = offlinePath.exists ? '#00ff88' : '#ff6b6b';
+        offlinePathEl.className = 'choice-hint mono ' + (offlinePath.exists ? 'text-success' : 'text-error');
       }
 
       // Only update mode radio if user is not interacting with the XML config form
@@ -490,7 +495,7 @@ async function setXmlPath() {
 function showXmlError(msg) {
   const el = document.getElementById('xmlConfigError');
   el.textContent = msg;
-  el.style.display = 'block';
+  el.style.display = 'flex';
 }
 
 // Mode radio change handler
@@ -677,17 +682,18 @@ function renderAllLogs() {
 
   if (filtered.length === 0) {
     container.innerHTML = '';
-    noLogs.style.display = 'block';
+    container.style.display = 'none';
+    noLogs.style.display = 'flex';
   } else {
     noLogs.style.display = 'none';
+    container.style.display = '';
     container.innerHTML = filtered.map(renderLogEntry).join('');
   }
 
   updateLogStats();
 
   if (document.getElementById('logAutoScroll').checked) {
-    const logContainer = document.getElementById('logContainer');
-    logContainer.scrollTop = logContainer.scrollHeight;
+    container.scrollTop = container.scrollHeight;
   }
 }
 
@@ -828,7 +834,7 @@ function renderClients() {
 
   if (clientsData.length === 0) {
     grid.innerHTML = '';
-    noClients.style.display = 'block';
+    noClients.style.display = 'flex';
     return;
   }
 
@@ -836,17 +842,23 @@ function renderClients() {
   grid.innerHTML = clientsData.map(renderClientCard).join('');
 }
 
+// Online / offline badge of a client: classes for the badge and its dot, and the label.
+function clientStatus(online) {
+  return online
+    ? { badge: 'badge badge-success', dot: 'status-dot status-dot-success', text: 'Online' }
+    : { badge: 'badge badge-neutral', dot: 'status-dot status-dot-neutral', text: 'Offline' };
+}
+
 function renderClientCard(client) {
-  const statusClass = client.online ? 'online' : 'offline';
-  const statusText = client.online ? 'Online' : 'Offline';
+  const status = clientStatus(client.online);
   const label = client.label || '(unnamed)';
-  const labelClass = client.label ? '' : 'empty';
+  const labelClass = client.label ? 'font-medium' : 'font-medium text-muted';
 
   // Show configKey (clientId or IP) and actual IP if different
   const configKey = client.configKey || client.ip;
   const idTypeLabel = client.hasExplicitId ? 'ID' : 'IP';
   const ipHint = client.hasExplicitId && client.ipAddress
-    ? '<div class="client-ip-hint">from ' + escapeHtml(client.ipAddress) + '</div>'
+    ? ' · from ' + escapeHtml(client.ipAddress)
     : '';
 
   // Build config display
@@ -854,61 +866,39 @@ function renderClientCard(client) {
   var configHtml = '';
 
   if (cfg.type || cfg.displayRows || cfg.customTitle) {
-    configHtml = '<div class="client-config">';
+    configHtml = '<dl class="kv">';
     if (cfg.type) {
-      configHtml += '<div class="client-config-row">' +
-        '<svg class="client-config-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/></svg>' +
-        '<span class="client-config-label">Layout</span>' +
-        '<span class="client-config-value">' + escapeHtml(cfg.type) + '</span>' +
-        '</div>';
+      configHtml += '<dt>Layout</dt><dd>' + escapeHtml(cfg.type) + '</dd>';
     }
     if (cfg.displayRows) {
-      configHtml += '<div class="client-config-row">' +
-        '<svg class="client-config-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>' +
-        '<span class="client-config-label">Rows</span>' +
-        '<span class="client-config-value">' + cfg.displayRows + '</span>' +
-        '</div>';
+      configHtml += '<dt>Rows</dt><dd>' + cfg.displayRows + '</dd>';
     }
     if (cfg.customTitle) {
-      configHtml += '<div class="client-config-row">' +
-        '<svg class="client-config-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 110 2h-3a1 1 0 01-1-1v-2a1 1 0 00-1-1H9a1 1 0 00-1 1v2a1 1 0 01-1 1H4a1 1 0 110-2V4zm3 1h2v2H7V5zm2 4H7v2h2V9zm2-4h2v2h-2V5zm2 4h-2v2h2V9z" clip-rule="evenodd"/></svg>' +
-        '<span class="client-config-label">Title</span>' +
-        '<span class="client-config-value">' + escapeHtml(truncate(cfg.customTitle, 20)) + '</span>' +
-        '</div>';
+      configHtml += '<dt>Title</dt><dd>' + escapeHtml(truncate(cfg.customTitle, 20)) + '</dd>';
     }
-    configHtml += '</div>';
+    configHtml += '</dl>';
   } else {
-    configHtml = '<div class="client-params"><span class="client-param">Default configuration</span></div>';
+    configHtml = '<div class="text-muted text-sm">Default configuration</div>';
   }
 
   // Action buttons with icons
-  const editIcon = '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg>';
-  const refreshIcon = '<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>';
+  const editIcon = '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg>';
+  const refreshIcon = '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>';
 
-  // Card status class for colored left border (design system .card-status-*)
-  const cardStatusClass = client.online ? 'card-status-success' : '';
+  const key = escapeHtml(configKey);
 
-  // Use design system .card .card-interactive + .card-compact + status variant
-  return '<div class="card card-interactive card-compact client-card ' + cardStatusClass + ' ' + statusClass + '" data-ip="' + escapeHtml(configKey) + '">' +
-    '<div class="client-header">' +
-      '<div class="client-identity">' +
-        '<span class="client-ip" title="' + idTypeLabel + ': ' + escapeHtml(configKey) + '">' + escapeHtml(configKey) + '</span>' +
-        ipHint +
-      '</div>' +
-      '<div class="client-status">' +
-        '<span class="client-status-badge ' + statusClass + '">' +
-          '<span class="client-status-dot ' + statusClass + '"></span>' +
-          statusText +
-        '</span>' +
-      '</div>' +
+  return '<div class="card card-compact client-card" role="listitem" data-ip="' + key + '">' +
+    '<div class="card-header">' +
+      '<span class="client-label ' + labelClass + '" role="button" tabindex="0" title="Edit configuration" onclick="openClientModal(\'' + key + '\')" onkeydown="if (event.key === \'Enter\' || event.key === \' \') { event.preventDefault(); openClientModal(\'' + key + '\'); }">' + escapeHtml(label) + '</span>' +
+      '<span class="' + status.badge + '"><span class="' + status.dot + '"></span>' + status.text + '</span>' +
     '</div>' +
-    '<div class="card-body client-body">' +
-      '<div class="client-label ' + labelClass + '" onclick="openClientModal(\'' + escapeHtml(configKey) + '\')">' + escapeHtml(label) + '</div>' +
+    '<div class="card-body flex-1 flex flex-col gap-2">' +
+      '<div class="mono text-xs text-muted" title="' + idTypeLabel + ': ' + key + '">' + idTypeLabel + ' ' + key + ipHint + '</div>' +
       configHtml +
-      '<div class="client-actions">' +
-        '<button class="client-btn primary" onclick="openClientModal(\'' + escapeHtml(configKey) + '\')">' + editIcon + ' Edit</button>' +
-        (client.online ? '<button class="client-btn refresh" onclick="refreshClient(\'' + escapeHtml(configKey) + '\')">' + refreshIcon + ' Refresh</button>' : '') +
-      '</div>' +
+    '</div>' +
+    '<div class="card-footer">' +
+      '<button class="btn btn-sm" onclick="openClientModal(\'' + key + '\')">' + editIcon + 'Edit</button>' +
+      (client.online ? '<button class="btn btn-sm" onclick="refreshClient(\'' + key + '\')">' + refreshIcon + 'Refresh</button>' : '') +
     '</div>' +
   '</div>';
 }
@@ -927,8 +917,9 @@ function openClientModal(configKey) {
   // Set status badge
   const statusBadge = document.getElementById('modalClientStatus');
   const isOnline = client?.online;
-  statusBadge.className = 'client-status-badge ' + (isOnline ? 'online' : 'offline');
-  statusBadge.innerHTML = '<span class="client-status-dot ' + (isOnline ? 'online' : 'offline') + '"></span>' + (isOnline ? 'Online' : 'Offline');
+  const status = clientStatus(isOnline);
+  statusBadge.className = status.badge;
+  statusBadge.innerHTML = '<span class="' + status.dot + '"></span>' + status.text;
 
   document.getElementById('modalLabel').value = client?.label || '';
 
@@ -945,7 +936,7 @@ function openClientModal(configKey) {
   // Load assets into modal
   loadModalAssets(cfg.assets);
 
-  document.getElementById('modalError').style.display = 'none';
+  hideError('modalError');
   document.getElementById('clientModal').style.display = 'flex';
 
   // Enable focus trap
@@ -1109,9 +1100,7 @@ async function refreshAllClients() {
 }
 
 function showModalError(msg) {
-  const el = document.getElementById('modalError');
-  el.textContent = msg;
-  el.style.display = 'block';
+  showError('modalError', msg);
   // Also show toast for better visibility
   showToast(msg, 'error');
 }
@@ -1153,6 +1142,40 @@ function startLiveTimerRefresh() {
   }, 1000);
 }
 
+// Connection state of the live push → badge (the one mapping).
+function liveStateBadge(state) {
+  const map = {
+    'not_configured': { text: 'Not Configured', badge: 'badge-neutral', dot: 'status-dot-neutral' },
+    'connected': { text: 'Connected', badge: 'badge-success', dot: 'status-dot-success' },
+    'paused': { text: 'Paused', badge: 'badge-warning', dot: 'status-dot-warning' },
+    'error': { text: 'Error', badge: 'badge-error', dot: 'status-dot-error' },
+    'disconnected': { text: 'Disconnected', badge: 'badge-neutral', dot: 'status-dot-neutral' }
+  };
+  const s = map[state] || map['not_configured'];
+  return '<span class="badge ' + s.badge + '"><span class="status-dot ' + s.dot + '"></span>' + escapeHtml(s.text) + '</span>';
+}
+
+// Status of an event on the live server → badge (the one mapping, panel and browse list).
+function liveEventStatusBadge(eventStatus) {
+  const cls = {
+    'draft': 'badge-neutral',
+    'startlist': 'badge-info',
+    'running': 'badge-live',
+    'finished': 'badge-warning',
+    'official': 'badge-success'
+  }[eventStatus] || 'badge-neutral';
+  const dot = eventStatus === 'running' ? '<span class="status-dot status-dot-live"></span>' : '';
+  return '<span class="badge ' + cls + '">' + dot + escapeHtml(eventStatus || '-') + '</span>';
+}
+
+// Push channel → status-dot modifier: off, failing, pushing, or enabled with nothing pushed yet.
+function liveChannelDotClass(channelStatus) {
+  if (!channelStatus.enabled) return 'status-dot-neutral';
+  if (channelStatus.lastError) return 'status-dot-error';
+  if (channelStatus.totalPushes > 0) return 'status-dot-success';
+  return 'status-dot-pending';
+}
+
 /**
  * Render Live-Mini status panel
  */
@@ -1167,15 +1190,7 @@ function renderLiveStatus(status) {
   if (!notConfigured || !connected || !statusBadge) return;
 
   // Update status badge
-  const stateBadgeMap = {
-    'not_configured': { text: 'Not Configured', class: 'badge-secondary' },
-    'connected': { text: 'Connected', class: 'badge-success' },
-    'paused': { text: 'Paused', class: 'badge-warning' },
-    'error': { text: 'Error', class: 'badge-danger' },
-    'disconnected': { text: 'Disconnected', class: 'badge-secondary' }
-  };
-  const badge = stateBadgeMap[status.state] || stateBadgeMap['not_configured'];
-  statusBadge.innerHTML = '<span class="badge ' + badge.class + '">' + escapeHtml(badge.text) + '</span>';
+  statusBadge.innerHTML = liveStateBadge(status.state);
 
   // Show appropriate panel
   if (status.state === 'not_configured' || status.state === 'disconnected') {
@@ -1196,14 +1211,7 @@ function renderLiveStatus(status) {
   if (serverDisplay) serverDisplay.textContent = status.serverUrl || '-';
   if (eventIdDisplay) eventIdDisplay.textContent = status.eventId || '-';
   if (eventStatusDisplay) {
-    const statusBadgeClass = {
-      'draft': 'badge-secondary',
-      'startlist': 'badge-info',
-      'running': 'badge-success',
-      'finished': 'badge-warning',
-      'official': 'badge-primary'
-    }[status.eventStatus] || 'badge-secondary';
-    eventStatusDisplay.innerHTML = '<span class="badge ' + statusBadgeClass + '">' + escapeHtml(status.eventStatus || '-') + '</span>';
+    eventStatusDisplay.innerHTML = liveEventStatusBadge(status.eventStatus);
   }
   if (connectedAtDisplay) {
     connectedAtDisplay.textContent = status.connectedAt ? formatRelativeTime(status.connectedAt) : '-';
@@ -1248,8 +1256,9 @@ function renderLiveStatus(status) {
   const cbWarning = document.getElementById('liveCircuitBreakerWarning');
   if (cbWarning) {
     if (status.circuitBreaker.isOpen) {
-      cbWarning.style.display = 'block';
-      cbWarning.textContent = 'Circuit breaker open! ' + status.circuitBreaker.consecutiveFailures + ' consecutive failures. Will retry automatically.';
+      cbWarning.style.display = 'flex';
+      cbWarning.innerHTML = '<div class="alert-content"><div class="alert-title">Circuit breaker open</div>'
+        + escapeHtml(String(status.circuitBreaker.consecutiveFailures)) + ' consecutive failures. Push is paused and will retry automatically.</div>';
     } else {
       cbWarning.style.display = 'none';
     }
@@ -1259,8 +1268,8 @@ function renderLiveStatus(status) {
   const errorDisplay = document.getElementById('liveErrorDisplay');
   if (errorDisplay) {
     if (status.state === 'error' && status.lastError) {
-      errorDisplay.style.display = 'block';
-      errorDisplay.innerHTML = '<strong>Last error:</strong> ' + escapeHtml(status.lastError);
+      errorDisplay.style.display = 'flex';
+      errorDisplay.innerHTML = '<div class="alert-content"><div class="alert-title">Last error</div>' + escapeHtml(status.lastError) + '</div>';
     } else {
       errorDisplay.style.display = 'none';
     }
@@ -1279,17 +1288,7 @@ function updateLiveChannel(channelName, channelStatus) {
   if (!dot || !pushes || !errors || !last) return;
 
   // Update status dot
-  if (channelStatus.enabled) {
-    if (channelStatus.lastError) {
-      dot.className = 'status-dot status-dot-danger';
-    } else if (channelStatus.totalPushes > 0) {
-      dot.className = 'status-dot status-dot-success';
-    } else {
-      dot.className = 'status-dot status-dot-warning';
-    }
-  } else {
-    dot.className = 'status-dot status-dot-muted';
-  }
+  dot.className = 'status-dot ' + liveChannelDotClass(channelStatus);
 
   // Update stats
   pushes.textContent = channelStatus.totalPushes;
@@ -1511,7 +1510,7 @@ async function loadBrowseEvents() {
   var emptyEl = document.getElementById('liveEventsEmpty');
   var listEl = document.getElementById('liveEventsList');
 
-  if (loadingEl) loadingEl.style.display = 'block';
+  if (loadingEl) loadingEl.style.display = 'flex';
   if (emptyEl) emptyEl.style.display = 'none';
   if (listEl) listEl.innerHTML = '';
   hideError('liveSelectEventModalError');
@@ -1532,35 +1531,29 @@ async function loadBrowseEvents() {
 
     var events = data.events || [];
     if (events.length === 0) {
-      if (emptyEl) emptyEl.style.display = 'block';
+      if (emptyEl) emptyEl.style.display = 'flex';
       return;
     }
 
     var html = '';
     for (var i = 0; i < events.length; i++) {
       var ev = events[i];
-      var statusClass = {
-        'draft': 'badge-secondary',
-        'startlist': 'badge-info',
-        'running': 'badge-success',
-        'finished': 'badge-warning',
-        'official': 'badge-primary'
-      }[ev.status] || 'badge-secondary';
-
       var maskedKey = ev.apiKey && ev.apiKey.length > 12
         ? ev.apiKey.substring(0, 6) + '...' + ev.apiKey.substring(ev.apiKey.length - 4)
         : (ev.apiKey || '-');
 
-      html += '<div class="live-event-row">'
-        + '<div class="live-event-row-info">'
-        + '<div class="live-event-row-title">' + escapeHtml(ev.mainTitle) + '</div>'
-        + '<div class="live-event-row-meta">'
-        + '<span>' + escapeHtml(ev.eventId) + '</span>'
-        + '<span class="badge ' + statusClass + '">' + escapeHtml(ev.status) + '</span>'
-        + '<span>' + escapeHtml(maskedKey) + '</span>'
+      html += '<div class="card card-compact" role="listitem">'
+        + '<div class="card-body flex items-center justify-between gap-3">'
+        + '<div class="flex-1 flex flex-col gap-1">'
+        + '<div class="font-medium text-sm">' + escapeHtml(ev.mainTitle) + '</div>'
+        + '<div class="flex flex-wrap items-center gap-3 text-xs text-secondary">'
+        + '<span class="mono">' + escapeHtml(ev.eventId) + '</span>'
+        + liveEventStatusBadge(ev.status)
+        + '<span class="mono">' + escapeHtml(maskedKey) + '</span>'
         + '</div>'
         + '</div>'
         + '<button class="btn btn-sm btn-primary" data-event-id="' + escapeHtml(ev.eventId) + '" data-api-key="' + escapeHtml(ev.apiKey) + '" data-event-status="' + escapeHtml(ev.status) + '">Connect</button>'
+        + '</div>'
         + '</div>';
     }
     if (listEl) {
@@ -1811,6 +1804,8 @@ function processLiveImageFile(file) {
       preview.style.display = 'flex';
       if (previewImg) previewImg.src = liveImageData;
     }
+    var dropZone = document.getElementById('liveImageDropZone');
+    if (dropZone) dropZone.classList.add('has-file');
     hideError('liveEventModalError');
   };
   reader.readAsDataURL(file);
@@ -1831,6 +1826,8 @@ function clearLiveEventImage() {
   if (preview) preview.style.display = 'none';
   if (previewImg) previewImg.src = '';
   if (fileInput) fileInput.value = '';
+  var dropZone = document.getElementById('liveImageDropZone');
+  if (dropZone) dropZone.classList.remove('has-file');
 }
 
 /**
@@ -2178,11 +2175,11 @@ function updateModalAssetPreview(key, dataUrl) {
     if (dataUrl) {
       preview.innerHTML = '<img src="' + dataUrl + '" alt="' + name + '">';
       placeholder.style.display = 'none';
-      if (dropZone) dropZone.classList.add('has-value');
+      if (dropZone) dropZone.classList.add('has-file');
     } else {
       preview.innerHTML = '';
       placeholder.style.display = 'block';
-      if (dropZone) dropZone.classList.remove('has-value');
+      if (dropZone) dropZone.classList.remove('has-file');
     }
   }
 }
@@ -2195,10 +2192,10 @@ function updateModalAssetInfo(key, dataUrl, width, height) {
     if (dataUrl) {
       const sizeKB = Math.round(dataUrl.length / 1024);
       info.textContent = width + 'x' + height + ' (' + sizeKB + ' KB) - will be saved with config';
-      info.className = sizeKB > 100 ? 'modal-asset-info warning' : 'modal-asset-info';
+      info.className = sizeKB > 100 ? 'form-hint text-warning' : 'form-hint';
     } else {
       info.textContent = '';
-      info.className = 'modal-asset-info';
+      info.className = 'form-hint';
     }
   }
 }
@@ -2210,7 +2207,7 @@ function clearModalAsset(key) {
   const info = document.getElementById('modal' + name + 'Info');
   if (info) {
     info.textContent = 'Cleared - will use global default';
-    info.className = 'modal-asset-info';
+    info.className = 'form-hint';
   }
 }
 
@@ -2221,7 +2218,7 @@ function useDefaultAsset(key) {
   const info = document.getElementById('modal' + name + 'Info');
   if (info) {
     info.textContent = 'Using global default';
-    info.className = 'modal-asset-info';
+    info.className = 'form-hint';
   }
 }
 
@@ -2243,7 +2240,7 @@ function loadModalAssets(assets) {
         const info = document.getElementById('modal' + name + 'Info');
         if (info) {
           info.textContent = 'Explicitly cleared';
-          info.className = 'modal-asset-info';
+          info.className = 'form-hint';
         }
       }
     } else {
@@ -2252,7 +2249,7 @@ function loadModalAssets(assets) {
       const info = document.getElementById('modal' + name + 'Info');
       if (info) {
         info.textContent = 'Using global default';
-        info.className = 'modal-asset-info';
+        info.className = 'form-hint';
       }
     }
   });
@@ -2278,16 +2275,18 @@ function openLightbox(imageSrc, title, width, height) {
   const sizeKB = imageSrc ? Math.round(imageSrc.length / 1024) : 0;
 
   lightbox.innerHTML =
-    '<div class="lightbox-content" onclick="event.stopPropagation()">' +
-      '<img class="lightbox-image" src="' + imageSrc + '" alt="' + escapeHtml(title || 'Preview') + '">' +
-      '<div class="lightbox-info">' +
+    '<div class="card lightbox-content" onclick="event.stopPropagation()">' +
+      '<div class="card-body lightbox-stage">' +
+        '<img class="lightbox-image" src="' + imageSrc + '" alt="' + escapeHtml(title || 'Preview') + '">' +
+      '</div>' +
+      '<div class="card-footer flex-wrap text-sm text-secondary mono">' +
         (title ? '<span>' + escapeHtml(title) + '</span>' : '') +
         (sizeInfo ? '<span>' + sizeInfo + '</span>' : '') +
         (sizeKB ? '<span>' + sizeKB + ' KB</span>' : '') +
       '</div>' +
     '</div>' +
-    '<button class="lightbox-close" onclick="closeLightbox()" aria-label="Close">' +
-      '<svg viewBox="0 0 20 20" fill="currentColor">' +
+    '<button class="btn btn-icon lightbox-close" type="button" onclick="closeLightbox()" aria-label="Close">' +
+      '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">' +
         '<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>' +
       '</svg>' +
     '</button>';
@@ -2391,7 +2390,7 @@ function initAssetHandlers() {
 
   // Global paste handler
   document.addEventListener('paste', function(e) {
-    const focusedZone = document.querySelector('.asset-drop-zone[data-focused="1"]');
+    const focusedZone = document.querySelector('#panel-assets .dropzone[data-focused="1"]');
     if (!focusedZone) return;
 
     const key = focusedZone.dataset.key;
@@ -2579,7 +2578,7 @@ function updateAssetPreview(key, dataUrl) {
     const img = document.createElement('img');
     img.src = dataUrl;
     img.alt = label;
-    img.style.cursor = 'zoom-in';
+    img.className = 'asset-zoom';
     img.title = 'Click to preview';
 
     // Store dimensions for lightbox
@@ -2596,7 +2595,7 @@ function updateAssetPreview(key, dataUrl) {
     preview.innerHTML = '';
     preview.appendChild(img);
     placeholder.style.display = 'none';
-    if (dropZone) dropZone.classList.add('has-image');
+    if (dropZone) dropZone.classList.add('has-file');
   }
 }
 
@@ -2610,7 +2609,7 @@ function clearAssetPreview(key) {
   if (preview) preview.innerHTML = '';
   if (placeholder) placeholder.style.display = 'flex';
   if (info) info.textContent = '';
-  if (dropZone) dropZone.classList.remove('has-image');
+  if (dropZone) dropZone.classList.remove('has-file');
 }
 
 function updateAssetInfo(key, dataUrl, width, height) {
@@ -2620,7 +2619,7 @@ function updateAssetInfo(key, dataUrl, width, height) {
   if (info) {
     const sizeKB = Math.round(dataUrl.length / 1024);
     info.textContent = width + 'x' + height + ' (' + sizeKB + ' KB)';
-    info.className = sizeKB > 100 ? 'asset-info warning' : 'asset-info';
+    info.className = sizeKB > 100 ? 'form-hint text-warning' : 'form-hint';
   }
 }
 

@@ -26,3 +26,6 @@ docs/superpowers/
 
 # Per-worktree dev environment (scripts/dev-env.mjs)
 .dev-env/
+
+# Design system CSS and fonts, copied from the package by scripts/sync-design-system.js
+src/admin-ui/vendor/

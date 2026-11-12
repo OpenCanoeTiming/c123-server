@@ -1,7 +1,7 @@
 /**
  * Cross-platform script to copy admin-ui to dist folder
  */
-import { cpSync, existsSync, mkdirSync } from 'fs';
+import { cpSync, existsSync, mkdirSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -15,7 +15,8 @@ if (!existsSync(join(rootDir, 'dist'))) {
   mkdirSync(join(rootDir, 'dist'), { recursive: true });
 }
 
-// Copy admin-ui folder
+// Copy admin-ui folder; start clean so files deleted from src do not linger in dist
+rmSync(dest, { recursive: true, force: true });
 cpSync(src, dest, { recursive: true });
 
 console.log('✓ Copied admin-ui to dist/');
