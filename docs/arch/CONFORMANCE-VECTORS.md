@@ -182,7 +182,8 @@ Each vector has:
   `CONTRACTS.md` §2.4's pairing by class and token — `standing-not-resent-on-running-tick` has its
   `pair` standing from its first snapshot (`CONTRACTS.md` §5 step 1; `DECISIONS/LOG.md`, round 22).
   Class, format and pair are the harness's to state for such a Phase, in its first unit: a
-  deployable's merge reads no id for any of them (`CONTRACTS.md` §2.3, §2.4). The server's
+  deployable's merge reads no id for any of them (`CONTRACTS.md` §2.3, §2.4; the one read of an
+  id is the TCP parser's fallback for `format`, `DERIVATIONS.md` §2.1). The server's
   adapter states the class today; until it also states `format` and `pair`, the server's core
   still reads those two from the id for a Phase nothing has described (a code follow-up,
   `DECISIONS/LOG.md`, round C part 2). A parser states

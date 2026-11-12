@@ -26,8 +26,8 @@ is intended to become permanent documentation.
 
 ## Where to start
 
-The contract is 1,250 lines and the test architecture 600. Nobody should read this folder front
-to back. Depending on what you are here to judge:
+The contract is about 2,500 lines and the test architecture about 1,200. Nobody should read this
+folder front to back. Depending on what you are here to judge:
 
 | You are reviewing | Read, in order |
 |---|---|
