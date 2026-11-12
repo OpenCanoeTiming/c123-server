@@ -160,7 +160,8 @@ and "`lastRewriteDetectedAt` minus the poll interval". Since round 18 the conten
 reader's `changedAfter` (`ADR-003` Revision 6; `CONTRACTS.md` §4 INV-2c), `null` on a first read,
 which never qualifies. The re-baseline's own read (decision 8, step 2) carries the same stamp.
 An absent XML row and an XML table with no rows are not retractions (INV-7, XML bullet); TCP's
-absent row and start-list table remain so.
+absent row and start-list table remain so. (That sentence was the round-18 default; Revision 5
+replaces it.)
 
 ## Revision 4 — the stream withdraws a finish it alone stated; a retraction supersedes the `tcp` slot (2026-11-06)
 
@@ -179,3 +180,73 @@ retraction that passes the guard supersedes the `tcp` observation it retracts, w
 candidate of its source; a TCP row restating the value afterwards is a new observation and is
 presented (`DERIVATIONS.md` §4.12). Steps 1 and 2 of the re-baseline reach the core as one ingest
 unit after the read has succeeded (`CONTRACTS.md` §4).
+
+## Revision 5 — an absent XML row retracts again; a wholly empty XML table does not (decided 2026-11-11, written 2026-11-12)
+
+**Decision (maintainer, 2026-11-11; replaces the last sentence of Revision 3):** "an absent XML row
+retracts again, under the existing content-age guard; a wholly empty XML table retracts nothing and
+raises a diagnostic."
+
+**Why.** Revision 3's sentence rested on "rows are never deleted from the file; a cleared result
+shows as fields going empty". That is true of half the corrections. Upstream rewrites the file
+whole from its current tables at every save (observed upstream behaviour):
+
+| Operator action | In the next file |
+|---|---|
+| A result deleted (selected results, the re-run wizard); a DNS, DNF or DSQ set or cleared | The row stays. Its result fields are empty, or only its status changes |
+| A competitor deleted; a competitor moved to another race or class; a bib changed | The row is gone from that race. A moved or re-bibbed competitor appears under the new race or bib |
+| A start list generated again or redrawn | The race's rows are rebuilt, so there can be fewer or other rows (the same whole rewrite; this action itself was not traced, E4) |
+
+No recording holds a removal, so nothing recorded shows either way. Under Revision 3 a removed
+competitor's result stood in every XML-fed value until an operator re-baseline.
+
+**The rule** (`CONTRACTS.md` §4 INV-7; `DERIVATIONS.md` §0.3, §4.12):
+
+1. **An absent row is a retraction, as on TCP.** For an Attempt whose presented result fields came
+   from results-table observations, an XML snapshot of its race that carries at least one row and
+   not this Attempt's retracts `outcome`, `gates` (in Kayak Cross `faults`), `placement`,
+   `underReview`, `qualified` and any mark in `status`; in a paired second run also `pairTotal`
+   and `countingRun`.
+2. **The guard is decision 4's, unchanged** (INV-2c). Against a `tcp` observation the retraction
+   applies only when the snapshot's `changedAfter` is later than that observation's latest
+   delivery; `null`, a first read, never qualifies. Otherwise the snapshot is ignored for that
+   field and the next one settles it. The snapshot's own earlier `xml` observation is always
+   superseded: the same source, later ingested.
+3. **What is never retracted stays so:** an on-course inference, `entry`, `bib`, `startOrder`,
+   `heat`, `startLane`, `run`, and any field of an Attempt never present in a results-table
+   observation. The Attempt itself is not removed.
+4. **A row that returns** is a new observation of upstream's table and is presented by the
+   ordinary rules, as Revision 4 says of a TCP row after an XML retraction.
+5. **A wholly empty table retracts nothing.** That is an XML snapshot naming a race in its
+   schedule with no result row for it at all. A table whose rows are all blank is not this case:
+   each blank row retracts as a present row. One read of the lagging source does not clear a whole
+   race. A deliberate "delete all results" keeps the rows, blanked, and TCP pushes it at once in
+   start-list mode, which retracts (decision 1). Where the race holds at least one result an
+   absent row would have retracted, the core raises `xml-table-emptied`, an ingest-only
+   diagnostic: it reaches the admin log, never `GET /api/diagnostics`, so no wire shape moves. It
+   is raised once per emptying. If the race was really emptied, the re-baseline (decision 8) is
+   the remedy.
+6. **Unchanged:** the three TCP forms; a classification Phase's emptied table, which keeps the
+   last built Standing (maintainer, 2026-11-06); a race the file does not name, which is a
+   snapshot of another race and states nothing (INV-1).
+
+**Example.** Bib 11 has a result from a TCP push at 10:40:59. The operator deletes the competitor.
+The file saved at 10:41:35 lists the race without bib 11; its `changedAfter` is 10:41:32. Bib 11's
+`outcome` and `placement` go `not-yet` and its `status` `not-started`, pushed as any change. Had
+the same file been a first read (`changedAfter: null`), nothing would move until the next save.
+
+**What it costs.**
+- A save that lands between the two halves of a move shows the result in neither race for one
+  save cycle. That is upstream's own table at that instant, like every half-correction.
+- A competitor deleted upstream stays on our start list as a `not-started` Attempt, on site and on
+  live. Whether a removal should remove the Attempt is the open maintainer question recorded in
+  `CLIENT-OBLIGATIONS.md`, "Gaps and conflicts".
+- The level of `xml-table-emptied` is a default: the admin log. Making it a wire `Diagnostic`,
+  visible in the admin UI, is a contract-package change (`DERIVATIONS.md` §10 item 26).
+
+**Vectors.** `inv2c-first-read-unknown-age-refused` pinned Revision 3's sentence in its last step;
+its expected outcome for the absent row is now `not-yet`. Four vectors are added:
+`retraction-xml-absent-row`, `retraction-xml-absent-row-guard`,
+`retraction-xml-absent-row-then-returns` and `retraction-xml-empty-table-retracts-nothing`. The
+core follows in the M2 server batch; until then the changed vector and the first three new ones
+are on the expected-red ledger (`CONFORMANCE-VECTORS.md` §2). The fourth passes today.

@@ -27,7 +27,7 @@ const LIVE_INGEST = [
 ];
 
 describe('vector count and ids (issue #200 rows 1, 2)', () => {
-  it('vector count and ids: the JSON, CONFORMANCE-VECTORS §1 and the server set agree (105 total, 99 server)', () => {
+  it('vector count and ids: the JSON, CONFORMANCE-VECTORS §1 and the server set agree (109 total, 103 server)', () => {
     const all = loadVectors();
     const doc = readFileSync(resolve(root, 'docs/arch/CONFORMANCE-VECTORS.md'), 'utf8');
     const total = /\*\*(\d+) vectors:/.exec(doc);
@@ -36,7 +36,7 @@ describe('vector count and ids (issue #200 rows 1, 2)', () => {
     expect(server, 'the document states the server count').not.toBeNull();
     expect(all.length).toBe(Number(total![1]));
     expect(serverVectors(all).length).toBe(Number(server![1]));
-    expect(serverVectors(all).length).toBe(99);
+    expect(serverVectors(all).length).toBe(103);
     expect(new Set(all.map((v) => v.id)).size).toBe(all.length);
   });
 
@@ -54,8 +54,8 @@ describe('vector count and ids (issue #200 rows 1, 2)', () => {
     const names: string[] = [];
     const collect: ItLike = Object.assign((name: string) => void names.push(name), { fails: (name: string) => void names.push(name) });
     registerVectorTests({ vectors: serverVectors(), port: corePort, expectedRed: loadExpectedRed(), strict: false, it: collect });
-    expect(names.length).toBe(99);
-    expect(new Set(names).size).toBe(99);
+    expect(names.length).toBe(103);
+    expect(new Set(names).size).toBe(103);
     expect(new Set(names)).toEqual(new Set(loadVectors().filter((v) => v.invariant !== 'live-ingest').map((v) => `vector ${v.id}`)));
     for (const id of LIVE_INGEST) expect(names).not.toContain(`vector ${id}`);
   });
@@ -125,11 +125,18 @@ describe('expected-red ledger and modes (issue #200 rows 3, 4, 5)', () => {
     for (const id of LIVE_INGEST) expect(listed).not.toContain(id);
   });
 
-  it('expected-red after #211 (gate checks): the ledger is empty, every server vector is expected to pass', () => {
+  it('expected-red after contract round C part 2 (#323): four vectors wait for the absent-XML-row retraction (ADR-015 Revision 5)', () => {
     // The ratchet: ids leave as core issues land. #203 took the merge vectors, #205 the standing-assembly ones, #211 the five `check-*` workflow vectors.
+    // Round C part 2 changed one vector's expected outcome by the maintainer's decision of 2026-11-11 and added three that assert the same rule;
+    // the core follows in the M2 server batch (the fourth new vector, the empty table, passes today).
     const nonMerge = serverVectors().filter((v) => !Array.isArray(v.given)).map((v) => v.id);
     expect(nonMerge.filter((id) => id.startsWith('check-')).length).toBe(5);
-    expect(loadExpectedRed()).toEqual([]);
+    expect(loadExpectedRed()).toEqual([
+      'inv2c-first-read-unknown-age-refused',
+      'retraction-xml-absent-row',
+      'retraction-xml-absent-row-guard',
+      'retraction-xml-absent-row-then-returns',
+    ]);
   });
 
   it('the ledger is read from the file it is given, not from a constant', () => {

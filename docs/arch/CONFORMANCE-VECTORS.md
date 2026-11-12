@@ -52,14 +52,16 @@ as recorded), the INV-2d lift, placement only when ranked, no standing re-send o
 fields provisional while run 2 runs, `status` never provisional, an Attempt unstaged before its start,
 and a first-run row wiped in place (the recorded jury re-run).
 
-**105 vectors:** 92 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
-needed, not a target. **c123-server runs 99 of them, live-mini-server 23** (§1, "Which vectors each
+**109 vectors:** 96 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
+needed, not a target. **c123-server runs 103 of them, live-mini-server 23** (§1, "Which vectors each
 component runs"); 17 run in both suites.
 
 **Since then** the file has changed with the contract rounds from 14 on and with #314;
 `DECISIONS/LOG.md` says what each ruled and which vectors it added or reshaped. No round changed
-what an existing vector asserts except where its row says so. §1 states the format as it stands and §2
-lists every vector.
+what an existing vector asserts except where its row says so. Round C part 2 changed one:
+`inv2c-first-read-unknown-age-refused`, in its last step, by the maintainer's decision that an
+absent XML row retracts. It also added four vectors for that rule (§2, "Expected red"). §1 states
+the format as it stands and §2 lists every vector.
 
 ---
 
@@ -125,7 +127,10 @@ Each vector has:
   (`DERIVATIONS.md` §4.7). A row that carries nothing states no result. A parser emits a table
   with no rows as `mode: 'start-list'`, `rows: []` (`DERIVATIONS.md` §0.3); in a vector, `rows: []`
   with `mode: 'results'` is a table whose other rows are elided — the named row is absent — and
-  asserts the same (`retraction-dns-cleared-then-races`). **A scope snapshot of a
+  asserts the same (`retraction-dns-cleared-then-races`). From `xml` the two differ (INV-7):
+  `mode: 'start-list'` with `rows: []` is the wholly empty table and retracts nothing, while an
+  Attempt not listed among other rows, or `rows: []` with `mode: 'results'`, has its row absent
+  and is retracted under the content-age guard. **A scope snapshot of a
   classification Phase** (`CONTRACTS.md` §2.4) carries `CONTRACTS.md` §8.3 `ClassificationRow`s
   instead — `entryId`, `bib`, `rank`, `order`, `decidedIn`, the last `null` where only TCP has stated
   the row — creates no Attempt, and replaces the Phase's rows whole under INV-2c's guard alone
@@ -175,7 +180,12 @@ Each vector has:
   `classification-emptied-keeps-last-standing` and the live `standing.updated` counts stay as written) —
   and so its `pair`, with the first run named by
   `CONTRACTS.md` §2.4's pairing by class and token — `standing-not-resent-on-running-tick` has its
-  `pair` standing from its first snapshot (`CONTRACTS.md` §5 step 1; `DECISIONS/LOG.md`, round 22). A parser states
+  `pair` standing from its first snapshot (`CONTRACTS.md` §5 step 1; `DECISIONS/LOG.md`, round 22).
+  Class, format and pair are the harness's to state for such a Phase, in its first unit: a
+  deployable's merge reads no id for any of them (`CONTRACTS.md` §2.3, §2.4). The server's
+  adapter states the class today; until it also states `format` and `pair`, the server's core
+  still reads those two from the id for a Phase nothing has described (a code follow-up,
+  `DECISIONS/LOG.md`, round C part 2). A parser states
   `pair` with the format, `siblingPhaseId: null` until the schedule names the first run, and that
   stated `null` makes the `pair` standing wait. The Entry is that Attempt's; where no element sets
   the Attempt's `entry` pointer, every Entry field in the vector is one Entry's. Neither needs a
@@ -203,11 +213,16 @@ Each vector has:
   a source-less observation (the `unavailable` one) states no upstream message, so it is a unit of
   its own and never groups with a neighbour; and the seam between `given` and `then` is always a
   unit boundary, since `then` follows an asserted intermediate state, which can only exist at one.
+- **`context.xml`** states the XML source's state where a vector needs one. One vector does:
+  `two-run-br1-unavailable-no-live-no-xml` states `'unreachable'` and expects
+  `unavailable{source-unreachable}`. The on-site process never gives that input
+  (`DERIVATIONS.md` §4.5), so the vector is to be reshaped with the core change: `'not-configured'`,
+  expecting `unavailable{not-configured}` (`DERIVATIONS.md` §10 item 30).
 
 **Which vectors each component runs.** Each component feeds its own merge function through a thin
 adapter (`TEST-ARCHITECTURE.md` §3.1); the sets overlap, and each suite asserts its own count.
 
-**c123-server runs 99: every vector not tagged `live-ingest`.** The tag is the rule; apart from it,
+**c123-server runs 103: every vector not tagged `live-ingest`.** The tag is the rule; apart from it,
 every merge vector is on-site material (`tcp`, `xml` and `operator-write` observations, the
 source-less `unavailable` observation, connection and operator events, scope snapshots and
 on-course listings), and all 8 `standing-assembly` and all 5 `workflow-state` vectors are the
@@ -326,7 +341,7 @@ check, readable under its own `run`) is not asserted.
 | INV-2 rule 1, `gates` cell-wise | `gates-blank-result-cell-keeps-judged-oncourse-cell`, `gates-result-vector-authoritative-after-leaving` | 2 |
 | INV-2 rule 2 exception (marks on silent paths) | `left-without-finish-then-mark-from-xml`, `xml-mark-does-not-override-tcp-finish`, `inv2-rule2-refused-xml-mark-shows-no-outcome` | 3 |
 | `left-without-finish` | `left-without-finish-observed-not-dnf` | 1 |
-| INV-7 (retraction) | `retraction-vanished-row-first-run`, `-dns-cleared-then-races`, `-start-list-mode-clears-all`, `-does-not-touch-inference`, `-second-run-time-empty-keeps-placement`, `-from-xml-row-cleared`, `-first-run-row-present-empty`; the guard: `retraction-xml-guard-rewrite-before-push`, `inv7-guard-against-redelivered-tcp-row` | 9 |
+| INV-7 (retraction) | `retraction-vanished-row-first-run`, `-dns-cleared-then-races`, `-start-list-mode-clears-all`, `-does-not-touch-inference`, `-second-run-time-empty-keeps-placement`, `-from-xml-row-cleared`, `-first-run-row-present-empty`; an absent XML row and a wholly empty XML table: `retraction-xml-absent-row`, `-xml-empty-table-retracts-nothing`, `-xml-absent-row-then-returns`; the guard: `retraction-xml-guard-rewrite-before-push`, `retraction-xml-absent-row-guard`, `inv7-guard-against-redelivered-tcp-row` | 13 |
 | INV-1 against retraction (omission is not absence) | `retraction-not-from-fragment`, `retraction-not-in-other-race-snapshot` | 2 |
 | INV-2d (contradiction by the on-course stream; the lift) | `contradiction-oncourse-running-again`, `contradiction-lift-keeps-stale-rows-unpresented`, `contradiction-leaves-no-tcp-marker-on-xml-only-field` | 3 |
 | Marks over time; half-corrections | `status-overrides-time`, `half-correction-snapshot-duplicate-finish` | 2 |
@@ -352,6 +367,31 @@ check, readable under its own `run`) is not asserted.
 | Kayak Cross | `cross-outcome-not-yet-before-operator-entry`, `-from-placement-not-time`, `-corrected-after-next-heat-started` | 3 |
 | Phase status transition | `phasestatus-official-to-revised-skips-unofficial` | 1 |
 | Standing assembly (§5) | relayed order and single-run tie; combined tie with no anomaly; unplaced entries; age-category assembly; category-rank disagreement; order disagreement; Cross never checked; behind and flags | 8 |
+
+**Expected red.** Four vectors assert a rule the server's core does not implement yet: an absent
+XML row retracts (`CONTRACTS.md` §4 INV-7; maintainer, 2026-11-11). They are listed in the
+expected-red ledger (`src/__tests__/conformance/expected-red.json`; a listed id runs as an
+expected failure, and `VECTORS_STRICT=1` shows it red). The core change is in the M2 server
+batch; the ids leave the ledger with it.
+- `inv2c-first-read-unknown-age-refused`, an existing vector whose expected outcome changed. Its
+  last snapshot lists bibs 9 and 10 and not bib 11, which holds a TCP result. The absent row
+  retracts under the content-age guard, so bib 11's `outcome` is `not-yet`. Until the decision
+  the vector asserted that it stayed `known` from `tcp`.
+- `retraction-xml-absent-row`, new: a TCP result, then an XML snapshot that lists another row
+  and has a later content age. The Attempt is retracted, with one `attempt.updated`.
+- `retraction-xml-absent-row-guard`, new: the same with a content age not later than the push.
+  Nothing moves. The next rewrite retracts.
+- `retraction-xml-absent-row-then-returns`, new: after the retraction a later snapshot carries
+  the row with a result again. It is presented, from `xml`.
+
+The fourth new vector passes on today's core and is not listed:
+`retraction-xml-empty-table-retracts-nothing`, a TCP result and then an XML snapshot with
+`mode: 'start-list'` and `rows: []` and a later content age. Nothing is retracted and nothing
+is sent. The `xml-table-emptied` diagnostic goes to the admin log, which no vector reads.
+
+**Owed with the core change.** The reshape of `two-run-br1-unavailable-no-live-no-xml` (§1,
+`context.xml`): its expected outcome would change on a default, so it waits for the code and its
+review.
 
 ---
 

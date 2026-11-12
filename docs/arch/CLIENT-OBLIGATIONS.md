@@ -331,4 +331,9 @@ sends `DELETE /ingest/v2/attempts/{phaseId}/{bib}`. On site an Attempt is never 
 is field-level (INV-7) and a re-baseline reaches live as a Phase replace, which removes absent
 Attempts by itself; so today only a §8.5 organiser correction has a reason to call `DELETE`, and no
 server vector covers a bridge trigger. Whether an upstream start-list removal should become one is a
-maintainer question (CONTRACTS §4, §8.3, §8.5).
+maintainer question (CONTRACTS §4, §8.3, §8.5). By the maintainer's decision of 2026-11-11 the
+server sees such a removal: a competitor deleted, moved or given another bib upstream is gone from
+the race's XML table, and the absent row retracts the Attempt's result fields (CONTRACTS §4;
+ADR-015). The Attempt itself stays, `not-started`, with its entry, on site and on live. No
+obligation above changes by this: the retraction arrives as the explicit `not-yet` values a client
+already applies.

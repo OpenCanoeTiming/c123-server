@@ -236,7 +236,8 @@ contract (`Gate.penalty`, §2.6). This is the direct fix for `EVIDENCE.md` Exhib
 `reason` is a closed set, never free text:
 - `'not-configured'`: the source that would carry this is not set up. For example, no XML path is
   configured, or no course is defined for the Phase.
-- `'source-unreachable'`: the source is configured but not answering right now.
+- `'source-unreachable'`: the source is configured but not answering right now. The on-site
+  process gives this reason for no field today (`DERIVATIONS.md` §4.5).
 - `'not-applicable'`: the fact does not exist for this entity, permanently and by its nature. For
   example, no `eventBib` exists where bibs are issued per race (§2.5), and a heat number does not
   apply to a race without heats. A member with no registry identity is `externalId: null` inside a
@@ -533,8 +534,12 @@ type Class = {
 type AgeCategory = { ageCategoryId: string; name: string }   // Canoe123 CatId and its name
 ```
 
-- **`classId` is read from Canoe123's class field, never from a `RaceId` prefix.** For a hyphenated
-  class the two differ (`K1M-ST` against `K1M_ST`).
+- **`classId` is read from Canoe123's class field, never from a `RaceId` prefix.** Upstream builds
+  a `RaceId` from the class id (`K1M_ST_BR1_6` for class `K1M_ST`, `K1M-ZS_BR1_25` for `K1M-ZS`,
+  `MX1J_XT_26_JUN` for `MX1J`), but it rebuilds it only while the race has not started. After an
+  operator renames a class or moves a race, a started race keeps its old prefix while the class
+  field follows the change (`DERIVATIONS.md` §1). The same holds for finding a Phase's other run
+  (§2.4): no part of a `RaceId` is read for it.
 - **Canoe123 lists pseudo-classes, which are never Classes.** One means "not assigned". The race
   staged with the literal id `<unassigned>` is likewise never a Phase (`DERIVATIONS.md` §0.3).
 - **`discipline`** is exposed explicitly, because two structurally different things hang off it: the
@@ -577,27 +582,53 @@ pairing and combination behaviour.
 
 | Upstream format tokens | `kind` | `pair` | `scoringKind` | `heats` |
 |---|---|---|---|---|
-| `BR1`/`BR2` (best-run slalom), `HT1`/`HT2` (international heats), `EL1`/`EL2`, `TR1`/`TR2` | race | first / second, `combination: 'best'` | duration | no |
-| `NHT2` | race | second of a pair where upstream defines one, `'best'` | duration | no |
-| `SR1`/`SR2` and any other paired second run | race | first / second, `combination: 'sum'` | duration | no |
+| `BR1`/`BR2` (best-run slalom), `HT1`/`HT2` (international heats), `NHT1`/`NHT2` (heats with direct qualification; see Pairing), `EL1`/`EL2`, `TR1`/`TR2` | race | first / second, `combination: 'best'` | duration | no |
+| `SR1`/`SR2`, `TS1`/`TS2` and any other paired second run | race | first / second, `combination: 'sum'` | duration | no |
 | `QF`, `SF`, `SFB`, `FI`, `FIB`, `SP1`, `SP2`, `SPF`, `TSR`, `XT`, `XT1`, `XT2` and single-run tokens generally | race | `null` | duration | no |
 | `X8`, `X4`, `XS`, `XF` (Kayak Cross head-to-head) | race | `null` | ordinal | yes |
 | `XER`, `SLER`, `WWER` (event-result classifications: "ER" = event result) | classification | `null` | ordinal | no |
 | `RXER` (a title only; upstream calculates nothing for it) | classification, never holding rows | `null` | ordinal | no |
 | `SUF` (super-final after a second run) | race | second of a pair with the `BR2`, `combination: 'sum'` | duration | no |
-| `FI` after an `SF` under upstream's legacy-finals setting | race | second of a pair with the `SF`, `combination: 'sum'` — only when its rows carry a combined total, see below | duration | no |
+| `FI` or `FIB` after an `SF`, `TFI` after a `TSF`, under upstream's legacy-finals setting | race | second of a pair with that semi-final, `combination: 'sum'` — only when its rows carry a combined total, see below | duration | no |
 | any unknown token | race | `null` | duration | no |
 
-**Pairing.**
-- A second run names its first by class and format: `BR2` pairs with the same class's `BR1` on the
-  same day, and likewise for `HT`, `EL`, `TR` and `SR`.
+**Pairing** (maintainer, 2026-11-11; `DECISIONS/LOG.md`, #287).
+- **A second run names its first by two fields of the Phase: its `classId` and its `format`.**
+  The first run is the Phase with the same `classId` whose `format` this table gives for the
+  second run's:
+
+  | Second run | `BR2` | `HT2` | `NHT2` | `EL2` | `TR2` | `SR2` | `TS2` | `SUF` | `FI`, `FIB` | `TFI` |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | Its first run | `BR1` | `HT1` | `NHT1` | `EL1` | `TR1` | `SR1` | `TS1` | `BR2` | `SF` | `TSF` |
+
+  A first-run token (`BR1`, `HT1`, `NHT1`, `EL1`, `TR1`, `SR1`, `TS1`) names its second by the
+  same table read the other way. `BR2`, `SF` and `TSF` are only named, by the `SUF` or the final:
+  their own `pair` is their row of the format table above. This is how upstream itself links two
+  runs (observed upstream behaviour).
+- **The same day breaks a tie.** When one Phase matches, it is the sibling, whatever its day.
+  When several match, the sibling is the one whose `date` is this Phase's. When that does not
+  leave exactly one, `siblingPhaseId` stays `null` (a default; no recording holds such an event).
+- **No part of a `RaceId` is read for pairing,** and no sibling id is built from this Phase's id.
+  `classId` is the class field's value, verbatim (§2.3), which covers pairing too: after a rename
+  the two runs still share a `classId`, while a started first run keeps its old `RaceId` prefix.
+  *Examples.* `K1M_ST_BR2_6` and `K1M_ST_BR1_6` pair because both state `classId` `K1M_ST` and
+  their formats are `BR2` and `BR1`; the same for `K1M-ZS_BR2_25` with `K1M-ZS_BR1_25`. An
+  attribute sub-race (`MX1J_XT_26_JUN`, class `MX1J`, format `XT`) has no second run and pairs
+  with nothing. A rename, illustrative since no recording holds one: class `K1M` becomes `K1M-X`
+  after its first run started, and the second run's id is rebuilt. The Phases are `K1M_BR1_19`
+  and `K1M-X_BR2_19`, both with `classId` `K1M-X`: they pair. Reading the prefix would not find
+  the first run.
 - `combination` is `'best'` exactly for `BR2`, `HT2`, `NHT2`, `EL2` and `TR2`. Upstream sums both runs
   for every other second run.
+- **`NHT1`/`NHT2` are a pair like `HT1`/`HT2`, combination `'best'`** (maintainer, 2026-11-11):
+  the heats with direct qualification, whose second run gets a new start list seeded from the
+  first run's ranked qualifiers. `NHT2`'s first run is `NHT1`. Neither token is in any recording,
+  and whether upstream combines the two runs as it does `HT1`/`HT2` is not verified
+  (`DERIVATIONS.md` §10 item 31: to be checked before the first event that uses them).
 - `role` and `combination` come from the token alone; `siblingPhaseId` is `null` until the schedule
-  names the other run (a TCP-first cold start, `DERIVATIONS.md` §2.1). A second-run Phase reads its
-  rows as a second run from its first row, sibling resolved or not (`DERIVATIONS.md` §4.4). An `NHT2`
-  has `pair: null` until its first-run token is known (`DERIVATIONS.md` §10 item 21): with the token
-  unknown, no sibling can ever resolve, and its rows read as a single run.
+  names the other run — until a Phase with that class and format is known (a TCP-first cold start,
+  `DERIVATIONS.md` §2.1). A second-run Phase reads its rows as a second run from its first row,
+  sibling resolved or not (`DERIVATIONS.md` §4.4).
 - The tokens `QUA`/`SEM`/`FIN`, which appeared in an earlier draft of this contract and in the
   protocol documentation, **do not exist upstream**.
 - **Two further pairings** (observed upstream behaviour; neither appears in the corpus): a
@@ -606,8 +637,9 @@ pairing and combination behaviour.
   the operator types it. The final-after-semi pairing counts only under a legacy-finals setting that
   is stored **per machine**, not in the event file, so two machines could rank the same final
   differently. The contract therefore never computes either combination: `pairTotal` and
-  `placement` are relayed, and the `FI`/`SF` pairing is asserted only when the final's rows carry a
-  combined total, with `confidence: 'inferred'` on `pair`.
+  `placement` are relayed, and a final's pairing with its semi-final (`FI` or `FIB` with `SF`,
+  `TFI` with `TSF`) is asserted only when the final's rows carry a combined total, with
+  `confidence: 'inferred'` on `pair`.
 
 ```ts
 type Stage = 'run' | 'time-trial' | 'heats' | 'quarter-final' | 'semi-final' | 'final'
@@ -1410,7 +1442,8 @@ implementation must satisfy, not an algorithm.
   row and is not consumed at all (`DECISIONS/ADR-011`); a disconnected source says nothing. A TCP
   result push was complete in 17,496 of 17,496 recorded messages. **A table with no rows is a scope
   snapshot in start-list mode** (its mode is read structurally like any other, `DERIVATIONS.md`
-  §0.3); recorded only before any row of that race ever existed, where it changes nothing;
+  §0.3); recorded only before any row of that race ever existed, where it changes nothing. From
+  TCP it retracts as start-list mode does; from the XML it retracts nothing (INV-7);
 - an **operator write** (`operator-write`).
 
 - **INV-1 (monotonic knowledge against omission, per run generation).** A field's `state` never
@@ -1610,21 +1643,41 @@ implementation must satisfy, not an algorithm.
     carrier — restates it, `BetterRunNr` `0` being `not-yet`; the retraction reaches it only with
     the row absent (recorded: the same Attempt, `BetterRunNr` `1` → `0` in the snapshot of
     11:40:25.507, 18 s after the push).
-  - **XML:** a first-run or single-run row carrying no time, no finish time and no mark: as the TCP
-    first-run case. A second-run row so carrying: as the TCP time-empty case, and `countingRun` is
-    the row's as `BetterRunNr` states it, `0` being `not-yet` — before run 2, every
-    second-run row in the snapshot already carries the combined placement and total with no time.
-    **An absent XML row, and an XML table with no rows, state nothing and retract nothing:** the
-    file lists every entry of a race and a cleared result shows as fields going empty
-    (`DERIVATIONS.md` §0.3); an entry gone from the file is not a result statement. Not recorded
-    (a default; the re-baseline is the remedy for anything left standing).
+  - **XML, the row is present** and carries no time, no finish time and no mark. A first-run or
+    single-run row: as the TCP first-run case. A second-run row: as the TCP time-empty case, and
+    `countingRun` is the row's as `BetterRunNr` states it, `0` being `not-yet` — before run 2,
+    every second-run row in the snapshot already carries the combined placement and total with no
+    time. This is how a deleted result, or a DNS, DNF or DSQ taken back, shows in the file: the
+    row stays and its fields go empty.
+  - **XML, the row is absent** from a table that carries other rows: as the TCP absent-row case,
+    `pairTotal` and `countingRun` included in a paired second run (maintainer, 2026-11-11;
+    `DECISIONS/ADR-015` Revision 5). Upstream rewrites the file whole from its current tables at
+    every save, and a competitor deleted, moved to another race or class, or given another bib is
+    gone from the race's next file; so is a row a redrawn start list no longer holds (observed
+    upstream behaviour, `DERIVATIONS.md` §4.12; no recording holds a removal).
+    *Example:* bib 11 holds a TCP result of 10:40:59 and the operator deletes the competitor. The
+    next save lists the race without bib 11. Its content age, 10:41:32, is later than the push, so
+    bib 11's `outcome`, `gates` and `placement` go `not-yet` and its `status` `not-started`. The
+    Attempt stays, with its `entry`, `bib` and `startOrder`. A row that returns later is a new
+    observation and is presented by rules 1–2 like any other.
+  - **XML, a wholly empty table retracts nothing.** That is a race the snapshot's schedule names
+    with no result row at all. It is not a table whose rows are all blank: there each row
+    retracts as a present row. One read of the lagging source does not clear a whole race: a
+    deliberate "delete all results" keeps the rows, blanked, and TCP pushes it at once in
+    start-list mode. Where the race holds at least one result an absent row would have retracted,
+    the core raises `xml-table-emptied`, once per emptying. It is an ingest-only diagnostic: it
+    reaches the admin log and never `GET /api/diagnostics` (`DERIVATIONS.md` §0.5, §4.12). If the
+    race really was emptied, the re-baseline below is the remedy. A classification Phase's
+    emptied table is `DERIVATIONS.md` §4.10's case. Not recorded: no table lost its rows in any
+    recording.
   - **Never retracted:** an on-course inference, `entry`, `bib`, `startOrder`, `heat`, `startLane`,
     `run`, or a field whose Attempt was never present in a results-table observation.
-  - **XML retractions are guarded by content age (INV-2c).** The snapshot lags TCP by up to a save
-    cycle, so a snapshot written before a result push must not undo it. An XML retraction, and the
-    mark exception of rule 2, apply to a `tcp` observation only when the snapshot's content age —
-    its `changedAfter`, INV-2c — is later than that observation's content age (its latest
-    delivery's `observedAt`, INV-2c).
+  - **XML retractions are guarded by content age (INV-2c),** a present row's and an absent row's
+    alike. The snapshot lags TCP by up to a save cycle, so a snapshot written before a result push
+    must not undo it. An XML retraction, and the mark exception of rule 2, apply to a `tcp`
+    observation only when the snapshot's content age — its `changedAfter`, INV-2c — is later than
+    that observation's content age (its latest delivery's `observedAt`, INV-2c). A first read,
+    whose `changedAfter` is `null`, therefore retracts nothing a `tcp` observation states.
     Otherwise the snapshot is ignored for that field, and the next snapshot settles it. A guard on
     our own clock, not an ordering rule; INV-6 still orders the merge.
   - A retraction is an explicit observation with its own ingest sequence, pushed as `not-yet`
@@ -1732,9 +1785,10 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    cold start), the combined placement is on the Attempts and in the second Phase's `phase` standing
    only; the `pair` standing's first publication follows the resolution. Known means stated on the
    Phase: a parser states `pair` with the `format`, `siblingPhaseId: null` until the schedule names
-   the first run (`DERIVATIONS.md` §2.1), and the `pair` standing waits. A Phase no element has
-   described — a stream of Attempt observations alone, as the conformance vectors are — reads from
-   its id, `format` and first run alike (`CONFORMANCE-VECTORS.md` §1, a harness convention; `DECISIONS/LOG.md`, round 22).
+   the first run (`DERIVATIONS.md` §2.1), and the `pair` standing waits. Nothing here reads an
+   id: the first run is found by class and format (§2.4). The conformance vectors, whose Phases
+   no element describes, get a `pair` from their harness, which states it as it states the class
+   (`CONFORMANCE-VECTORS.md` §1, a convention of that file alone).
    **`asOf`** is the ingest time of the latest observation that changed the standing as serialised;
    for a classification, the latest scope snapshot that changed its rows (§2.4,
    `DERIVATIONS.md` §4.10), not a snapshot re-sending the same rows and not an emptied table, which
