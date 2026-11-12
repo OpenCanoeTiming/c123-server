@@ -22,6 +22,8 @@
     "sweep:merge": "tsx --max-old-space-size=3072 scripts/sweep-merge.ts",
     "measure:gaps": "node scripts/measure-gaps.mjs",
     "dev:env": "node scripts/dev-env.mjs",
+    "predev": "node scripts/sync-design-system.js",
+    "preonsite": "node scripts/sync-design-system.js",
     "postinstall": "node scripts/sync-design-system.js",
     "prebuild": "node scripts/sync-design-system.js --strict"
   },
@@ -40,7 +42,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@opencanoetiming/c123-contract": "0.0.0",
-    "@opencanoetiming/timing-design-system": "^1.2.0",
+    "@opencanoetiming/timing-design-system": "^1.2.1",
     "@types/express": "^5.0.0",
     "@types/node": "^26.6.2",
     "@types/ws": "^8.5.13",
