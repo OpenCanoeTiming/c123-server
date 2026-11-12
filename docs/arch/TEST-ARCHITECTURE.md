@@ -277,7 +277,10 @@ the step index, the Attempt, the field and the property number.
      presented after a re-baseline or an outage, a `tcp` listing then judging a cell — that
      listing is the producer, and the vector is `xml` on the listing's instant.
 
-   **An earlier instant is legitimate in these cases, and only with the envelope stated here.**
+   **An earlier instant is legitimate wherever (b) admits it.** The cases below are the ones
+   whose envelope needed stating, and in each of them only the envelope stated here is right.
+   The list is not closed: any other envelope older than its step — a value whose `provisional`
+   flips at a closure and keeps its row's instant, for one — is judged by (b) and (c) alone.
    - **A creation message or a standing** carries earlier envelopes.
    - **A row the merge held for the stream's finish** (`DERIVATIONS.md` §4.11) is presented at the
      listing that settled it, with its own `observedAt` **and its own value**: the fields the row
@@ -348,7 +351,9 @@ the step index, the Attempt, the field and the property number.
      - first or single run: `outcome`, `gates` (in Kayak Cross `faults`), `placement`,
        `underReview`, `qualified` and a mark in `status`;
      - paired second run with the row absent: those plus `pairTotal` and `countingRun`;
-     - second run with an empty time: `outcome` and `gates` (`faults`) only. `placement` and
+     - second run with an empty time: `outcome` and `gates` (`faults`) only; a mark in `status`
+       goes with them (INV-7), a `known → known` change and so no regression as this section
+       defines one. `placement` and
        `pairTotal` are the row's, `known` or `not-yet` as its `Rank` and `Total` state them (INV-7
        "follow the row"; `DERIVATIONS.md` §4.7, §4.12): a change there is the row's statement,
        not this property's regression, and so is the `not-yet` an empty `Rank` states on a row
@@ -360,7 +365,9 @@ the step index, the Attempt, the field and the property number.
      field whose presented value is an on-course inference (`kind: inference`, or
      `outcome.kind: 'running'`).
    - **(b) `status` afterwards** is what the on-course listing shows for the Attempt (`at-start`,
-     `on-course`, or an inferred `finished` that still stands), else `not-started`; a
+     `on-course`, or an inferred `finished` that still stands; after an `oncourse-left` of the
+     generation with a start observed, no finish ever listed and no re-listing since, the
+     leave's `left-without-finish`, `DERIVATIONS.md` §4.12), else `not-started`; a
      `finished → on-course` at this step is this property's, not property 7's.
    - **(c) The content-age guard.** For an `xml` snapshot retracting or displacing a
      `tcp`-presented field, the snapshot's content age is later than that field's presented `tcp`
@@ -424,7 +431,9 @@ the step index, the Attempt, the field and the property number.
    XML row still holds `0`); after it has left, and until a
    re-listing of the generation, cells change only at a results-table
    step. (c) A field presented from `tcp` flips to `xml` only: after a `tcp-disconnected` that
-   followed the step that ingested the presented `tcp` observation; by rule 2's mark exception
+   followed the step that ingested the presented `tcp` observation — its latest delivery, a
+   re-delivery that restates the value being an ingest step of its own (INV-5) — by rule 2's
+   mark exception
    (`status` from `not-started`, `at-start` or `left-without-finish` to a no-result mark,
    `non-ranked` excluded); by an INV-7
    retraction from the snapshot (property 5); by rule 1, a snapshot result row superseding an on-course
@@ -633,7 +642,8 @@ the step index, the Attempt, the field and the property number.
     with no rows after rows changes nothing: the Standing stays as last built, `asOf` included —
     maintainer, 2026-11-06); each
     scope snapshot of the Phase that passes INV-2c's guard across sources (`DERIVATIONS.md` §4.10:
-    an `xml` snapshot against `tcp`-built rows needs a later `changedAfter`, `null` never; a `tcp`
+    an `xml` snapshot against rows a `tcp` snapshot has stated, built or re-delivered equal,
+    needs a `changedAfter` later than their latest `tcp` delivery, `null` never; a `tcp`
     snapshot always) replaces its rows whole, and it changes only at such a snapshot or
     `scope.replaced`. The spike's checker
     applied the Attempt clause to it and reported 673 violations on the Cross event result (XER), which

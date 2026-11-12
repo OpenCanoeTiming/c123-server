@@ -136,7 +136,10 @@ The fields, precisely:
   - **setting off:** the first push already follows the last gate.
 
   `provisional` answers "might this still move". `confidence` answers "how was this produced". A
-  client needs both and must not conflate them.
+  client needs both and must not conflate them. **A change of `provisional` alone moves no
+  `observedAt`:** a closure or a course binding is no new observation of the value, so the
+  envelope is pushed with the flag changed and its instant unchanged — also where the element
+  that closes the run is a row restating the value already presented (INV-5).
 
 **Condition 1 in full: the stream's cells and the merged vector.** `gates` is merged cell by cell
 (§4 rule 1), so its envelope needs a rule of its own.
@@ -181,8 +184,8 @@ from the first and changes nothing presented, so it moves nothing.
   heat's `faults` stays under it until the heat leaves the list (`DERIVATIONS.md` §4.2, §4.7).
 
 *Examples.* A first result push with gate 14 still blank is provisional until the judge enters
-the gate (§2.11). A row pushed at a cold start, before the first snapshot binds a course, is
-provisional until the course binds and shows no blank cell, or the run closes. Before run 2 a
+the gate or the run closes (§2.11). A row pushed at a cold start, before the first snapshot binds
+a course, is provisional until the course binds and shows no blank cell, or the run closes. Before run 2 a
 second-run row carries the combined placement and total with no time: those values are run 1's,
 and the clause does not reach them.
 
@@ -589,7 +592,7 @@ pairing and combination behaviour.
 | `XER`, `SLER`, `WWER` (event-result classifications: "ER" = event result) | classification | `null` | ordinal | no |
 | `RXER` (a title only; upstream calculates nothing for it) | classification, never holding rows | `null` | ordinal | no |
 | `SUF` (super-final after a second run) | race | second of a pair with the `BR2`, `combination: 'sum'` | duration | no |
-| `FI` or `FIB` after an `SF`, `TFI` after a `TSF`, under upstream's legacy-finals setting | race | second of a pair with that semi-final, `combination: 'sum'` — only when its rows carry a combined total, see below | duration | no |
+| `FI` or `FIB` after an `SF` under upstream's legacy-finals setting; `TFI` after a `TSF` (whether under that setting is not established) | race | second of a pair with that semi-final, `combination: 'sum'` — only when its rows carry a combined total, see below | duration | no |
 | any unknown token | race | `null` | duration | no |
 
 **Pairing** (maintainer, 2026-11-11; `DECISIONS/LOG.md`, #287).
@@ -792,7 +795,7 @@ type Gate = { number: number; penalty: number | null; memberPenalties?: (number 
 type Split = { number: number; elapsedSeconds: number }
 type Faults = {
   count: number          // faulted judging slots
-  gates: string[]        // their captions, as upstream names them: 'ST', '1'…'6', 'RZ', '7'
+  gates: string[]        // their names, from the slot itself: 'ST', '1'…'6', 'RZ', '7' — DERIVATIONS §4.6(d)
   lastCleanSlot: number  // upstream's 1-based SLOT position of the last slot judged clean before the
 }                        // first fault, counting the start ramp and roll zone; 0 = none; a clean run =
                          // the slot count (9 on the recorded 9-slot, 7-gate course). Not a gate number:
@@ -922,7 +925,8 @@ absence in a complete statement of the race: a row missing from a TCP result pus
 in the XML snapshot. The domain layer turns that absence into an explicit retraction:
 - the retracted fields become `not-yet`, and the change is pushed like any other;
 - `status` returns to what the on-course stream currently shows for the Attempt (`at-start`,
-  `on-course`), else `not-started`;
+  `on-course`; where the Attempt left the list and the leave drew `left-without-finish`,
+  that), else `not-started`;
 - an on-course inference is never retracted by a result push, because a race's push can precede the
   row being written.
 
@@ -1242,8 +1246,9 @@ is recoverable from the XML snapshot in one read. So:
 - every change is written to durable storage atomically, as a temporary file then a rename, so a
   crash at any point leaves the previous complete state;
 - a write is acknowledged (§7.4) and pushed (§7.2) only after it is durable;
-- the store is validated on load, and a file that fails validation is reported through
-  `SourceStatus`-style diagnostics, never silently replaced;
+- the store is validated on load, and a file that fails validation is reported to the admin
+  audience and never silently replaced: it is set aside under another name, the store opens
+  empty and the server starts (a default; `DERIVATIONS.md` §10 item 33);
 - `TEST-ARCHITECTURE.md` §3.5 is the verification path (#168).
 
 ### 2.11 Worked example: the envelope through a finish
@@ -1415,9 +1420,12 @@ reliable signal that a Phase's results changed is ordinary field-level change: a
 - **Retraction and contradiction** (`DECISIONS/ADR-015`), all routine in-race corrections:
   - `finished → on-course`, when the on-course stream lists the Attempt with its start and no
     finish: the finish was taken away (§4 INV-2d);
-  - `finished | non-ranked` or any no-result status `→ not-started | at-start | on-course`, on a
-    retraction (§4 INV-7): the row vanished, or a DNS was cleared; the target is what the on-course
-    stream currently shows, else `not-started`.
+  - `finished | non-ranked` or any no-result status `→ not-started | at-start | on-course |
+    left-without-finish`, on a retraction (§4 INV-7): the row vanished, or a DNS was cleared; the
+    target is what the on-course stream currently shows — its latest inference for the
+    generation, so `left-without-finish` where the leave drew it (slalom: a start observed and
+    no finish ever listed), whichever of the leave and the retracted row came first — else
+    `not-started`, as after a finisher's ordinary closure.
 - **Re-run** (`DECISIONS/ADR-013`): `finished` or any no-result status `→ at-start | on-course`,
   **only together with a `run` increment.** This is the one transition that retracts known facts. It
   is explicit and observed, never inferred from omission.
@@ -1544,8 +1552,9 @@ implementation must satisfy, not an algorithm.
        **The presented value under this rule is a whole
        `gates` vector:** the vector presented from rules 1–3 with the target cell replaced by the
        requested one, `source: operator-write` on the envelope (`gates` keeps the course's count,
-       §2.6; the vectors' one-cell `gates` are one-gate courses). What is presented when no vector
-       is `known` at submission is #212's to state.
+       §2.6; the vectors' one-cell `gates` are one-gate courses). Where no vector is `known` at
+       submission, the base is the course's gates with every cell `null` (a default: a write is
+       refused without a course, §7.3, so the count is always known).
      - **`provisional: false`** is an assertion with no echo expected. Examples are a direct
        correction against the cloud store after the on-site session ended (§8.5). A later assertion of the same kind supersedes it. So does a
        results-table observation that **changes** its own source's retained value after the
@@ -1664,7 +1673,8 @@ implementation must satisfy, not an algorithm.
     with no result row at all. It is not a table whose rows are all blank: there each row
     retracts as a present row. One read of the lagging source does not clear a whole race: a
     deliberate "delete all results" keeps the rows, blanked, and TCP pushes it at once in
-    start-list mode. Where the race holds at least one result an absent row would have retracted,
+    start-list mode. Where the race holds at least one result an absent row would have retracted
+    — the guard below applied, so a table read before the results it lacks raises nothing —
     the core raises `xml-table-emptied`, once per emptying. It is an ingest-only diagnostic: it
     reaches the admin log and never `GET /api/diagnostics` (`DERIVATIONS.md` §0.5, §4.12). If the
     race really was emptied, the re-baseline below is the remedy. A classification Phase's
@@ -1833,10 +1843,14 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    - `order` = position in that filtered list.
 
    This reproduced upstream's own category ranks, single-run and combined, exactly: 1,855 rows,
-   0 mismatches. It makes category standings available at class-rank latency. Upstream's own category
+   0 mismatches in the rows measured (a class tie differs, below). It makes category standings
+   available at class-rank latency. Upstream's own category
    ranks reach only the snapshot, a median of ~20 s after the finish. When the snapshot's category
    rank arrives and differs from the assembled one, a `category-rank-disagreement` anomaly is
-   recorded. The assembled rank stays presented. The check reads only rows whose `CatId` is set: on a
+   recorded. The assembled rank stays presented. A class tie is the known case: entries of one
+   category that share a class `rank` share the category rank here, while upstream numbers them
+   consecutively (recorded once: jarni-ne-odp C1M_BR1_19, two entries on class rank 43, here 5
+   and 5, upstream 5 and 6). The check reads only rows whose `CatId` is set: on a
    second-run row with an empty `CatId`, `TotalCatRnk` repeats the class rank and is not a category
    rank (observed in up to 196,621 row-instances per recording).
 5. **`provisional` and `underReview`** are copied from the entry's own Attempt. They are `true` if any
@@ -1845,7 +1859,14 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    scopes. **The ranked value is the value the entry's placement is based on:** `pairTotal` for an
    entry of a second-run Phase, in its `phase` standing and in the `pair` standing alike (its placement
    is the combined one, step 2, `DERIVATIONS.md` §4.7), and `result.totalSeconds` otherwise. It is
-   `null` otherwise, and `null` for entries without a numeric ranked value. Compared on `result`, a
+   `null` otherwise, and `null` for entries without a numeric ranked value: an unplaced entry
+   (step 3), whose time no placement is based on, and an untimed row's entry (step 2), in a
+   second-run Phase too. **It is never negative:** where the entry's value is smaller than the
+   first-ordered entry's it is `null`. A Kayak Cross time trial is ordered by its judging before
+   its time, and upstream leaves its own gap blank there (recorded: cp3-cross MX1_XT_26 bib 48
+   at 08:05:56.796Z, placed fourth with 66.70 behind a leader's 66.74, one cell not yet
+   judged).
+   Compared on `result`, a
    second-run Phase's `phase` standing sets a combined order against run 2's own times: negative
    `behindSeconds`, and 118–285 false step-7 anomalies per recording, every one of them there.
 7. **Anomaly check, the one mechanical comparison** (`order-disagreement`). It applies in a
@@ -2141,7 +2162,12 @@ meanwhile queue behind it, milliseconds — so that no echo can pass before the 
 rule 4 would leave it `pending` for ever, `DECISIONS/ADR-010`'s lost echo) and no same-key retry
 can send a second command (§1.5). A refused or failed write creates no `WriteRequest`, binds no key
 and pushes nothing — refusing rather than holding, by the same reasoning as the window after the
-finish above. The command is one XML document on one line, the `Canoe123` envelope naming the
+finish above. **Once the socket has accepted the command the write exists,** whatever happens to
+its durable record (§1.5): if storing it fails, the `WriteRequest` and its key stay bound in
+memory, the `202` and the push go out as usual — a same-key retry is still answered from the key
+and sends nothing — and the failure is reported to the admin audience. What is lost until the
+store writes again is the restart guarantee alone.
+The command is one XML document on one line, the `Canoe123` envelope naming the
 connected instance and the correction element with the race id, bib, gate and value, followed by
 the stream's message terminator; whitespace inside the element is not a contract item.
 

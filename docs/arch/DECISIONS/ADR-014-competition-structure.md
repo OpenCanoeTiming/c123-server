@@ -102,3 +102,14 @@ states them.
   `Pen` is ignored in Cross (`DERIVATIONS.md` §4.6(d)).
 - **Attribute sub-classes** are ordinary separate classes; no base-class link exists upstream.
 
+## Revision — the evidence class of `NHT2` in decision 3 (2026-11-12)
+
+Decision 3 lists `NHT2` among the second runs that combine as *best* and calls the list E1. For
+`NHT2` that class does not hold. A later reading of upstream's behaviour did not confirm that
+`NHT1` and `NHT2` are combined at all: it found the second run ranked as its own run, the first
+only seeding it. No recording or sample holds either token. The evidence class for `NHT2` is
+therefore E4, not established; for `BR2`, `HT2`, `EL2` and `TR2` it is unchanged.
+
+The decision itself is not changed here. `NHT1`/`NHT2` are a pair with `combination: 'best'` by
+the maintainer's decision of 2026-11-11 (`CONTRACTS.md` §2.4), which stands until it is verified
+on real `NHT` data or with the maintainer (`DERIVATIONS.md` §10 item 31).

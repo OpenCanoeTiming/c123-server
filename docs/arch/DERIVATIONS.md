@@ -261,6 +261,9 @@ the parser's four it reaches the admin log and never `GET /api/diagnostics`.
     day number, because **TCP `Schedule` has no `DisId` attribute**.
   - An attribute sub-race carries a suffix (`WX1J_XT_26_JUN`). The token is still the part before the
     day number.
+  - Once the snapshot has stated `DisId` for the Phase, that is its `format`, and a TCP message's
+    token no longer decides it (a default, §10 item 37). The token is the one part of an id any
+    parser reads, and only as this fallback.
 - **`stage`.** From the format token by `CONTRACTS.md` §2.4's mapping; an unknown token is `run`.
   `confidence: 'authoritative'`, a lookup.
 - **`kind`, `scoringKind`, `pair`, `heats`.**
@@ -641,7 +644,8 @@ withheld stale mark leaves the time presented (§4.12).
 ### 4.4 `outcome` from a result row
 
 **Untimed rows** (`CONTRACTS.md` §2.6). A result row in a duration-scored Phase with a placement
-(`Rank`/`RankOrder` or `Rnk`/`RnkOrder`) but no finish time (`dtFinish` empty on the row, and no
+(`Rank`/`RankOrder` or `Rnk`/`RnkOrder`) but no finish time (`dtFinish` empty or absent on the
+row, which §0.1 reads alike: real snapshots omit the element on such rows; and no
 `dtFinish` ever seen on the on-course stream for this Attempt) presents `outcome:
 unavailable{not-applicable}`, whatever `Time` says. Recorded: junior Cross time-trial rows with
 `Time="100.00" Total="100.00" Pen="" Gates=""` and real ranks, later rank × 1000; 24 of 32 rows of
@@ -811,7 +815,10 @@ slalom course every slot is a gate, so cell `i` is gate `i+1`.
   INV-7's retraction case — states its `gates` vector,
   every cell `null` for `Gates=""`, `provisional` by §4.4 (a mark closes the run, so a `DNS` row's
   all-null vector is settled); a row stating neither states nothing, its `Gates` included
-  (recorded: `IRM="DNS" Gates=""` on second-run rows, nkz-19so K1M_BR2_19:107). Kayak
+  (recorded: `IRM="DNS" Gates=""` on second-run rows, nkz-19so K1M_BR2_19:107). A mark here is
+  a result mark that sets `status` (§4.1): `*` is none, so a row carrying `*` and no time
+  states no result and no `gates` vector (§4.11 reads it the same way; recorded: jarni-so-odp
+  K1W_BR2_18:16, an XML `*` row 25 s after the start). Kayak
   Cross `faults` keeps its own rule, (d).
 - **Never split on whitespace.** That collapses blanks and shifts every later gate: `EVIDENCE.md`
   Exhibit 2.
@@ -831,8 +838,9 @@ the latest cells per source and decides among three states:
   reused, and so is the cells' envelope: the vector carries the `source` and `observedAt` of the
   presented observation as `CONTRACTS.md` §1.2 states it — the latest cells of that source in the
   generation read on the course; the instant the later of the presented row's and the last cell
-  change's, a listing's included, an identical re-delivery — one restating the presented merged
-  cells, whatever that source's previous row said — moving nothing — never the
+  change's, a listing's included, an identical re-delivery — one restating the merged cells as an
+  earlier binding would have presented them, whatever that source's previous row said — moving
+  nothing — never the
   binding unit's: the course is the key to read a statement already captured (§1.2), and a
   vector of that source on the snapshot's instant is `TEST-ARCHITECTURE.md` §3.2 property 1's
   violation (recorded: cp3-cross MX1_XT_26, 43 vectors from the rows of the push of
@@ -1015,8 +1023,11 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   classification rows are no Attempt's fields, so INV-2 rules 1–2 do not apply; the later-ingested
   snapshot replaces the Phase's rows whole, whatever its `mode` (an empty table is start-list mode,
   §0.3) and whichever source, under INV-2c's guard alone: an `xml` snapshot replaces rows a `tcp`
-  snapshot built only when its `changedAfter` is later than that snapshot's `observedAt` (`null`
-  never), and a `tcp` snapshot always replaces. Recorded (cp3-cross, E2, `scan-cls.ts`): at 10:26:13 the XML carried upstream's newer build ahead of TCP's rotation, by 89 s
+  snapshot has stated only when its `changedAfter` is later than the `observedAt` of the latest
+  `tcp` delivery of those rows (`null` never) — a `tcp` snapshot that built them, or one that
+  re-delivered them equal after an `xml` snapshot built them, since INV-5 advances a `tcp`
+  observation's content age at every re-delivery (INV-2c) — and a `tcp` snapshot always
+  replaces. Recorded (cp3-cross, E2, `scan-cls.ts`): at 10:26:13 the XML carried upstream's newer build ahead of TCP's rotation, by 89 s
   (MX1_XER_26, TCP at 10:27:42) and 119 s (WX1J_XER_26_JUN, TCP at 10:28:12), which rule 2 would
   have held back; on the reversal TCP led, by 21 s (MX1_XER_26, 10:28:42, XML 10:29:03) and 44 s
   (WX1J_XER_26_JUN, 10:29:24, XML 10:30:08). The guard admits both and still refuses a
@@ -1079,7 +1090,9 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
     next row attributed records it again. The stream records nothing by itself: a finish it lists
     with no row behind it is its to withdraw (§4.1), so §4.1 and this rule never claim one listing;
     and a TCP row retained until the generation's finish (attribution, below) records at its
-    attribution, not before.
+    attribution, not before. A row whose mark INV-7's guard refused records nothing either: the
+    guard refuses the observation (`CONTRACTS.md` §2.6), and the snapshot that restates it and
+    is admitted records then.
   **Every other change of the listed start is a start correction** within the generation (E1): the recorded start becomes the listing's, and the `Time` the generation remembers at its
   finish becomes the listing's where the listing carries the finish; at the listing no
   results-table value, no `run` and no placement changes (INV-2 rule 1: an inference never
@@ -1211,8 +1224,11 @@ previously known from a results-table observation:
   another Attempt (`phaseId:bib`): the old bib's Attempt is retracted and stays, `not-started`,
   and the new bib's is created by its own row.
 - **The table has no rows at all:** nothing is retracted. Where at least one Attempt of the race
-  holds a result the absent-row case would retract, the core raises `xml-table-emptied` with the
-  `phaseId` and the number of such Attempts (ingest-only, §0.5). It is raised once: at the first
+  holds a result the absent-row case would retract — the guard below included: a result held
+  from `tcp` counts only where the snapshot's `changedAfter` is later than its latest delivery,
+  so a first read, or a file written before the results it lacks, raises nothing — the core
+  raises `xml-table-emptied` with the `phaseId` and the number of such Attempts (ingest-only,
+  §0.5). It is raised once: at the first
   such snapshot, and again only after a snapshot of the race has carried a row. A table that
   never had rows raises nothing (all 521 recorded empty XML race tables are of this kind, §0.3).
   If the race was really emptied, TCP's start-list push retracts it, or the operator
@@ -1229,7 +1245,13 @@ displacing a `tcp` value during an outage. Recorded: the XML was five minutes *a
 jury-invalidated row (C1M_BR1_19 bib 7, later re-run, §4.11), and 7 s behind TCP on a cleared DNS.
 
 **After a retraction,** `status` is what the on-course stream currently shows for the Attempt
-(`at-start`, `on-course`, or a `finished` it still lists), else `not-started`. An XML retraction that
+(`at-start`, `on-course`, or a `finished` it still lists), else `not-started`. What the stream
+shows is its latest inference for the generation, the leave's included: where the leave drew
+`left-without-finish` (§4.1: a start observed and no finish ever listed) that is the status, in
+either order of the leave and the retracted row. So the leave's inference is recorded when it
+is drawn, also while a table `finished` or mark outranks it and it is not presented. A finisher
+who left the list at closure has no such inference and returns to `not-started` (recorded: the
+wiped row of nkz-19so C1M_BR1_19:7, §4.11). An XML retraction that
 passes the guard supersedes the `tcp` observation it retracts: that value is no longer a candidate
 of its source (a `tcp` marker would outrank every later XML value while connected), and a TCP row
 restating it afterwards is a new observation of upstream's table and is presented.
@@ -1512,7 +1534,7 @@ on 2026-10-14; items 15 and 17 were answered by the spike and the exit-delay mea
 the round-20 measurement; item 22 by the maintainer (2026-11-06); items 23 and 25 are accepted
 risks and item 5 is closed (maintainer, 2026-11-11 and 2026-11-10; `DECISIONS/LOG.md`); item 21
 by the maintainer's `NHT1`/`NHT2` decision (2026-11-11). Items 9, 11, 12, 18, 19, 20 and 24
-remain. Items 26 to 32 are defaults taken on 2026-11-12, in round C part 2, under the
+remain. Items 26 to 37 are defaults taken on 2026-11-12, in round C parts 2 and 3, under the
 maintainer's rule of 2026-11-11 that a disagreement moving no client obligation gets a default
 and an item here, not a contract round (`README.md`, ground rules); each says what would reopen
 it.
@@ -1545,7 +1567,13 @@ it.
    snapshot written before the clearing can show DNS for up to about 35 s. This is rare, and accepted
    as residual. Narrowed (round 20, second pass): the restaging listing is a delivery of the
    `at-start` (`CONTRACTS.md` §4 INV-2c), so a snapshot written before it is refused by the guard;
-   what remains is a snapshot written between the clearing and the restaging.
+   what remains is a snapshot written between the clearing and the restaging. The guard's cost
+   on the other side, recorded since (E2, replayed 2026-11-12 on a cut of nkz-20ne): a real
+   `dns` written to the file in the seconds before the leave is evaluated is refused and waits
+   for the next rewrite, which upstream makes only on a flagged change. C1M_BR1_20:64: last
+   listed 09:40:01.810Z, the leave at 09:40:05.837, the file with `DNS` read at 09:40:06.618 and
+   refused, the next rewrite at 09:41:51.770: 105 s of `not-started` where rule 2's text weighs
+   "1.1 s once". Ratified as ruled: a late `dns` is acceptable (`CONTRACTS.md` §2.6).
 10. ~~The cause of the 11–27 s late-finish outliers.~~ Answered (maintainer, round 2): the operator
     assigns a finish retroactively after a judge reports the passage, or swaps two athletes' finishes
     noticed late. Both are corrections that §4.12 now models.
@@ -1622,11 +1650,17 @@ it.
     by a start correction would therefore increment. Not recorded either way. (Round 19.)
 24. **A Kayak Cross `faults` merge.** `CONTRACTS.md` §4 INV-2 rule 1 merges `gates` cell by cell and
     names nothing else; a Cross Attempt's `faults` is presented whole from the presented observation,
-    so a fault the stream judges after a row shows at the next row. Recorded once: cp3-cross
-    MX1_XT_26:26, the stream's slot 9 `2` from 08:27:10, the row of 08:27:44 blank there, the next row
-    at 08:27:51 — 7 s of `count 0`, `provisional: true`, the honest label. A merge would be a new
-    rule (slot cells against captions, and which stamp property 11 reads); not taken on one 7 s
-    instance. (Round 26.)
+    so a fault the stream judges after a row shows at the next row. Recorded twice, both at
+    cp3-cross (E2, the round-26 review's scan of the step log). MX1_XT_26:26: the stream's slot 9
+    `2` from 08:27:10, the row of 08:27:44 blank there, the next row at 08:27:51 — 7 s of
+    `count 0`, `provisional: true`, the honest label. WX1_XT_26:9, the opposite sign: the row of
+    07:47:07.443 presents `count 0`, settled; the stream shows the roll zone faulted from
+    07:47:32.949 to 07:47:42.835 and withdraws it; the rows keep `count 0`. There a merge would
+    have shown a fault upstream withdrew. A merge would be a new rule (slot cells against
+    captions, and which stamp property 11 reads); not taken on these two. With no merge,
+    `faults` has no merged-vector rule either: its envelope is the presented observation's own,
+    `observedAt` included (`CONTRACTS.md` §1.2). Reopens on a recording where the default
+    presents a wrong value for longer than a save cycle. (Round 26; round C part 3.)
 25. **The generation across a server restart.** **Closed as an accepted risk (maintainer,
     2026-11-10; `DECISIONS/LOG.md`, #294): the server stores nothing extra, and the operator
     resolves mismatched checks and pending corrections by hand.** `CONTRACTS.md` §2.10 keys checks and flags by `run`,
@@ -1656,7 +1690,8 @@ it.
     whole. The core agrees for a second-run scope (E2, the run in #333: the Phase's 117 Attempts
     and 14 Standings). For a first-run scope it also sends the second Phase's `phase` Standings,
     which §7.2 does not name (read in the core, not run): redundant for a client, which applies
-    them like a `standing.updated`, and to be dropped with the gate row. Closes with that row
+    them like a `standing.updated`, and to be dropped with the gate row. Property 13's "the
+    Standings §7.2 names" is read as exactly those. Closes with that row
     (#333): one per-Phase re-baseline on each side of a pair and one per-Event, stated, on a
     paired slalom cut, 0 violations, property 13 exercised.
 28. **A merged `gates` vector whose presented row is the other source's.** After a per-Event
@@ -1684,7 +1719,9 @@ it.
     input. With the core change the option goes and the vector is reshaped to the case the
     process does give: no XML configured, `unavailable{not-configured}` once run 2 is observed,
     `not-yet` before. Reopens if a client needs to tell the two states apart; feeding the
-    reader's state to the core as an ingest event would then be the change.
+    reader's state to the core as an ingest event would then be the change. The reason stays in
+    the closed set although nothing on site produces it: removing it changes the schema and the
+    contract package, a breaking change to weigh once, before 1.0, not in a round.
 31. **The combination of `NHT1`/`NHT2`.** The pair is `combination: 'best'` by the maintainer's
     decision (2026-11-11). Whether upstream builds a combined result for these two runs as it
     does for `HT1`/`HT2` is not established: no recording or sample holds either token, and what
@@ -1700,3 +1737,47 @@ it.
     (`ST,1,2,3,4,5,6,RZ,7`), so nothing recorded differs. Default: it stays so, which keeps a
     `faults` value equal from TCP and from the XML and independent of whether a `RaceConfig` has
     arrived. Reopens on a recording whose Cross captions are other than the structural names.
+33. **A store file that fails validation at load** (#273). `CONTRACTS.md` §2.10 says such a file is
+    reported and never silently replaced; the maintainer's triage decision (2026-11-11) adds
+    that it must not stop the startup. Default, for the checks and flags store, the writes
+    store and the `seq` file alike: the file is set aside under another name, the store opens
+    empty, the server starts, and the admin log says so. Nothing is on the wire: no
+    `SourceStatus` slot, no `Diagnostic` kind and no error code is added. For the `seq` file one
+    rule still binds: `seq` never regresses across a restart (`CONTRACTS.md` §1.6), so the
+    counter restarts above any value the server can have issued, never at zero. What is lost is
+    workflow state: checks and flags read as never made, a pending write is forgotten and the
+    operator resolves it by hand, as after §10 item 25. Reopens if an operator must see the
+    failure without reading the log; that goes with item 26's question.
+34. **What "durable" covers** (#273). `CONTRACTS.md` §2.10 states the guarantee against a crash:
+    "a crash at any point leaves the previous complete state". That is a crash of the server
+    process, on every platform: a temporary file, flushed, then a rename. Against a power loss
+    it is best effort: the directory entry is flushed where the platform offers it, and on
+    Windows it does not, so a write acknowledged in the last moments before the power fails
+    may roll back to the previous complete state. Nothing acknowledged is ever half-written.
+    The venue-laptop check (#198) measures what Windows does. Reopens if the maintainer wants
+    power loss covered; that needs a write-through the check would have to verify.
+35. **A Kayak Cross leave and the stream's `running` outcome** (#318). A Cross Attempt that
+    leaves the list keeps `status: on-course` (§4.2; `CONTRACTS.md` §7.1), and it keeps the
+    stream's `running` outcome with it: `running` is the outcome of an Attempt on course
+    (`CONTRACTS.md` §2.6), and withdrawing it would present `on-course` beside `not-yet`, a pair
+    no state has. The clock no longer ticks; a client freezes it and shows it stale after
+    `runningStaleAfterSeconds` (§2.6), until the row brings the placement. Property 4's
+    withdrawal of `running` at a leave is slalom's, with `left-without-finish`. The core and
+    the gate-2 checker agree (E2, the M1 run: 0 reports on the seven whole recordings at
+    86ed855).
+    Reopens if the scoreboard work (M3) finds a frozen heat clock misleading.
+36. **A re-run finished over a standing mark without the wizard** (#301). Upstream does not
+    clear the old mark (§4.11, §4.12). Whether it then ranks the marked row — a `Rank` and a
+    `Total` beside `IRM="DNF"` — is not known: every recorded marked row has both empty, and no
+    recording holds such a re-run (E4). The contract reads either shape: the stale mark is
+    withheld, the row's time and cells are presented, and `placement` is `known` exactly when
+    `Rank` is non-empty (§4.7). The re-run fixtures assert the ranked shape; that is their
+    stated assumption, to be named in their manifests, and their end-state and Standing
+    assertions hold for that shape only. Reopens on a recording of the case.
+37. **`format` after the snapshot has stated `DisId`** (§2.1). On TCP the token of the `RaceId`
+    is the fallback for `format`, the one read of an id by any parser; pairing then reads the
+    field (`CONTRACTS.md` §2.4). If upstream let a `DisId` be edited on a started race, the
+    token would go stale as the class part does (§1). Default: the snapshot's `DisId` is the
+    Phase's `format` from its first statement on, and a later TCP message's token does not
+    displace it. Not recorded, and whether upstream allows such an edit is not established
+    (E4). Reopens on a recording where a Phase's token and its `DisId` differ.
