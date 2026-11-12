@@ -109,6 +109,12 @@ reader can see the whole set at once.
   2026-11-12). Where the contract assembles or numbers what a result list prints — a rank, an
   order, which entries a list shows — it follows what Canoe123 prints, and a difference from
   Canoe123 is a defect of the assembly, never a choice of ours (`CONTRACTS.md` §5).
+- **The bib is the key of a run's data; the competitor's identity under a bib may change**
+  (maintainer, 2026-11-12). Times, penalties and the fact that penalties were checked are
+  recorded against the bib, as they are collected on the course. An Attempt is `phaseId:bib`; who
+  raced under the bib is its `entry` pointer, and a different competitor later under a bib is a
+  re-pointed `entry`, never an error and never a new Attempt (`CONTRACTS.md` §2.6, §2.10, §4
+  INV-4, INV-7).
 - **`CLIENT-OBLIGATIONS.md` changes in the same PR as the sections it cites.** It is derived, so the
   cited sections win. `scripts/check-obligations.js` runs in CI (`.github/workflows/docs-arch.yml`)
   and fails in two cases: a citation no longer resolves, or a cited section or ADR changed while the
