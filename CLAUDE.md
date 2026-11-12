@@ -165,7 +165,7 @@ Application saves user settings to file to survive restart:
 
 ```
 node_modules/@opencanoetiming/timing-design-system/dist/  # Source (devDependency, ^1.1)
-src/admin-ui/vendor/                                      # timing.css + fonts, copied by scripts/sync-design-system.js on postinstall/prebuild; gitignored
+src/admin-ui/vendor/                                      # timing.css + fonts, copied by scripts/sync-design-system.js on postinstall, prebuild and dev start (predev, preonsite, dev:env); gitignored
 ```
 
 ---
