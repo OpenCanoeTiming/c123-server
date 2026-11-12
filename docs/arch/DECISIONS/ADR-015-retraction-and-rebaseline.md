@@ -255,7 +255,9 @@ are on the expected-red ledger (`CONFORMANCE-VECTORS.md` §2). The fourth passes
 
 **Decision (maintainer, 2026-11-12; extends Revision 5 from the result to the Attempt):** "A
 competitor removed upstream (deleted, moved or re-bibbed) has their Attempt REMOVED." Removal
-applies when the row is absent from an admitted XML snapshot under the content-age guard. A moved
+applies when the row is absent from an admitted XML snapshot under the content-age guard
+(Revision 7: when no row of the race carries the bib; a re-bib or swap that leaves the bib in the
+race removes nothing). A moved
 competitor appears as a new Attempt in the other Phase. The bridge sends `DELETE` for it to live.
 
 **Why.** Revision 5's table shows what the next file holds after each action: the row is gone
@@ -269,7 +271,8 @@ decision fixes the trigger and the guard; the rest are defaults taken inside it:
 1. **The trigger is the race's row in the snapshot's results table**, the one row per Attempt,
    start-list rows included: the row upstream drops on a delete, a move or a re-bib and keeps,
    blanked, on a result delete. The class's participants table carries the Entry, not the
-   Attempt, and removes nothing. Only an Attempt a results-table row of its race has named is
+   Attempt, and removes nothing. (Narrowed by Revision 7: the row is the one that carries the
+   Attempt's bib, so the trigger is that no row of the race carries the bib.) Only an Attempt a results-table row of its race has named is
    removed; one only the on-course stream has named is TCP's.
 2. **The guard is decision 4's, over the whole Attempt.** The snapshot is admitted for the Attempt
    when its `changedAfter` is later than the latest delivery of every `tcp` observation of the
@@ -288,7 +291,9 @@ decision fixes the trigger and the guard; the rest are defaults taken inside it:
    `DELETE /ingest/v2/attempts/{phaseId}/{bib}`.
 5. **A row that reappears** creates a new Attempt by the ordinary rule, `run` 1, carrying nothing
    of the removed one. A moved or re-bibbed competitor's new row creates its Attempt the same
-   way, in the same unit as the old one's removal when one snapshot carries both.
+   way, in the same unit as the old one's removal when one snapshot carries both. (Narrowed by
+   Revision 7: "nothing" is the removed one's result state; its checks and flags are the bib's
+   and are served again. A re-bib or swap that leaves the bib in the race removes nothing.)
 6. **Unchanged:** a wholly empty table removes and retracts nothing (Revision 5 rule 5); a
    classification table holds no Attempts; a race the file does not name states nothing.
 
@@ -308,3 +313,41 @@ added. The guard can hold a removal back for one save cycle while TCP keeps list
 removal; `attempt-removed-xml-absent-start-list-row` and `attempt-removed-not-while-on-course`
 are added. All but the last are on the expected-red ledger until the core change (P3); the last
 passes on today's core, which removes nothing.
+
+## Revision 7 — the bib is the key of a run's data (decided and written 2026-11-12)
+
+**Decision (maintainer, 2026-11-12, #349; narrows Revision 6):** "The data belongs to the bib.
+Timing is built on start numbers, and the names are secondary. Times, penalties, and the fact that
+penalties were checked are recorded against the bib, and that is also how they are collected on
+the course. If a different name later appears under a bib, nothing is wrong, because the data
+stays bound to the bib." Recorded as the principle "The bib is the key of a run's data; the
+competitor's identity under a bib may change" (`../README.md`, ground rules).
+
+**The rule** (`CONTRACTS.md` §2.6, §2.10, §4 INV-7; `DERIVATIONS.md` §4.9, §4.12, §10 item 38):
+1. **The trigger is the bib.** An Attempt is removed only when its bib leaves the race: no row of
+   the race's results table in a snapshot admitted for the Attempt (Revision 6 rule 2) carries
+   its bib. Revision 6's "the row is absent" means exactly that; a row is the Attempt's by its
+   bib, not by the competitor's `Id`.
+2. **A re-bib or swap that leaves the bib in the race keeps the Attempt.** The row that carries
+   the bib is the Attempt's row and is read by the present-row rules; its `Id` re-points `entry`
+   (`CONTRACTS.md` §4 INV-4), and nothing else of the Attempt changes for that reason: not `run`,
+   not a result field the row restates, not a check.
+3. **A moved competitor:** the bib leaves race A, so A's Attempt is removed there (Revision 6);
+   the row in race B creates B's Attempt by the ordinary rule, or re-points an Attempt B already
+   holds under that bib. **A swap within a race:** both bibs stay, both Attempts stay, and their
+   Entries swap. A swap done through an intermediate bib, one save at a time, removes and
+   recreates the Attempt of each bib that one save leaves out (Revision 6 rule 5).
+4. **Checks and flags stay the bib's.** They are keyed by the Attempt (Phase and bib) and served
+   whenever that Attempt exists, whoever the competitor under the bib is, a recreated Attempt
+   included (`CONTRACTS.md` §2.10; `DERIVATIONS.md` §10 item 38 default (g) stands). Revision 6 rule 5's "carrying nothing of
+   the removed one" is the result state only: no generation, contradiction record or remembered
+   mark.
+
+**What it costs.** A judge's check made under one competitor is served under the next one the
+bib carries; that is the decision (the paper protocol is per bib as raced). Whether upstream lets
+two rows of a race share a bib inside one save, or forces a swap through an intermediate bib, is
+not established (E4); rules 2 and 3 cover both.
+
+**Vectors.** No expected outcome changes: every removal vector drops the bib from the race.
+`attempt-kept-when-bib-stays-under-another-entry` is added (the bib stays under another `Id`: no
+`attempt.deleted`, `entry` re-pointed, `run` 1); it passes on today's core, which removes nothing.
