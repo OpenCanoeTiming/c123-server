@@ -118,8 +118,8 @@ cover:
 - run generations;
 - §5's standing assembly.
 
-The count is 105 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
-a thin adapter that feeds the vectors `CONFORMANCE-VECTORS.md` §1 assigns to it (99 and 23; 17 are in
+The count is 109 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
+a thin adapter that feeds the vectors `CONFORMANCE-VECTORS.md` §1 assigns to it (103 and 23; 17 are in
 both) into its own merge function and asserts the result — proving
 both satisfy the same data-defined contract without either depending on the other's code.
 
@@ -255,8 +255,27 @@ the step index, the Attempt, the field and the property number.
      producer of its own `source` among the unit's elements; a `tcp` vector on an `xml` unit's
      instant is a violation. Without this clause the cases below would let through a core that
      restamps at the step: a replay with 43 late-bound vectors restamped at the binding instant
-     once passed the checker. What each kind of element produces is listed in
-     `DECISIONS/LOG.md`, round 27f.
+     once passed the checker. What an element produces, on its own instant and `source`:
+     - *A scope snapshot* produces, for an Attempt it names or covers: the fields its row
+       states; what the contract derives from them at that step, the `no-result` outcome of a
+       presented mark (`CONTRACTS.md` §2.6); and the result fields INV-7 retracts. It never
+       produces an on-course field, nor anything for an Attempt it neither names nor covers.
+     - *A retraction* is every INV-7 form. From `tcp`: the row absent, the row present with no
+       time and no mark, the message in start-list mode. From `xml`, each only where the
+       content-age guard admits it: the row present with no time, no finish time and no mark,
+       and the row absent from a table that carries other rows. An `xml` table with no rows
+       retracts nothing and produces nothing. What a retraction presents is the retained stream
+       inference with that listing's own envelope where one is retained, else `not-started` on
+       the retraction's own instant and `source` (property 5).
+     - *`oncourse-left` and `oncourse-empty`* are the core's evaluation at a TCP message
+       (`DERIVATIONS.md` §4.1, §4.8), so what they produce — `status`, the stream's withdrawn
+       `running` outcome, the set — is `tcp`.
+
+     One default (`DERIVATIONS.md` §10 item 28): a merged `gates` vector takes its `source` from
+     the presented row and its instant from the element that last changed the presented cells
+     (`CONTRACTS.md` §1.2). Where the presented row is the other source's — an `xml` row
+     presented after a re-baseline or an outage, a `tcp` listing then judging a cell — that
+     listing is the producer, and the vector is `xml` on the listing's instant.
 
    **An earlier instant is legitimate in these cases, and only with the envelope stated here.**
    - **A creation message or a standing** carries earlier envelopes.
@@ -290,9 +309,10 @@ the step index, the Attempt, the field and the property number.
      - An identical re-delivery after either moves nothing (INV-5). Identical is to the presented
        merged cells, never to that source's previous row (§1.2).
 
-     *Recorded:* cp3-cross MX1_XT_26:52, the row of 08:45:13.346 read on the course of the
-     snapshot at 08:45:18.057: the vector is `tcp` at 13.346. MX1_XT_26:8, listings
-     08:45:13.218–17.961 and the row of 13.346 all stating nine clean cells: the vector at 13.346.
+     *Recorded* (instants in recording UTC): cp3-cross MX1_XT_26:52, the row of 08:45:00.903
+     read on the course of the snapshot of 08:45:05.614: the vector is `tcp` at 00.903.
+     MX1_XT_26:8, listings 08:45:00.775–05.518 and the row of 00.903 all stating nine clean
+     cells: the vector at 00.903.
      nkz-19so K1M_BR2_19:81, the row of 09:30:05.720 with cell 23 blank, the listing of 06.150
      judging it clean, the row of 12.812 restating the merged cells: the vector at 06.150, whether
      the course binds at 11.556 (nkz-19so) or at 13.551 (the #208 fixture cut from it); a core
@@ -371,10 +391,15 @@ the step index, the Attempt, the field and the property number.
      to 06:12:23.908.
    - **(e) Completeness.** Where the replay log carries the snapshot's rows, as the vector format
      does, every Attempt of R presenting results-table values whose row states no result is
-     retracted in that step: for a `tcp` snapshot an absent row and a start-list table included;
-     for an `xml` snapshot a present row only, since an absent XML row and an empty XML table
-     state nothing (INV-7). `countingRun` is asked of an `xml` row and of an absent `tcp` row,
-     never of a present `tcp` row, which cannot state it.
+     retracted in that step, the guard of (c) permitting. That holds for a present row that
+     states no result and for an absent row, from either source, and for a `tcp` start-list
+     table. One exception: an `xml` snapshot of R with no row at all retracts nothing (INV-7);
+     the `xml-table-emptied` diagnostic it may raise goes to the admin log, which the checker
+     does not read. `countingRun` is asked of an `xml` row, present or absent, and of an absent
+     `tcp` row, never of a present `tcp` row, which cannot state it. *Example:* bib 11 presents a
+     `tcp` result; an `xml` snapshot of the race lists bibs 9 and 10 only and its content age is
+     later than bib 11's push: bib 11 is retracted in that step. The same snapshot with
+     `changedAfter: null` leaves it, by (c).
 6. **Precedence (INV-2 rules 1–3).** (a) Once a result field presents a `result-row` observation, it
    never afterwards presents an `inference` for the same generation, except through a contradiction
    (property 7) or after a retraction (property 5). (b) `gates` is merged cell by cell: while

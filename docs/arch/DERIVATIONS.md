@@ -82,14 +82,17 @@ results table, and only these two:
   start list in start order (its subtitle also gets a literal " - Start List" suffix, which is not
   relied on). Upstream uses start-list mode exactly when nobody in the race is ranked, so a
   start-list-mode message for a race that had results means every result was deleted.
-- **An XML snapshot**, for every race in it. Rows are never deleted from the file; a retraction shows
-  only as fields going empty.
+- **An XML snapshot**, for every race in it. Upstream rewrites the file whole from its current
+  tables at every save. A retraction shows in one of two ways: the row stays with its result
+  fields empty (a result deleted, a mark taken back), or the row is gone (a competitor deleted,
+  moved or given another bib; a redrawn start list). Both retract (§4.12).
 - **Mode is read the same way for every table**, classification Phases included, and **a table with
   no rows is a scope snapshot in start-list mode** (TCP: a `Results` message with no row; XML: a
   Schedule race with no `Results` row). The parser emits it like any other (`RXER` excepted: a title
   that never carries rows, skipped by both parsers, §4.10). The core applies INV-7 to it as
-  written: a TCP table with no rows retracts as its start-list case; an XML table with no rows, like
-  an absent XML row, states nothing (`CONTRACTS.md` §4 INV-7, XML bullet); a classification
+  written: a TCP table with no rows retracts as its start-list case; an XML table with no rows
+  retracts nothing and, where the race holds results, raises `xml-table-emptied` (`CONTRACTS.md`
+  §4 INV-7; §4.12); a classification
   Phase's table with no rows, from either source, changes its rows not at all (§4.10; maintainer,
   2026-11-06). Recorded (cp3-cross,
   E1): 741 empty Cross heat and final tables (521 XML, 220 TCP) and 508 empty classification tables
@@ -193,6 +196,10 @@ time that does not parse) and `gates-absent` (a finished slalom on-course listin
 §4.6(a): no duration inference is possible). A parser diagnostic reports, never guesses: a value it
 cannot read is absent, not invented.
 
+The core raises one further ingest-only kind, `xml-table-emptied` (§4.12): an XML table with no
+rows over a race that holds results. It needs the held state, so it cannot be the parser's. Like
+the parser's four it reaches the admin log and never `GET /api/diagnostics`.
+
 ---
 
 ## 1. Class
@@ -200,8 +207,22 @@ cannot read is absent, not invented.
 - **`classId`, `code`.**
   - Source: `XML.Participants.ClassId` / `XML.Schedule.ClassId`, or `Results.ClassId` on TCP, used
     verbatim.
-  - **Never the `RaceId` prefix.** For a hyphenated class the two differ (`K1M-ST` against
-    `K1M_ST`).
+  - **Never the `RaceId` prefix.** Upstream builds a `RaceId` as
+    `<ClassId>_<DisId>_<day>[_<attribute>]`, and in every recording and sample its class part
+    equals the `ClassId` exactly:
+
+    | `RaceId` | `ClassId` | Where |
+    |---|---|---|
+    | `K1M_ST_BR1_6` | `K1M_ST` | a class id with an underscore |
+    | `K1M-ZS_BR1_25` | `K1M-ZS` | a class id with a hyphen |
+    | `MX1J_XT_26_JUN` | `MX1J` | an attribute sub-race, the suffix after the day (cp3-cross) |
+
+    The prefix is still not the class, for two reasons. It cannot be cut off mechanically: a class
+    id may itself hold `_`, and a suffix may follow the day. And it goes stale: upstream rebuilds
+    a `RaceId` only while its race is at the initial status, so after an operator renames a class
+    or moves a race to another class, a started race keeps its old prefix while `ClassId` follows
+    the change on every Schedule and Participant row (observed upstream behaviour; no recording
+    holds a rename). The same rule covers pairing (§2.1).
   - Envelope: `source` is the channel; `confidence: 'authoritative'`; no `eventTime`.
   - Failure mode: `not-yet` until first seen.
 - **`name`.**
@@ -248,11 +269,32 @@ cannot read is absent, not invented.
     observation that states its class on either channel (`CONTRACTS.md` §1.6: the first message for a
     new id carries the whole resource; the `classId` bullet above), never deferred to the snapshot
     when TCP states it.
-  - `pair.siblingPhaseId` is the Phase with the same `classId` and the first-run token. When several
-    exist, take the one with the same schedule date. This mirrors upstream's own pairing behaviour.
-    Until the schedule names it, `siblingPhaseId` is `null`; `role` and `combination` are the token's
-    regardless, so §4.4's second-run reading applies from the first row. An `NHT2` has `pair: null`
-    until its first-run token is known (§10 item 21); its rows read as a single run meanwhile.
+  - `pair.siblingPhaseId` is found by two fields, never by the id (maintainer, 2026-11-11, #287;
+    `CONTRACTS.md` §2.4). For a second run it is the Phase with the same `classId` whose `format`
+    is the first-run token of this one: `BR2`→`BR1`, `HT2`→`HT1`, `NHT2`→`NHT1`, `EL2`→`EL1`,
+    `TR2`→`TR1`, `SR2`→`SR1`, `TS2`→`TS1`, `SUF`→`BR2`, `FI` and `FIB`→`SF`, `TFI`→`TSF`. For a
+    first-run token (`BR1`, `HT1`, `NHT1`, `EL1`, `TR1`, `SR1`, `TS1`) it is the Phase the same
+    table names the other way; `BR2`, `SF` and `TSF` are only named, and keep their own `pair`.
+    This mirrors upstream's own lookup: by the schedule row's `ClassId` and a fixed token table,
+    never by the `RaceId` string.
+  - **The tiebreak is the day.** One match is the sibling. With several, take the one whose
+    `date` equals this Phase's. If that leaves none or more than one, `siblingPhaseId` stays
+    `null` (a default, not recorded).
+  - **No id is parsed or built.** The earlier reading, "the same class part of the id with the
+    other token", fails after a class rename or a race moved to another class: the started first
+    run keeps its old `RaceId` prefix, the second run's `ClassId` follows the change, and the two
+    ids no longer share a prefix while the two Phases still share a `classId` (§1). `format` is
+    the Phase's own field, stated as the `format` bullet above says; pairing reads the field.
+  - Until a Phase with that class and token is known, `siblingPhaseId` is `null`; `role` and
+    `combination` are the token's regardless, so §4.4's second-run reading applies from the first
+    row.
+  - **`NHT1`/`NHT2`** are a pair with `combination: 'best'` (maintainer, 2026-11-11, closing §10
+    item 21). Upstream names `NHT1` as the heats' first run with direct qualification and `NHT2`
+    as their second run with a new start list; `NHT2`'s first run is `NHT1`, and `NHT1`'s second
+    is `NHT2`. The decision note wrote the entry `NHT1→NHT2`, which is the same pair read from the
+    first run. Evidence: neither token is in any of the seven recordings or the samples (E1,
+    absence), and whether upstream combines the two runs as it does `HT1`/`HT2` is not
+    established (E4; §10 item 31).
 - **`date`.**
   - Source: the date part of `XML.Schedule.StartTime`, a full date-time with offset. Envelope:
     `source: 'xml'`, `confidence: 'authoritative'`.
@@ -298,9 +340,10 @@ cannot read is absent, not invented.
   - `I` is a split point: record the gate before it.
   - `D` is the Kayak Cross start ramp (caption `ST`) and `E` the roll zone (`RZ`). Each is a judging
     slot that does not advance the gate number. Build `Course.slots` from the layout: one slot per
-    `N`/`R`/`D`/`E`, in order, with `gateNumber` for `N`/`R` only and the caption from
-    `RaceConfig.GateCaptions` at the same index. `S` and `I` produce no slot. An `S` or `I` before
-    the first gate (`DS…`, after the Cross ramp) records nothing.
+    `N`/`R`/`D`/`E`, in order, with `gateNumber` for `N`/`R` only. A slot carries no `caption` on
+    site: `slots` is the snapshot's alone, and upstream's captions are `Course.captions`, TCP's,
+    where caption `i` names slot `i` (the refresh below; §10 item 32). `S` and `I` produce no
+    slot. An `S` or `I` before the first gate (`DS…`, after the Cross ramp) records nothing.
 - **Refresh from TCP.**
   - `RaceConfig.GateConfig` is the currently selected course's layout. TCP strips the `S` markers.
   - `RaceConfig` gives no course number and names no race, and the selected course need not be a
@@ -718,9 +761,26 @@ itself changes. Run 1's own detail is therefore available:
   - Envelope: `source: 'xml'`, `confidence: 'authoritative'`.
 - **(b) From this server's own retained observation**, if it was running during run 1 (INV-1).
 
-**Failure mode.** `unavailable{source-unreachable | not-configured}` only once run 2 has been observed
-and neither path can supply run 1. Before that, the state is `not-yet`. `PrevRnk` in Cross means the
-rank in the previous round, not a previous run, and is not modelled (§9).
+**Failure mode.** `unavailable{not-configured}` only once run 2 has been observed and neither path
+can supply run 1: the XML source is not configured (`SourceStatus.xml`, §5) and this server did
+not observe run 1. Before that, the state is `not-yet`.
+
+**The on-site process never gives `source-unreachable`** (a default, §10 item 30). While a
+configured XML source is unreachable, run 1's detail stays `not-yet`: the next successful read
+supplies it. Three reasons:
+- no client renders the two states differently (`CONTRACTS.md` §1.2);
+- the admin audience already sees that the source is unreachable, in `SourceStatus.xml.state` (§5);
+- a reason that followed the reader's state would make that state an event of the ingest sequence,
+  with a place in replay and in the fixtures (`CONTRACTS.md` §4, Determinism), for a difference
+  nobody sees.
+
+The reason stays in the closed set (`CONTRACTS.md` §1.2); nothing on site produces it. The vector
+`two-run-br1-unavailable-no-live-no-xml` still feeds the merge an XML source stated as
+unreachable, an input the process never gives; it is reshaped to the not-configured case with the
+core change (§10 item 30).
+
+`PrevRnk` in Cross means the rank in the previous round, not a previous run, and is not modelled
+(§9).
 
 ### 4.6 Gate parsing
 
@@ -775,8 +835,8 @@ the latest cells per source and decides among three states:
   cells, whatever that source's previous row said — moving nothing — never the
   binding unit's: the course is the key to read a statement already captured (§1.2), and a
   vector of that source on the snapshot's instant is `TEST-ARCHITECTURE.md` §3.2 property 1's
-  violation (recorded: cp3-cross MX1_XT_26, 43 rows of 08:45:13.346Z read on the course
-  of the snapshot at 08:45:18.057Z).
+  violation (recorded: cp3-cross MX1_XT_26, 43 vectors from the rows of the push of
+  08:45:00.903Z read on the course of the snapshot of 08:45:05.614Z).
 - **`unavailable{not-configured}`** when nothing configured can supply a course: the XML source is
   not configured (`SourceStatus.xml`, §5), so nothing can ever bind; or the snapshot shows the Phase
   with no `CourseNr`, or a course whose layout is empty (the snapshot's determination). A fabricated
@@ -812,7 +872,10 @@ results push precedes the first snapshot" (`DECISIONS/ADR-017` D4); whole record
   untimed row of a bound course is not under the judging clause; a row's outcome observation
   carries `runClosed`, never a judging stamp (§4.4), so no other stamp decides `provisional`.
 - **`faults` is derived from the cells plus the captions, on TCP and in the XML alike:** `count` is
-  the number of cells marked `2`; `gates` lists those slots' captions (`ST`, `1`…`6`, `RZ`, `7`);
+  the number of cells marked `2`; `gates` lists those slots' captions (`ST`, `1`…`6`, `RZ`, `7`),
+  each built from the slot itself — the gate number, `ST` for the start ramp, `RZ` for the roll
+  zone — which is what every recorded `GateCaptions` holds, so the value does not depend on
+  whether a `RaceConfig` has been seen (§10 item 32);
   `lastCleanSlot` is upstream's 1-based **slot position** (not the gate number: `ST` and `RZ` count) of
   the last slot judged `0` before the first fault; `0` if none; a clean run on the recorded 9-slot
   course reads `9`, above its 7 numbered gates (values seen: 0 ×176, 9 ×122, then 3, 8, 6, 2, 1). This
@@ -1126,12 +1189,39 @@ came from results-table observations:
 - **Never:** an Attempt whose outcome is still an on-course inference; an Attempt never present in a
   results-table observation; a row that was never present.
 
-**Retraction from an XML snapshot.** The row carries no time, no finish time and no mark, for an
-Attempt previously known from a results-table observation: for a first-run or single-run row, retract
-as the TCP first-run case; for a second-run row, as the TCP time-empty case — before run 2 every
-second-run row already carries `TotalRnk` and `TotalTotal` with no time. An absent XML row and an
-XML table with no rows state nothing (`CONTRACTS.md` §4 INV-7; the file lists every entry, §0.3).
-**Guard (INV-2c, content age):** apply it against a `tcp` observation only when the snapshot's
+**What the XML file shows for each correction** (observed upstream behaviour; the file is rewritten
+whole from upstream's current tables at every save):
+
+| Operator action | In the next file |
+|---|---|
+| A result deleted ("delete selected results", the re-run wizard); a DNS, DNF or DSQ set or cleared | the row stays; its result fields are empty, or only its status changes |
+| A competitor deleted; a competitor moved to another race or class; a bib changed | the row is gone from that race; a moved or re-bibbed competitor appears under the new race or bib |
+| A start list generated again or redrawn | the race's rows are rebuilt: fewer or other rows (the same rewrite; this action itself was not traced, E4) |
+
+No recording holds a removed row or a table emptied after it had rows.
+
+**Retraction from an XML snapshot** (INV-7; `DECISIONS/ADR-015` Revision 5). For an Attempt
+previously known from a results-table observation:
+- **The row is present and carries no time, no finish time and no mark.** For a first-run or
+  single-run row, retract as the TCP first-run case; for a second-run row, as the TCP time-empty
+  case — before run 2 every second-run row already carries `TotalRnk` and `TotalTotal` with no
+  time.
+- **The row is absent** from a table that carries other rows: retract as the TCP absent-row case,
+  `pairTotal` and `countingRun` included in a paired second run. A re-bibbed competitor is
+  another Attempt (`phaseId:bib`): the old bib's Attempt is retracted and stays, `not-started`,
+  and the new bib's is created by its own row.
+- **The table has no rows at all:** nothing is retracted. Where at least one Attempt of the race
+  holds a result the absent-row case would retract, the core raises `xml-table-emptied` with the
+  `phaseId` and the number of such Attempts (ingest-only, §0.5). It is raised once: at the first
+  such snapshot, and again only after a snapshot of the race has carried a row. A table that
+  never had rows raises nothing (all 521 recorded empty XML race tables are of this kind, §0.3).
+  If the race was really emptied, TCP's start-list push retracts it, or the operator
+  re-baselines.
+- **A row that returns** after an absent-row retraction is a new `xml` observation and is
+  presented by the ordinary rules: at once where no `tcp` observation stands, else under rule 2.
+
+**Guard (INV-2c, content age),** for the present row and the absent row alike: apply the
+retraction against a `tcp` observation only when the snapshot's
 `changedAfter` (§0.3; `null` never qualifies) is later than that observation's `observedAt`.
 Otherwise the snapshot may predate the push, and it is ignored for that field until the next
 snapshot. The same guard applies to the mark exception of INV-2 rule 2, and to any snapshot value
@@ -1420,8 +1510,12 @@ but no code path or recording ever filled it.
 Items 1–7 and 13 were answered on 2026-09-25 (#179; E1, verified upstream behaviour); item 8 was closed by INV-2c
 on 2026-10-14; items 15 and 17 were answered by the spike and the exit-delay measurement; item 16 by
 the round-20 measurement; item 22 by the maintainer (2026-11-06); items 23 and 25 are accepted
-risks and item 5 is closed (maintainer, 2026-11-11 and 2026-11-10; `DECISIONS/LOG.md`). Items 9,
-11, 12, 18, 19, 20, 21 and 24 remain.
+risks and item 5 is closed (maintainer, 2026-11-11 and 2026-11-10; `DECISIONS/LOG.md`); item 21
+by the maintainer's `NHT1`/`NHT2` decision (2026-11-11). Items 9, 11, 12, 18, 19, 20 and 24
+remain. Items 26 to 32 are defaults taken on 2026-11-12, in round C part 2, under the
+maintainer's rule of 2026-11-11 that a disagreement moving no client obligation gets a default
+and an item here, not a contract round (`README.md`, ground rules); each says what would reopen
+it.
 
 1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
    hardware judge terminals on their own port and raises a flag on the scoring service for about
@@ -1487,11 +1581,18 @@ risks and item 5 is closed (maintainer, 2026-11-11 and 2026-11-10; `DECISIONS/LO
     E2; needs the finish-first order, 28 %, a rotation inside run 2 and an equal time; lasts under a
     second). Accepted as residual unless M1's data shows it; a remedy would compare the row's cells with
     the on-course stream's before attributing.
-20. **`duplicate-finish` on TCP after D1.** The six recorded TCP instances were never replayed, and no
-    replayed window raised one; M1 replays them.
-21. **`NHT2`'s first-run token.** `CONTRACTS.md` §2.4 pairs it "where upstream defines one"; which
+20. **`duplicate-finish` on TCP after D1.** Replayed, not yet pinned. The whole-recording replays
+    raise the diagnostic (E2, the M1 exit review's runs). Two instances in jarni-ne-odp, each
+    named by the finish time the two bibs share: C1M_BR1_19 bibs 64 and 65 at 11:39:27.400Z, and
+    K1W_BR2_19 bibs 18 and 19 at 13:01:21.040Z. A sweep of the merge core over the seven whole
+    recordings raises those two and a third, jarni-ne-do K1M_BR1_19 bibs 133 and 134 at
+    07:57:32.070Z (E2, 2026-11-12). No test pins a recorded instance yet. The item closes when
+    one does (#340).
+21. ~~**`NHT2`'s first-run token.** `CONTRACTS.md` §2.4 pairs it "where upstream defines one"; which
     schedule token it pairs with is unstated, so until it is settled an `NHT2` has `pair: null`
-    (§2.1). In no recording. (Round 17.)
+    (§2.1). In no recording. (Round 17.)~~ **Decided (maintainer, 2026-11-11):** `NHT1`/`NHT2` are
+    a pair like `HT1`/`HT2`, `combination: 'best'`; `NHT2`'s first run is `NHT1` (§2.1;
+    `CONTRACTS.md` §2.4). What the decision leaves to verify is item 31.
 17. ~~The finish → on-course-exit interval per recording.~~ **Measured (E1, seven recordings, 1,995
     closures):** about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % in [18, 20) s), about
     47 s at cp3-cross (p90 57 s), manual closes under 5 s on the two NKZ days (12.6 %, 34.9 %) — the
@@ -1537,3 +1638,65 @@ risks and item 5 is closed (maintainer, 2026-11-11 and 2026-11-10; `DECISIONS/LO
     Attempt and from live's state. A rare conjunction (one recorded re-run in seven recordings, then a
     restart inside the event) with a wrong-workflow, never a wrong-result, consequence on site
     (`ADR-016`), and a decrease on live. (Round 27i, second pass.)
+26. **The level of `xml-table-emptied`.** An XML table with no rows over a race that holds results
+    retracts nothing and raises this diagnostic (`CONTRACTS.md` §4 INV-7; maintainer, 2026-11-11).
+    The decision says "raises a diagnostic" and not where. Default: ingest-only, the admin log, as
+    the parser's own kinds are (§0.5), so no wire shape moves. The alternative is a seventh
+    `Diagnostic` kind on `GET /api/diagnostics`, visible in the admin UI: a change of the contract
+    package and of one admin obligation. Reopens if operators need to see it without reading the
+    log; the maintainer's to say.
+27. **What a per-Phase re-baseline replaces on a paired Phase.** `CONTRACTS.md` §7.2 sends the
+    Attempts of the named Phase and every Standing whose scope names it, a `pair` Standing on
+    either side included. The gate-2 checker's scope added the sibling Phase and so reported the
+    sibling's Attempts and `phase` Standings as omitted (#333: 124 reports for a second-run scope,
+    2,070 for the first-run mirror). Default: §7.2 stands as written and the checker's scope
+    becomes the named Phase alone (E3: §4 step 1 discards "the scope's" result fields, and
+    property 13 already says a first-Phase message does not carry the second Phase's Attempts). A
+    second run's row carries the combined placement and total itself, so a Phase rebuilt alone is
+    whole. The core agrees for a second-run scope (E2, the run in #333: the Phase's 117 Attempts
+    and 14 Standings). For a first-run scope it also sends the second Phase's `phase` Standings,
+    which §7.2 does not name (read in the core, not run): redundant for a client, which applies
+    them like a `standing.updated`, and to be dropped with the gate row. Closes with that row
+    (#333): one per-Phase re-baseline on each side of a pair and one per-Event, stated, on a
+    paired slalom cut, 0 violations, property 13 exercised.
+28. **A merged `gates` vector whose presented row is the other source's.** After a per-Event
+    re-baseline, or after an outage in which the XML took over, the presented row is the XML's
+    and a TCP listing then judges a cell. `CONTRACTS.md` §1.2 gives the merged vector the
+    presented row's `source` and the instant of the element that last changed the presented
+    cells, so the vector is `xml` on the listing's instant. Property 1(c) asks for a producer of
+    the envelope's own `source` in the unit and rejected it (#333: 3 reports, K1M_BR2_19:65).
+    Default: §1.2 stands and the core is right; for a merged vector, the unit's cell-changing
+    listing of the Attempt is the producer of its instant whatever the row's source. No client
+    reads the combination. Reopens if a client ever branches on `source` together with
+    `observedAt`; closes with the gate row of item 27.
+29. **A classification Standing across a re-baseline.** `CONTRACTS.md` §7.2 does not carry "a
+    Standing whose own Attempts give no entry", and a classification Standing has no Attempts.
+    Default, from the text: its entries are the classification Phase's rows (`CONTRACTS.md` §5
+    step 2), which §4 step 1 does not discard, since they are no Attempt's result fields. The
+    re-read snapshot replaces them under §4.10's rule or, with an empty table, changes nothing
+    (maintainer, 2026-11-06). So a published classification Standing is always carried by
+    `scope.replaced`, as last built, and a re-baseline never drops one. Not exercised by any gate
+    run; reopens if a replay of a re-baseline over a classification Phase shows otherwise.
+30. **`unavailable{source-unreachable}` on site.** Default: the on-site process never gives it
+    (§4.5); a first run's detail stays `not-yet` while a configured XML source is unreachable.
+    Today the core can give the reason only through an option that nothing but the conformance
+    harness sets (#337), and the vector `two-run-br1-unavailable-no-live-no-xml` passes on that
+    input. With the core change the option goes and the vector is reshaped to the case the
+    process does give: no XML configured, `unavailable{not-configured}` once run 2 is observed,
+    `not-yet` before. Reopens if a client needs to tell the two states apart; feeding the
+    reader's state to the core as an ingest event would then be the change.
+31. **The combination of `NHT1`/`NHT2`.** The pair is `combination: 'best'` by the maintainer's
+    decision (2026-11-11). Whether upstream builds a combined result for these two runs as it
+    does for `HT1`/`HT2` is not established: no recording or sample holds either token, and what
+    is known of upstream's behaviour can be read both ways. `DECISIONS/ADR-014` decision 3 lists
+    `NHT2` with the `best` tokens; a later reading of upstream's behaviour did not confirm that,
+    and found the second run ranked as its own run, the first only seeding it. Neither reading
+    is taken as verified. If upstream does not combine them, an `NHT2` row's `Total` and `Rank`
+    are run 2's own and must not be relayed as `pairTotal` and a combined `placement`. To verify
+    on real `NHT` data, or with the maintainer, before the first event that uses these formats.
+32. **Kayak Cross slot captions.** `faults.gates` names a faulted slot by the slot itself: the
+    gate number, `ST`, `RZ` (§4.6(d)); `Course.slots` carries no `caption` on site and upstream's
+    captions are `Course.captions` (§2.3). Every recorded `GateCaptions` equals those names
+    (`ST,1,2,3,4,5,6,RZ,7`), so nothing recorded differs. Default: it stays so, which keeps a
+    `faults` value equal from TCP and from the XML and independent of whether a `RaceConfig` has
+    arrived. Reopens on a recording whose Cross captions are other than the structural names.
