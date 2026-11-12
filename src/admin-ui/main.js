@@ -283,6 +283,11 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// A file path as HTML that may wrap after each separator (a Windows path has no other break opportunity)
+function breakablePath(path) {
+  return escapeHtml(path).replace(/([\\/])/g, '$1<wbr>');
+}
+
 function truncate(str, len) {
   if (!str) return '';
   return str.length > len ? str.substring(0, len) + '...' : str;
@@ -417,15 +422,15 @@ async function loadXmlConfig() {
         const mainPath = data.availablePaths.main;
         const offlinePath = data.availablePaths.offline;
 
-        mainPathEl.textContent = mainPath.path
+        mainPathEl.innerHTML = breakablePath(mainPath.path
           ? (mainPath.exists ? mainPath.path : mainPath.path + ' (not found)')
-          : '(not configured)';
-        mainPathEl.className = 'mono text-xs ' + (mainPath.exists ? 'text-success' : 'text-error');
+          : '(not configured)');
+        mainPathEl.className = 'choice-hint mono ' + (mainPath.exists ? 'text-success' : 'text-error');
 
-        offlinePathEl.textContent = offlinePath.path
+        offlinePathEl.innerHTML = breakablePath(offlinePath.path
           ? (offlinePath.exists ? offlinePath.path : offlinePath.path + ' (not found)')
-          : '(not configured)';
-        offlinePathEl.className = 'mono text-xs ' + (offlinePath.exists ? 'text-success' : 'text-error');
+          : '(not configured)');
+        offlinePathEl.className = 'choice-hint mono ' + (offlinePath.exists ? 'text-success' : 'text-error');
       }
 
       // Only update mode radio if user is not interacting with the XML config form
@@ -2192,7 +2197,7 @@ function updateModalAssetInfo(key, dataUrl, width, height) {
     if (dataUrl) {
       const sizeKB = Math.round(dataUrl.length / 1024);
       info.textContent = width + 'x' + height + ' (' + sizeKB + ' KB) - will be saved with config';
-      info.className = sizeKB > 100 ? 'text-xs text-warning' : 'form-hint';
+      info.className = sizeKB > 100 ? 'form-hint text-warning' : 'form-hint';
     } else {
       info.textContent = '';
       info.className = 'form-hint';
@@ -2619,7 +2624,7 @@ function updateAssetInfo(key, dataUrl, width, height) {
   if (info) {
     const sizeKB = Math.round(dataUrl.length / 1024);
     info.textContent = width + 'x' + height + ' (' + sizeKB + ' KB)';
-    info.className = sizeKB > 100 ? 'text-xs text-warning' : 'form-hint';
+    info.className = sizeKB > 100 ? 'form-hint text-warning' : 'form-hint';
   }
 }
 

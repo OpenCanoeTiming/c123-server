@@ -40,18 +40,18 @@
 
   <!-- XML Mismatch Warning Banner -->
   <div id="mismatchBanner" class="page-banner page-banner-warning" style="display: none;" role="alert" aria-live="assertive">
-    <svg class="text-warning" width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+    <span class="page-banner-icon"><svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
       <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-    </svg>
+    </svg></span>
     <span id="mismatchMessage">XML file does not match C123 live data</span>
     <button class="btn btn-sm" onclick="redetectXmlPath()">Re-detect XML</button>
   </div>
 
   <!-- Update Available Banner (populated by /api/update-check) -->
   <div id="updateBanner" class="page-banner page-banner-info" style="display: none;" role="status" aria-live="polite">
-    <svg class="text-secondary" width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+    <span class="page-banner-icon"><svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
       <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-11.25a.75.75 0 00-1.5 0v4.59L7.3 9.24a.75.75 0 00-1.1 1.02l3.25 3.5a.75.75 0 001.1 0l3.25-3.5a.75.75 0 10-1.1-1.02l-1.95 2.1V6.75z" clip-rule="evenodd"/>
-    </svg>
+    </svg></span>
     <span id="updateMessage">A new version is available</span>
     <a id="updateLink" href="https://github.com/OpenCanoeTiming/c123-server/releases/latest" target="_blank" rel="noopener" class="btn btn-sm btn-primary">Download</a>
   </div>
@@ -286,31 +286,29 @@
       </dl>
 
       <!-- Mode selector (Windows only) -->
-      <div id="modeSelector" style="display: none;" role="radiogroup" aria-labelledby="xmlModeTitle">
-        <div class="section-head"><h3 class="section-title" id="xmlModeTitle">Source mode</h3></div>
-        <div class="flex flex-col gap-2">
-          <div>
-            <label class="radio">
-              <input type="radio" name="xmlMode" value="auto-offline" aria-describedby="offlinePath">
-              Auto - offline copy (recommended)
-            </label>
-            <div id="offlinePath" class="form-hint mono"></div>
-          </div>
-          <div>
-            <label class="radio">
-              <input type="radio" name="xmlMode" value="auto-main" aria-describedby="mainPath">
-              Auto - main event file
-            </label>
-            <div id="mainPath" class="form-hint mono"></div>
-          </div>
-          <div>
-            <label class="radio">
-              <input type="radio" name="xmlMode" value="manual">
-              Manual path
-            </label>
-          </div>
+      <fieldset id="modeSelector" class="fieldset fieldset-plain" style="display: none;" role="radiogroup">
+        <legend class="fieldset-legend">Source mode</legend>
+        <div class="flex flex-col items-start gap-2">
+          <label class="radio">
+            <input type="radio" name="xmlMode" value="auto-offline" aria-labelledby="xmlModeOfflineLabel" aria-describedby="offlinePath">
+            <span class="flex-1">
+              <span class="choice-label" id="xmlModeOfflineLabel">Auto - offline copy (recommended)</span>
+              <span id="offlinePath" class="choice-hint mono"></span>
+            </span>
+          </label>
+          <label class="radio">
+            <input type="radio" name="xmlMode" value="auto-main" aria-labelledby="xmlModeMainLabel" aria-describedby="mainPath">
+            <span class="flex-1">
+              <span class="choice-label" id="xmlModeMainLabel">Auto - main event file</span>
+              <span id="mainPath" class="choice-hint mono"></span>
+            </span>
+          </label>
+          <label class="radio">
+            <input type="radio" name="xmlMode" value="manual">
+            Manual path
+          </label>
         </div>
-      </div>
+      </fieldset>
 
       <!-- Manual path input -->
       <div id="manualPathSection" class="config-form" role="group" aria-label="Manual XML path">
@@ -493,18 +491,19 @@
           <div class="form-hint">Live results identifier used in public URLs. Independent from C123 XML Event ID.</div>
         </div>
 
-        <div class="form-group">
-          <label class="form-label" for="liveEventLocation">Location</label>
-          <input type="text" id="liveEventLocation" class="input" placeholder="e.g., Prague, Czech Republic">
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="liveEventDiscipline">Discipline</label>
-          <select id="liveEventDiscipline" class="select">
-            <option value="Slalom">Slalom</option>
-            <option value="Sprint">Sprint</option>
-            <option value="WildWater">Wild Water</option>
-          </select>
+        <div class="form-row form-row-2-1">
+          <div class="form-group">
+            <label class="form-label" for="liveEventLocation">Location</label>
+            <input type="text" id="liveEventLocation" class="input" placeholder="e.g., Prague, Czech Republic">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="liveEventDiscipline">Discipline</label>
+            <select id="liveEventDiscipline" class="select">
+              <option value="Slalom">Slalom</option>
+              <option value="Sprint">Sprint</option>
+              <option value="WildWater">Wild Water</option>
+            </select>
+          </div>
         </div>
 
         <div class="form-group">
@@ -566,7 +565,7 @@
         <button class="btn btn-danger" onclick="deleteLiveEvent()">Delete Event</button>
         <div class="flex gap-2">
           <button class="btn" onclick="closeLiveTransitionModal()">Cancel</button>
-          <button class="btn btn-primary" onclick="transitionLiveStatus()">Update Status</button>
+          <button class="btn btn-danger-solid" onclick="transitionLiveStatus()">Update Status</button>
         </div>
       </div>
     </div>
@@ -666,9 +665,9 @@
       <div class="modal-body">
         <div class="grid grid-cols-2 gap-4">
           <!-- Left column: settings -->
-          <div class="flex flex-col gap-4">
-            <div role="group" aria-labelledby="modalBasicTitle">
-              <div class="section-head"><h4 class="section-title" id="modalBasicTitle">Basic Info</h4></div>
+          <div>
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend">Basic Info</legend>
               <div class="form-group">
                 <label class="form-label" for="modalLabel">Label</label>
                 <input type="text" id="modalLabel" class="input" placeholder="e.g. Finish Line Display">
@@ -677,10 +676,10 @@
                 <label class="form-label" for="modalClientId">Client ID</label>
                 <input type="text" id="modalClientId" class="input" placeholder="(auto - uses IP address)">
               </div>
-            </div>
+            </fieldset>
 
-            <div role="group" aria-labelledby="modalDisplayTitle">
-              <div class="section-head"><h4 class="section-title" id="modalDisplayTitle">Display</h4></div>
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend">Display</legend>
               <div class="form-group">
                 <label class="form-label" for="modalType">Layout Type</label>
                 <select id="modalType" class="select">
@@ -689,13 +688,15 @@
                   <option value="ledwall">LED Wall</option>
                 </select>
               </div>
-              <div class="form-group">
-                <label class="form-label" for="modalDisplayRows">Rows</label>
-                <input type="number" id="modalDisplayRows" class="input" min="3" max="20" placeholder="auto">
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="modalCustomTitle">Custom Title</label>
-                <input type="text" id="modalCustomTitle" class="input" placeholder="(event name)">
+              <div class="form-row form-row-1-2">
+                <div class="form-group">
+                  <label class="form-label" for="modalDisplayRows">Rows</label>
+                  <input type="number" id="modalDisplayRows" class="input" min="3" max="20" placeholder="auto">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="modalCustomTitle">Custom Title</label>
+                  <input type="text" id="modalCustomTitle" class="input" placeholder="(event name)">
+                </div>
               </div>
               <div class="form-group flex flex-col">
                 <label class="checkbox">
@@ -707,12 +708,12 @@
                   Browse results after highlight
                 </label>
               </div>
-            </div>
+            </fieldset>
           </div>
 
           <!-- Right column: per-client asset overrides -->
-          <div role="group" aria-labelledby="modalAssetsTitle">
-            <div class="section-head"><h4 class="section-title" id="modalAssetsTitle">Asset Overrides</h4></div>
+          <fieldset class="fieldset">
+            <legend class="fieldset-legend">Asset Overrides</legend>
               <div class="form-group">
                 <div class="form-label" id="modalLogoLabel">Logo</div>
                 <div class="flex flex-col gap-2">
@@ -758,7 +759,7 @@
                 </div>
                 <div class="form-hint" id="modalFooterImageInfo" aria-live="polite"></div>
               </div>
-          </div>
+          </fieldset>
         </div>
       </div>
 

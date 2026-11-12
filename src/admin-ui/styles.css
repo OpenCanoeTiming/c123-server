@@ -110,8 +110,3 @@
   top: var(--space-4);
   right: var(--space-4);
 }
-
-/* Log stream: the scroll area is clipped by its container, so its focus ring is drawn inside */
-#logEntries:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--color-border-focus);
-}
