@@ -2375,7 +2375,10 @@ type PhaseAttemptsPutResponse = { attempts: Attempt[] }
 - **Merge on the live tier** is §4 reduced to what the wire carries. The wire brings resolved
   observations from one automated source, the bridge, plus operator writes (§8.5). So the store
   applies INV-1 (omission), INV-3, INV-4, INV-5, INV-6 and INV-2 rule 4, and honours explicit
-  `not-yet`, `DELETE` and the Phase replace. It has nothing to apply INV-2 rules 1–3, INV-2b, INV-2c,
+  `not-yet`, `DELETE` and the Phase replace. **It never lowers an Attempt's `run`:** a push, or a
+  Phase replace, carrying a `run` lower than the stored one leaves `run` as stored and applies the
+  other fields, so live never shows `run` decreasing after an on-site restart (maintainer,
+  2026-11-12; `DERIVATIONS.md` §10 item 25). It has nothing to apply INV-2 rules 1–3, INV-2b, INV-2c,
   INV-2d or INV-7 to: those need the on-course stream, TCP connection events and scope snapshots,
   which never leave the venue. A retraction reaches live already resolved, as explicit `not-yet`.
   Among bridge observations of one field, the later-ingested one is presented (INV-6).

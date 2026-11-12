@@ -225,6 +225,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Store exactly what the ingest contract asserts, per tenant, durable across on-site disconnection (ARCHITECTURE §3).
 - [ ] Apply INV-1, INV-3, INV-4, INV-5, INV-6 and INV-2 rule 4, and honour explicit `not-yet`, `DELETE` and the Phase replace; apply none of INV-2 rules 1 to 3, INV-2b, INV-2c, INV-2d or INV-7 (CONTRACTS §4, §8.3; ARCHITECTURE §3).
 - [ ] Among bridge observations of one field, present the later-ingested one (CONTRACTS §4, §8.3).
+- [ ] Never lower a stored Attempt's `run`: a push or a Phase replace carrying a lower `run` leaves `run` as stored and applies its other fields (CONTRACTS §8.3; DERIVATIONS §10).
 - [ ] Accept `stage` on the Phase push and serve it; it is structural, not a vendor token (CONTRACTS §2.4, §8.3; ADR-007).
 - [ ] Accept `pair.siblingPhaseId: null` on the Phase push and serve it as `null`; publish the `pair` standing only once it is non-null (CONTRACTS §2.4, §5, §8.3).
 - [ ] Expect the bridge to re-push the current state of every changed resource after an outage, a cleared rejection or a restart, and treat each as the idempotent `PUT` it is (CONTRACTS §1.5, §2.8, §8.3).

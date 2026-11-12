@@ -1670,7 +1670,14 @@ it.
     `run` per Attempt with §2.10's discipline, or seed it from the store's highest `run` for the
     Attempt and from live's state. A rare conjunction (one recorded re-run in seven recordings, then a
     restart inside the event) with a wrong-workflow, never a wrong-result, consequence on site
-    (`ADR-016`), and a decrease on live. (Round 27i, second pass.)
+    (`ADR-016`). (Round 27i, second pass.) **The accepted risk covers on site only (maintainer,
+    2026-11-12): live never shows `run` decreasing.** The live store never lowers an Attempt's
+    `run`: a push carrying a lower `run` than the stored one leaves `run` as stored and applies
+    its other fields (a default; the restarted bridge has no memory of what it pushed, live
+    holds it; `CONTRACTS.md` §8.3). Upstream's current row is the re-run's, so the fields are
+    right and only the restarted server's label is low. *Example:* live holds
+    `K1M_BR1_19:9` at `run` 2; after a restart the bridge re-pushes it with `run` 1 and the
+    re-run's result; live keeps 2 and stores the result. M5 work.
 26. **The level of `xml-table-emptied`.** An XML table with no rows over a race that holds results
     retracts nothing and raises this diagnostic (`CONTRACTS.md` §4 INV-7; maintainer, 2026-11-11).
     The decision says "raises a diagnostic" and not where. Default: ingest-only, the admin log, as
