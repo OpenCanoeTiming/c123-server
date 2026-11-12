@@ -87,6 +87,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Show a result without a rank until `placement` is known; never fill in a computed rank (CONTRACTS §5; ADR-012).
 - [ ] Render Standing entries in delivered order; unplaced entries (`rank: null`, `order: null`) come last, in an order with no ranking meaning (CONTRACTS §5).
 - [ ] Where standings are shown, show age-category standings alongside the class standing, not instead of it (CONTRACTS §2.3; ADR-014).
+- [ ] Render an age-category Standing as delivered: placed entries ranked as Canoe123 numbers them, so entries tied on class rank carry consecutive category ranks, then the category's unplaced entries with `rank: null` and `order: null`, as on a printed result list (CONTRACTS §5; ADR-012).
 - [ ] Render a `classification` Standing from its own entries, with `decidedIn` as upstream's own round token (`F`, `SF`, `1/2`, `1/4`, `T`), shown verbatim and absent while `null`, as upstream last built it; a classification Phase has no Attempts (CONTRACTS §2.4, §2.7; DERIVATIONS §4.10).
 - [ ] Expect `pair.siblingPhaseId` to be `null` until the schedule names the other run; `role` and `combination` are already final (CONTRACTS §2.4; DERIVATIONS §2.1).
 - [ ] Read a member's `externalId` inside the `known` `members` value, where `null` means no registry identity; expect no per-member envelope on either tier (CONTRACTS §1.2, §2.5, §8.3).
@@ -229,7 +230,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Accept `stage` on the Phase push and serve it; it is structural, not a vendor token (CONTRACTS §2.4, §8.3; ADR-007).
 - [ ] Accept `pair.siblingPhaseId: null` on the Phase push and serve it as `null`; publish the `pair` standing only once it is non-null (CONTRACTS §2.4, §5, §8.3).
 - [ ] Expect the bridge to re-push the current state of every changed resource after an outage, a cleared rejection or a restart, and treat each as the idempotent `PUT` it is (CONTRACTS §1.5, §2.8, §8.3).
-- [ ] Assemble standings as c123-server does, from the pushed `placement` and `ageCategoryId`, without the category-rank check and without the order-anomaly check; rank nothing; emit `standing.updated` only when the standing's serialised form changed, never for a running athlete's ticks (CONTRACTS §5, §8, §8.3; ADR-012; ADR-017).
+- [ ] Assemble standings as c123-server does, from the pushed `placement` and `ageCategoryId`, without the category-rank check and without the order-anomaly check; rank nothing; in an age-category standing number the placed entries by their position in class order and list the category's unplaced entries after them with `rank: null` (CONTRACTS §5 step 4); emit `standing.updated` only when the standing's serialised form changed, never for a running athlete's ticks (CONTRACTS §5, §8, §8.3; ADR-012; ADR-017).
 - [ ] Set each Standing's `asOf` to the ingest time of the latest observation behind any of its entries (CONTRACTS §5).
 - [ ] Accept `PUT /ingest/v2/phases/{phaseId}/classification` for a Phase of `kind: 'classification'`, replace its rows whole (`decidedIn: string | null`, relayed as pushed), assemble the `classification` Standing from them as delivered and emit `standing.updated`; refuse Attempts on a classification Phase, classifications pushed as Attempts, and `rows: []` (`400 validation-failed`: an emptied classification is never shown; the bridge keeps the last built Standing and never sends one) (CONTRACTS §2.4, §5, §8.3, §8.6; DERIVATIONS §4.10).
 - [ ] Recompute nothing else: retire `EventLifecycleService`'s independent judgement, the independent ranking and the second XML parser (ARCHITECTURE §3; CONTRACTS §8).
@@ -288,7 +289,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Encode every envelope as the wire encoding requires, `eventTime` omitted rather than `null`, so that every envelope and error validates against the two wire schemas (CONTRACTS §1.2, §1.7).
 
 **Tests**
-- [ ] Run, through a thin adapter into its own merge function, the 23 tier-1 vectors CONFORMANCE-VECTORS §1 lists for the live tier, applying each vector's ingest units as §1 defines them, one ingest request being one unit, resolving each field name and `scope` to the Attempt, its Entry or its Phase as §1 defines ("Scope of a field"), matching `expect` as §1 defines (a `not-yet` or `unavailable` envelope whole, a `known` one as a subset), and asserting that count: `INV-1` except the two scope-snapshot ones, `INV-3`, `trichotomy`, `INV-4`, `INV-5`, `INV-6`, `under-review`, `phase-status-transition`, `live-ingest`, the two `operator-correction-*` vectors, and `standing-assembly` except the three anomaly vectors (CONFORMANCE-VECTORS §1, §2; CONTRACTS §1.6; TEST-ARCHITECTURE §3.1).
+- [ ] Run, through a thin adapter into its own merge function, the 24 tier-1 vectors CONFORMANCE-VECTORS §1 lists for the live tier, applying each vector's ingest units as §1 defines them, one ingest request being one unit, resolving each field name and `scope` to the Attempt, its Entry or its Phase as §1 defines ("Scope of a field"), matching `expect` as §1 defines (a `not-yet` or `unavailable` envelope whole, a `known` one as a subset), and asserting that count: `INV-1` except the two scope-snapshot ones, `INV-3`, `trichotomy`, `INV-4`, `INV-5`, `INV-6`, `under-review`, `phase-status-transition`, `live-ingest`, the two `operator-correction-*` vectors, and `standing-assembly` except the three anomaly vectors (CONFORMANCE-VECTORS §1, §2; CONTRACTS §1.6; TEST-ARCHITECTURE §3.1).
 - [ ] Add tier-1 time-window vectors for calendar `status`: just under, exactly at and just over 5 minutes (TEST-ARCHITECTURE §3.1).
 - [ ] Replay each admitted domain-state fixture's deltas as the §8.3 pushes they correspond to, check that values read back over the public reads match, and run the deltas-only gate-2 properties (those marked **D**) on the resulting public stream (TEST-ARCHITECTURE §3.2, §7).
 - [ ] Verify tenant isolation with the store's own integration tests: no leakage between two keys with equal local ids, no cross-event access, `403` for a revoked key, `404` for an unknown `eventId` (TEST-ARCHITECTURE §3.5; CONFORMANCE-VECTORS §3).
@@ -350,10 +351,10 @@ left open. It changed cited sections and moved no obligation above:
 - a store file that fails validation is set aside and the server starts with an empty store, so
   checks and flags read as never made; nothing new is on the wire (CONTRACTS §2.10).
 
-Put to the maintainer by that round, each of which would add or change a duty if decided
-otherwise: whether an age-category Standing should also list its unplaced entries (today only the
-class Standing lists them, CONTRACTS §5), and whether entries tied on class rank may share the
-category rank where upstream's own list numbers them consecutively (CONTRACTS §5).
+Put to the maintainer by that round and answered on 2026-11-12 (round C part 4), each moving the
+duties above: an age-category Standing lists its unplaced entries after the placed ones, and
+entries tied on class rank carry consecutive category ranks, as Canoe123 numbers them
+(CONTRACTS §5).
 
 Round C part 4 (2026-11-12; `DECISIONS/LOG.md`) wrote the maintainer's answers of that day. Those
 that changed a cited section and moved no obligation above:

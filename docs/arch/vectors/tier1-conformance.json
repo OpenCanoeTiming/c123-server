@@ -6957,7 +6957,7 @@
     {
       "id": "standing-age-category-assembled",
       "invariant": "standing-assembly",
-      "description": "Age-category standing: filter the class standing, rank = 1 + number of same-category entries with a strictly better class rank.",
+      "description": "Age-category standing: filter the class standing; a placed entry's rank and order are its position among the category's placed entries in class order, Canoe123's numbering, so entries tied on class rank get consecutive category ranks (maintainer, 2026-11-12).",
       "scope": {
         "kind": "phase",
         "phaseId": "K1M_BR1_6"
@@ -7062,10 +7062,104 @@
           },
           {
             "entryId": "D",
-            "rank": 2,
+            "rank": 3,
             "order": 3
           }
         ]
+      }
+    },
+    {
+      "id": "standing-age-category-unplaced-listed-after",
+      "invariant": "standing-assembly",
+      "description": "An age-category standing lists the category's unplaced entries after its placed ones, with null rank and order, in step 3's order, as on a printed result list (maintainer, 2026-11-12). Entries of another category are not listed.",
+      "scope": {
+        "kind": "phase",
+        "phaseId": "K1M_BR1_6"
+      },
+      "given": {
+        "entries": [
+          {
+            "entryId": "A",
+            "bib": "1",
+            "status": "finished",
+            "placement": {
+              "rank": 1,
+              "order": 1
+            },
+            "provisional": false,
+            "underReview": false,
+            "result": {
+              "kind": "duration",
+              "totalSeconds": 80
+            },
+            "ageCategoryId": "DS"
+          },
+          {
+            "entryId": "B",
+            "bib": "2",
+            "status": "finished",
+            "placement": {
+              "rank": 2,
+              "order": 2
+            },
+            "provisional": false,
+            "underReview": false,
+            "result": {
+              "kind": "duration",
+              "totalSeconds": 81
+            },
+            "ageCategoryId": "DM"
+          },
+          {
+            "entryId": "C",
+            "bib": "7",
+            "status": "dnf",
+            "placement": null,
+            "provisional": false,
+            "underReview": false,
+            "ageCategoryId": "DM"
+          },
+          {
+            "entryId": "D",
+            "bib": "4",
+            "status": "dns",
+            "placement": null,
+            "provisional": false,
+            "underReview": false,
+            "ageCategoryId": "DS"
+          },
+          {
+            "entryId": "E",
+            "bib": "3",
+            "status": "dns",
+            "placement": null,
+            "provisional": false,
+            "underReview": false,
+            "ageCategoryId": "DM"
+          }
+        ]
+      },
+      "ageCategoryId": "DM",
+      "expect": {
+        "ageCategoryId": "DM",
+        "standing": [
+          {
+            "entryId": "B",
+            "rank": 1,
+            "order": 1
+          },
+          {
+            "entryId": "E",
+            "rank": null,
+            "order": null
+          },
+          {
+            "entryId": "C",
+            "rank": null,
+            "order": null
+          }
+        ],
+        "note": "Recorded shape: jarni-ne-odp C1M_BR1_19, bib 64 DNF in category ZM after the placed entries; its upstream CatRnk 9 is a list position, not a rank. Unplaced entries order by status in AttemptStatus declaration order (dns before dnf), then bib."
       }
     },
     {

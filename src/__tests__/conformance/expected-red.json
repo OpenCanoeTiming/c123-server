@@ -2,5 +2,7 @@
   "inv2c-first-read-unknown-age-refused",
   "retraction-xml-absent-row",
   "retraction-xml-absent-row-guard",
-  "retraction-xml-absent-row-then-returns"
+  "retraction-xml-absent-row-then-returns",
+  "standing-age-category-assembled",
+  "standing-age-category-unplaced-listed-after"
 ]

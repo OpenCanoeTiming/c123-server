@@ -118,8 +118,8 @@ cover:
 - run generations;
 - §5's standing assembly.
 
-The count is 109 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
-a thin adapter that feeds the vectors `CONFORMANCE-VECTORS.md` §1 assigns to it (103 and 23; 17 are in
+The count is 110 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
+a thin adapter that feeds the vectors `CONFORMANCE-VECTORS.md` §1 assigns to it (104 and 24; 18 are in
 both) into its own merge function and asserts the result — proving
 both satisfy the same data-defined contract without either depending on the other's code.
 
@@ -608,7 +608,7 @@ the step index, the Attempt, the field and the property number.
     scope absent from the message is one whose own Attempts give no entry on the state after the
     message's Attempts are applied — the Phase's, the second Phase's for a `pair` (which the
     message of a first-Phase scope does not carry), the heat's, and for an age category that
-    category's placed entries (`CONTRACTS.md` §5 steps 2–4; the checker assembles them from its own
+    category's entries, placed or not (`CONTRACTS.md` §5 steps 2–4; the checker assembles them from its own
     held Attempts, not from the message alone; recorded: cp3-cross at a stated 09:05Z re-baseline,
     `heat:WX1_XS_26:1/all` with its heat's placements in no XML row, rebuilt by the next TCP push). Across it, `entry`, `bib`, `run`,
     `startOrder`, `heat`, `startLane`, every check and flag, and every `WriteRequest` are unchanged;
@@ -626,8 +626,9 @@ the step index, the Attempt, the field and the property number.
     one last by `startOrder`.
 15. **Standing (§5) D.** Every placed entry of a whole-class `standing.updated` has the `rank` and
     `order` of its Attempt's presented `placement`; entries sort by `order`; unplaced entries follow
-    in step 3's order; an age-category `rank` is `1 +` the number of same-category entries with a
-    strictly smaller class rank; `provisional` and `underReview` follow step 5; an entry's `result`
+    in step 3's order; an age-category standing lists the category's entries in that order, a
+    placed entry's `rank` and `order` being its position among the category's placed entries
+    (consecutive across a class tie) and an unplaced one's `null`; `provisional` and `underReview` follow step 5; an entry's `result`
     is `pending` while its Attempt is `pending` or `running`. A `standing.updated` appears only at a
     step that changed the standing as serialised (§5 step 1): an Attempt's `placement`, a result
     outcome, `pairTotal`, `provisional` or `underReview`; an Entry's `ageCategoryId` becoming known (a

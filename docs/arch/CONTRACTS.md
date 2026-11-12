@@ -1840,22 +1840,30 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
      replaced wherever it differs, would be flicker.
    - Relayed marks keep upstream's placement. A `ral` athlete is placed last. A second-run `dns` keeps
      the combined placement from run 1.
-4. **Age-category entries** (maintainer answer Q3; `DECISIONS/ADR-014`). Take the whole-class
-   standing's placed entries whose Entry has this `ageCategoryId`, in class order. Then:
-   - `rank = 1 +` the number of entries in the same category with a strictly smaller class `rank`;
-   - `order` = position in that filtered list.
+4. **Age-category entries** (maintainer answer Q3; `DECISIONS/ADR-014`; maintainer,
+   2026-11-12). Take the whole-class standing's entries whose Entry has this `ageCategoryId`,
+   placed and unplaced, in the class standing's order. Then:
+   - a placed entry's `order` is its position among the category's placed entries, and its
+     `rank` equals its `order`: Canoe123's own category numbering, which numbers entries tied on
+     class rank consecutively, in class order;
+   - an unplaced entry (step 3) has `rank: null` and `order: null` and is listed after every
+     placed one, in step 3's order, as on a printed result list.
 
-   This reproduced upstream's own category ranks, single-run and combined, exactly: 1,855 rows,
-   0 mismatches in the rows measured (a class tie differs, below). It makes category standings
-   available at class-rank latency. Upstream's own category
-   ranks reach only the snapshot, a median of ~20 s after the finish. When the snapshot's category
-   rank arrives and differs from the assembled one, a `category-rank-disagreement` anomaly is
-   recorded. The assembled rank stays presented. A class tie is the known case: entries of one
-   category that share a class `rank` share the category rank here, while upstream numbers them
-   consecutively (recorded once: jarni-ne-odp C1M_BR1_19, two entries on class rank 43, here 5
-   and 5, upstream 5 and 6). The check reads only rows whose `CatId` is set: on a
-   second-run row with an empty `CatId`, `TotalCatRnk` repeats the class rank and is not a category
-   rank (observed in up to 196,621 row-instances per recording).
+   *Example* (recorded: jarni-ne-odp C1M_BR1_19, category ZM). Bibs 53 and 54 share class rank 43
+   and are the category's fifth and sixth placed entries: category ranks 5 and 6, as upstream's
+   own `CatRnk`. Bib 64, `DNF`, has no class rank: it follows the placed entries with `rank: null`.
+   The rule follows what Canoe123 prints (`README.md`, ground rules), and it makes category
+   standings available at class-rank latency: upstream's own category ranks reach only the
+   snapshot, a median of ~20 s after the finish. The earlier rule, one plus the number of
+   entries with a strictly smaller class rank, reproduced 1,855 measured rows with 0 mismatches;
+   the two rules differ only on a class tie. When the snapshot's category rank of a placed entry
+   arrives and differs from the assembled one, a `category-rank-disagreement` anomaly is
+   recorded and the assembled rank stays presented; since the numbering is upstream's, such a
+   difference is a defect of the assembly, never a difference the contract accepts. The check
+   reads placed entries only: an unplaced row's `CatRnk` is a list position, not a rank (bib 64
+   above carries `CatRnk` 9). It reads only rows whose `CatId` is set: on a second-run row with
+   an empty `CatId`, `TotalCatRnk` repeats the class rank and is not a category rank (observed in
+   up to 196,621 row-instances per recording).
 5. **`provisional` and `underReview`** are copied from the entry's own Attempt. They are `true` if any
    of `outcome`, `placement` or `pairTotal` is provisional.
 6. **`behindSeconds`** is the entry's ranked value minus the first-ordered entry's, for duration
@@ -2046,7 +2054,7 @@ Every message carries `seq` (§1.6).
   whose own Attempts give no entry after the rebuild is not carried** — its own Attempts being those
   §5 names for its scope: the Phase's, the second Phase's for a `pair` (step 2, so a `pair` Standing
   on the first Phase's re-baseline is fed by Attempts the message does not carry), the heat's, and
-  for an age category the placed entries of that category (step 4) — judged on the state after the
+  for an age category the entries of that category, placed or not (step 4) — judged on the state after the
   message's Attempts are applied: the rebuilt state is a fresh one, and a Standing is published from
   its first entry (§5 step 1), so the client's replace removes one it held and `standing.updated`
   creates it again when an entry returns, whole as always.

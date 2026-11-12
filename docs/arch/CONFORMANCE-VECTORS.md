@@ -52,16 +52,18 @@ as recorded), the INV-2d lift, placement only when ranked, no standing re-send o
 fields provisional while run 2 runs, `status` never provisional, an Attempt unstaged before its start,
 and a first-run row wiped in place (the recorded jury re-run).
 
-**109 vectors:** 96 merge vectors, 8 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
-needed, not a target. **c123-server runs 103 of them, live-mini-server 23** (§1, "Which vectors each
-component runs"); 17 run in both suites.
+**110 vectors:** 96 merge vectors, 9 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
+needed, not a target. **c123-server runs 104 of them, live-mini-server 24** (§1, "Which vectors each
+component runs"); 18 run in both suites.
 
 **Since then** the file has changed with the contract rounds from 14 on and with #314;
 `DECISIONS/LOG.md` says what each ruled and which vectors it added or reshaped. No round changed
 what an existing vector asserts except where its row says so. Round C part 2 changed one:
 `inv2c-first-read-unknown-age-refused`, in its last step, by the maintainer's decision that an
-absent XML row retracts. It also added four vectors for that rule (§2, "Expected red"). §1 states
-the format as it stands and §2 lists every vector.
+absent XML row retracts. It also added four vectors for that rule (§2, "Expected red"). Round C
+part 4 changed `standing-age-category-assembled` by the maintainer's category-rank decision of
+2026-11-12 and added one vector for the category's unplaced entries. §1 states the format as it
+stands and §2 lists every vector.
 
 ---
 
@@ -223,10 +225,10 @@ Each vector has:
 **Which vectors each component runs.** Each component feeds its own merge function through a thin
 adapter (`TEST-ARCHITECTURE.md` §3.1); the sets overlap, and each suite asserts its own count.
 
-**c123-server runs 103: every vector not tagged `live-ingest`.** The tag is the rule; apart from it,
+**c123-server runs 104: every vector not tagged `live-ingest`.** The tag is the rule; apart from it,
 every merge vector is on-site material (`tcp`, `xml` and `operator-write` observations, the
 source-less `unavailable` observation, connection and operator events, scope snapshots and
-on-course listings), and all 8 `standing-assembly` and all 5 `workflow-state` vectors are the
+on-course listings), and all 9 `standing-assembly` and all 5 `workflow-state` vectors are the
 server's (`ARCHITECTURE.md` §3: c123-server owns the on-site domain layer whole, `CONTRACTS.md` §4
 and §5 with the anomaly checks, and the checks store). It runs **none of the six `live-ingest`
 vectors**. Five feed a bare §8.3 push, a `DELETE` or an explicit `not-yet` observation into a store
@@ -241,9 +243,9 @@ the `run-generation`, `INV-7` and `rebaseline` vectors (`attempt.updated` with e
 `scope.replaced`); on site a retraction is field-level and there is no deletion message
 (`CONTRACTS.md` §7.2).
 
-**live-mini-server runs 23** (`CONTRACTS.md` §8.3, "Merge on the live tier"). The two lists below
+**live-mini-server runs 24** (`CONTRACTS.md` §8.3, "Merge on the live tier"). The two lists below
 cover every tag in the file, each tag in exactly one, with named exceptions where a tag is split; a
-suite asserts 23. In live vectors an observation's `source` is the one the bridge states
+suite asserts 24. In live vectors an observation's `source` is the one the bridge states
 (`CONTRACTS.md` §8.3, "Attempt fields arrive already wrapped"), so `tcp` there is a forwarded on-site
 envelope, not a live source; `provisional` and `confidence` arrive the same way, so a live adapter
 feeds them resolved.
@@ -258,7 +260,7 @@ corrections (`operator-correction-not-displaced-by-redelivery`,
 only; and the `standing-assembly` vectors **except** the three anomaly
 ones (`standing-category-rank-disagreement-recorded`, `standing-order-disagreement-anomaly`,
 `standing-cross-never-checked`), since the live tier assembles without steps 4 and 7 of
-`CONTRACTS.md` §5. That is 2 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 6 + 2 + 5 = 23.
+`CONTRACTS.md` §5. That is 2 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 6 + 2 + 6 = 24.
 
 **Runs none tagged** `INV-2 rule 1`, `INV-2 rule 1 gates`, `INV-2 rule 2`, `INV-2 rule 2 exception`,
 `INV-2 rule 3`, `INV-2b`, `INV-2c`, `INV-2d`, `INV-7`, `INV-7 guard`, `placement`, `provisional`,
@@ -367,10 +369,12 @@ check, readable under its own `run`) is not asserted.
 | Two-run | `two-run-br1-untouched-by-br2`, `-recovered-from-xml-cold`, `-unavailable-no-live-no-xml` | 3 |
 | Kayak Cross | `cross-outcome-not-yet-before-operator-entry`, `-from-placement-not-time`, `-corrected-after-next-heat-started` | 3 |
 | Phase status transition | `phasestatus-official-to-revised-skips-unofficial` | 1 |
-| Standing assembly (§5) | relayed order and single-run tie; combined tie with no anomaly; unplaced entries; age-category assembly; category-rank disagreement; order disagreement; Cross never checked; behind and flags | 8 |
+| Standing assembly (§5) | relayed order and single-run tie; combined tie with no anomaly; unplaced entries; age-category assembly; age-category unplaced entries; category-rank disagreement; order disagreement; Cross never checked; behind and flags | 9 |
 
-**Expected red.** Four vectors assert a rule the server's core does not implement yet: an absent
-XML row retracts (`CONTRACTS.md` §4 INV-7; maintainer, 2026-11-11). They are listed in the
+**Expected red.** Six vectors assert a rule the server's core does not implement yet. Four: an
+absent XML row retracts (`CONTRACTS.md` §4 INV-7; maintainer, 2026-11-11). Two: a category
+standing numbers as Canoe123 prints and lists its unplaced entries (`CONTRACTS.md` §5 step 4;
+maintainer, 2026-11-12). They are listed in the
 expected-red ledger (`src/__tests__/conformance/expected-red.json`; a listed id runs as an
 expected failure, and `VECTORS_STRICT=1` shows it red). The core change is in the M2 server
 batch; the ids leave the ledger with it.
@@ -384,6 +388,12 @@ batch; the ids leave the ledger with it.
   Nothing moves. The next rewrite retracts.
 - `retraction-xml-absent-row-then-returns`, new: after the retraction a later snapshot carries
   the row with a result again. It is presented, from `xml`.
+- `standing-age-category-assembled`, an existing vector whose expected outcome changed (round C
+  part 4): entries C and D share class rank 3 and are the category's second and third placed
+  entries, so D's category rank is 3, not the shared 2.
+- `standing-age-category-unplaced-listed-after`, new (round C part 4): the category's `dns` and
+  `dnf` entries follow its placed one with `rank: null` and `order: null`, in step 3's order; the
+  other category's entries are not listed.
 
 The fourth new vector passes on today's core and is not listed:
 `retraction-xml-empty-table-retracts-nothing`, a TCP result and then an XML snapshot with

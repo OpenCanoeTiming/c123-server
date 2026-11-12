@@ -39,18 +39,18 @@ describe('the real vectors.test.ts in a child vitest (issue #200 rows 1, 2, 5; r
   const ids = serverVectors().map((v) => `vector ${v.id}`);
   const suite = (strict: boolean) => child(resolve(here, 'fixtures/suite-vitest.config.ts'), root, strict);
 
-  it('normal run: exactly the 103 server vectors, each one reads passed, exit 0', () => {
+  it('normal run: exactly the 104 server vectors, each one reads passed, exit 0', () => {
     const { exit, results } = suite(false);
     expect(results.map((r) => r.title).sort()).toEqual([...ids].sort());
-    expect(results.length).toBe(103);
+    expect(results.length).toBe(104);
     expect(results.filter((r) => r.status !== 'passed').map((r) => r.title)).toEqual([]);
     expect(exit).toBe(0);
   }, 120_000);
 
-  it('VECTORS_STRICT=1: exactly the 103 titles again, the ledger is ignored: the four listed ids read failed, every other passed, exit 1', () => {
-    // Strict mode shows the true state. The listed vectors assert the absent-XML-row retraction (contract round C part 2, #323), which the core does not implement yet.
+  it('VECTORS_STRICT=1: exactly the 104 titles again, the ledger is ignored: the six listed ids read failed, every other passed, exit 1', () => {
+    // Strict mode shows the true state. The listed vectors assert the absent-XML-row retraction (contract round C part 2, #323), and the category standing of round C part 4, which the core does not implement yet.
     const listed = new Set(loadExpectedRed().map((id) => `vector ${id}`));
-    expect(listed.size).toBe(4);
+    expect(listed.size).toBe(6);
     const { exit, results } = suite(true);
     expect(results.map((r) => r.title).sort()).toEqual([...ids].sort());
     expect(results.filter((r) => r.status !== 'passed').map((r) => r.title).sort()).toEqual([...listed].sort());
