@@ -342,8 +342,8 @@ Round C part 3 (2026-11-12; `DECISIONS/LOG.md`) ruled or ratified the questions 
 left open. It changed cited sections and moved no obligation above:
 - a `StandingEntry.behindSeconds` is never negative; where it would be, it is `null`, a value a
   client already renders (CONTRACTS §5);
-- after a retraction an Attempt that had left the course with a start observed returns to
-  `left-without-finish`, a status a client already renders (CONTRACTS §3.2);
+- after a retraction an Attempt that had left the course with a start and no finish observed
+  returns to `left-without-finish`, a status a client already renders (CONTRACTS §3.2);
 - a penalty write whose durable record cannot be stored is still answered `202` and pushed; a
   client sees an ordinary pending write (CONTRACTS §7.3);
 - a store file that fails validation is set aside and the server starts with an empty store, so

@@ -1246,10 +1246,12 @@ jury-invalidated row (C1M_BR1_19 bib 7, later re-run, §4.11), and 7 s behind TC
 
 **After a retraction,** `status` is what the on-course stream currently shows for the Attempt
 (`at-start`, `on-course`, or a `finished` it still lists), else `not-started`. What the stream
-shows is its latest inference for the generation, the leave's included: after a leave with a
-start observed that is `left-without-finish` (§4.1), in either order of the leave and the
-retracted row. So the leave's inference is recorded when it is drawn, also while a table
-`finished` or mark outranks it and it is not presented. An XML retraction that
+shows is its latest inference for the generation, the leave's included: where the leave drew
+`left-without-finish` (§4.1: a start observed and no finish ever listed) that is the status, in
+either order of the leave and the retracted row. So the leave's inference is recorded when it
+is drawn, also while a table `finished` or mark outranks it and it is not presented. A finisher
+who left the list at closure has no such inference and returns to `not-started` (recorded: the
+wiped row of nkz-19so C1M_BR1_19:7, §4.11). An XML retraction that
 passes the guard supersedes the `tcp` observation it retracts: that value is no longer a candidate
 of its source (a `tcp` marker would outrank every later XML value while connected), and a TCP row
 restating it afterwards is a new observation of upstream's table and is presented.

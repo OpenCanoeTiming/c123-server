@@ -925,8 +925,8 @@ absence in a complete statement of the race: a row missing from a TCP result pus
 in the XML snapshot. The domain layer turns that absence into an explicit retraction:
 - the retracted fields become `not-yet`, and the change is pushed like any other;
 - `status` returns to what the on-course stream currently shows for the Attempt (`at-start`,
-  `on-course`; after a leave with a start observed, its `left-without-finish`), else
-  `not-started`;
+  `on-course`; where the Attempt left the list and the leave drew `left-without-finish`,
+  that), else `not-started`;
 - an on-course inference is never retracted by a result push, because a race's push can precede the
   row being written.
 
@@ -1423,8 +1423,9 @@ reliable signal that a Phase's results changed is ordinary field-level change: a
   - `finished | non-ranked` or any no-result status `→ not-started | at-start | on-course |
     left-without-finish`, on a retraction (§4 INV-7): the row vanished, or a DNS was cleared; the
     target is what the on-course stream currently shows — its latest inference for the
-    generation, so `left-without-finish` after a leave with a start observed (slalom), whichever
-    of the leave and the retracted row came first — else `not-started`.
+    generation, so `left-without-finish` where the leave drew it (slalom: a start observed and
+    no finish ever listed), whichever of the leave and the retracted row came first — else
+    `not-started`, as after a finisher's ordinary closure.
 - **Re-run** (`DECISIONS/ADR-013`): `finished` or any no-result status `→ at-start | on-course`,
   **only together with a `run` increment.** This is the one transition that retracts known facts. It
   is explicit and observed, never inferred from omission.
