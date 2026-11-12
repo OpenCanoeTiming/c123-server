@@ -635,7 +635,7 @@ the step index, the Attempt, the field and the property number.
     (consecutive across a class tie) and an unplaced one's `null`; `provisional` and `underReview` follow step 5; an entry's `result`
     is `pending` while its Attempt is `pending` or `running`. A `standing.updated` appears only at a
     step that changed the standing as serialised (§5 step 1): an Attempt's `placement`, a result
-    outcome, `pairTotal`, `provisional` or `underReview`; an Entry's `ageCategoryId` becoming known (a
+    outcome, `pairTotal`, `provisional` or `underReview`; an entry's Attempt removed (§4 INV-7); an Entry's `ageCategoryId` becoming known (a
     category standing's first publication); a second Phase's `pair.siblingPhaseId` becoming known
     (the `pair` standing's first publication, §5 step 1); a snapshot's category ranks raising or
     clearing an anomaly; or `scope.replaced`. A running athlete's tick never produces one. **A `classification`
