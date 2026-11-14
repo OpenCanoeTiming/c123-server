@@ -41,7 +41,7 @@ export function slotOf(
 const same = (a: Slot, b: Slot): boolean =>
   a.state === b.state && a.reason === b.reason && a.eventTime === b.eventTime && a.marker === b.marker && JSON.stringify(a.value) === JSON.stringify(b.value);
 
-const laterAge = (a: number | null, b: number | null): number | null => (b !== null && (a === null || b > a) ? b : a);
+export const laterAge = (a: number | null, b: number | null): number | null => (b !== null && (a === null || b > a) ? b : a);
 
 /**
  * INV-5 and rule 2. An observation re-delivered equal to what its source holds is one in its own right where that changes what is
