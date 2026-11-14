@@ -14,13 +14,13 @@ import { XMLValidator } from 'fast-xml-parser';
 import { createXmlReader, parseTcp, parseXmlSnapshot, type Clock, type IngestContext, type IngestElement, type XmlFs, type XmlReader, type XmlReaderStatus } from '../ingest/index.js';
 import { createContextTracker, type ContextTracker } from '../ingest/context-tracker.js';
 import { createMergeCore, type MergeCore } from '../core/index.js';
-import { openChecksStore, type ChecksFs, type ChecksStore } from '../store/checks.js';
+import { openChecksStore, ChecksFileInvalidError, type ChecksFs, type ChecksStore } from '../store/checks.js';
 import { TcpSource } from '../sources/TcpSource.js';
 import type { Source, WritableSource } from '../sources/types.js';
 import { createApp, errorBody, type AttemptRoute, type OnsiteApi, type RestReply, type RebaselineOutcome, type RebaselineScope } from './app.js';
 import { openSeq, type SeqCounter } from './seq.js';
 import { canon, createStepLog, type StepLog } from './step-log.js';
-import { openWritesStore, penaltyCorrectionCommand, type WritesStore } from './writes-store.js';
+import { openWritesStore, WritesFileInvalidError, penaltyCorrectionCommand, type WritesStore } from './writes-store.js';
 import { checkInput, checkKeyInput, flagInput, resolutionInput, ValidationError } from './validate.js';
 import { onsiteEvent, phaseOfAttempt, toWire, type CurrentEvent, type J } from './wire.js';
 
@@ -38,7 +38,19 @@ export interface OnsiteDiscovery extends EventEmitter {
   reset(): void;
 }
 
+/** #273: a store file that failed validation was renamed aside and the store opened empty. Admin log only; nothing goes on the wire. */
+export interface AdminLogEntry {
+  kind: 'store-set-aside';
+  store: 'checks' | 'writes' | 'seq';
+  eventId?: string;
+  file: string;
+  setAsideAs: string;
+  reason: string;
+}
+
 export interface OnsiteOptions {
+  /** Where the admin log goes; default one stderr line. */
+  adminLog?: (entry: AdminLogEntry) => void;
   port?: number;
   clock: Clock;
   fs: ChecksFs & XmlFs;
@@ -83,7 +95,42 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   let dead = false;
   let stopping = false;
 
-  const seq: SeqCounter = await openSeq(fs, dataDir);
+  const base = dataDir.endsWith('/') || dataDir.endsWith('\\') ? dataDir : `${dataDir}/`;
+  const adminLog = opts.adminLog ?? ((en: AdminLogEntry): void => {
+    console.error(`onsite: ${en.kind} store=${en.store}${en.eventId !== undefined ? ` event=${en.eventId}` : ''} file=${en.file} setAsideAs=${en.setAsideAs} reason=${en.reason}`);
+  });
+  /** A set-aside name for `file` that nothing has in the directory: an earlier set-aside is never overwritten. */
+  async function setAsideName(file: string): Promise<string> {
+    const names = new Set(await fs.readdir(dataDir));
+    const stem = file.slice(base.length);
+    let n = 0;
+    const nameAt = (i: number): string => `${stem}.invalid-${clock.now()}${i === 0 ? '' : `-${i}`}`;
+    while (names.has(nameAt(n))) n++;
+    return `${base}${nameAt(n)}`;
+  }
+  const report = (store: AdminLogEntry['store'], file: string, setAsideAs: string, reason: string, eventId?: string): void => {
+    adminLog({ kind: 'store-set-aside', store, ...(eventId !== undefined ? { eventId } : {}), file, setAsideAs, reason });
+  };
+  /** Renames an invalid checks or writes file aside and reports it; the store then opens empty. */
+  async function setAside(store: 'checks' | 'writes', eventId: string, reason: string): Promise<void> {
+    const file = `${base}${store}-${encodeURIComponent(eventId)}.json`; // the error's path may name a place inside the file
+    const setAsideAs = await setAsideName(file);
+    await fs.rename(file, setAsideAs);
+    report(store, file, setAsideAs, reason, eventId);
+  }
+
+  /**
+   * An invalid seq file is copied aside, not renamed: it stays at its name until `openSeq` replaces it with a valid mark (§1.6 with
+   * §2.10's discipline), so a crash in between leaves the invalid file and the next start recovers again, never at zero.
+   */
+  const seq: SeqCounter = await openSeq(fs, dataDir, {
+    floor: () => clock.now(),
+    keep: async (path, content, reason) => {
+      const setAsideAs = await setAsideName(path);
+      await fs.writeFile(setAsideAs, content);
+      report('seq', path, setAsideAs, reason);
+    },
+  });
 
   // ------------------------------------------------------------------------------------------------ event, core, checks store
   let event: CurrentEvent | undefined = opts.eventId === undefined ? undefined : { eventId: opts.eventId, name: opts.eventName ?? opts.eventId };
@@ -100,7 +147,13 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   async function storeFor(eventId: string): Promise<ChecksStore> {
     const have = stores.get(eventId);
     if (have !== undefined) return have;
-    const store = await openChecksStore({ fs, dir: dataDir, eventId, clock, ...(opts.newId !== undefined ? { newId: opts.newId } : {}) });
+    const open = (): Promise<ChecksStore> => openChecksStore({ fs, dir: dataDir, eventId, clock, ...(opts.newId !== undefined ? { newId: opts.newId } : {}) });
+    let store: ChecksStore;
+    try { store = await open(); } catch (e) {
+      if (!(e instanceof ChecksFileInvalidError)) throw e;
+      await setAside('checks', eventId, e.reason);
+      store = await open();
+    }
     stores.set(eventId, store);
     return store;
   }
@@ -110,7 +163,13 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   async function writesFor(eventId: string): Promise<WritesStore> {
     const have = writeStores.get(eventId);
     if (have !== undefined) return have;
-    const ws = await openWritesStore({ fs, dir: dataDir, eventId, clock });
+    const open = (): Promise<WritesStore> => openWritesStore({ fs, dir: dataDir, eventId, clock });
+    let ws: WritesStore;
+    try { ws = await open(); } catch (e) {
+      if (!(e instanceof WritesFileInvalidError)) throw e;
+      await setAside('writes', eventId, e.reason);
+      ws = await open();
+    }
     writeStores.set(eventId, ws);
     return ws;
   }

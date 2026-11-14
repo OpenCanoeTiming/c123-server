@@ -27,20 +27,45 @@ export class SeqFileInvalidError extends Error {
   }
 }
 
-export async function openSeq(fs: ChecksFs, dir: string): Promise<SeqCounter> {
+/**
+ * Startup on a seq file that fails validation (DERIVATIONS §10 item 33). `keep` stores the file's content under a new name; then the
+ * counter starts at `floor` and the new mark is persisted over the invalid file (temporary file, rename). The invalid file stays at its
+ * name until a valid mark replaces it, so a crash at any point leaves either it (the next start recovers again) or the new mark.
+ */
+export interface SeqRecovery {
+  /** The counter starts at no less than this; the clock in ms is above any counter issued in practice. */
+  floor(): number;
+  keep(path: string, content: string, reason: string): Promise<void>;
+}
+
+/** Throws `SeqFileInvalidError` on a file that fails validation unless `recover` is given; any other read error but ENOENT is rethrown. */
+export async function openSeq(fs: ChecksFs, dir: string, recover?: SeqRecovery): Promise<SeqCounter> {
   const base = dir.endsWith('/') || dir.endsWith('\\') ? dir : `${dir}/`;
   const target = `${base}seq.json`;
   const tmp = `${target}.tmp`;
   await fs.mkdir(dir);
   let counter = 0;
+  let text: string | undefined;
   try {
-    const raw: unknown = JSON.parse(await fs.readFile(target));
-    const mark = (raw as { version?: unknown; highWater?: unknown } | null)?.highWater;
-    if ((raw as { version?: unknown } | null)?.version !== 1 || typeof mark !== 'number' || !Number.isInteger(mark) || mark < 0) throw new SeqFileInvalidError(target, 'not a version 1 high-water mark');
-    counter = mark;
+    text = await fs.readFile(target);
   } catch (e) {
-    if (e instanceof SeqFileInvalidError) throw e;
-    if ((e as { code?: string }).code !== 'ENOENT') throw new SeqFileInvalidError(target, (e as Error).message);
+    if ((e as { code?: string }).code !== 'ENOENT') throw e;
+  }
+  if (text !== undefined) {
+    let reason: string | undefined;
+    try {
+      const raw: unknown = JSON.parse(text);
+      const mark = (raw as { highWater?: unknown } | null)?.highWater;
+      if ((raw as { version?: unknown } | null)?.version !== 1 || typeof mark !== 'number' || !Number.isInteger(mark) || mark < 0) reason = 'not a version 1 high-water mark';
+      else counter = mark;
+    } catch (e) {
+      reason = (e as Error).message;
+    }
+    if (reason !== undefined) {
+      if (recover === undefined) throw new SeqFileInvalidError(target, reason);
+      await recover.keep(target, text, reason);
+      counter = recover.floor();
+    }
   }
   let mark = -1; // nothing is persisted until the first write below
   const persist = async (to: number): Promise<void> => {
