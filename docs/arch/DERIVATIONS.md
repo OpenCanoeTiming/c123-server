@@ -1808,15 +1808,14 @@ decision.
     second set-aside after an earlier recovery, with the clock set back below that recovery's
     floor (a laptop clock reset), can regress `seq` once. A client that kept its last applied
     `seq` across the restart then discards new messages until the counter passes it, and its
-    next handshake recovers (`CONTRACTS.md` §1.6). Taken as a default, it needs two invalid `seq`
-    files and a clock set back across them, and none is recorded (E4). Whether `CONTRACTS.md`
-    §1.6's guarantee may carry this residual is **the maintainer's, not yet answered**; §1.6
-    points here meanwhile. No floor read from the server's own state removes it entirely: the
-    set-aside file is invalid by definition, and the floor of an earlier recovery bounds neither
-    the counter reached after it nor survives the operator deleting the set-aside files. The
-    cheapest narrowing is `max(now(), F + 2^40)`, where F is the highest `<ms>` among the earlier
-    `seq` set-aside names, written as the floor used rather than the clock. It still regresses if
-    those files are gone. It is a #273 follow-up if the maintainer wants it. The `seq` file is copied aside, not
+    next handshake recovers (`CONTRACTS.md` §1.6). It needs two invalid `seq` files and a clock
+    set back across them, and none is recorded (E4). **Settled (maintainer, 2026-11-14): accepted**
+    as a residual risk, the same class as #294 and item 23; `CONTRACTS.md` §1.6's guarantee
+    carries it and points here. No floor read from the server's own state removes it entirely:
+    the set-aside file is invalid by definition, and the floor of an earlier recovery bounds
+    neither the counter reached after it nor survives the operator deleting the set-aside files.
+    No narrowing: the optional `max(now(), F + 2^40)` offered with the default (F the highest
+    floor used by an earlier `seq` set-aside) is dropped by the same decision. The `seq` file is copied aside, not
     renamed, and stays under its own name until a valid mark replaces it by temporary file and
     rename, so a crash at any point leaves a file from which the next start recovers, never no
     file (a missing file is a first start, at zero). The copy is the file's text: bytes that are

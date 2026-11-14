@@ -155,8 +155,9 @@ The fields, precisely:
   presented cells, a listing's included. `observedAt` is when the presented observation was
   captured, and rule 1's supersession presents a new one, as INV-5's regained precedence does.
 - **What moves it.** A row that first supersedes the stream's inference presents, equal cells or
-  not: the supersession is a change of what is presented. A later row restating equal cells is
-  an INV-5 re-delivery and moves nothing. Equal is to the **presented** merged cells — INV-5's
+  not: the supersession is a change of what is presented. A later row from the presented source
+  restating equal cells is an INV-5 re-delivery and moves nothing; a row from another source that
+  takes over under §4 rule 2 presents, equal cells or not (`DERIVATIONS.md` §10 item 39). Equal is to the **presented** merged cells — INV-5's
   own test is the value already presented from that source — never to that source's previous
   row, and whether a course was bound when the row arrived changes nothing of this.
 - **After the row's retraction** the stream's vector is an inference again, with the envelope of
@@ -386,8 +387,8 @@ nor applies it, and steps 2 and 4 below concern only messages that carry `seq`. 
 carries, because all of them read one counter. It is strictly increasing, and it **never regresses
 across a server restart**: the counter's high-water mark is persisted with the same discipline as
 §2.10. On site, a mark that fails validation at load is set aside, and the counter restarts at a
-floor above any value issued in practice (this relaxes nothing for live-mini's counter); the one residual is stated in `DERIVATIONS.md` §10 item 33, and
-whether this guarantee may carry it is with the maintainer. `seq` only lets a client tell whether it has already incorporated a given change, the way a
+floor above any value issued in practice (this relaxes nothing for live-mini's counter). The guarantee carries the one residual stated in
+`DERIVATIONS.md` §10 item 33, which the maintainer accepted as a residual risk (2026-11-14). `seq` only lets a client tell whether it has already incorporated a given change, the way a
 log offset would. It carries no ranking or authority information; precedence among sources is
 settled in the domain layer (§4) before anything reaches the wire. live-mini-server keeps its own
 counter with the same rules.
@@ -2104,8 +2105,12 @@ Every message carries `seq` (§1.6).
 - **`event.changed`** carries the whole `Event`. It is sent when the current event changes: on the
   explicit "start a new event" action (`ARCHITECTURE.md` Scenario E; the action is the admin UI's
   own, not a §7 path, §2.2), or when a client connects while
-  an event is configured. On a *different* `eventId` than the one the client holds, the client
-  discards everything and re-hydrates (§1.6).
+  an event is configured. It is also sent, with the same `eventId`, when the presented `Event`
+  changes during a session: its `details` (§2.2) or its `name`, which defaults to the snapshot's
+  title. A snapshot restating the presented `Event` sends nothing (INV-5). On a *different*
+  `eventId` than the one the client holds, the client discards everything and re-hydrates (§1.6);
+  on the `eventId` it holds, the client replaces the held `Event` whole, with no re-hydration.
+  Maintainer, 2026-11-14 (#283).
 - **`scope.replaced`** carries, after a re-baseline (§4), **every Attempt of the scope and every
   Standing whose scope names one of its Phases** (phase, pair on either side, heat, classification;
   whole class and every age category). For `{ kind: 'event' }` that is every Attempt and every Standing
