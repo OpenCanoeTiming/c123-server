@@ -138,7 +138,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Expect the on-site serialisations: a person carries `birthYear: number | null` and no `birthDate`, and the Event carries no `organiserId` (CONTRACTS §7).
 - [ ] Take live updates from the WebSocket `/ws`, every message carrying `seq` (CONTRACTS §7.2; ARCHITECTURE §8).
 - [ ] Handle `404 event-not-found` on `/api/events/current` as "no event configured yet" (CONTRACTS §1.4, §7.1).
-- [ ] On `event.changed` naming a different `eventId` than the one held, discard everything and re-hydrate (CONTRACTS §1.6, §7.2).
+- [ ] On `event.changed` naming a different `eventId` than the one held, discard everything and re-hydrate; on `event.changed` naming the held `eventId`, replace the held Event whole, with no re-hydration: it comes mid-session when the Event's `details` or `name` change (CONTRACTS §1.6, §7.2).
 - [ ] Read `birthYear: number | null`; the on-site tier carries no birth date (CONTRACTS §2.5, §7; ADR-006).
 - [ ] Use `format` and `phaseId` as Canoe123-native tokens, verbatim (CONTRACTS §7; ADR-007).
 - [ ] Show an unknown `format` token verbatim, with what the structural fields say; never invent a name and never fail to render (CONTRACTS §2.4; DERIVATIONS §9).
