@@ -178,14 +178,14 @@ export const UNASSIGNED = '<unassigned>';
 /** §0.4: the pseudo-class `NA` takes its Schedule rows, Phases and result rows with it; the class is the `RaceId`'s first part. */
 export const isNaRace = (raceId: string, classId = ''): boolean => classId === 'NA' || splitRaceId(raceId).classKey === 'NA';
 
-/** §4.10: one classification row. `decidedIn` is the XML `RecordType` verbatim, null where the source carries none (TCP). A row without a `RankOrder` is reported, not guessed. */
+/** §4.10: one classification row; a `Bib` written `t   13` (time-trial prefix, no field) is read as `13`. `decidedIn` is the XML `RecordType` verbatim, null where the source carries none (TCP). A row without a `RankOrder` is reported, not guessed. */
 export function classificationRow(u: Unit, where: string, f: { entryId: string; bib: string; rank: string; order: string; decidedIn: string }): ClassificationRow | undefined {
   const order = int(f.order);
   if (order === undefined) {
     u.diagnostic({ kind: 'unparseable-field', where, name: 'RankOrder', text: f.order });
     return undefined;
   }
-  return { entryId: f.entryId, bib: f.bib.trim(), rank: int(f.rank) ?? null, order, decidedIn: f.decidedIn.trim() === '' ? null : f.decidedIn.trim() };
+  return { entryId: f.entryId, bib: f.bib.replace(/^t\s+/, '').trim(), rank: int(f.rank) ?? null, order, decidedIn: f.decidedIn.trim() === '' ? null : f.decidedIn.trim() };
 }
 
 // ---------------------------------------------------------------- §4.1 marks
