@@ -27,17 +27,18 @@ export class SeqFileInvalidError extends Error {
   }
 }
 
-export async function openSeq(fs: ChecksFs, dir: string): Promise<SeqCounter> {
+/** `floor`: the counter starts at no less than this (used after the file was set aside; the clock in ms is above any counter issued in practice). */
+export async function openSeq(fs: ChecksFs, dir: string, floor = 0): Promise<SeqCounter> {
   const base = dir.endsWith('/') || dir.endsWith('\\') ? dir : `${dir}/`;
   const target = `${base}seq.json`;
   const tmp = `${target}.tmp`;
   await fs.mkdir(dir);
-  let counter = 0;
+  let counter = floor;
   try {
     const raw: unknown = JSON.parse(await fs.readFile(target));
     const mark = (raw as { version?: unknown; highWater?: unknown } | null)?.highWater;
     if ((raw as { version?: unknown } | null)?.version !== 1 || typeof mark !== 'number' || !Number.isInteger(mark) || mark < 0) throw new SeqFileInvalidError(target, 'not a version 1 high-water mark');
-    counter = mark;
+    counter = Math.max(counter, mark);
   } catch (e) {
     if (e instanceof SeqFileInvalidError) throw e;
     if ((e as { code?: string }).code !== 'ENOENT') throw new SeqFileInvalidError(target, (e as Error).message);
