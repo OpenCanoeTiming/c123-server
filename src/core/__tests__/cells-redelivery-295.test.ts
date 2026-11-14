@@ -31,13 +31,13 @@ const tcp = (ms: number): Unit => {
  * The recorded XML snapshot with a result (Time, Pen, Total) and a `Gates` text stating cell 3 as 2 where the TCP listing states 0: an XML vector for the
  * same Attempt. `bound` false leaves the course out (no CourseData, an empty Schedule CourseNr, no ctx course): the vector is retained while no course is bound.
  */
-const xmlCells = (ms: number, bound: boolean): Unit => {
+const xmlCells = (ms: number, bound: boolean, changedAfter: string | null | undefined = T(base, ms - 5000)): Unit => {
   const gates = ['  0', '  0', '  2', ...Array(9).fill('  0')].join('');
   const edit = (d: string): string => {
     const rowed = d.replace('<Bib>  51</Bib>', `<Bib>  51</Bib>\r\n    <Gates>${gates}</Gates>\r\n    <Time>83570</Time>\r\n    <Pen>2</Pen>\r\n    <Total>85570</Total>`);
     return bound ? rowed : rowed.replace(/<CourseData>[\s\S]*?<\/CourseData>\r?\n?/, '').replace('<CourseNr>2</CourseNr>', '<CourseNr />');
   };
-  return xmlUnit(derive(JA51_XML, { observedAt: T(base, ms), edit }), DAY, T(base, ms - 5000), bound ? {} : { courses: {} });
+  return xmlUnit(derive(JA51_XML, { observedAt: T(base, ms), edit }), DAY, changedAfter, bound ? {} : { courses: {} });
 };
 /** The snapshot that binds the course: the same XML row (equal cells), now with the course (default ctx courses, the recorded CourseData). */
 const binding = (ms: number): Unit => xmlCells(ms, true);
@@ -48,7 +48,7 @@ function reconnectStream() {
   const core = coreWith([connected(T(base, -1000))]); // epoch 1
   core.applyUnit(tcp(0)); // C delivered
   core.applyUnit(disconnected(T(base, 500)));
-  core.applyUnit(xmlCells(1000)); // XML states a different vector
+  core.applyUnit(xmlCells(7000, false)); // XML states a different vector (content age 2000: later than the TCP cells at 0)
   core.applyUnit(connected(T(base, 8000))); // epoch 2
   core.applyUnit(tcp(8500)); // C re-delivered unchanged
   core.applyUnit(binding(10000));
@@ -85,5 +85,30 @@ describe('retained cells re-delivered after a reconnect (#295, CONTRACTS INV-5 a
     expect(bound).toHaveLength(1);
     expect(gatesOf(core).state).toBe('known');
     expect(gatesOf(core).observedAt).toBe(base.observedAt);
+  });
+
+  // plan row 4 (INV-5 last clause, INV-2c "the age only rises"): the scenario of review B1, built from the contract text
+  const ageStream = (restate: boolean) => {
+    const core = coreWith([connected(T(base, -1000))]);
+    core.applyUnit(tcp(0)); // C, a results row of the tcp channel
+    core.applyUnit(disconnected(T(base, 500)));
+    core.applyUnit(xmlCells(2000, false, T(base, -4000))); // D, content age before C's: a candidate INV-2c refuses
+    if (restate) core.applyUnit(xmlCells(6000, false, T(base, 1000))); // D restated identically from a later rewrite: the retained age rises
+    core.applyUnit(xmlCells(10000, true, null)); // binds the course, restates D, age unknown (first read after setPath): INV-5 keeps the retained age
+    return core;
+  };
+
+  it('INV-5 + INV-2c: an identical XML cell re-delivery from a later rewrite advances the retained content age', () => {
+    const g = gatesOf(ageStream(true));
+    expect(g.state).toBe('known');
+    expect(g.source).toBe('xml');
+    expect(g.value![2]!.penalty).toBe(2);
+  });
+
+  it('INV-5 + INV-2c: an identical XML cell re-delivery from a later rewrite advances the retained content age (control: without the rewrite TCP stays)', () => {
+    const g = gatesOf(ageStream(false));
+    expect(g.state).toBe('known');
+    expect(g.source).toBe('tcp');
+    expect(g.value![2]!.penalty).toBe(0);
   });
 });
