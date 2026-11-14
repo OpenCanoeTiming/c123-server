@@ -2,7 +2,8 @@
  * Durable gate checks and flags (CONTRACTS §2.10, ADR-016). One file per event, keyed by `eventId`.
  * Write order: temporary file (synced by the fs seam) -> rename over the target -> memory -> acknowledge.
  * The rename replaces an existing target in one step on every platform, win32 included (the real adapter
- * in `adapters/real-io.ts` carries the win32 retry); the target is never unlinked, rewritten in place or renamed away.
+ * in `adapters/real-io.ts` carries the win32 retry); the target is never unlinked, rewritten in place or renamed away, except
+ * that startup renames a file that fails validation aside (DERIVATIONS §10 item 33, `onsite/index.ts`).
  * Memory changes only after the rename; a failed write leaves it at the previous state. Writes are serialised.
  * Status is derived by `core/workflow`, never stored.
  */

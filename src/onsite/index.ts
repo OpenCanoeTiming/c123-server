@@ -18,7 +18,7 @@ import { openChecksStore, ChecksFileInvalidError, type ChecksFs, type ChecksStor
 import { TcpSource } from '../sources/TcpSource.js';
 import type { Source, WritableSource } from '../sources/types.js';
 import { createApp, errorBody, type AttemptRoute, type OnsiteApi, type RestReply, type RebaselineOutcome, type RebaselineScope } from './app.js';
-import { openSeq, SeqFileInvalidError, type SeqCounter } from './seq.js';
+import { openSeq, type SeqCounter } from './seq.js';
 import { canon, createStepLog, type StepLog } from './step-log.js';
 import { openWritesStore, WritesFileInvalidError, penaltyCorrectionCommand, type WritesStore } from './writes-store.js';
 import { checkInput, checkKeyInput, flagInput, resolutionInput, ValidationError } from './validate.js';
@@ -99,26 +99,38 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   const adminLog = opts.adminLog ?? ((en: AdminLogEntry): void => {
     console.error(`onsite: ${en.kind} store=${en.store}${en.eventId !== undefined ? ` event=${en.eventId}` : ''} file=${en.file} setAsideAs=${en.setAsideAs} reason=${en.reason}`);
   });
-  /** Renames an invalid store file to a name nothing has in the directory (never overwrites an earlier set-aside) and reports it. */
-  async function setAside(store: AdminLogEntry['store'], file: string, reason: string, eventId?: string): Promise<void> {
+  /** A set-aside name for `file` that nothing has in the directory: an earlier set-aside is never overwritten. */
+  async function setAsideName(file: string): Promise<string> {
     const names = new Set(await fs.readdir(dataDir));
     const stem = file.slice(base.length);
     let n = 0;
     const nameAt = (i: number): string => `${stem}.invalid-${clock.now()}${i === 0 ? '' : `-${i}`}`;
     while (names.has(nameAt(n))) n++;
-    const setAsideAs = `${base}${nameAt(n)}`;
-    await fs.rename(file, setAsideAs);
+    return `${base}${nameAt(n)}`;
+  }
+  const report = (store: AdminLogEntry['store'], file: string, setAsideAs: string, reason: string, eventId?: string): void => {
     adminLog({ kind: 'store-set-aside', store, ...(eventId !== undefined ? { eventId } : {}), file, setAsideAs, reason });
+  };
+  /** Renames an invalid checks or writes file aside and reports it; the store then opens empty. */
+  async function setAside(store: 'checks' | 'writes', eventId: string, reason: string): Promise<void> {
+    const file = `${base}${store}-${encodeURIComponent(eventId)}.json`; // the error's path may name a place inside the file
+    const setAsideAs = await setAsideName(file);
+    await fs.rename(file, setAsideAs);
+    report(store, file, setAsideAs, reason, eventId);
   }
 
-  let seq: SeqCounter;
-  try {
-    seq = await openSeq(fs, dataDir);
-  } catch (e) {
-    if (!(e instanceof SeqFileInvalidError)) throw e;
-    await setAside('seq', `${base}seq.json`, e.reason);
-    seq = await openSeq(fs, dataDir, clock.now());
-  }
+  /**
+   * An invalid seq file is copied aside, not renamed: it stays at its name until `openSeq` replaces it with a valid mark (§1.6 with
+   * §2.10's discipline), so a crash in between leaves the invalid file and the next start recovers again, never at zero.
+   */
+  const seq: SeqCounter = await openSeq(fs, dataDir, {
+    floor: () => clock.now(),
+    keep: async (path, content, reason) => {
+      const setAsideAs = await setAsideName(path);
+      await fs.writeFile(setAsideAs, content);
+      report('seq', path, setAsideAs, reason);
+    },
+  });
 
   // ------------------------------------------------------------------------------------------------ event, core, checks store
   let event: CurrentEvent | undefined = opts.eventId === undefined ? undefined : { eventId: opts.eventId, name: opts.eventName ?? opts.eventId };
@@ -139,7 +151,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     let store: ChecksStore;
     try { store = await open(); } catch (e) {
       if (!(e instanceof ChecksFileInvalidError)) throw e;
-      await setAside('checks', `${base}checks-${encodeURIComponent(eventId)}.json`, e.message, eventId);
+      await setAside('checks', eventId, e.reason);
       store = await open();
     }
     stores.set(eventId, store);
@@ -155,7 +167,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     let ws: WritesStore;
     try { ws = await open(); } catch (e) {
       if (!(e instanceof WritesFileInvalidError)) throw e;
-      await setAside('writes', `${base}writes-${encodeURIComponent(eventId)}.json`, e.message, eventId);
+      await setAside('writes', eventId, e.reason);
       ws = await open();
     }
     writeStores.set(eventId, ws);
