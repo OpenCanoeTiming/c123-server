@@ -8,7 +8,7 @@ import { isMark, markRefusedByGuard, present, presentStatus, refusedByGuard } fr
 import { boundSlots, fmtFor } from './registry.js';
 import { refuse } from './counters.js';
 import { carriesContradicted } from './retraction.js';
-import { fieldSlots, retain, slotOf } from './retention.js';
+import { fieldSlots, laterAge, retain, slotOf } from './retention.js';
 import { resolveEcho } from './writes.js';
 import type { AttemptState, CoreState, Element, Row, Slot, Source } from './types.js';
 
@@ -67,8 +67,12 @@ export function putCells(s: CoreState, a: AttemptState, channel: 'tcp' | 'xml' |
     // when it restates the presented merged cells, whatever its source's previous row said (round 29): the slot stays, its cells taken
     const held = a.cells[channel];
     const same = held !== undefined && held.slot.source === slot.source && held.slot.confidence === slot.confidence;
+    // the observation moves on: `seq`, `epoch` and the later content `age` are the re-delivery's, `at` stays (INV-5)
+    const kept = (): Slot => ({ ...held!.slot, seq: slot.seq, epoch: slot.epoch, age: laterAge(held!.slot.age, slot.age) });
     if (!same || JSON.stringify(held.cells) !== JSON.stringify(cells)) {
-      a.cells[channel] = same && channel !== 'inference' && restatesMerged(a, held, cells, slot) ? { cells, slot: held.slot } : { cells, slot };
+      a.cells[channel] = same && channel !== 'inference' && restatesMerged(a, held, cells, slot) ? { cells, slot: kept() } : { cells, slot };
+    } else {
+      held.slot = kept();
     }
     if (courseUnavailable(s, a.phaseId)) {
       if (retain(fieldSlots(a.slots, field), channel, { ...slot, state: 'unavailable', reason: NOT_CONFIGURED.reason })) s.dirtyAttempts.add(a);
