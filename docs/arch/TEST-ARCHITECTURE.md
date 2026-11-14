@@ -643,7 +643,8 @@ the step index, the Attempt, the field and the property number.
     (the `pair` standing's first publication, §5 step 1); a snapshot's category ranks raising or
     clearing an anomaly; or `scope.replaced`. A running athlete's tick never produces one. **A `classification`
     standing has no Attempts:** its entries come from the classification Phase's rows (§5 step 2), each
-    entry's `rank` and `order` equal its row's and its `decidedIn` its row's or, where a `tcp` row
+    entry's `rank` and `order` equal those of the row with its `entryId` (a classification's bibs are
+    not keyed on, DERIVATIONS §4.10) and its `decidedIn` its row's or, where a `tcp` row
     states `null`, the last admitted `xml` row's for that `entryId` (a refused snapshot moves
     nothing); its first publication is its first row
     observation (a scope snapshot of the Phase with no rows before that publishes nothing, and one

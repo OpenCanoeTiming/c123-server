@@ -1026,17 +1026,28 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   `1/2`, `1/4`, `T`), verbatim: an open token, not a format (`CONTRACTS.md` §2.7). TCP's
   classification rows carry no `RecordType`: a row's `decidedIn` is `null` until the snapshot states
   it for that `entryId`, and the core keeps the snapshot's across later TCP rows.
-- `bib` is the race bib. Upstream writes a row ranked from the time trial with a `t` before
-  its padded bib (`t   13`), in the XML (`RecordType` `T`) and on TCP alike; `F` and `SF` rows
-  carry the bib plain. A classification row's `Bib` that starts with `t` and whitespace is read
-  without them, then trimmed (§0.1). The prefix is no field and is not read as `decidedIn`, which
-  stays the snapshot's (above). Recorded (cp3-cross, E2; M2 P2 ruling, 2026-11-14): per
-  `entryId`, the prefix on exactly the 92 of 124 entries whose `RecordType` is `T`, in all 98
-  snapshots; on TCP, which carries no `RecordType`, 1,257 prefixed and 440 plain rows, matching
-  the XML per `entryId`. No other bib in the seven recordings carries a letter:
-  `XT`, `XS`, `XF`, `BR1` and `BR2` rows, `OnCourse` and `TVS`. `1/2` and `1/4` rows and the
-  `SLER`/`WWER` tables are not recorded (E4); the rule covers every classification row and changes
-  nothing where no prefix occurs. Attempt rows are not read so.
+- `bib` is the row's `Bib` trimmed at both ends (§0.1), with nothing else removed: on a row ranked
+  from the time trial it keeps upstream's `t` (`t   13`, `t    7`). Upstream writes the `t` on a
+  row ranked from the time trial (`RecordType` `T`), in the XML and on TCP alike: per `entryId`,
+  on exactly the 92 of 124 entries whose `RecordType` is `T`, in all 98 snapshots; on TCP, which
+  carries no `RecordType`, 1,257 prefixed and 440 plain rows, matching the XML per `entryId`.
+  **The number after `t` is the entry's bib in the time-trial Phase; the plain number of an `F` or
+  `SF` row is its bib in the semi-final and final**, which upstream sets to the entry's time-trial
+  rank. One athlete carries both, and the two number ranges overlap, so the number alone is not
+  unique within a classification and the `t` is what keeps the rows apart. Recorded (cp3-cross,
+  E2; #335 reopened, 2026-11-14): 864 of 864 `T` rows carry `t` and the `XT` bib, 304 of 304 `F`
+  and `SF` rows the `XS`/`XF` bib, which is the time-trial rank for all 32 finalists, and every
+  finalist's two bibs differ. Kept, the bib repeats in no classification table (98 XML
+  snapshots, 209 TCP messages); stripped, it repeats in two of the four (WX1_XER_26: 6, 7;
+  MX1_XER_26: 3, 4, 7). The prefix is no field and is not read as `decidedIn`, which stays the
+  snapshot's (above). No other bib in the seven recordings carries a letter: `XT`, `XS`, `XF`,
+  `BR1` and `BR2` rows, `OnCourse` and `TVS`. `X4`, `1/2` and `1/4` rows and the `SLER`/`WWER`
+  tables are not recorded (E4). A classification entry is the row with its `entryId`, never the
+  one with its bib (`TEST-ARCHITECTURE.md` §3.2 property 15). **Correction:** the M2 P2 ruling of
+  the same day read `bib` as "the race bib" without the `t`; that was wrong (it tested the prefix
+  against `RecordType`, not uniqueness) and is withdrawn. The text returns to what the parser has
+  always done. Whether a spectator should see `t 13`, or the number with a label, is with the
+  maintainer (`DECISIONS/LOG.md`, 2026-11-14, #335 reopened); the wire stays as above meanwhile.
 - On site the rows reach the core as a scope snapshot of the classification Phase whose rows are
   `CONTRACTS.md` §8.3 `ClassificationRow`s (`CONFORMANCE-VECTORS.md` §1), and as nothing else: the
   parser emits no `{push: 'classification'}`, which is the bridge's message to live. **Precedence:**

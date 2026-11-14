@@ -274,7 +274,7 @@ with no special-casing at the envelope level.
 - **Dates** are `YYYY-MM-DD`. **Timestamps** are full ISO-8601 with an explicit offset or `Z`.
 - **Bibs** are strings, trimmed of upstream's padding before they are used anywhere. Result-table bibs
   arrive padded to four characters (`DERIVATIONS.md` §0.1). A Kayak Cross classification row's
-  bib also arrives with a time-trial prefix, which is not part of the bib (`DERIVATIONS.md` §4.10).
+  bib keeps its time-trial prefix (`t   13`): the number alone is not unique there (`DERIVATIONS.md` §4.10).
 - **Gate penalties** are an integer number of seconds, or `null` for not yet judged or passed. `null`
   is never coerced to `0`. A single boat's value is `0`, `2` or `50`. A team's value is the sum over
   its members (§2.6), so 4, 52, 100 and 150 occur. Upstream's gate cells are also free text in the
