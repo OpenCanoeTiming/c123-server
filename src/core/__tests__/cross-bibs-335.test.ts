@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { at } from './kit.js';
 import { CLS, type ClsRec } from './fixtures/classification-excerpts.js';
 import { coreWith, tcpUnit, xmlUnit, derive, type Unit } from './streams.js';
-import type { GivenElement } from '../../__tests__/conformance/port.js';
 
 // #335 (reopened 2026-11-15; maintainer's decision, PR #363): Kayak Cross bibs across Phases. DERIVATIONS §4.10 / §0.1, CONTRACTS §1.3, CLIENT-OBLIGATIONS (Kayak Cross lines):
 // nothing joins across Phases by bib (entryId across Phases; an Attempt = Phase + bib within one); a classification row's bib is trimmed and collapsed to one space;
@@ -19,7 +18,6 @@ const DAY = { MX1_XER_26: '2026-04-26', WX1J_XER_26_JUN: '2026-04-26' };
 const sent = (c: Core, from = 0): Std[] => c.notifications().slice(from).filter((m) => m.type === 'standing.updated').map((m) => m['standing'] as Std);
 const cls = (c: Core, from = 0): Std[] => sent(c, from).filter((s) => s.standingKey.startsWith('classification:'));
 const collapse = (b: string): string => b.trim().replace(/\s+/g, ' ');
-const el = (e: unknown): GivenElement => e as GivenElement;
 const changedBefore = (r: ClsRec): string => new Date(Date.parse(r.observedAt) - 5000).toISOString();
 
 interface Own { entryId: string; bib: string; rank: number | null; order: number | null; decidedIn: string | null }
@@ -101,13 +99,8 @@ const rec = (t: number, data: string): ClsRec => ({ kind: 'tcp', recording: 'syn
 const tcp = (t: number, data: string): Unit => tcpUnit(rec(t, data), PHASES);
 const attemptIds = (c: Core): string[] => [...new Set(c.notifications().filter((m) => m.type === 'attempt.updated').map((m) => m['attemptId'] as string))];
 const phaseStd = (c: Core, phaseId: string): Std[] => sent(c).filter((s) => s.standingKey === `phase:${phaseId}/all`);
-const rebase = (t: number, phaseId: string): Unit => [
-  el({ ingestSeq: 900, event: 'rebaseline', observedAt: at(t), scope: { kind: 'phase', phaseId } }),
-  el({ ingestSeq: 901, event: 'xml-rewrite-detected', observedAt: at(t), changedAfter: at(t - 5) }),
-  el({ ingestSeq: 902, observedAt: at(t), snapshot: { source: 'xml', phaseId, mode: 'results', rows: [] } }),
-];
-const replacedKeys = (c: Core, from: number): string[] =>
-  c.notifications().slice(from).filter((m) => m.type === 'scope.replaced').flatMap((m) => (m['standings'] as Std[]).map((s) => s.standingKey));
+/** The hydration: the core's held Standings (public `standings()`, what GET /api/standings serves), classification and empty ones included. */
+const held = (c: Core): Std[] => (c as unknown as { standings(): Std[] }).standings();
 
 describe('#335 Kayak Cross bibs across Phases (synthetic; DERIVATIONS §4.10, 2026-11-15)', () => {
   it('DERIVATIONS (2026-11-15): heats that keep the XT bibs join right by entryId; nothing assumes 1..N', () => {
@@ -150,9 +143,9 @@ describe('#335 Kayak Cross bibs across Phases (synthetic; DERIVATIONS §4.10, 20
     expect(phaseStd(c, 'MX1_XT_26').length, 'the XT standing is there').toBeGreaterThan(0);
     expect(phaseStd(c, 'MX1_XS_26').length, 'the heat standing is there').toBeGreaterThan(0);
     expect(cls(c), 'no standing.updated of kind classification').toEqual([]);
-    const m = c.notifications().length;
-    c.applyUnit(rebase(100, 'MX1_XT_26'));
-    expect(replacedKeys(c, m).filter((k) => k.startsWith('classification:')), 'not in hydration').toEqual([]);
+    // a mutant publishing a classification Standing (even with no entries) for this class puts a `classification:` key in standings()
+    expect(held(c).filter((s) => s.standingKey.startsWith('classification:')), 'not in hydration (standings())').toEqual([]);
+    expect(held(c).map((s) => s.standingKey), 'the hydration holds the heat standings').toEqual(expect.arrayContaining(['phase:MX1_XT_26/all', 'phase:MX1_XS_26/all']));
   });
 
   it('DERIVATIONS §4.10: an XER whose table is empty in every snapshot (XML and TCP) publishes no classification Standing', () => {
@@ -168,8 +161,8 @@ describe('#335 Kayak Cross bibs across Phases (synthetic; DERIVATIONS §4.10, 20
     ]);
     expect(phaseStd(c, 'MX1_XT_26').length, 'the core is alive: the XT standing is published').toBeGreaterThan(0);
     expect(cls(c), 'no classification standing.updated').toEqual([]);
-    const m = c.notifications().length;
-    c.applyUnit(rebase(100, CP).map((e) => e));
-    expect(replacedKeys(c, m).filter((k) => k.startsWith('classification:')), 'not in hydration').toEqual([]);
+    // standings() lists every held Standing, entry-less ones too: a mutant publishing an empty classification Standing fails here
+    expect(held(c).filter((s) => s.standingKey.startsWith('classification:')), 'not in hydration (standings())').toEqual([]);
+    expect(held(c).map((s) => s.standingKey), 'the hydration holds the XT standing').toContain('phase:MX1_XT_26/all');
   });
 });
