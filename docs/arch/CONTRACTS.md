@@ -274,8 +274,12 @@ with no special-casing at the envelope level.
   penalties. The domain layer normalises at ingest, once (`DERIVATIONS.md` §0.1).
 - **Dates** are `YYYY-MM-DD`. **Timestamps** are full ISO-8601 with an explicit offset or `Z`.
 - **Bibs** are strings, trimmed of upstream's padding before they are used anywhere. Result-table bibs
-  arrive padded to four characters (`DERIVATIONS.md` §0.1). A Kayak Cross classification row's
-  bib keeps its time-trial prefix (`t   13`): the number alone is not unique there (`DERIVATIONS.md` §4.10).
+  arrive padded to four characters (`DERIVATIONS.md` §0.1). A classification row's bib (`XER`,
+  `SLER`, `WWER`) is relayed as Canoe123 writes it, trimmed, with its inner padding collapsed to one
+  space (maintainer, 2026-11-15): a Kayak Cross row ranked from the time trial keeps its prefix and
+  reads `t 13` where Canoe123 writes `t   13`. Without the `t` the number can repeat within one
+  classification (`DERIVATIONS.md` §4.10). A bib never joins data across Phases: across Phases a
+  competitor is its `entryId` (§2.6).
 - **Gate penalties** are an integer number of seconds, or `null` for not yet judged or passed. `null`
   is never coerced to `0`. A single boat's value is `0`, `2` or `50`. A team's value is the sum over
   its members (§2.6), so 4, 52, 100 and 150 occur. Upstream's gate cells are also free text in the
@@ -387,8 +391,9 @@ nor applies it, and steps 2 and 4 below concern only messages that carry `seq`. 
 carries, because all of them read one counter. It is strictly increasing, and it **never regresses
 across a server restart**: the counter's high-water mark is persisted with the same discipline as
 §2.10. On site, a mark that fails validation at load is set aside, and the counter restarts at a
-floor above any value issued in practice (this relaxes nothing for live-mini's counter). The guarantee carries the one residual stated in
-`DERIVATIONS.md` §10 item 33, which the maintainer accepted as a residual risk (2026-11-14). `seq` only lets a client tell whether it has already incorporated a given change, the way a
+floor above any value issued in practice; on site, the guarantee carries the one residual stated in
+`DERIVATIONS.md` §10 item 33, which the maintainer accepted as a residual risk (2026-11-14). Neither
+relaxes anything for live-mini's counter. `seq` only lets a client tell whether it has already incorporated a given change, the way a
 log offset would. It carries no ranking or authority information; precedence among sources is
 settled in the domain layer (§4) before anything reaches the wire. live-mini-server keeps its own
 counter with the same rules.
@@ -688,7 +693,10 @@ classification is relayed as upstream last built it, never recomputed by us. **`
 what tells a client how old it is** (§5): for a classification it is the ingest time of the latest
 snapshot that changed its rows, which happens when the operator recalculates, so a client compares it with the
 `asOf` of the contributing Phases' standings to see that it lags them. `RXER` is a title for which upstream calculates nothing: a classification Phase
-that never holds rows.
+that never holds rows. **A Kayak Cross class may have no classification at all**, or an `XER` whose
+table holds no rows: the operator need never press "calculate event result" (`DERIVATIONS.md`
+§4.10). No classification Standing is published then (§5 step 1), and the heats' standings are the
+class's only Cross results.
 
 **`date` is assigned once and never changes**, even if a correction to the Phase's results is pushed a
 week later. That is what keeps multi-day grouping correct under late correction. Before the snapshot
@@ -762,9 +770,11 @@ type Entry = {
   therefore derived from the snapshot and results rows only (`DERIVATIONS.md` §3).
 - **Bibs.**
   - `eventBib` is present only where the event issues bibs event-wide. Where bibs are issued per race,
-    it is `unavailable{not-applicable}`: all 124 competitors of one recorded Cross event changed bib
-    between rounds.
-  - The bib that identifies a run is always `Attempt.bib` (§2.6).
+    it is `unavailable{not-applicable}`: in one recorded Cross event every competitor who reached
+    the heats raced them under a new bib (32 of 32). A Kayak Cross round's bibs may also equal the
+    time-trial bibs; neither is guaranteed (`DERIVATIONS.md` §4.10).
+  - The bib that identifies a run is always `Attempt.bib` (§2.6). The competitor across the
+    Phases of a class is `entryId`, never a bib.
 
 ### 2.6 Attempt
 
@@ -833,6 +843,12 @@ down the course in this race. *Who* that was is the correctable assertion `entry
 turn out, even a week later, to have raced under the wrong bib.
 - The bib is this race's bib. Per-race bib issue does not disturb the key, because the key never
   claimed stability across Phases.
+- **Nothing joins across Phases by bib.** Across Phases a competitor is its `entryId`; within a
+  Phase, a run is its Attempt. In Kayak Cross each round is its own Phase, and its bibs may be
+  renumbered from the time trial or equal to it (`DERIVATIONS.md` §4.10): the same bib can name two
+  athletes in two rounds, and one athlete can carry two bibs. A classification row is matched by
+  its `entryId` (§5 step 2). This is the bib principle ("the bib is the key of a run's data",
+  maintainer, 2026-11-12) applied per Phase, not an exception to it.
 - Two kinds of collision cannot happen:
   - Kayak Cross's four simultaneous competitors are the same Phase with different bibs;
   - two classes reusing a bib number are different Phases.
@@ -2107,7 +2123,8 @@ Every message carries `seq` (§1.6).
   own, not a §7 path, §2.2), or when a client connects while
   an event is configured. It is also sent, with the same `eventId`, when the presented `Event`
   changes during a session: its `details` (§2.2) or its `name`, which defaults to the snapshot's
-  title. A snapshot restating the presented `Event` sends nothing (INV-5). On a *different*
+  title. A snapshot restating the presented `Event` sends nothing: the presented `Event` has not
+  changed (for `details`, an `Observed` value, that is INV-5; `name` is a plain string). On a *different*
   `eventId` than the one the client holds, the client discards everything and re-hydrates (§1.6);
   on the `eventId` it holds, the client replaces the held `Event` whole, with no re-hydration.
   Maintainer, 2026-11-14 (#283).

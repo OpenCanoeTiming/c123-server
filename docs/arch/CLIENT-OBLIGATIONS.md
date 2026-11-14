@@ -27,6 +27,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Treat `phaseId` (Canoe123 `RaceId`), `entryId` (Canoe123 `Id`) and `classId` as opaque; never parse them for class, run, age category, crew or day (CONTRACTS §1.1, §2.3, §2.5; ADR-001).
 - [ ] Take structure only from its own fields: `Class.discipline`, `Phase.kind`, `Phase.pair`, `Phase.scoringKind`, `Phase.heats` (CONTRACTS §2.3, §2.4; ADR-014).
 - [ ] Key every Attempt-level record by `attemptId` = `(phaseId, bib)`, never by bib alone (CONTRACTS §2.6; ARCHITECTURE §5).
+- [ ] In Kayak Cross, never join data across Phases by bib: a competitor across Phases by `entryId`, a run within a Phase by its Attempt (`phaseId`, `bib`), a classification row by its `entryId`. A round's bibs may be renumbered from the time trial or equal to it, and without its `t` a classification bib can repeat. This is the bib principle ("the bib is the key of a run's data", 2026-11-12) with each Cross round its own Phase (CONTRACTS §1.3, §2.5, §2.6; DERIVATIONS §4.10).
 - [ ] Keep `null` distinct from an absent key and from `0`; never coerce `null` to `0` or `""` (CONTRACTS §1.2, §1.3; ARCHITECTURE §5).
 - [ ] Branch on `error.code` only; never parse `error.message`; read `error.details` only on the three codes that define it, in the shape that code fixes: `[{field, issue}]` on `validation-failed`, `{ reason }` on `write-not-possible` and `source-unavailable`; expect the key absent on every other code (CONTRACTS §1.4).
 - [ ] Pin a specific domain-state fixture set by id and version in a committed reference; never a floating "latest" (TEST-ARCHITECTURE §6).
@@ -50,6 +51,7 @@ moved since this derivation); the duties themselves are the lines below.
 
 **Identity**
 - [ ] Identify a run by `Attempt.bib`; expect `Entry.eventBib` to be `unavailable{not-applicable}` where bibs are issued per race (CONTRACTS §2.5).
+- [ ] Infer nothing from a Kayak Cross bib: neither that a round's bibs run 1..N nor that they equal the time-trial bibs, and nothing about renumbering from a classification bib's `t` or its absence (CONTRACTS §2.5, §2.6; DERIVATIONS §4.10).
 - [ ] Treat `Attempt.entry` as a mutable pointer: a `known → known` change is a correction of who raced, applied like any field update (CONTRACTS §2.6, §4; ARCHITECTURE §1).
 - [ ] Treat `entryId` as identifying a competitor within one event only; use a member's `externalId` `{scheme, value}` for identity across events (CONTRACTS §2.5; ADR-006).
 - [ ] Render a person with `externalId: null` as an ordinary participant, never a degraded one (CONTRACTS §2.5, §8.3).
@@ -89,6 +91,8 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Where standings are shown, show age-category standings alongside the class standing, not instead of it (CONTRACTS §2.3; ADR-014).
 - [ ] Render an age-category Standing as delivered: placed entries ranked as Canoe123 numbers them, so entries tied on class rank carry consecutive category ranks, then the category's unplaced entries with `rank: null` and `order: null`, as on a printed result list (CONTRACTS §5; ADR-012).
 - [ ] Render a `classification` Standing from its own entries, with `decidedIn` as upstream's own round token (`F`, `SF`, `1/2`, `1/4`, `T`), shown verbatim and absent while `null`, as upstream last built it; a classification Phase has no Attempts (CONTRACTS §2.4, §2.7; DERIVATIONS §4.10).
+- [ ] Take a classification row's `bib` as delivered, an opaque string with its inner padding already collapsed (a Kayak Cross row ranked from the time trial reads `t 13`); never strip the `t` to key on the number; how it is shown is presentation (CONTRACTS §1.3; DERIVATIONS §4.10).
+- [ ] Where Kayak Cross is shown, expect a class with no classification Standing (the event result never calculated, or its `XER` table empty) and show its heats only; never wait for one or assemble one (CONTRACTS §2.4, §5; DERIVATIONS §4.10).
 - [ ] Expect `pair.siblingPhaseId` to be `null` until the schedule names the other run; `role` and `combination` are already final (CONTRACTS §2.4; DERIVATIONS §2.1).
 - [ ] Read a member's `externalId` inside the `known` `members` value, where `null` means no registry identity; expect no per-member envelope on either tier (CONTRACTS §1.2, §2.5, §8.3).
 - [ ] Show a classification's age from its `Standing.asOf`, compared with the `asOf` of its contributing Phases' standings, so that a lag behind them is visible (CONTRACTS §2.4, §5).
@@ -314,7 +318,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Take each on-course athlete's `status`, `running` outcome, judged `gates` and `timeToBeat` from `attempt.updated` (CONTRACTS §8.3).
 - [ ] Show a listed Attempt whose `status` is `finished` or a mark as a finisher still on upstream's list; how long it stays visible is the client's own policy (CONTRACTS §8.3, §8.4; ARCHITECTURE §2).
 - [ ] On `attempt.deleted`, remove the Attempt and its standing entries (CONTRACTS §8.4).
-- [ ] Show a classification Standing (`XER`, `SLER`, `WWER`) as delivered, dated by its `asOf`, which lags the contributing Phases until the operator recalculates (CONTRACTS §2.4, §5, §8.3).
+- [ ] Show a classification Standing (`XER`, `SLER`, `WWER`) as delivered, dated by its `asOf`, which lags the contributing Phases until the operator recalculates; a Kayak Cross class may have none, and then shows its heats only (CONTRACTS §2.4, §5, §8.3).
 - [ ] Label a Phase from its organiser-authored `title` when present, else from `stage`, `pair.role`, `combination`, `heats`, `scoringKind` and `kind`; expect no `format` token; `stage` is what tells a Cross semi-final from its final (CONTRACTS §2.4, §8.3; ADR-007; DERIVATIONS §9).
 - [ ] Show birth data only as served: `birthYear`, `birthDate` or neither, per the event's publication setting (CONTRACTS §8.4).
 - [ ] Expect no `anomalies`, diagnostics, `write.updated`, `sources.updated`, `check.updated`, `flag.updated` or `event.changed` on the live tier (CONTRACTS §2.7, §4, §8.4).
