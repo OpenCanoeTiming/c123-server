@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { JA51, JA51_XML } from './fixtures/round24-excerpts.js';
+import { msg, plus } from './text.js';
 import { connected, coreWith, derive, disconnected, tcpUnit, xmlUnit, type Unit } from './streams.js';
 
 const PHASE = 'K1M_BR2_19';
@@ -14,11 +15,18 @@ const JA = `${PHASE}:51`;
 const DAY = { [PHASE]: '2026-04-19' };
 const T = (r: { observedAt: string }, ms: number): string => new Date(Date.parse(r.observedAt) + ms).toISOString();
 const TWELVE = '0,0,0,0,0,0,0,0,0,0,0,0,,,,,,';
-const base = JA51.find((r) => r.data.includes(`Gates="${TWELVE}"`) && r.data.includes('<OnCourse'))!;
-
+const base = JA51.find((r) => r.data.includes(`Gates="${TWELVE}"`) && r.data.includes('<OnCourse'))!; // only its instant is used: the stream's first instant
 type Gates = { state: string; source?: string; observedAt: string; value?: Array<{ number: number; penalty: number | null }> };
 const gatesOf = (c: ReturnType<typeof coreWith>): Gates => c.presented(JA)['gates'] as Gates;
-const tcp = (ms: number): Unit => tcpUnit(derive(base, { observedAt: T(base, ms) }), DAY, { courses: {} });
+/**
+ * A TCP Results-table row of the Attempt (the `tcp` channel, not the on-course stream's inference): Time 83.57, twelve judged cells, all 0, no course bound.
+ * No on-course listing of this Attempt is in any stream here, so no inference slot competes.
+ */
+const tcp = (ms: number): Unit => {
+  const gates = Array(12).fill('  0').join('');
+  const text = `<Canoe123 System="Main"><Results RaceId="${PHASE}" ClassId="K1M" Current="Y" MainTitle="K1M" SubTitle="2nd Run"><Row Number="43"><Participant Bib="  51" Id="9069.K1M" Name="KOLÁŘ Lukáš" Club="USK Praha" Nat="" GivenName="Lukáš" FamilyName="KOLÁŘ" StartOrder="51" StartTime="11:10:40" /><Result Type="T" HeatNr="0" Q="" IRM="" Pen="0" Gates="${gates}" Time="83.57" Total="83.57" Rank="43" RankOrder="43" Behind="" PP="" /></Row></Results></Canoe123>`;
+  return tcpUnit(msg(plus(base.observedAt, ms), text), DAY, { courses: {} });
+};
 /**
  * The recorded XML snapshot with a result (Time, Pen, Total) and a `Gates` text stating cell 3 as 2 where the TCP listing states 0: an XML vector for the
  * same Attempt. `bound` false leaves the course out (no CourseData, an empty Schedule CourseNr, no ctx course): the vector is retained while no course is bound.
