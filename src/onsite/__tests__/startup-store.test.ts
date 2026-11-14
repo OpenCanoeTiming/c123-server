@@ -60,7 +60,7 @@ const replay = async (env: Env): Promise<void> => {
   await feed(env, ODP.emptyAt(env.clock.now() + 1000));
 };
 const checksOf = async (env: Env): Promise<J> => (await get(env, `/api/phases/${ODP.phaseId}/checks`)).body;
-const WIRE_TYPES = new Set(['event.changed', 'sources.updated', 'attempt.updated', 'phase.updated', 'entry.updated', 'class.updated', 'standing.updated', 'oncourse.updated', 'check.updated', 'flag.updated', 'write.updated', 'diagnostic.updated', 'diagnostics.updated']);
+const WIRE_TYPES = new Set(['attempt.updated', 'attempt.deleted', 'phase.updated', 'entry.updated', 'class.updated', 'standing.updated', 'course.updated', 'write.updated', 'sources.updated', 'check.updated', 'flag.updated', 'oncourse.updated', 'diagnostics.updated', 'event.changed', 'scope.replaced']); // CONTRACTS §7.2 WsPayload
 async function expectSilentWire(env: Env): Promise<void> {
   const ws = await openWs(env);
   await replay(env);
