@@ -273,7 +273,8 @@ with no special-casing at the envelope level.
   penalties. The domain layer normalises at ingest, once (`DERIVATIONS.md` §0.1).
 - **Dates** are `YYYY-MM-DD`. **Timestamps** are full ISO-8601 with an explicit offset or `Z`.
 - **Bibs** are strings, trimmed of upstream's padding before they are used anywhere. Result-table bibs
-  arrive padded to four characters (`DERIVATIONS.md` §0.1).
+  arrive padded to four characters (`DERIVATIONS.md` §0.1). A Kayak Cross classification row's
+  bib also arrives with a time-trial prefix, which is not part of the bib (`DERIVATIONS.md` §4.10).
 - **Gate penalties** are an integer number of seconds, or `null` for not yet judged or passed. `null`
   is never coerced to `0`. A single boat's value is `0`, `2` or `50`. A team's value is the sum over
   its members (§2.6), so 4, 52, 100 and 150 occur. Upstream's gate cells are also free text in the
@@ -504,7 +505,14 @@ across days (Scenario E, `ARCHITECTURE.md`). A future central registry could iss
 - **The event title** defaults to the snapshot's own title. It is organiser-authored text (§1.3).
 - **`details`** is the snapshot's `Events` table: `SubTitle`, `Location` as `venue`, `Facility`, and
   the date parts of `StartDate` and `EndDate`; `not-yet` until the snapshot states it, and the XML
-  parser's element to emit (E1, the XML layout).
+  parser's element to emit (E1, the XML layout). The date part is the `YYYY-MM-DD` as written
+  before the time part, with no zone conversion: the file writes a time of day and an offset
+  (recorded `2026-04-25T00:00:00+02:00`), and converting would move the day the organiser entered.
+  An empty or whitespace-only `SubTitle`, `Location` or `Facility` leaves its optional field absent
+  (recorded `<SubTitle />`, `<Location />`). A missing or unparseable `StartDate` or `EndDate`
+  means the snapshot states no `details`: what is presented stays, `not-yet` before any, and an
+  unparseable one raises the parser's ingest-only `unparseable-field` (`DERIVATIONS.md` §0.5;
+  default, never recorded: every recorded snapshot carries both). M2 P2 ruling, 2026-11-14.
 - **Upstream's own event id** in the snapshot is **not** exposed. It is an input to the operational
   check "is this still the same Canoe123 event" (`ARCHITECTURE.md` Scenario E), never an identity.
 
