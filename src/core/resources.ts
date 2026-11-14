@@ -89,13 +89,15 @@ export function applyClassification(s: CoreState, phaseId: string, source: Sourc
       return;
     }
   }
-  const decided = new Map((cur?.rows ?? []).map((r) => [r.entryId, r.decidedIn]));
+  const decided = new Map(cur?.xmlDecided ?? []);
+  if (source === 'xml') for (const r of rows) decided.set(r.entryId, r.decidedIn);
   const next = rows.map((r) => (source === 'tcp' && r.decidedIn === null ? { ...r, decidedIn: decided.get(r.entryId) ?? null } : r));
   // TCP re-sends the same rows on rotation: those move nothing, `asOf` included; the delivery still dates what the guard compares
   if (cur !== undefined && JSON.stringify(inRelayedOrder(cur.rows)) === JSON.stringify(inRelayedOrder(next))) {
     if (source === 'tcp' && cur.builtBy === 'tcp') cur.at = at;
+    cur.xmlDecided = decided;
     return;
   }
-  s.classifications.set(phaseId, { rows: next, asOf: el.observedAt, builtBy: source, at });
+  s.classifications.set(phaseId, { rows: next, asOf: el.observedAt, builtBy: source, at, xmlDecided: decided });
   s.dirtyScopes.add(phaseId);
 }
