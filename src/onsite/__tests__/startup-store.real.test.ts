@@ -1,17 +1,15 @@
 /**
  * #273 row 12 (tier 1, real fs): startup on an invalid checks file over a real directory (CONTRACTS §2.10, DERIVATIONS §10 item 33).
  * The production seam is the real adapters (`createRealChecksFs`, `createRealXmlFs`) on a mkdtemp directory under os.tmpdir().
- * `AdminLogEntry` is declared locally (not exported yet); time comes from the injected virtual clock.
+ * Time comes from the injected virtual clock.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRealChecksFs, createRealXmlFs } from '../../adapters/real-io.js';
-import { startOnsite, type OnsiteHandle, type OnsiteOptions } from '../index.js';
+import { startOnsite, type AdminLogEntry, type OnsiteHandle, type OnsiteOptions } from '../index.js';
 import { virtualClock } from './onsite-harness.js';
-
-interface AdminLogEntry { kind: 'store-set-aside'; store: 'checks' | 'writes' | 'seq'; eventId?: string; file: string; setAsideAs: string; reason: string }
 
 const dirs: string[] = [];
 const handles: OnsiteHandle[] = [];

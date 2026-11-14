@@ -3,20 +3,17 @@
  * #273 M2 P2 (tier 1): startup on an invalid store file (CONTRACTS §2.10 durability bullets, §1.6 "seq never regresses across a restart",
  * DERIVATIONS §10 item 33). A store file that fails validation (checks and flags, writes, seq) is set aside under a new name in the same
  * directory, the store opens empty, the server starts, the admin log reports it; nothing goes on the wire. A missing file is a first start.
- * Interface: onsite-harness.ts header, plus (this package) `OnsiteOptions.adminLog` and `AdminLogEntry`, declared locally below because
- * the export does not exist yet: the tests must fail on behaviour, not on an import.
+ * Interface: onsite-harness.ts header, plus `OnsiteOptions.adminLog` and `AdminLogEntry` (src/onsite/index.ts).
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   boot, DATA_DIR, disposeAll, feedTcp, fakeOnsiteFs, get, hydrate, maxSeq, openWs, post, seqsOf, setInstance, virtualClock, type Env, type FakeOnsiteFs, type J,
 } from './onsite-harness.js';
 import { feed, ODP } from './datasets.js';
-import type { OnsiteOptions } from '../index.js';
+import type { AdminLogEntry, OnsiteOptions } from '../index.js';
 
 afterEach(disposeAll);
 
-/** The shape the issue fixes (orchestrator's technical decision); the real type is exported from src/onsite/index.ts. */
-interface AdminLogEntry { kind: 'store-set-aside'; store: 'checks' | 'writes' | 'seq'; eventId?: string; file: string; setAsideAs: string; reason: string }
 const logger = (): { entries: AdminLogEntry[]; opts: Partial<OnsiteOptions> } => {
   const entries: AdminLogEntry[] = [];
   return { entries, opts: { adminLog: (e: AdminLogEntry) => { entries.push(e); } } as unknown as Partial<OnsiteOptions> };
@@ -278,4 +275,67 @@ describe('#273 combined, startNewEvent, repeats, first start, default log (DERIV
   });
 });
 
-void feedTcp;
+
+/** A view of `fs` whose `fs.fs` goes through `wrap`; the files map is shared with `fs`. */
+const through = (fs: FakeOnsiteFs, wrap: (base: FakeOnsiteFs['fs']) => FakeOnsiteFs['fs']): FakeOnsiteFs => ({ ...fs, fs: wrap(fs.fs) });
+
+describe('#273 seq set-aside under I/O errors and crashes (review of PR #351)', () => {
+  for (const code of ['EACCES', 'EBUSY']) {
+    it(`item 33: a seq file that cannot be read (${code}) is no failed validation: startup fails as before, nothing set aside`, async () => {
+      const p = await prime();
+      p.fs.files.set(p.seq, 'not a counter'); // would be a failed validation if it could be read
+      const before = Object.fromEntries(p.fs.files);
+      const renames: string[] = [];
+      const log = logger();
+      const fs = through(p.fs, (b) => ({
+        ...b,
+        readFile: async (path: string) => { if (path === p.seq) throw Object.assign(new Error(`${code} ${path}`), { code }); return b.readFile(path); },
+        rename: async (from: string, to: string) => { renames.push(`${from} ${to}`); return b.rename(from, to); },
+      }));
+      await expect(boot({ startAt: p.startAt, eventDate: ODP.day, fs, clock: virtualClock(p.clockAfter + 3_600_000), ...log.opts })).rejects.toBeDefined();
+      expect(renames).toEqual([]);
+      expect(log.entries).toEqual([]);
+      expect(Object.fromEntries(p.fs.files)).toEqual(before);
+    });
+  }
+
+  it('contract §1.6 + §2.10: a crash at any point of the seq set-aside leaves a state from which the next start issues seq above every seq sent before', async () => {
+    const p = await prime();
+    p.fs.files.set(p.seq, 'not a counter');
+    const invalid = Object.fromEntries(p.fs.files);
+    let crashes = 0;
+    for (let n = 0; n < 30; n++) {
+      const fs1 = fakeOnsiteFs(invalid);
+      let seen = false, ops = 0, fired = false;
+      const crash = (what: string): Error => { fired = true; return Object.assign(new Error(`EIO crash at ${what}`), { code: 'EIO' }); };
+      const faulty = through(fs1, (b) => {
+        const gate = async <T>(what: string, run: () => Promise<T>): Promise<T> => {
+          if (seen && ops++ === n) throw crash(what);
+          return run();
+        };
+        return {
+          ...b,
+          readFile: async (path: string) => { const r = await b.readFile(path).finally(() => { if (path === p.seq) seen = true; }); return r; },
+          writeFile: (path: string, d: string) => gate(`write ${path}`, () => b.writeFile(path, d)),
+          rename: (from: string, to: string) => gate(`rename ${from}`, () => b.rename(from, to)),
+          unlink: (path: string) => gate(`unlink ${path}`, () => b.unlink(path)),
+        };
+      });
+      try {
+        const env = await boot({ startAt: p.startAt, eventDate: ODP.day, fs: faulty, clock: virtualClock(p.clockAfter + 3_600_000) });
+        env.h.kill(); // the process is abandoned
+      } catch { /* the crash may reject startup */ }
+      if (!fired) break; // n is past the last file operation of the set-aside
+      crashes++;
+      const second = await boot({ startAt: p.startAt, eventDate: ODP.day, fs: fs1, clock: virtualClock(p.clockAfter + 3_700_000) });
+      const ws = await openWs(second);
+      await replay(second);
+      await ws.barrier();
+      const seqs = seqsOf(ws.messages);
+      expect(seqs.length, `crash at operation ${n}`).toBeGreaterThan(0);
+      expect(seqs[0]!, `first seq after a crash at operation ${n}`).toBeGreaterThan(p.sent);
+      second.h.kill();
+    }
+    expect(crashes, 'the set-aside has at least a rename to crash at').toBeGreaterThan(0);
+  }, 60_000);
+});
