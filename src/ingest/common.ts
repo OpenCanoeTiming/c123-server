@@ -185,7 +185,7 @@ export function classificationRow(u: Unit, where: string, f: { entryId: string; 
     u.diagnostic({ kind: 'unparseable-field', where, name: 'RankOrder', text: f.order });
     return undefined;
   }
-  return { entryId: f.entryId, bib: f.bib.trim(), rank: int(f.rank) ?? null, order, decidedIn: f.decidedIn.trim() === '' ? null : f.decidedIn.trim() };
+  return { entryId: f.entryId, bib: f.bib.trim().replace(/\s+/g, ' '), rank: int(f.rank) ?? null, order, decidedIn: f.decidedIn.trim() === '' ? null : f.decidedIn.trim() };
 }
 
 // ---------------------------------------------------------------- §4.1 marks
