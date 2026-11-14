@@ -146,6 +146,8 @@ export interface ClassificationState {
   builtBy: Source;
   /** Content age of the rows as last delivered by TCP, a re-send of equal rows included (INV-2c's guard); `asOf` dates the change. */
   at: number;
+  /** §4.10: `decidedIn` per `entryId` from the last admitted XML row; read where a TCP row states null. */
+  xmlDecided?: Map<string, string | null>;
 }
 
 export interface WriteState extends WriteRequest {
