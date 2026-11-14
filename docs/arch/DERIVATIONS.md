@@ -843,7 +843,13 @@ the latest cells per source and decides among three states:
   binding unit's: the course is the key to read a statement already captured (§1.2), and a
   vector of that source on the snapshot's instant is `TEST-ARCHITECTURE.md` §3.2 property 1's
   violation (recorded: cp3-cross MX1_XT_26, 43 vectors from the rows of the push of
-  08:45:00.903Z read on the course of the snapshot of 08:45:05.614Z).
+  08:45:00.903Z read on the course of the snapshot of 08:45:05.614Z). An earlier binding
+  includes one during a TCP outage. Suppose cells of the other source, retained meanwhile, would
+  have displaced the retained vector on a bound course, whether equal or not: rule 2 and INV-2c
+  decide by ingest order, the connection and content age, never by a cell difference
+  (`CONTRACTS.md` §4). Then
+  the identical re-delivery after the reconnect regains precedence as it would on a bound course,
+  and the vector carries the re-delivery's instant (INV-5; §10 item 39).
 - **`unavailable{not-configured}`** when nothing configured can supply a course: the XML source is
   not configured (`SourceStatus.xml`, §5), so nothing can ever bind; or the snapshot shows the Phase
   with no `CourseNr`, or a course whose layout is empty (the snapshot's determination). A fabricated
@@ -1020,6 +1026,17 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   `1/2`, `1/4`, `T`), verbatim: an open token, not a format (`CONTRACTS.md` §2.7). TCP's
   classification rows carry no `RecordType`: a row's `decidedIn` is `null` until the snapshot states
   it for that `entryId`, and the core keeps the snapshot's across later TCP rows.
+- `bib` is the race bib. Upstream writes a row ranked from the time trial with a `t` before
+  its padded bib (`t   13`), in the XML (`RecordType` `T`) and on TCP alike; `F` and `SF` rows
+  carry the bib plain. A classification row's `Bib` that starts with `t` and whitespace is read
+  without them, then trimmed (§0.1). The prefix is no field and is not read as `decidedIn`, which
+  stays the snapshot's (above). Recorded (cp3-cross, E2; M2 P2 ruling, 2026-11-14): per
+  `entryId`, the prefix on exactly the 92 of 124 entries whose `RecordType` is `T`, in all 98
+  snapshots; on TCP, which carries no `RecordType`, 1,257 prefixed and 440 plain rows, matching
+  the XML per `entryId`. No other bib in the seven recordings carries a letter:
+  `XT`, `XS`, `XF`, `BR1` and `BR2` rows, `OnCourse` and `TVS`. `1/2` and `1/4` rows and the
+  `SLER`/`WWER` tables are not recorded (E4); the rule covers every classification row and changes
+  nothing where no prefix occurs. Attempt rows are not read so.
 - On site the rows reach the core as a scope snapshot of the classification Phase whose rows are
   `CONTRACTS.md` §8.3 `ClassificationRow`s (`CONFORMANCE-VECTORS.md` §1), and as nothing else: the
   parser emits no `{push: 'classification'}`, which is the bridge's message to live. **Precedence:**
@@ -1774,7 +1791,27 @@ decision.
     empty, the server starts, and the admin log says so. Nothing is on the wire: no
     `SourceStatus` slot, no `Diagnostic` kind and no error code is added. For the `seq` file one
     rule still binds: `seq` never regresses across a restart (`CONTRACTS.md` §1.6), so the
-    counter restarts above any value the server can have issued, never at zero. What is lost is
+    counter restarts above any value the server can have issued in practice, never at zero.
+    **Default (M2 P2 ruling, 2026-11-14; #273 review CQ-A):** the floor is the process clock's
+    `now()` in milliseconds. A counter that started at zero stays far below it. The residual: a
+    second set-aside after an earlier recovery, with the clock set back below that recovery's
+    floor (a laptop clock reset), can regress `seq` once. A client that kept its last applied
+    `seq` across the restart then discards new messages until the counter passes it, and its
+    next handshake recovers (`CONTRACTS.md` §1.6). Taken as a default, it needs two invalid `seq`
+    files and a clock set back across them, and none is recorded (E4). Whether `CONTRACTS.md`
+    §1.6's guarantee may carry this residual is **the maintainer's, not yet answered**; §1.6
+    points here meanwhile. No floor read from the server's own state removes it entirely: the
+    set-aside file is invalid by definition, and the floor of an earlier recovery bounds neither
+    the counter reached after it nor survives the operator deleting the set-aside files. The
+    cheapest narrowing is `max(now(), F + 2^40)`, where F is the highest `<ms>` among the earlier
+    `seq` set-aside names, written as the floor used rather than the clock. It still regresses if
+    those files are gone. It is a #273 follow-up if the maintainer wants it. The `seq` file is copied aside, not
+    renamed, and stays under its own name until a valid mark replaces it by temporary file and
+    rename, so a crash at any point leaves a file from which the next start recovers, never no
+    file (a missing file is a first start, at zero). The copy is the file's text: bytes that are
+    not valid UTF-8 are not kept byte for byte (#352). Accepted: the copy is forensic only and
+    the counter's recovery never reads it. Reopens if a venue reports a clock set back across a
+    recovery. What is lost is
     workflow state: checks and flags read as never made, a pending write is forgotten and the
     operator resolves it by hand, as after §10 item 25. **Settled (maintainer, 2026-11-12), with
     item 26:** the admin log entry is the report; nothing goes on the wire.
@@ -1847,3 +1884,29 @@ decision.
     No recording holds a removal (E2: a scan of every pair of consecutive snapshots in the
     recordings found no row dropped). Reopens on a recording of a removal that these defaults present
     wrongly, or if the TCP push is to remove as well.
+39. **A TCP outage while no course is bound** (#295 re-review, PR #353; M2 P2 ruling,
+    2026-11-14). Gate cells are retained while no course is bound (§4.6). TCP delivers C and
+    disconnects. An XML snapshot during the outage states D, with a content age that would have
+    displaced TCP on a bound course (`CONTRACTS.md` §4 rule 2, INV-2c). D may differ from C or
+    equal it. TCP reconnects and
+    re-sends C unchanged, and then a snapshot binds the course. Ruled from the text (E3), not a
+    default. Three passages give the bound-throughout answer:
+    - §1.2 "whether a course was bound when the row arrived changes nothing of this";
+    - §4.6 "as an earlier binding would have presented them";
+    - `TEST-ARCHITECTURE.md` §3.2 property 1, "the envelope is the one an earlier binding would
+      have given".
+    So the vector is TCP's at the re-delivery's instant: INV-5's regained precedence, +8.5 s after
+    the first delivery in the review's probe. Where the outage snapshot would have been refused
+    (INV-2c), nothing displaced TCP, and the instant stays the first delivery's. The merged core
+    gives the first delivery's instant in both cases and is to change. In #353's row 2, the later
+    XML step expects the re-delivery's instant; the earlier step keeps the first delivery's.
+    "Would have displaced" is rule 2's and INV-2c's question, decided as on a bound course:
+    - by ingest order, the connection and content age;
+    - never by comparing cells. INV-5's no-op covers only a value already presented from the same
+      source, so an `xml` vector equal to C also takes over during the outage, and TCP's re-send
+      then regains precedence at its own instant.
+
+    The course's slot count therefore decides only what the vector reads, never whether
+    displacement happened. This corrects the first version of this item, which compared the
+    retained cells (review of PR #355, CQ2). No vector asserts the case, and no client duty
+    moves: a client reads `observedAt` as served.
