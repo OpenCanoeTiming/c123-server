@@ -385,7 +385,9 @@ nor applies it, and steps 2 and 4 below concern only messages that carry `seq`. 
 `sources.updated`, which does carry `seq` (§7.2). It is the same number on every connection and in every `asOfSeq` a REST response
 carries, because all of them read one counter. It is strictly increasing, and it **never regresses
 across a server restart**: the counter's high-water mark is persisted with the same discipline as
-§2.10. `seq` only lets a client tell whether it has already incorporated a given change, the way a
+§2.10. A mark that fails validation at load is set aside, and the counter restarts at a floor above
+any value issued in practice; the one residual is stated in `DERIVATIONS.md` §10 item 33, and
+whether this guarantee may carry it is with the maintainer. `seq` only lets a client tell whether it has already incorporated a given change, the way a
 log offset would. It carries no ranking or authority information; precedence among sources is
 settled in the domain layer (§4) before anything reaches the wire. live-mini-server keeps its own
 counter with the same rules.
