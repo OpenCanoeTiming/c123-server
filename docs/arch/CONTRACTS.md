@@ -511,12 +511,17 @@ type EventDetails = {
 across days (Scenario E, `ARCHITECTURE.md`). A future central registry could issue it instead
 (`DECISIONS/ADR-006`).
 
-- **The event title** defaults to the snapshot's own title. It is organiser-authored text (§1.3).
+- **The event title** is the name the operator entered, at boot or in the "start a new event"
+  action, and the snapshot's title never displaces it; where the operator entered none (an empty or
+  whitespace-only name counts as none), it is the snapshot's own title and follows it as it changes
+  (`DERIVATIONS.md` §10 item 40). It is organiser-authored text (§1.3).
 - **`details`** is the snapshot's `Events` table: `SubTitle`, `Location` as `venue`, `Facility`, and
   the date parts of `StartDate` and `EndDate`; `not-yet` until the snapshot states it, and the XML
   parser's element to emit (E1, the XML layout). The date part is the `YYYY-MM-DD` as written
   before the time part, with no zone conversion: the file writes a time of day and an offset
   (recorded `2026-04-25T00:00:00+02:00`), and converting would move the day the organiser entered.
+  A date part that is not a calendar date (`2026-13-45`, `2026-02-29`) is unparseable; what follows
+  it is not read (`DERIVATIONS.md` §10 item 40).
   An empty or whitespace-only `SubTitle`, `Location` or `Facility` leaves its optional field absent
   (recorded `<SubTitle />`, `<Location />`). A missing or unparseable `StartDate` or `EndDate`
   means the snapshot states no `details`: what is presented stays, `not-yet` before any, and an
@@ -1276,10 +1281,12 @@ else the check's `status` if a check exists, else `plain`.
   now carries.
 - **An Attempt removed upstream** (§2.6, §4 INV-7) keeps its checks and flags in the store; nothing
   deletes them. While the Attempt does not exist they are not served (`/checks` lists none for it,
-  a check or flag write is `404 attempt-not-found`) and no `check.updated` is sent. If a row with
-  the same bib returns to the race, the recreated Attempt's reads serve them again, `status`
-  derived as above, whoever the competitor under the bib is (maintainer, 2026-11-12;
-  `DERIVATIONS.md` §10 item 38 (g)).
+  a check or flag write, a flag's resolution included, is `404 attempt-not-found`) and no
+  `check.updated` or `flag.updated` is sent. If a row with the same bib returns to the race, the
+  recreated Attempt's reads serve them again, `status` derived as above, whoever the competitor
+  under the bib is (maintainer, 2026-11-12; `DERIVATIONS.md` §10 item 38 (g)), and the unit that
+  creates it pushes each of them, `check.updated` and `flag.updated` after its `attempt.updated`
+  (§7.2; `DERIVATIONS.md` §10 item 38 (k), (m)).
 - **The re-baseline** (§4) keeps every check and flag and recomputes `status` against the rebuilt
   values.
 - **A late correction** (a protest 30 minutes on) changes the presented penalty; every check on that
@@ -1731,7 +1738,9 @@ implementation must satisfy, not an algorithm.
     the row is retracted instead, as the TCP absent-row case (`pairTotal` and `countingRun`
     included in a paired second run), under the guard below field by field, and a later snapshot
     settles the removal. TCP's absent row only retracts, never removes. A removed Attempt is gone from every read and every Standing; on site
-    it is sent as `attempt.deleted` (§7.2), to live as `DELETE` (§8.3). A pending `WriteRequest`
+    it is sent as `attempt.deleted` (§7.2), to live as `DELETE` (§8.3); an Attempt of a
+    re-baseline's scope that its read removes goes by the replace alone, `scope.replaced` and the
+    Phase replace (§7.2). A pending `WriteRequest`
     of it resolves `mismatched` without `confirmedValue`, as on a retraction; its checks and
     flags stay in the store (§2.10). The Entry is not removed. A moved competitor's row in the
     other race, or under the new bib, creates that Attempt by the ordinary rule; a row that
@@ -1825,7 +1834,8 @@ re-baseline, per Phase or per Event:
    or this read's own retry stats — that showed a signature other than the one this read returns,
    `null` when none (never "the last poll's", which after a run of failed polls dates the read too
    late and lets a pending write resolve against an older save, INV-2 rule 4) — met by nothing
-   step 1 discarded. If no valid snapshot can be read, the
+   step 1 discarded: an absent row's removal (INV-7) reads only the on-course listings step 1
+   kept, never the result deliveries it discarded (`DERIVATIONS.md` §10 item 38 (l)). If no valid snapshot can be read, the
    action fails with `409 source-unavailable` and changes nothing: the read precedes step 1, and
    steps 1 and 2 reach the core as one ingest unit, the `rebaseline` event followed by the snapshot's
    elements, so the discard and the rebuild are one step and `scope.replaced` goes with it;
@@ -2098,7 +2108,9 @@ Every message carries `seq` (§1.6).
 - **`check.updated`** carries `{ attemptId, run, gate, check: GateCheck | null }`, whole; `null` means
   the check was removed. It is sent on every check write and **whenever a check's derived `status`
   changes** because the presented gate penalty changed (§2.10). **`flag.updated`** carries the whole
-  `GateFlag` under `flag`. Neither is ever sent on the live tier (§8.4).
+  `GateFlag` under `flag`. In the unit that creates an Attempt again after its removal, one
+  `check.updated` per check and one `flag.updated` per flag of it follow its `attempt.updated`:
+  what its reads serve again (§2.10). Neither is ever sent on the live tier (§8.4).
 - **A retraction** (§4 INV-7) or a contradiction (INV-2d) is sent as `attempt.updated` with explicit
   `not-yet` values, never by omission.
 - **`attempt.deleted`** carries `{ attemptId }`: upstream removed the Attempt (§2.6, §4 INV-7), and
@@ -2106,7 +2118,10 @@ Every message carries `seq` (§1.6).
   unit; the unit's `write.updated` of a pending write of it (resolved `mismatched`) precedes it and
   the `standing.updated` of each Standing that held it follows it. It sends no `check.updated`: a
   client drops the Attempt's checks and flags with it, and the store keeps them (§2.10). The
-  shape is §8.4's (maintainer, 2026-11-12; an additive message).
+  shape is §8.4's (maintainer, 2026-11-12; an additive message). In a re-baseline's unit an
+  Attempt of the scope that the re-read removes gets no `attempt.deleted`: `scope.replaced`
+  removes it by omission (§1.6), after its pending write's `write.updated`; one outside the scope
+  gets `attempt.deleted` as above (`DERIVATIONS.md` §10 item 38 (l)).
 - **`oncourse.updated`** carries the whole on-course set: `{ attemptIds: string[], featuredByUpstream:
   string | null, asOf: Timestamp }`, `attemptIds` in `courseOrder` (§7.1), `asOf` the ingest time of
   the unit at which the set last changed, as §7.1 defines it, so it equals what `/api/oncourse`
@@ -2123,8 +2138,8 @@ Every message carries `seq` (§1.6).
   explicit "start a new event" action (`ARCHITECTURE.md` Scenario E; the action is the admin UI's
   own, not a §7 path, §2.2), or when a client connects while
   an event is configured. It is also sent, with the same `eventId`, when the presented `Event`
-  changes during a session: its `details` (§2.2) or its `name`, which defaults to the snapshot's
-  title. A snapshot restating the presented `Event` sends nothing: the presented `Event` has not
+  changes during a session: its `details` (§2.2) or its `name`, which follows the snapshot's
+  title unless the operator entered one (§2.2). A snapshot restating the presented `Event` sends nothing: the presented `Event` has not
   changed (for `details`, an `Observed` value, that is INV-5; `name` is a plain string). On a *different*
   `eventId` than the one the client holds, the client discards everything and re-hydrates (§1.6);
   on the `eventId` it holds, the client replaces the held `Event` whole, with no re-hydration.
@@ -2329,7 +2344,7 @@ targets the Attempt's current generation.
 | `PUT /api/attempts/{phaseId}/{bib}/checks/{gate}` | `{ "checkedBy"?: string }` | `200 GateCheck`: the check for the current generation, `valueAtCheck` set to the presented penalty at this moment, `status: 'verified'`. Repeating it replaces the snapshot, which is how a judge re-verifies after a correction | `404 attempt-not-found`; `400 validation-failed` (`gate` outside the Phase's course, or the course not configured); `409 write-not-possible`, `reason: 'cross'` on a Cross Attempt (§7.3) |
 | `DELETE /api/attempts/{phaseId}/{bib}/checks/{gate}` | — | `204`, whether or not a check existed; `check.updated` with `check: null` only where one did (nothing changed, nothing pushed, §1.6) | `404 attempt-not-found` |
 | `POST /api/attempts/{phaseId}/{bib}/flags` | `{ "gate": number, "comment": string, "suggestedValue"?: number, "createdBy"?: string }`, with `Idempotency-Key` (§1.5) | `201 GateFlag`, open; a retry with the same key `200`, the same flag (§1.5) | `404 attempt-not-found`; `400 validation-failed` |
-| `POST /api/flags/{flagId}/resolution` | `{ "note"?: string, "resolvedBy"?: string }` | `200 GateFlag`, resolved. Repeating it on a resolved flag returns `200` unchanged | `404 flag-not-found` |
+| `POST /api/flags/{flagId}/resolution` | `{ "note"?: string, "resolvedBy"?: string }` | `200 GateFlag`, resolved. Repeating it on a resolved flag returns `200` unchanged | `404 flag-not-found`; `404 attempt-not-found` while the flag's Attempt does not exist (§2.10) |
 
 ```ts
 type GateCheckRequest = { checkedBy?: string }

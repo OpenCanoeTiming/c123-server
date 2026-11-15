@@ -214,7 +214,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Check a gate with `PUT /api/attempts/{phaseId}/{bib}/checks/{gate}`, body `{ checkedBy? }`; re-verify after a correction by repeating it (CONTRACTS §7.4).
 - [ ] Remove a check with `DELETE /api/attempts/{phaseId}/{bib}/checks/{gate}`, which returns `204` whether or not one existed (CONTRACTS §7.4).
 - [ ] Raise a flag with `POST /api/attempts/{phaseId}/{bib}/flags`, body `{ gate, comment, suggestedValue?, createdBy? }`, with an `Idempotency-Key`; expect `201` and an open `GateFlag`, and `200` with the same flag on a retry with the same key (CONTRACTS §1.5, §7.4).
-- [ ] Resolve a flag with `POST /api/flags/{flagId}/resolution`, body `{ note?, resolvedBy? }`; repeating it is safe; handle `404 flag-not-found` (CONTRACTS §1.4, §7.4).
+- [ ] Resolve a flag with `POST /api/flags/{flagId}/resolution`, body `{ note?, resolvedBy? }`; repeating it is safe; handle `404 flag-not-found`, and `404 attempt-not-found` while the flag's Attempt does not exist (CONTRACTS §1.4, §2.10, §7.4).
 - [ ] Put no `run` in any path; check and flag writes target the Attempt's current generation (CONTRACTS §7.4).
 - [ ] Never change a penalty through a flag: apply a suggested value with a penalty write, and resolve the flag separately (CONTRACTS §7.4).
 - [ ] Never derive `stale` on the tablet; show the server's `GateCheck.status`, `verified` or `stale` (CONTRACTS §2.10; ADR-016).
@@ -222,7 +222,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Key checks and flags by `(attemptId, run, gate)`; a new run generation starts with no checks and no open flags, and a check never carries to a re-run (CONTRACTS §2.10; ADR-013; ADR-016).
 - [ ] Keep a check with the Attempt it was made on: a retraction, a contradiction, a result moved to another bib or a re-pointed `entry` never moves or deletes it (CONTRACTS §2.10; ADR-016).
 - [ ] Expect checks, flags and pending writes to survive a re-baseline, with each check's `status` recomputed (CONTRACTS §2.10, §4).
-- [ ] On `attempt.deleted`, drop the Attempt with its checks and flags from the tablet's view; no `check.updated` comes for them and the server keeps them; a pending write of it arrives first as `mismatched` without `confirmedValue`, to be shown as "competitor removed in Canoe123"; a later check, flag or penalty write for it is `404 attempt-not-found`; if the same `attemptId` returns, its checks are served again with its hydration, whoever the competitor under the bib now is (CONTRACTS §2.10, §4, §7.1, §7.2).
+- [ ] On `attempt.deleted`, drop the Attempt with its checks and flags from the tablet's view; no `check.updated` comes for them and the server keeps them; a pending write of it arrives first as `mismatched` without `confirmedValue`, to be shown as "competitor removed in Canoe123"; a later check, flag or penalty write for it, a flag's resolution included, is `404 attempt-not-found`; if the same `attemptId` returns, its checks and flags come back as `check.updated` and `flag.updated` after the `attempt.updated` that creates it, and with any later hydration, whoever the competitor under the bib now is (CONTRACTS §2.10, §4, §7.1, §7.2).
 - [ ] Drop its own event fingerprint; the server keys the store by `eventId` (CONTRACTS §2.10; ARCHITECTURE §3; ADR-016).
 - [ ] Follow the rendering clients' Phase-choice default in the race selector and let the judge override it (ARCHITECTURE §2).
 
