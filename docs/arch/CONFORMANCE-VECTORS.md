@@ -178,20 +178,27 @@ Each vector has:
   `${phaseId}:${bib}` (§2.6), and where both are present they agree. Reading the Phase off the id is
   a convention of this file alone, for a harness: a deployable finds a Phase through `Attempt.phaseId`
   and parses no identifier (`CONTRACTS.md` §1.1). The same convention describes a Phase no element
-  has described: its `format` is the id's token, its `classId` the part of the id before the format token — a convention of
-  this file alone, so that a vector's Phase has a class from its first observation and `CONTRACTS.md`
-  §5 step 1's on-site precondition, a standing no earlier than its Phase, holds without a `classId`
-  element (`standing-not-resent-on-running-tick`,
-  `classification-emptied-keeps-last-standing` and the live `standing.updated` counts stay as written) —
-  and so its `pair`, with the first run named by
-  `CONTRACTS.md` §2.4's pairing by class and token — `standing-not-resent-on-running-tick` has its
-  `pair` standing from its first snapshot (`CONTRACTS.md` §5 step 1; `DECISIONS/LOG.md`, round 22).
-  Class, format and pair are the harness's to state for such a Phase, in its first unit: a
-  deployable's merge reads no id for any of them (`CONTRACTS.md` §2.3, §2.4; the one read of an
-  id is the TCP parser's fallback for `format`, `DERIVATIONS.md` §2.1). The server's
-  adapter states the class today; until it also states `format` and `pair`, the server's core
-  still reads those two from the id for a Phase nothing has described (a code follow-up,
-  `DECISIONS/LOG.md`, round C part 2). A parser states
+  has described, and it is the harness adapter's alone, never a merge's. For each of `classId`,
+  `format` and `pair`, a Phase whose first unit carries no element of that field has it stated by
+  the adapter in that unit, as an element like any other:
+  - `classId` is the part of the id before the format token;
+  - `format` is the id's token;
+  - `pair` is the token's role and combination (`CONTRACTS.md` §2.4), with `siblingPhaseId` the
+    id that carries the other run's token in the token's place, whether or not the vector holds
+    that Phase: `K1M_BR2_19` names `K1M_BR1_19`. This is the one place anything builds an id, and
+    it can because a vector's ids are regular by construction.
+
+  So a vector's Phase has a class from its first observation, and `CONTRACTS.md` §5 step 1's
+  on-site precondition, a standing no earlier than its Phase, holds without a `classId` element
+  (`standing-not-resent-on-running-tick`, `classification-emptied-keeps-last-standing` and the
+  live `standing.updated` counts stay as written). And `standing-not-resent-on-running-tick` has
+  its `pair` standing from its first snapshot (`CONTRACTS.md` §5 step 1; `DECISIONS/LOG.md`,
+  round 22). A deployable's merge reads no id for any of the three (`CONTRACTS.md` §2.3, §2.4;
+  the one read of an id is the TCP parser's fallback for `format`, `DERIVATIONS.md` §2.1): with a
+  `pair` nothing has stated, its `pair` standing waits. The server's adapter states the class
+  today, and `format` and `pair` from the M2 P3b code change on (#287; `DECISIONS/LOG.md`,
+  2026-11-15); until that lands the server's core still reads those two from the id for a Phase
+  nothing has described. A parser states
   `pair` with the format, `siblingPhaseId: null` until the schedule names the first run, and that
   stated `null` makes the `pair` standing wait. The Entry is that Attempt's; where no element sets
   the Attempt's `entry` pointer, every Entry field in the vector is one Entry's. Neither needs a

@@ -277,13 +277,21 @@ the parser's four it reaches the admin log and never `GET /api/diagnostics`.
     `CONTRACTS.md` §2.4). For a second run it is the Phase with the same `classId` whose `format`
     is the first-run token of this one: `BR2`→`BR1`, `HT2`→`HT1`, `EL2`→`EL1`,
     `TR2`→`TR1`, `SR2`→`SR1`, `TS2`→`TS1`, `SUF`→`BR2`, `FI` and `FIB`→`SF`, `TFI`→`TSF`. For a
-    first-run token (`BR1`, `HT1`, `EL1`, `TR1`, `SR1`, `TS1`) it is the Phase the same
-    table names the other way; `BR2`, `SF` and `TSF` are only named, and keep their own `pair`.
+    first-run token (`BR1`, `HT1`, `EL1`, `TR1`, `SR1`, `TS1`) it is the second run that names
+    this Phase, the inverse of that lookup and not a lookup of its own (a default, §10 item
+    48); `BR2`, `SF` and `TSF` are only named, and keep their own `pair`.
     This mirrors upstream's own lookup: by the schedule row's `ClassId` and a fixed token table,
     never by the `RaceId` string.
-  - **The tiebreak is the day.** One match is the sibling. With several, take the one whose
-    `date` equals this Phase's. If that leaves none or more than one, `siblingPhaseId` stays
-    `null` (a default, not recorded).
+  - **The tiebreak is the day.** For a second run, one match is the sibling. With several,
+    take the one whose `date` equals this Phase's. If that leaves none or more than one,
+    `siblingPhaseId` stays `null` (a default, not recorded). A first run takes the second run
+    that names it; where several name it, the one on its day; if that leaves none or more than
+    one, `null`. *Example,* one class: a `BR1` on the 19th, a `BR1` on the 20th and a `BR2` on
+    the 20th. The `BR2` finds two first runs and names the one of the 20th, which names it
+    back. The `BR1` of the 19th is named by nothing: `null`. With the `BR2` on the 21st
+    instead, it finds two first runs and neither on its day: `null`, and so are both first
+    runs. With a single `BR1` on the 19th and the `BR2` on the 20th, one matches: they pair
+    across the days, each naming the other.
   - **No id is parsed or built.** The earlier reading, "the same class part of the id with the
     other token", fails after a class rename or a race moved to another class: the started first
     run keeps its old `RaceId` prefix, the second run's `ClassId` follows the change, and the two
@@ -554,7 +562,8 @@ row (§4.12; `CONTRACTS.md` §2.6).
   - 8 only by rotation, up to about 600 s.
 - **Where the mark comes from.** The XML snapshot at about 35 s (INV-2, rule 2's exception), or TCP's
   next push of the race.
-- Kayak Cross never uses it.
+- Kayak Cross never uses it, the time trial included: a Cross leave changes no `status`
+  (`CONTRACTS.md` §7.1; §10 items 35 and 43 (d)).
 
 **Result marks, closed-set mapping.** A row with a mark presents `outcome: no-result`, whatever time
 it carries: a DNF row can keep a time, even another athlete's finish (`CONTRACTS.md` §2.6). That is
@@ -562,17 +571,19 @@ the core's presentation of a presented mark — of the presented `status`, never
 own: a mark refused for `status` (INV-2 rule 2, INV-2c) shows nowhere (`CONTRACTS.md` §2.6); the parser emits the time beside the mark (§0.5), and a
 withheld stale mark leaves the time presented (§4.12).
 - Sources:
-  - `Results.Result@IRM` on TCP, where upstream sends the `*` mark as empty;
+  - `Results.Result@IRM` on TCP, where upstream sends `*` (under review, below) as empty;
   - `Results.Result@PP = "*"` on TCP;
   - `XML.Results.Status`.
 - The mapping:
   - `DNS`, `DNF`, `CAP`, `RAL`, `DSQ`, `DSQ-R` and `DQB` map to `dns`, `dnf`, `cap`, `ral`, `dsq`,
     `dsq-r` and `dqb`.
   - `NON-RK` maps to `non-ranked`, a finished run excluded from ranking.
-  - `*` means `underReview: true`, with the run otherwise `finished`. Every result row that carries a
-    time, a mark or a placement states `underReview`, `false` without the mark, so a withdrawn `*`
-    clears; a row that stated it only when true could never clear it (INV-1). A row carrying none of
-    the three states nothing (INV-7's blank row, `CONFORMANCE-VECTORS.md` §1).
+  - `*` is upstream's under-review flag, not a result mark: it sets no `status` and states no
+    result (§4.6(b), §4.11). It means `underReview: true`, with the run otherwise `finished`.
+    Every result row that carries a time, a mark or a placement states `underReview`, `false`
+    without the `*`, so a withdrawn `*` clears; a row that stated it only when true could never
+    clear it (INV-1). A row carrying none of the three states nothing (INV-7's blank row,
+    `CONFORMANCE-VECTORS.md` §1).
   - Empty with a time means `finished`.
   - Any other value maps to `other`.
 - **No-results arrive only here, and not always promptly.**
@@ -614,6 +625,17 @@ withheld stale mark leaves the time presented (§4.12).
   `provisional: true`. It follows the listing: a start correction that moves `Time` moves it
   (§4.11; recorded 0 → 89 at jarni-so-do K1M_BR1_18:138), and a listing with `dtStart` empty ends
   it (§4.1: the start deleted, `outcome` back to `not-yet`).
+- **It is the outcome of an Attempt the stream shows `on-course`, and it ends where the stream's
+  own status leaves that** (`CONTRACTS.md` §2.6; defaults, §10 item 43):
+  - at a listing that shows `at-start` (§4.1: `dtStart` empty, outside a Cross heat), whatever
+    `Time` that listing carries;
+  - at a listing with a `dtFinish`: the `duration` inference below replaces it, and where that
+    listing yields none — its `Time` is empty, or a slalom listing has no `Gates` (§4.6(a)) —
+    nothing does, so `outcome` is `not-yet` until a row states one;
+  - at a slalom leave, on every path of §4.1's rule.
+
+  A Kayak Cross leave ends nothing (§10 item 35). So no presented state pairs a `running`
+  outcome with a `status` other than `on-course`.
 
 **`duration`, the inference.**
 - At the finish transition:
@@ -642,7 +664,8 @@ withheld stale mark leaves the time presented (§4.12).
   the seven recordings.
 - **Envelope:** `source: 'tcp'`, `confidence: 'inferred'`, `provisional: true`.
 
-**Failure mode:** `not-yet` before the finish. Never `unavailable`.
+**Failure mode:** `not-yet` before the finish, and after a finish listing that yields no
+`duration` (the `running` bullet above) until a row states the outcome. Never `unavailable`.
 
 ### 4.4 `outcome` from a result row
 
@@ -972,7 +995,7 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   those three it is `unavailable{not-applicable}`, except that a row there carrying `Q` is still
   presented `true`: a stated fact is never dropped. The boundary is by `stage` (E4;
   recorded: `Q` throughout the junior time trial, E1).
-- **`underReview`** is §4.1's `*` mark.
+- **`underReview`** is §4.1's `*` flag.
 
 ### 4.8 On-course extras
 
@@ -1433,7 +1456,8 @@ review R16, E2: the spike applied the stale-mark check only to rows it had attri
 - **`confirmed`:** a later results-table observation of the same target field, for the same run
   generation, equals `requestedValue`.
 - **`mismatched`:** it arrives unequal.
-- **`superseded`:** the generation increments first (§4.11).
+- **`superseded`:** the generation increments first (§4.11). The core decides it, like every
+  outcome of this section (§0.5), for a write resumed after a restart too (§10 item 44 (c)).
 - The comparison is field-level: a row refreshed for an unrelated reason is not an echo of a different
   field. The field is the target gate's cell: the `gates` cell whose `number` is the gate the request
   names (#212; in the vectors, the `number` of `requestedValue`'s one cell), its `penalty` against
@@ -1446,6 +1470,14 @@ review R16, E2: the spike applied the stale-mark check only to rows it had attri
   `DECISIONS/ADR-010`'s lost echo. An `xml` observation is an echo only if its content age
   (`changedAfter`) is later than `submittedAt`; a save written before the correction is retained and
   settles nothing.
+- **A retained value is a `known` one.** A slot that is `not-yet` or `unavailable` retains no
+  cell: a retraction's marker states no result, and cells held while no course is bound are not
+  a `gates` value (§4.6). At submission the write then records that none was retained. At a
+  later delivery such a slot is no prior, and the comparison is with the value the write
+  recorded, or with none. *Example:* a write is pending with `2` retained; the Phase's course
+  becomes not configured and TCP re-sends the row, retained as `unavailable{not-configured}`; the
+  course binds again and TCP re-sends `2`. That is a re-delivery of the retained `2`, and the
+  write stays `pending` (§10 item 44 (d)).
 - The echo arrives as an event-driven result push, because a correction recalculates the race.
 - **After a restart** a stored `pending` write resumes at load (`CONTRACTS.md` §1.5), keyed by its
   target and generation, and its echo is the next results-table observation of the target cell for
@@ -1623,7 +1655,9 @@ and an item here, not a contract round (`README.md`, ground rules); each says wh
 it. Round C part 4 (maintainer, 2026-11-12) closed item 31, settled items 26, 33 and 34, added
 the live side to item 25's closure, and added item 38, the defaults inside the removal
 decision. Items 40 to 42, and item 38 (k) to (m), are defaults of 2026-11-15 from the reviews
-of M2 P3a, under the same rule.
+of M2 P3a, under the same rule. Items 43 to 48, and item 41 (c), are defaults of 2026-11-15
+from M2 P3b: the questions round C left open (#346), the rules that package's code needed
+(#300, #318), and one from the review of its text (item 48).
 
 1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
    hardware judge terminals on their own port and raises a flag on the scoring service for about
@@ -1659,7 +1693,10 @@ of M2 P3a, under the same rule.
    for the next rewrite, which upstream makes only on a flagged change. C1M_BR1_20:64: last
    listed 09:40:01.810Z, the leave at 09:40:05.837, the file with `DNS` read at 09:40:06.618 and
    refused, the next rewrite at 09:41:51.770: 105 s of `not-started` where rule 2's text weighs
-   "1.1 s once". Ratified as ruled: a late `dns` is acceptable (`CONTRACTS.md` §2.6).
+   "1.1 s once". The recording's snapshot record of 09:40:41.676 in between is no rewrite: it is
+   byte for byte the file read at 09:40:06.618 (2,078,513 characters, equal; E1, compared
+   2026-11-15), so the reader delivers nothing for it (§0.3). Ratified as ruled: a late `dns` is
+   acceptable (`CONTRACTS.md` §2.6).
 10. ~~The cause of the 11–27 s late-finish outliers.~~ Answered (maintainer, round 2): the operator
     assigns a finish retroactively after a judge reports the passage, or swaps two athletes' finishes
     noticed late. Both are corrections that §4.12 now models.
@@ -1814,8 +1851,7 @@ of M2 P3a, under the same rule.
     process does give: no XML configured, `unavailable{not-configured}` once run 2 is observed,
     `not-yet` before. Reopens if a client needs to tell the two states apart; feeding the
     reader's state to the core as an ingest event would then be the change. The reason stays in
-    the closed set although nothing on site produces it: removing it changes the schema and the
-    contract package, a breaking change to weigh once, before 1.0, not in a round.
+    the closed set although nothing on site produces it (item 47).
 31. ~~**The combination of `NHT1`/`NHT2`.** Whether upstream builds a combined result for these
     two runs as it does for `HT1`/`HT2`.~~ **Closed (maintainer, 2026-11-12):** it does not.
     Upstream's two-run total and better-run path includes `BR2`, `HT2`, `EL2` and `TR2` and
@@ -1856,7 +1892,8 @@ of M2 P3a, under the same rule.
     the counter's recovery never reads it. Reopens if a venue reports a clock set back across a
     recovery. What is lost is
     workflow state: checks and flags read as never made, a pending write is forgotten and the
-    operator resolves it by hand, as after §10 item 25. **Settled (maintainer, 2026-11-12), with
+    operator resolves it by hand, as after §10 item 25; the idempotency keys go with the writes
+    store, so a same-key retry carried across that restart is a new request (item 44 (a)). **Settled (maintainer, 2026-11-12), with
     item 26:** the admin log entry is the report; nothing goes on the wire.
 34. **What "durable" covers** (#273). `CONTRACTS.md` §2.10 states the guarantee against a crash:
     "a crash at any point leaves the previous complete state". That is a crash of the server
@@ -1876,7 +1913,8 @@ of M2 P3a, under the same rule.
     `runningStaleAfterSeconds` (§2.6), until the row brings the placement. Property 4's
     withdrawal of `running` at a leave is slalom's, with `left-without-finish`. The core and
     the gate-2 checker agree (E2, the M1 run: 0 reports on the seven whole recordings at
-    86ed855).
+    86ed855). The time trial follows the same rule, an athlete removed before a finish
+    included (item 43 (c), (d)).
     Reopens if the scoreboard work (M3) finds a frozen heat clock misleading.
 36. **A re-run finished over a standing mark without the wizard** (#301). Upstream does not
     clear the old mark (§4.11, §4.12). Whether it then ranks the marked row — a `Rank` and a
@@ -2004,8 +2042,9 @@ of M2 P3a, under the same rule.
     and `2026-13-45T00:00:00+02:00` states no `details` and raises `unparseable-field`. Every
     recorded snapshot carries a calendar date and a well-formed time. Reopens on a recording
     whose time part shows that its date part is not the day the organiser meant.
-41. **Two readings inside the XML retraction** (review of PR #369, CQ-A and CQ-B; 2026-11-15).
-    Both keep the merged core; no client duty moves, no vector changes.
+41. **Three readings inside the XML retraction** (review of PR #369, CQ-A and CQ-B, 2026-11-15;
+    (c) from #346, the same day). All keep the merged core; no client duty moves, no vector
+    changes.
     (a) *What re-arms `xml-table-emptied`* (§4.12): an XML snapshot of the race that carries a
     row. A TCP push carrying rows does not. The emptied table is the file's, as is "a table that
     never had rows"; under the TCP reading every push and rotation of a race live on TCP over an
@@ -2028,6 +2067,16 @@ of M2 P3a, under the same rule.
     (INV-2d) replaces both, and a new generation clears the run's fields. Reopens if a path is
     added that takes a `tcp` value away and leaves the `xml` slot with no later `tcp` observation
     over it; the `xml` slot then takes the absence as well.
+    (c) *When `xml-table-emptied` is raised* (§4.12; `DECISIONS/ADR-015` Revision 8). The
+    maintainer's decision raises it where an emptied table "retracts nothing". The text counts a
+    result held from `tcp` only where the content-age guard would have admitted the retraction,
+    so a first read (`changedAfter: null`), or a file written before the results it lacks,
+    raises nothing, and the first later snapshot the guard admits raises it. That narrows when
+    the diagnostic appears. It stays inside the decision: the entry says "this file would have
+    cleared results", and a file older than the results would not have. A default, since the
+    surface it was to go to the maintainer with is settled as the admin log (item 26). Reopens
+    if an operator misses an emptied table because every read of it was older than TCP's last
+    delivery of the race.
 42. **Every date the XML states** (2026-11-15, following item 40 (b)). Default, the smallest
     that fits: item 40 (b)'s rule reads every date part the snapshot states, not only the
     Event's. That is `Schedule.StartTime` (a Phase's `date`, §2.1, and the date pairing and
@@ -2051,3 +2100,137 @@ of M2 P3a, under the same rule.
     client shows `date`, `scheduledStart` and birth data as served, and `not-yet` as not known.
     Reopens on a recording with an invalid date part, or if organisers enter birth dates in a
     form this reads as unparseable often enough to crowd the admin log.
+43. **The stream's `running` outcome outside `on-course`, and a Kayak Cross leave** (#318 N1,
+    N3; #346; M2 P3b, 2026-11-15). `running` is the outcome of an Attempt on course
+    (`CONTRACTS.md` §2.6), and a client reads from `outcome.kind` alone that a value is still
+    accruing. The rule the tests read: **no presented state pairs a `running` outcome with a
+    `status` other than `on-course`** (§4.3). Four defaults inside it. No client duty moves.
+    Evidence (E2, a scan of the TCP on-course stream of the seven recordings, 564,120 listings,
+    2026-11-15): none of the four shapes occurs there with a `running` to lose.
+    (a) *A finish listed with no `duration` to infer.* A listing with a `dtFinish` ends the
+    stream's `running`. Ordinarily the `duration` inference replaces it. Where the listing
+    yields none — an empty `Time`, or a slalom listing without `Gates` (§0.5, `gates-absent`) —
+    nothing is invented, and `outcome` is `not-yet` until a row states one. Slalom and the Cross time trial alike, as the stream lists a finish per competitor in
+    both (§4.1). `TEST-ARCHITECTURE.md` §3.2 property 4 names this listing. Recorded: 234 such
+    listings, all of cp3-cross WX1_XT_26:25 and all with `dtStart` empty too, so the `running`
+    had ended at the deleted start; no listing carries `dtStart`, `dtFinish` and an empty
+    `Time`.
+    (b) *A listing that shows `at-start` and carries a `Time`.* It states no `running` (§4.3:
+    "a listing with `dtStart` empty ends it"), whichever of the unit's elements the core reads
+    first. Recorded: none.
+    (c) *What a leave yields.* In slalom no `running` survives a leave, on any path: `status`
+    stays a stream `finished` or a table's `finished` or mark, becomes `left-without-finish`
+    where a start was observed, or `not-started` from `at-start` (§4.1). A `duration` inference
+    stays (§4.3). In Kayak Cross, heat and time trial, the leave changes neither `status`
+    (`CONTRACTS.md` §7.1: "leaving the set never changes `status`") nor the stream's outcome
+    (item 35). A `running` then stands only beside `on-course`, and a time-trial Attempt that
+    leaves while staged stays `at-start` until a listing or a row (recorded: 3 such leaves in
+    MX1_XT_26 and WX1_XT_26).
+    (d) *A Cross time-trial athlete removed before a finish.* By (c) the Attempt stays
+    `on-course` with the clock frozen and stale, until a TCP push of the race states the mark.
+    That push is not prompt. A removal before a finish is one of rule 2's silent paths, so the
+    mark reaches TCP with another athlete's push of the race or with the rotation: for slalom's
+    marks §4.1 records a median of 20–52 s and a worst of 522 s on another athlete's push, and
+    up to about 600 s by rotation. After the last finisher of a time trial no other finish
+    follows, and only the rotation is left. The XML's mark does not displace it while TCP is
+    connected: INV-2 rule 2's exception
+    reaches `not-started`, `at-start` and `left-without-finish` only. Recorded: none. Of 71
+    leaves in the two recorded time trials, 68 followed a listed finish and 3 had no start.
+    Giving the time trial slalom's `left-without-finish` would bring the mark at the next save.
+    It would also put a status into Cross Phases that `CONTRACTS.md` §2.6 and §7.1 exclude,
+    which clients would see: a round's change, not taken here.
+    Gate 2 has no clause for the pairing, and none is added. The P3c recording sweep counts,
+    over the whole replays, presented `running` outcomes beside another `status`, and reports
+    how long each of (c)'s three staged time-trial leaves stood `at-start` (counted here, not
+    traced). Reopens on a non-zero count, on a recording of (d), or with item 35.
+44. **Four readings in the write path** (#300 N3 to N5; #346; M2 P3b, 2026-11-15). Each is
+    read from the text (E3); no recording holds a write (E4). No client duty moves.
+    (a) *A same-key retry after the keys were lost.* `CONTRACTS.md` §1.5 promises that a
+    same-key retry "never submits a second command upstream". Two cases lose the key across a
+    restart: a store write that failed after the socket accepted the command (§7.3), with a
+    restart before the store wrote again; and a store file set aside at load (item 33). A
+    retry with that key in the new lifetime is a new request: the same gate and value go
+    upstream again, or a second flag is raised. Default: accepted as a residual, and §1.5
+    says so. The second command restates the first, so upstream's table ends as the one
+    command left it, unless someone changed that cell in between. It needs a failed or invalid
+    store, a restart, and a tablet that carries one retry across it. Reopens if a venue
+    reports a doubled correction or flag after a restart, or if the venue-laptop check (#198)
+    shows the store failing validation in ordinary use.
+    (b) *"The Attempt has no run yet".* No such refusal exists. An Attempt presents `run` from
+    the observation that creates it, `1` on an upstream stream (`CONTRACTS.md` §2.6;
+    `TEST-ARCHITECTURE.md` §3.2 property 10), and a route that finds no Attempt answers
+    `404 attempt-not-found`. The server's `400` with `field: 'run'` after the
+    `upstream-disconnected` check is unreachable and goes: the creating step takes the
+    generation from the core. *Example:* an Attempt known only from a start-list row, never
+    listed, takes a write: `202`, `target.run` `1`.
+    (c) *Who decides `superseded` for a write resumed after a restart.* The core: §0.5 gives it
+    echo matching, and `superseded` is one of §6's three outcomes. The on-site layer hands a
+    stored `pending` write to the core once the core knows its Attempt, as the operator element
+    carrying the stored `target.run`. Where the Attempt's generation is already past it, the
+    core creates the write `superseded`, presents no optimistic value and pushes it. Where the
+    generation is the stored one, §6's rule runs unchanged. Where the core does not yet present
+    that generation, nothing is handed over (item 25). On an upstream stream the first case
+    cannot arise today, since a write is handed over right after the unit that creates its
+    Attempt, at generation `1`.
+    (d) *A non-`known` retained value.* §6: a slot that is `not-yet` or `unavailable` retains no
+    cell, at submission and as a prior at a later delivery. The comparison then uses the value
+    the write recorded, or none. Treating such a prior as a cell of `null` reads a later
+    re-delivery of the retained value as a change and resolves the write `mismatched` falsely.
+45. **A second run withdrawn with no run to come** (#266; #346; M2 P3b, 2026-11-15). After a row
+    of run 2 is retracted, the time-empty row that follows leaves `placement`, `pairTotal` and
+    `countingRun` carried, `provisional: true`: the run is about to happen once more
+    (`CONTRACTS.md` §1.2, condition 3; `TEST-ARCHITECTURE.md` §3.2 property 11(c)). Where the
+    run never comes, they stay provisional until a row of run 2 states a time or a mark.
+    Default: that stands. Nothing upstream tells a run still to come from one that will not
+    come: the row is the one every second-run Attempt carries before its run. And the flag is
+    honest: the stream showed the Attempt in run 2, and upstream's table states no result for
+    it. The cost is a `pair` standing entry that stays provisional for as long as the operator
+    enters neither a time nor a mark. Not recorded (E4: the one recorded run-2 mark cleared in
+    place, jarni-so-odp C1M_BR2_18:51, raced 44 s later). No client duty moves. Reopens on a
+    recording of the case, or if M3 or M5 find a provisional entry in the standing of an
+    `official` Phase misleading; ending the carry when `Phase.status` reaches `official` is
+    then the rule to weigh.
+46. **Three notes on what the gates measure** (#346; M2 P3b, 2026-11-15). None moves a client
+    duty or a vector.
+    (a) *The merged run-2 `outcome`'s instant and property 1* (round-26 review, CQ2). §4.4 gives
+    the instant: the element's that last changed `runSeconds` or a presented merged cell.
+    Property 1 has no clause for it, so a core that kept the row's instant when a listing
+    changed a merged cell would pass gate 2. Default: none is added. No client reads the
+    instant, the value is checked (property 6(b), gate 3), and the core's own test pins the
+    rule on the recorded case (nkz-20ne K1M_BR2_20:63, `src/core/__tests__/round26-rules.test.ts`).
+    Reopens if a client ever orders or ages by that `observedAt`.
+    (b) *`exercised` under a stated input* (round 24). A stated outage or re-baseline counts as
+    exercise for properties 8 and 13, and the counts carry no mark of it. Default: the
+    fixture's own `source.events` is the mark, and no count is split: a fixture with no
+    `source.events` exercised those properties on recorded input alone. Reopens when a
+    fixture holds a recorded outage beside a stated one, where one count would mix the two.
+    (c) *`CONTRACTS.md` §5 step 4's "0 mismatches".* The figure is the earlier rule's, on
+    1,855 rows whose selection is not recorded, and it was not measured again when the
+    category numbering changed (2026-11-12). The P3c recording sweep measures the current rule once:
+    every placed row with a `CatId` in the recordings' snapshots, the assembled category rank
+    against `CatRnk`, rows tied on class rank counted on their own. A mismatch is a defect of
+    the assembly (§5 step 4) and is reported, not accepted.
+47. **`source-unreachable` in the closed set** (#346; item 30; M2 P3b, 2026-11-15). No tier
+    produces the reason; for the on-site process that is item 30's default. Default: it stays in
+    `unavailable.reason`'s closed set. Removing it changes `schemas/observed.schema.json` and
+    the contract package, a breaking change for nothing a client sees, since all three reasons
+    render alike (`CONTRACTS.md` §1.2). Revisit once, at the 1.0 contract freeze (M6): drop
+    it there if it still has no producer.
+48. **A first run's `siblingPhaseId`** (review of PR #375, CQ2; M2 P3b, 2026-11-15). The
+    maintainer's pairing decision (2026-11-11, #287) is made from the second run's side: a
+    second run's first run is the Phase with its class and the paired token, the same day
+    breaking a tie. Read "the other way" as a lookup of its own, a first run could name a
+    second run that names another first run: with a `BR1` on the 19th, a `BR1` on the 20th and
+    a `BR2` on the 20th, the `BR1` of the 19th finds one `BR2` and would name it. Default: a
+    first run's sibling is the inverse of the second runs' lookup. It names the second run
+    that names it; where several name it, the one on its day; where that leaves none or more
+    than one, `null` (§2.1; `CONTRACTS.md` §2.4). A first run's sibling therefore always names
+    it back, and a client that follows the pointer from a first run lands on its pair. The
+    second run's side is the decision's and does not move, so no `pair` standing moves. One
+    shape stays one-way: two second runs that both name one first run, which names only the
+    one on its day. A single pointer cannot hold both. Nothing recorded tells the two
+    readings apart (E2, the last snapshot of each recording, 2026-11-15): in the six slalom
+    files every paired class has two first and two second runs, one of each per day, so the
+    day pairs them and each names the other; cp3-cross has no pair. No client duty moves:
+    `siblingPhaseId` is `null` wherever no pair is stated. Reopens on a recording where a
+    class's first and second runs are not one of each per day.

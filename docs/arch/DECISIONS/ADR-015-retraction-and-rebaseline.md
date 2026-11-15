@@ -351,3 +351,32 @@ not established (E4); rules 2 and 3 cover both.
 **Vectors.** No expected outcome changes: every removal vector drops the bib from the race.
 `attempt-kept-when-bib-stays-under-another-entry` is added (the bib stays under another `Id`: no
 `attempt.deleted`, `entry` re-pointed, `run` 1); it passes on today's core, which removes nothing.
+
+## Revision 8 — `xml-table-emptied` is raised under the content-age guard (a default, 2026-11-15)
+
+Revision 5, rule 5, raises `xml-table-emptied` "where the race holds at least one result an absent
+row would have retracted". Read with rule 2, that counts a result held from `tcp` only where the
+guard would have admitted the retraction: the snapshot's `changedAfter` is later than the result's
+latest delivery (`CONTRACTS.md` §4 INV-7; `DERIVATIONS.md` §4.12).
+
+So the guard narrows when the diagnostic appears:
+- a first read, whose `changedAfter` is `null`, raises nothing;
+- a file written before the results it lacks raises nothing;
+- the first later snapshot of the still-empty table that the guard admits raises it.
+
+A result held from `xml` alone counts at once, as before.
+
+**Why this is inside the decision** (maintainer, 2026-11-11: "a wholly empty XML table retracts
+nothing and raises a diagnostic"). The entry tells the operator that this file would have cleared
+results. A file older than those results would not have cleared them, table emptied or not, so
+it has nothing to report.
+
+*Example.* TCP pushes a race's results at 10:40:59. A file whose `changedAfter` is 10:40:55 names
+the race with no row: nothing is retracted and nothing is logged. The next save, `changedAfter`
+10:41:32, still has no row: `xml-table-emptied` is logged once.
+
+**Status.** Round C owed this to the maintainer together with the question of the diagnostic's
+surface. That question is settled as the admin log (2026-11-12), and nothing here changes what an
+official or a spectator sees, so it is recorded as a default (`DERIVATIONS.md` §10 item 41 (c)).
+It reopens if an operator misses an emptied table because every read of it was older than TCP's
+last delivery of the race.

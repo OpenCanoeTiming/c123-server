@@ -265,8 +265,10 @@ the step index, the Attempt, the field and the property number.
        content-age guard admits it: the row present with no time, no finish time and no mark,
        and the row absent from a table that carries other rows. An `xml` table with no rows
        retracts nothing and produces nothing. What a retraction presents is the retained stream
-       inference with that listing's own envelope where one is retained, else `not-started` on
-       the retraction's own instant and `source` (property 5).
+       inference with its own element's envelope where one is retained — the listing's, or for
+       the leave's `left-without-finish` the `oncourse-left`'s, `tcp` on the instant of the TCP
+       message at which the leave was evaluated — else `not-started` on the retraction's own
+       instant and `source` (property 5).
      - *`oncourse-left` and `oncourse-empty`* are the core's evaluation at a TCP message
        (`DERIVATIONS.md` §4.1, §4.8), so what they produce — `status`, the stream's withdrawn
        `running` outcome, the set — is `tcp`.
@@ -280,7 +282,9 @@ the step index, the Attempt, the field and the property number.
    **An earlier instant is legitimate wherever (b) admits it.** The cases below are the ones
    whose envelope needed stating, and in each of them only the envelope stated here is right.
    The list is not closed: any other envelope older than its step — a value whose `provisional`
-   flips at a closure and keeps its row's instant, for one — is judged by (b) and (c) alone.
+   flips at a closure and keeps its row's instant, for one — is judged by (b) and (c) alone. A
+   second run's merged `outcome` is another: `DERIVATIONS.md` §4.4 gives its instant, a core
+   test pins it, and no clause here names it (a default, `DERIVATIONS.md` §10 item 46 (a)).
    - **A creation message or a standing** carries earlier envelopes.
    - **A row the merge held for the stream's finish** (`DERIVATIONS.md` §4.11) is presented at the
      listing that settled it, with its own `observedAt` **and its own value**: the fields the row
@@ -290,9 +294,11 @@ the step index, the Attempt, the field and the property number.
      (INV-5) and keeps the listing's envelope. *Recorded:* nkz-19so C1M_BR1_19:7, the row of
      12:41:44.250 presented at the listing of 12:41:44.358; `outcome` the row's, `status` the
      listing's.
-   - **A retraction's fallback** to the retained stream inference keeps that listing's envelope
-     (property 5). *Recorded:* jarni-so-odp K1W_BR2_18:16, the `at-start` of 14:11:39.886
-     presented at the clearing of 14:12:08.
+   - **A retraction's fallback** to the retained stream inference keeps the envelope of the
+     element that drew it (property 5): a listing's, or the `oncourse-left`'s for a
+     `left-without-finish` (`CONTRACTS.md` §3.2). *Recorded:* jarni-so-odp K1W_BR2_18:16, the
+     `at-start` of 14:11:39.886 presented at the clearing of 14:12:08; no recording holds the
+     `left-without-finish` case.
    - **A mark the guard refused at its first read** and a later snapshot re-delivers is the
      re-delivery's element and instant (INV-5), the `no-result` outcome with it (`CONTRACTS.md`
      §2.6), never the refused read's.
@@ -316,10 +322,10 @@ the step index, the Attempt, the field and the property number.
      read on the course of the snapshot of 08:45:05.614: the vector is `tcp` at 00.903.
      MX1_XT_26:8, listings 08:45:00.775–05.518 and the row of 00.903 all stating nine clean
      cells: the vector at 00.903.
-     nkz-19so K1M_BR2_19:81, the row of 09:30:05.720 with cell 23 blank, the listing of 06.150
-     judging it clean, the row of 12.812 restating the merged cells: the vector at 06.150, whether
+     nkz-19so K1M_BR2_19:81, the row of 09:30:05.719 with cell 23 blank, the listing of 06.150
+     judging it clean, the row of 12.811 restating the merged cells: the vector at 06.150, whether
      the course binds at 11.556 (nkz-19so) or at 13.551 (the #208 fixture cut from it); a core
-     that stamps 12.812 on a late binding is the planted defect the checker rejects.
+     that stamps 12.811 on a late binding is the planted defect the checker rejects.
 2. **Envelopes (§1.2) D.** Every presented envelope validates against `schemas/observed.schema.json`:
    `eventTime` omitted when absent, never `null`; `unavailable.reason` in the closed set; `source`
    never `bridge` on site.
@@ -336,9 +342,12 @@ the step index, the Attempt, the field and the property number.
    the Attempt's race (property 5); a listing of the Attempt that increments `run` in the same delta
    (property 10) or contradicts a finish (property 7); a `rebaseline` of its scope (property 13);
    and, for the stream's own `running` outcome alone, an `oncourse-left` or `oncourse-empty`
-   covering the Attempt or a listing of it with `dtStart` empty — the stream withdrawing what it
-   alone stated (`DERIVATIONS.md` §4.3, §4.1; `ADR-015` Revision 4), `status` the leave's
-   `left-without-finish` or the listing's `at-start`, every other field unchanged.
+   covering the Attempt (slalom only: a Kayak Cross leave withdraws nothing, `DERIVATIONS.md`
+   §10 item 35), a listing of it with `dtStart` empty, or a listing of it with a `dtFinish` that
+   yields no `duration` (an empty `Time`, or a slalom listing with no `Gates`) — the stream withdrawing what it alone stated (`DERIVATIONS.md` §4.3, §4.1,
+   §10 item 43; `ADR-015` Revision 4), `status` as §4.1 gives it at that element (the leave's
+   `left-without-finish` or `not-started`, a table `finished` or mark standing; the listing's
+   `at-start` or `finished`), every other field unchanged.
    `unavailable` appears only with a closed reason, and only at a step that carries the field for the
    Attempt (property 3) or at a scope snapshot of its race, never at a connection event, a `fragment`
    or by itself (INV-3): a `not-configured` decided from `SourceStatus` or the snapshot
@@ -684,7 +693,9 @@ deliberately broken for it, and a property that no window exercises is not evide
 the spike, P10 and P13 ran zero times and P4, P7 and P8 two to four). **The fixture says which:**
 `evidence.gate2.exercised` records, per property, the number of steps that evaluated it
 (`schemas/fixture-admitted.schema.json`); a zero does not block admission, it tells every consumer
-that the fixture is no evidence for that property, and `violations` lists only what was evaluated. Properties that judge membership,
+that the fixture is no evidence for that property, and `violations` lists only what was evaluated. A count under properties 8 and 13 may
+rest on a stated outage or re-baseline, an input the recording lacked: the fixture's own `source.events` says so, and the count itself
+carries no mark (a default, `DERIVATIONS.md` §10 item 46 (b)). Properties that judge membership,
 element classification or attribution — 3, 6, 10, 11, 13 and 14 — **read upstream's raw stream**, not
 the ingest's own elements: a checker that trusts the `oncourse-left` the code under test emitted cannot
 see a wrong leave, and the spike's did not see a 10.7 s TCP stall empty a Kayak Cross heat's on-course

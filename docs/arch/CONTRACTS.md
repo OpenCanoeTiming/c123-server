@@ -364,8 +364,9 @@ correction attempt (a UUID is sufficient). The server retains the mapping from k
 that same `WriteRequest`, whatever its current `status`, and never submits a second command upstream.
 A **different** key is always a new correction, even against the same field — a judge revising their
 own just-submitted correction is a second legitimate `WriteRequest`, not a retry, and gets its own.
-The key maps — of writes and of flags (§7.4) — and every `WriteRequest` are durable with §2.10's
-discipline: a same-key retry "never submits a second command upstream" (above), and `pending`
+The key maps — of writes and of flags (§7.4) — and every `WriteRequest` are **the writes store**:
+one durable unit per event, written whole, apart from §2.10's checks and flags. It is durable
+with §2.10's discipline: a same-key retry "never submits a second command upstream" (above), and `pending`
 "persists until an echo … is ingested" (§2.9), neither of which a restart may undo — a key forgotten
 at a restart would let the retry send a second command or raise a second flag, and a forgotten
 `pending` write would be settled by nothing. The map may be dropped after the 24 hours, a later retry
@@ -373,6 +374,21 @@ being a new correction. A durable `WriteRequest` carries `target.run`, and the g
 is not persisted: a restart during a re-run is an accepted risk, the operator resolving a pending
 correction by hand (`DERIVATIONS.md` §10 item 25; maintainer, 2026-11-10). A missing header is
 `400 validation-failed`, `details: [{ field: 'Idempotency-Key', issue: 'missing' }]`.
+
+**Two cases leave a key in memory only, or lose it.** In both, what is lost is the guarantee
+across a restart, never the one inside a lifetime:
+- **A store write that fails after the socket accepted the command** (§7.3). The `WriteRequest`
+  and its key stay bound in memory, the `202` and the push go out, and a same-key retry is
+  answered from the key. This is §7.3's one exception to "durable before acknowledged". The
+  next successful write of the writes store stores them (§7.3), so the key is lost only by a
+  restart before that write.
+- **A store file set aside at load** because it failed validation (§2.10). The new lifetime has
+  none of the earlier keys and none of its `pending` writes.
+
+A same-key retry that arrives after a restart that lost the key finds none and is a new request. For a write
+the same gate and value go upstream a second time, as a second `WriteRequest`; for a flag a
+second flag is raised. This is an accepted residual (a default, `DERIVATIONS.md` §10 item 44 (a)):
+it needs a failed or invalid store, a restart, and a retry carried across it.
 
 ### 1.6 Snapshot and subscription ordering
 
@@ -631,13 +647,18 @@ pairing and combination behaviour.
   |---|---|---|---|---|---|---|---|---|---|
   | Its first run | `BR1` | `HT1` | `EL1` | `TR1` | `SR1` | `TS1` | `BR2` | `SF` | `TSF` |
 
-  A first-run token (`BR1`, `HT1`, `EL1`, `TR1`, `SR1`, `TS1`) names its second by the
-  same table read the other way. `BR2`, `SF` and `TSF` are only named, by the `SUF` or the final:
+  A first-run token (`BR1`, `HT1`, `EL1`, `TR1`, `SR1`, `TS1`) names the second run that names
+  it: the pairing is made from the second run's side, as upstream makes it, and the first run's
+  pointer is its inverse, never a lookup of its own (a default; `DERIVATIONS.md` §10 item 48).
+  `BR2`, `SF` and `TSF` are only named, by the `SUF` or the final:
   their own `pair` is their row of the format table above. This is how upstream itself links two
   runs (observed upstream behaviour).
-- **The same day breaks a tie.** When one Phase matches, it is the sibling, whatever its day.
-  When several match, the sibling is the one whose `date` is this Phase's. When that does not
-  leave exactly one, `siblingPhaseId` stays `null` (a default; no recording holds such an event).
+- **The same day breaks a tie.** For a second run: when one Phase matches, it is the sibling,
+  whatever its day. When several match, the sibling is the one whose `date` is this Phase's.
+  When that does not leave exactly one, `siblingPhaseId` stays `null` (a default; no recording
+  holds such an event). For a first run: the second run that names it; where several do, the
+  one on its day; where that does not leave exactly one, `null`. So a first run's sibling
+  always names it back.
 - **No part of a `RaceId` is read for pairing,** and no sibling id is built from this Phase's id.
   `classId` is the class field's value, verbatim (§2.3), which covers pairing too: after a rename
   the two runs still share a `classId`, while a started first run keeps its old `RaceId` prefix.
@@ -964,7 +985,14 @@ removed the athlete, and no finish exists.
   INV-2, rule 2's exception; one save cycle, 35 s at the recorded venue), or from TCP's next push of
   the race, whichever comes first. A late DNS is acceptable (maintainer answer, round 2): the athlete
   never reached the course.
-- Kayak Cross never uses this status: a whole heat leaves the list together, by design.
+- Kayak Cross never uses this status: a whole heat leaves the list together, by design. The
+  time trial, where athletes start one by one, does not use it either: leaving the set changes no
+  `status` in a Cross Phase (§7.1). A time-trial athlete removed before a finish therefore stays
+  `on-course`, the clock frozen and shown stale, until a TCP push of the race states the mark.
+  That is not prompt: the removal is a silent path (§4 INV-2 rule 2), so the mark comes with
+  another athlete's push of the race or with the rotation, as late as the figures above for
+  slalom, and after the last finisher of a time trial only the rotation is left (a default;
+  `DERIVATIONS.md` §10 item 43 (d)).
 
 **Retraction** (`DECISIONS/ADR-015`; §4 INV-7). Results move. A DNS is cleared when the athlete turns
 up, a result is deleted, a finish is moved to the right bib. Upstream states such a removal only as
@@ -1942,7 +1970,8 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    standings available at class-rank latency: upstream's own category ranks reach only the
    snapshot, a median of ~20 s after the finish. The earlier rule, one plus the number of
    entries with a strictly smaller class rank, reproduced 1,855 measured rows with 0 mismatches;
-   the two rules differ only on a class tie. When the snapshot's category rank of a placed entry
+   the two rules differ only on a class tie, and the current rule's own measurement is owed
+   (`DERIVATIONS.md` §10 item 46 (c)). When the snapshot's category rank of a placed entry
    arrives and differs from the assembled one, a `category-rank-disagreement` anomaly is
    recorded and the assembled rank stays presented; since the numbering is upstream's, such a
    difference is a defect of the assembly, never a difference the contract accepts. The check
@@ -2269,7 +2298,11 @@ stays `400`. For a new key the refusals are checked most permanent first, so the
 will not change: `404 attempt-not-found`; `409 cross`, then `team-boat`; `400 validation-failed`,
 the header and body before the course; `409 run-not-closed`; `409 upstream-disconnected` — no
 instance to address the envelope to: `SourceStatus.tcp.state` not `connected`, or `connected` with
-`upstreamInstance` `null` or `'offline'` (§2.8), or the command's socket write failed. The send
+`upstreamInstance` `null` or `'offline'` (§2.8), or the command's socket write failed. No refusal
+exists for a missing generation: an Attempt presents `run` from the observation that creates it
+(§2.6; `TEST-ARCHITECTURE.md` §3.2 property 10; `DECISIONS/ADR-013`, "it starts at 1"), so every
+Attempt a write can name has a target generation, and `validation-failed` is
+for the header, the body and the course alone (`DERIVATIONS.md` §10 item 44 (b)). The send
 (a design default): the key is reserved as in flight, the command is written to the socket and its
 acceptance awaited, and the step that creates the `WriteRequest`, applies the optimistic value and
 pushes both (§2.9) runs before the next upstream unit is applied — upstream units received
@@ -2280,8 +2313,12 @@ and pushes nothing — refusing rather than holding, by the same reasoning as th
 finish above. **Once the socket has accepted the command the write exists,** whatever happens to
 its durable record (§1.5): if storing it fails, the `WriteRequest` and its key stay bound in
 memory, the `202` and the push go out as usual — a same-key retry is still answered from the key
-and sends nothing — and the failure is reported to the admin audience. What is lost until the
-store writes again is the restart guarantee alone.
+and sends nothing — and the failure is reported to the admin audience: an admin log entry and
+nothing on the wire, as for a store file set aside (§2.10). What is lost until the store writes
+again is the restart guarantee alone: the next successful write of the writes store (§1.5: the
+`WriteRequest`s and both key maps, so a flag's key binding is such a write), whatever
+change it carries, also stores every `WriteRequest` and key that memory alone holds, each as last
+pushed, and a restart after it finds them.
 The command is one XML document on one line, the `Canoe123` envelope naming the
 connected instance and the correction element with the race id, bib, gate and value, followed by
 the stream's message terminator; whitespace inside the element is not a contract item.
