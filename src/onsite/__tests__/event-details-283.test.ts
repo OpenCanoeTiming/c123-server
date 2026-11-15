@@ -104,18 +104,19 @@ describe('row 9: a snapshot without details keeps what is presented (CONTRACTS �
 
 describe('row 10: same-id event.changed on a change of the presented Event (CONTRACTS §7.2, maintainer 2026-11-14, #283)', () => {
   it('a change of details or name mid-session sends event.changed with the same eventId; an equal re-delivery sends none', async () => {
-    const env = await bootOdp({ eventName: 'Jarní slalomy' }); // matches FULL's mainTitle default, so the first snapshot changes only `details`
+    const env = await bootOdp({ eventName: undefined }); // no explicit operator name: `name` defaults to the snapshot's own title (CONTRACTS §2.2 l.513)
     const ws = await openWs(env);
     await ws.barrier();
     ws.take();
 
-    // First snapshot: details go from not-yet to known.
+    // First snapshot: details go from not-yet to known, and name takes the snapshot's title (Events.MainTitle, E1) for the first time.
     await feedXml(env, snapshotAt(T0, FULL));
     await ws.barrier();
     let changed = ws.take().filter((x: any) => x.type === 'event.changed');
     expect(changed).toHaveLength(1);
     expect(changed[0].event.eventId).toBe('ev-1');
     expect(changed[0].event.details.value).toMatchObject({ venue: 'Český Vrbné' });
+    expect(changed[0].event.name).toBe(FULL.mainTitle ?? 'Jarní slalomy');
 
     // Second snapshot: Location changes -> details changes.
     await feedXml(env, snapshotAt(T1, { ...FULL, location: 'Nové Město' }));
