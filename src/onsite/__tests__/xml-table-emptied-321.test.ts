@@ -141,7 +141,20 @@ describe('#321 row 7: the guard on xml-table-emptied\'s count (DERIVATIONS §4.1
     env.clock.jump(much);
     await env.clock.advance(5_000);
 
+    // positive precondition (review note 1, PR #369): the emptied file really was read and ingested --
+    // not a stalled poll that would make "no entry" vacuous either way.
+    expect((await get(env, '/api/sources')).body.xml.lastRewriteDetectedAt, 'the rewrite was detected').toBe(new Date(much).toISOString());
     expect(log.entries, 'the guard refuses the only candidate: no entry').toHaveLength(0);
+
+    // follow-up (review note 1): a later empty read whose changedAfter now postdates tTcp admits the
+    // guard and raises -- pinning "a count of 0 does not consume the emptying" (the first, refused read
+    // did not leave the race marked emptied, so this one still counts bib 56 and raises for it).
+    const muchMore = much + 3_600_000;
+    env.fs.put(XML_PATH, firstRunEmptiedXml(muchMore).data, muchMore);
+    env.clock.jump(muchMore);
+    await env.clock.advance(5_000);
+    expect(log.entries, 'count 0 did not consume the emptying: this read raises').toHaveLength(1);
+    expect(log.entries[0]).toMatchObject({ kind: 'xml-table-emptied', phaseId: FIRST_RUN_PHASE, count: 1 });
   });
 
   it('DERIVATIONS §4.12 row 7c: a race whose table never had rows raises none', async () => {
