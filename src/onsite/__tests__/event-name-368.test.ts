@@ -110,4 +110,18 @@ describe('§10 item 40 (a): --event-name wins at boot; without it the name follo
     expect(changed[0].event.name).toBe('Y2');
     expect((await get(env, '/api/events/current')).body.event.name).toBe('Y2');
   });
+
+  it('a blank --event-name ("  ") counts as none: the snapshot\'s title is presented, one same-id event.changed (review of PR #374, N4)', async () => {
+    const env: Env = await boot({ startAt: T0, eventDate: ODP.day, eventName: '  ' });
+    const ws = await openWs(env);
+    await ws.barrier();
+    ws.take();
+
+    await feedXml(env, snapshotWithTitle(T1, 'Y'));
+    await ws.barrier();
+    const changed = ws.take().filter((m: any) => m.type === 'event.changed');
+    expect(changed, 'a whitespace-only boot flag entered none: the snapshot\'s title is presented, one same-id event.changed').toHaveLength(1);
+    expect(changed[0].event).toMatchObject({ eventId: 'ev-1', name: 'Y' });
+    expect((await get(env, '/api/events/current')).body.event.name).toBe('Y');
+  });
 });
