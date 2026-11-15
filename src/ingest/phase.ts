@@ -28,7 +28,13 @@ export interface PhaseIn {
 /** phaseId -> schedule date (YYYY-MM-DD) or undefined, for every Phase a sibling may be looked up among. */
 export type Candidates = Map<string, string | undefined>;
 
-/** CONTRACTS §2.4: several same-class, same-token matches are broken by the shared schedule date alone; no part of a `RaceId` is read for pairing. What that does not leave exactly one, no sibling (`unparseable Schedule.StartTime`, §10 item 42, included). */
+/**
+ * CONTRACTS §2.4: candidates sharing this Phase's class and format token (read here from the `candidates` map's
+ * own `RaceId` keys -- #287, a pre-existing divergence from "no part of a `RaceId` is read for pairing", P3b's to
+ * fix, not this file's) are narrowed, where more than one matches, to the one sharing this Phase's schedule date.
+ * When that does not leave exactly one, no sibling (an unparseable `Schedule.StartTime`, §10 item 42, included):
+ * no RaceId-only tie-break beyond the class/token read above.
+ */
 function siblingOf(phaseId: string, fmt: Fmt, candidates: Candidates): string | undefined {
   if (fmt.pair === null) return undefined;
   const mine = splitRaceId(phaseId);

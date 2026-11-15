@@ -280,29 +280,34 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   const stepLog: (StepLog & { reset(): void }) | undefined = opts.stepLog === undefined ? undefined : createStepLog(opts.stepLog, () => core, seq.current());
 
   /**
-   * CONTRACTS §2.2, §7.2 (#283): the Event's `details` and the default `name` off the unit's `{ event }` facts
-   * (ingest's `parseXmlSnapshot`). The core holds no Event at all, so this bridge-level state owns it alone.
-   * `details` an equal re-delivery moves nothing (INV-5); `name` only takes the snapshot's title while no explicit
-   * `--event-name` was configured. Returns whether the presented Event changed.
+   * CONTRACTS §2.2, §7.2 (#283): the Event's `details` and the default `name` off the unit's `{ eventFact }`
+   * elements (ingest's `parseXmlSnapshot`). The core holds no Event at all, so this bridge-level state owns it
+   * alone. `details` an equal re-delivery moves nothing (INV-5); `name` only takes the snapshot's title where
+   * `nameFrom` is `'snapshot'` (§10 item 40 (a): no operator name was entered, at boot or by `startNewEvent`).
+   *
+   * #368 N3: computes the next Event without assigning it. The caller (`processUnit`) assigns it, and prepends
+   * `event.changed`, only after `core.applyUnit` returns: a throwing `applyUnit` (its programming-error guards)
+   * then leaves the presented Event, and whether `event.changed` was sent, in step with each other.
    */
-  function applyEventFacts(elements: IngestElement[]): boolean {
-    if (event === undefined) return false;
+  function nextEventFacts(elements: IngestElement[]): { next: CurrentEvent | undefined; changed: boolean } {
+    if (event === undefined) return { next: undefined, changed: false };
+    let next = event;
     let changed = false;
     for (const el of elements) {
       const ev = el['eventFact'];
       if (typeof ev !== 'object' || ev === null) continue;
       const { field, value } = ev as { field: string; value: unknown };
       if (field === 'details') {
-        const cur = event.details;
+        const cur = next.details;
         if (cur.state === 'known' && JSON.stringify(cur.value) === JSON.stringify(value)) continue;
-        event = { ...event, details: { state: 'known', value, observedAt: el.observedAt, source: 'xml', confidence: 'authoritative', provisional: false } as CurrentEvent['details'] };
+        next = { ...next, details: { state: 'known', value, observedAt: el.observedAt, source: 'xml', confidence: 'authoritative', provisional: false } as CurrentEvent['details'] };
         changed = true;
-      } else if (field === 'name' && event.nameFrom === 'snapshot' && typeof value === 'string' && value !== event.name) {
-        event = { ...event, name: value };
+      } else if (field === 'name' && next.nameFrom === 'snapshot' && typeof value === 'string' && value !== next.name) {
+        next = { ...next, name: value };
         changed = true;
       }
     }
-    return changed;
+    return { next, changed };
   }
 
   /** One ingest unit: merged whole, then stamped and pushed (§1.6). */
@@ -313,9 +318,10 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
       upstreamInstance = instanceOf(status.tcp.upstreamInstance);
       if (typeof status.tcp.timingClockOffsetSeconds === 'number') timingClockOffsetSeconds = Math.round(status.tcp.timingClockOffsetSeconds);
     }
-    const eventChanged = applyEventFacts(elements);
+    const { next: nextEvent, changed: eventChanged } = nextEventFacts(elements);
     const before = liveAttempts;
-    const derived = core.applyUnit(elements);
+    const derived = core.applyUnit(elements); // throws: the Event stays unassigned, in step with event.changed never sent (#368 N3)
+    if (eventChanged) event = nextEvent;
     const nowAttempts = new Set(core.attempts());
     const createdIds = new Set([...nowAttempts].filter((id) => !before.has(id))); // §10 item 38 (m): a return after removal, or the first ever
     liveAttempts = nowAttempts;
