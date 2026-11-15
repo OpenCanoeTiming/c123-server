@@ -1,11 +1,13 @@
 /** The on-site serialisation (CONTRACTS §7 intro): `birthYear` for `birthDate`, no `organiserId`, the `eventId` the core never sees. */
 import type { Message } from '../core/types.js';
+import type { EventDetails, Observed } from '@opencanoetiming/c123-contract';
 
 export type J = Record<string, unknown>;
-export interface CurrentEvent { eventId: string; name: string }
+/** The core holds no Event (§2.2): `details` and `name` are bridge-level state, kept here alone (#283). */
+export interface CurrentEvent { eventId: string; name: string; details: Observed<EventDetails> }
 
-/** `OnsiteEvent`. The core states no event details: `details` is `not-yet` (§2.2 `Observed`). */
-export const onsiteEvent = (e: CurrentEvent): J => ({ eventId: e.eventId, name: e.name, details: { state: 'not-yet' } });
+/** `OnsiteEvent`. */
+export const onsiteEvent = (e: CurrentEvent): J => ({ eventId: e.eventId, name: e.name, details: e.details });
 
 /** DERIVATIONS `birthDate`: the year of the date as entered, `null` where there is none. */
 const birthYear = (birthDate: unknown): number | null => (typeof birthDate === 'string' && /^\d{4}/.test(birthDate) ? Number(birthDate.slice(0, 4)) : null);
