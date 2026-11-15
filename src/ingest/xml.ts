@@ -1,21 +1,23 @@
-import { type Node, UNASSIGNED, Unit, asArray, classificationRow, fmtOf, isNaRace, has, int, ms, parseLayout, readDoc, splitRaceId, tx, unparseableUnit } from './common.js';
+import { type Node, UNASSIGNED, Unit, asArray, calendarDate, classificationRow, fmtOf, isNaRace, has, int, ms, parseLayout, readDoc, splitRaceId, tx, unparseableUnit } from './common.js';
 import { type Candidates, emitCourse, emitPhase } from './phase.js';
 import { type RowIn, buildRow, rowIsResult } from './rows.js';
 import type { CourseSlot, IngestContext, IngestElement } from './types.js';
 
 const NA = 'not-applicable' as const;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const isTrue = (s: string): boolean => s.trim().toLowerCase() === 'true';
 
-function member(p: Node, sfx: '' | '2', scheme: string | undefined): Record<string, unknown> {
+/** §10 item 42: `Birthdate`/`Birthdate2`'s date part, calendar-checked; a non-empty unparseable value raises the ingest-only `unparseable-field` naming the participant's own `Id`, never invented. */
+function member(u: Unit, p: Node, sfx: '' | '2', scheme: string | undefined): Record<string, unknown> {
   const m: Record<string, unknown> = {};
   const given = tx(p, 'GivenName' + sfx).trim();
   const family = tx(p, 'FamilyName' + sfx).trim();
-  const bd = tx(p, 'Birthdate' + sfx).trim().slice(0, 10);
+  const bdRaw = tx(p, 'Birthdate' + sfx);
+  const bd = calendarDate(bdRaw);
   const icf = tx(p, 'ICFId' + sfx).trim();
   if (given !== '') m['givenName'] = given;
   if (family !== '') m['familyName'] = family;
-  if (DATE.test(bd)) m['birthDate'] = bd;
+  if (bd !== undefined) m['birthDate'] = bd;
+  else if (bdRaw.trim() !== '') u.diagnostic({ kind: 'unparseable-field', where: tx(p, 'Id'), name: 'Birthdate' + sfx, text: bdRaw });
   if (icf === '') m['externalId'] = null;
   else if (scheme !== undefined) m['externalId'] = { scheme, value: icf };
   return m;
@@ -39,11 +41,11 @@ function entry(u: Unit, p: Node, index: Map<string, Node>, bibHandling: string, 
       if (ref === '') continue;
       const found = index.get(ref);
       if (found === undefined) { u.diagnostic({ kind: 'unresolved-member', entryId, member: ref }); partial = true; }
-      else members.push(member(found, '', ctx.externalIdScheme));
+      else members.push(member(u, found, '', ctx.externalIdScheme));
     }
   } else {
-    members.push(member(p, '', ctx.externalIdScheme));
-    if (crew) members.push(member(p, '2', ctx.externalIdScheme));
+    members.push(member(u, p, '', ctx.externalIdScheme));
+    if (crew) members.push(member(u, p, '2', ctx.externalIdScheme));
   }
   if (partial) u.notYet('result-row', 'members', key); // no partial crew (§3)
   else u.obs('result-row', 'members', key, members);
@@ -101,17 +103,16 @@ function emitEventFacts(u: Unit, ev: Node | undefined): void {
   };
   const datePart = (name: string): string | undefined => {
     const raw = tx(ev, name);
-    const t = raw.trim();
-    if (t === '') return undefined; // missing: no details, no diagnostic
-    const part = t.slice(0, 10);
-    if (!DATE.test(part)) {
+    if (raw.trim() === '') return undefined; // missing: no details, no diagnostic
+    const part = calendarDate(raw);
+    if (part === undefined) {
       u.diagnostic({ kind: 'unparseable-field', where: 'event', name, text: raw });
       return undefined;
     }
     return part;
   };
   const title = text('MainTitle');
-  if (title !== undefined) u.event('name', title);
+  if (title !== undefined) u.eventFact('name', title);
 
   const startDate = datePart('StartDate');
   const endDate = datePart('EndDate');
@@ -123,7 +124,7 @@ function emitEventFacts(u: Unit, ev: Node | undefined): void {
   if (venue !== undefined) value['venue'] = venue;
   const facility = text('Facility');
   if (facility !== undefined) value['facility'] = facility;
-  u.event('details', value);
+  u.eventFact('details', value);
 }
 
 /** Parse one XML snapshot: every race in it is a complete statement (§0.3). Pure; a torn read is reported, never parsed. */
@@ -140,13 +141,14 @@ export function parseXmlSnapshot(xml: string, ctx: IngestContext): IngestElement
   const layouts = new Map<string, string>();
   for (const c of asArray(root['CourseData'])) layouts.set(tx(c, 'CourseNr').trim(), tx(c, 'CourseConfig'));
 
-  // dates and candidates for pairing: this snapshot first, then what the caller knows
+  // dates and candidates for pairing: this snapshot first, then what the caller knows. §10 item 42: an unparseable
+  // StartTime states no date here either; the diagnostic itself is raised once per Phase, in emitPhase.
   const dates = new Map<string, string | undefined>(Object.entries(ctx.phaseDates ?? {}));
   const candidates: Candidates = new Map(dates);
   for (const s of schedule) {
     const id = tx(s, 'RaceId');
-    const st = tx(s, 'StartTime').trim().slice(0, 10);
-    if (DATE.test(st)) dates.set(id, st);
+    const st = calendarDate(tx(s, 'StartTime'));
+    if (st !== undefined) dates.set(id, st);
     candidates.set(id, dates.get(id));
   }
   const tokenOf = (s: Node): string => tx(s, 'DisId').trim() || splitRaceId(tx(s, 'RaceId')).token;

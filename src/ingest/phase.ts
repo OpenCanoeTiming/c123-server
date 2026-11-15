@@ -1,5 +1,5 @@
 import type { PairRole, PhaseStatus } from '@opencanoetiming/c123-contract';
-import { type Fmt, type Unit, fmtOf, int, parseLayout, splitRaceId } from './common.js';
+import { type Fmt, type Unit, calendarDate, fmtOf, int, parseLayout, splitRaceId } from './common.js';
 
 const NA = 'not-applicable' as const;
 const NC = 'not-configured' as const;
@@ -28,6 +28,7 @@ export interface PhaseIn {
 /** phaseId -> schedule date (YYYY-MM-DD) or undefined, for every Phase a sibling may be looked up among. */
 export type Candidates = Map<string, string | undefined>;
 
+/** CONTRACTS §2.4: several same-class, same-token matches are broken by the shared schedule date alone; no part of a `RaceId` is read for pairing. What that does not leave exactly one, no sibling (`unparseable Schedule.StartTime`, §10 item 42, included). */
 function siblingOf(phaseId: string, fmt: Fmt, candidates: Candidates): string | undefined {
   if (fmt.pair === null) return undefined;
   const mine = splitRaceId(phaseId);
@@ -40,11 +41,7 @@ function siblingOf(phaseId: string, fmt: Fmt, candidates: Candidates): string | 
     const sameDate = found.filter((id) => candidates.get(id) !== undefined && candidates.get(id) === candidates.get(phaseId));
     if (sameDate.length > 0) found = sameDate;
   }
-  if (found.length > 1) {
-    const same = found.filter((id) => splitRaceId(id).rest === mine.rest);
-    if (same.length > 0) found = same;
-  }
-  return found.sort()[0];
+  return found.length === 1 ? found[0] : undefined;
 }
 
 /** §2.1: one Phase's structural and scheduled fields. Fields a source does not carry are not emitted. */
@@ -70,8 +67,12 @@ export function emitPhase(u: Unit, kind: 'fragment' | 'result-row', p: PhaseIn, 
   if (x === undefined) return;
   const st = x.startTime.trim();
   if (st !== '') {
-    if (/^\d{4}-\d{2}-\d{2}/.test(st)) u.obs(kind, 'date', key, st.slice(0, 10));
-    u.obs(kind, 'scheduledStart', key, st);
+    // §10 item 42: an unparseable date part states neither date nor scheduledStart at all (not a timestamp of no calendar day)
+    const date = calendarDate(st);
+    if (date !== undefined) {
+      u.obs(kind, 'date', key, date);
+      u.obs(kind, 'scheduledStart', key, st);
+    } else u.diagnostic({ kind: 'unparseable-field', where: p.phaseId, name: 'StartTime', text: x.startTime });
   }
   if (x.title.trim() !== '') u.obs(kind, 'title', key, x.title);
   else u.notYet(kind, 'title', key);

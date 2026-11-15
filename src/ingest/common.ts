@@ -89,6 +89,29 @@ function offsetMs(zone: string, t: number): number {
 
 const TOD = /^(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/;
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+// ---------------------------------------------------------------- §10 item 40 (b), 42: the calendar date part
+
+const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+const isLeapYear = (y: number): boolean => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+
+/**
+ * §10 item 40 (b), 42: the date part of an XML date-time (or plain date) text is its first ten characters; what
+ * follows is not read. It is unparseable unless it names a calendar day: month 01-12, a day the month has, 29
+ * February only in a leap year. Returns the ten characters when valid, else undefined -- whether the text was
+ * empty or merely shaped like a date; the caller decides whether an empty text raises no diagnostic while an
+ * invalid one does (DERIVATIONS §0.5).
+ */
+export function calendarDate(raw: string): string | undefined {
+  const part = raw.trim().slice(0, 10);
+  const m = DATE.exec(part);
+  if (m === null) return undefined;
+  const month = Number(m[2]);
+  if (month < 1 || month > 12) return undefined;
+  const day = Number(m[3]);
+  const max = month === 2 && isLeapYear(Number(m[1])) ? 29 : MONTH_DAYS[month - 1];
+  return day >= 1 && day <= max ? part : undefined;
+}
 /**
  * Phase.date + time of day + the venue's IANA zone (§0.2). undefined when the date, the zone or the time is missing or
  * unreadable. In the repeated autumn hour the later instant (standard time) is returned; a time in the skipped spring hour is
@@ -308,9 +331,13 @@ export class Unit {
   diagnostic(d: Record<string, unknown>): void {
     this.els.push({ diagnostic: d, source: this.source });
   }
-  /** #283: an Event fact (the snapshot carries no per-call address for it, §2.2). */
-  event(field: string, value: unknown): void {
-    this.els.push({ event: { field, value, source: this.source }, source: this.source });
+  /**
+   * #283: an Event fact (the snapshot carries no per-call address for it, §2.2). The key is its own, `eventFact`,
+   * never `event`: that key already names the string-valued connection/operator signals CONFORMANCE-VECTORS §1
+   * dispatches, a closed set an object-valued fact must not join (#368 N1).
+   */
+  eventFact(field: string, value: unknown): void {
+    this.els.push({ eventFact: { field, value, source: this.source }, source: this.source });
   }
   add(e: Record<string, unknown>): void {
     this.els.push({ ...e, source: this.source });
