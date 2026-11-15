@@ -308,6 +308,10 @@ export class Unit {
   diagnostic(d: Record<string, unknown>): void {
     this.els.push({ diagnostic: d, source: this.source });
   }
+  /** #283: an Event fact (the snapshot carries no per-call address for it, §2.2). */
+  event(field: string, value: unknown): void {
+    this.els.push({ event: { field, value, source: this.source }, source: this.source });
+  }
   add(e: Record<string, unknown>): void {
     this.els.push({ ...e, source: this.source });
   }

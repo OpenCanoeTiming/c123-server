@@ -133,7 +133,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   });
 
   // ------------------------------------------------------------------------------------------------ event, core, checks store
-  let event: CurrentEvent | undefined = opts.eventId === undefined ? undefined : { eventId: opts.eventId, name: opts.eventName ?? opts.eventId };
+  let event: CurrentEvent | undefined = opts.eventId === undefined ? undefined : { eventId: opts.eventId, name: opts.eventName ?? opts.eventId, details: { state: 'not-yet' } };
   const newCore = (): MergeCore => createMergeCore({ ...(opts.zone !== undefined ? { zone: opts.zone } : { zone: 'Europe/Prague' }), xmlConfigured: opts.xml !== undefined });
   let core = newCore();
   let tracker: ContextTracker = newTracker();
@@ -256,6 +256,32 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   // ------------------------------------------------------------------------------------------------ units
   const stepLog: (StepLog & { reset(): void }) | undefined = opts.stepLog === undefined ? undefined : createStepLog(opts.stepLog, () => core, seq.current());
 
+  /**
+   * CONTRACTS §2.2, §7.2 (#283): the Event's `details` and the default `name` off the unit's `{ event }` facts
+   * (ingest's `parseXmlSnapshot`). The core holds no Event at all, so this bridge-level state owns it alone.
+   * `details` an equal re-delivery moves nothing (INV-5); `name` only takes the snapshot's title while no explicit
+   * `--event-name` was configured. Returns whether the presented Event changed.
+   */
+  function applyEventFacts(elements: IngestElement[]): boolean {
+    if (event === undefined) return false;
+    let changed = false;
+    for (const el of elements) {
+      const ev = el['event'];
+      if (typeof ev !== 'object' || ev === null) continue;
+      const { field, value } = ev as { field: string; value: unknown };
+      if (field === 'details') {
+        const cur = event.details;
+        if (cur.state === 'known' && JSON.stringify(cur.value) === JSON.stringify(value)) continue;
+        event = { ...event, details: { state: 'known', value, observedAt: el.observedAt, source: 'xml', confidence: 'authoritative', provisional: false } as CurrentEvent['details'] };
+        changed = true;
+      } else if (field === 'name' && opts.eventName === undefined && typeof value === 'string' && value !== event.name) {
+        event = { ...event, name: value };
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
   /** One ingest unit: merged whole, then stamped and pushed (§1.6). */
   async function processUnit(elements: IngestElement[], bind?: { key: string; writeId: string }): Promise<void> {
     for (const el of elements) {
@@ -264,8 +290,10 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
       upstreamInstance = instanceOf(status.tcp.upstreamInstance);
       if (typeof status.tcp.timingClockOffsetSeconds === 'number') timingClockOffsetSeconds = Math.round(status.tcp.timingClockOffsetSeconds);
     }
+    const eventChanged = applyEventFacts(elements);
     const derived = core.applyUnit(elements);
     let wire = core.drainNotifications().map((m) => toWire(m, event?.eventId ?? '', classesSent));
+    if (eventChanged && event !== undefined) wire = [{ type: 'event.changed', event: onsiteEvent(event) }, ...wire];
     wire = writesBesideAttempts(wire);
     // §2.9: every WriteRequest change is durable before it is pushed; a re-adopted write restating what the store holds is no change (§1.6)
     let failure: unknown;
@@ -700,7 +728,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
         if (typeof e.eventId !== 'string' || e.eventId === '' || typeof e.name !== 'string') throw new ValidationError([{ field: 'event', issue: 'needs an eventId and a name' }]);
         if (event?.eventId === e.eventId) throw new ValidationError([{ field: 'eventId', issue: 'is the event that is already current' }]);
         const next = await storeFor(e.eventId);
-        event = { eventId: e.eventId, name: e.name };
+        event = { eventId: e.eventId, name: e.name, details: { state: 'not-yet' } };
         store = next;
         wstore = await writesFor(e.eventId);
         adopted.clear();

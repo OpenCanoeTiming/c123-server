@@ -87,6 +87,45 @@ function rowIn(u: Unit, phaseId: string, r: Node): RowIn | undefined {
   };
 }
 
+/**
+ * §2.2: the snapshot's `Events` table. `name` is `MainTitle`, read verbatim where present (the core/on-site paths
+ * decide whether it overrides a configured operator name). `details` is `SubTitle`/`Location`/`Facility` plus the
+ * date parts of `StartDate`/`EndDate`, no zone conversion; an empty or whitespace-only optional field is absent, and
+ * a missing or unparseable date states no `details` at all (unparseable also raises the ingest-only
+ * `unparseable-field`, DERIVATIONS §0.5).
+ */
+function emitEventFacts(u: Unit, ev: Node | undefined): void {
+  const text = (name: string): string | undefined => {
+    const v = tx(ev, name).trim();
+    return v === '' ? undefined : v;
+  };
+  const datePart = (name: string): string | undefined => {
+    const raw = tx(ev, name);
+    const t = raw.trim();
+    if (t === '') return undefined; // missing: no details, no diagnostic
+    const part = t.slice(0, 10);
+    if (!DATE.test(part)) {
+      u.diagnostic({ kind: 'unparseable-field', where: 'event', name, text: raw });
+      return undefined;
+    }
+    return part;
+  };
+  const title = text('MainTitle');
+  if (title !== undefined) u.event('name', title);
+
+  const startDate = datePart('StartDate');
+  const endDate = datePart('EndDate');
+  if (startDate === undefined || endDate === undefined) return;
+  const value: Record<string, unknown> = { startDate, endDate };
+  const subtitle = text('SubTitle');
+  if (subtitle !== undefined) value['subtitle'] = subtitle;
+  const venue = text('Location');
+  if (venue !== undefined) value['venue'] = venue;
+  const facility = text('Facility');
+  if (facility !== undefined) value['facility'] = facility;
+  u.event('details', value);
+}
+
 /** Parse one XML snapshot: every race in it is a complete statement (§0.3). Pure; a torn read is reported, never parsed. */
 export function parseXmlSnapshot(xml: string, ctx: IngestContext): IngestElement[] {
   const doc = readDoc(xml, 'Canoe123Data');
@@ -94,7 +133,9 @@ export function parseXmlSnapshot(xml: string, ctx: IngestContext): IngestElement
   const root = doc.root;
   const u = new Unit('xml', ctx.observedAt);
 
-  const bibHandling = tx(asArray(root['Events'])[0], 'BibHandling').trim();
+  const eventsNode = asArray(root['Events'])[0];
+  const bibHandling = tx(eventsNode, 'BibHandling').trim();
+  emitEventFacts(u, eventsNode);
   const schedule = asArray(root['Schedule']).filter((s) => tx(s, 'RaceId') !== UNASSIGNED && tx(s, 'RaceId') !== '' && !isNaRace(tx(s, 'RaceId'), tx(s, 'ClassId')));
   const layouts = new Map<string, string>();
   for (const c of asArray(root['CourseData'])) layouts.set(tx(c, 'CourseNr').trim(), tx(c, 'CourseConfig'));
