@@ -374,6 +374,19 @@ is not persisted: a restart during a re-run is an accepted risk, the operator re
 correction by hand (`DERIVATIONS.md` §10 item 25; maintainer, 2026-11-10). A missing header is
 `400 validation-failed`, `details: [{ field: 'Idempotency-Key', issue: 'missing' }]`.
 
+**Two cases leave a key in memory only, or lose it.** In both, what is lost is the guarantee
+across a restart, never the one inside a lifetime:
+- **A store write that fails after the socket accepted the command** (§7.3). The `WriteRequest`
+  and its key stay bound in memory, the `202` and the push go out, and a same-key retry is
+  answered from the key. This is §7.3's one exception to "durable before acknowledged".
+- **A store file set aside at load** because it failed validation (§2.10). The new lifetime has
+  none of the earlier keys and none of its `pending` writes.
+
+A same-key retry that arrives after such a restart finds no key and is a new request. For a write
+the same gate and value go upstream a second time, as a second `WriteRequest`; for a flag a
+second flag is raised. This is an accepted residual (a default, `DERIVATIONS.md` §10 item 44 (a)):
+it needs a failed or invalid store, a restart, and a retry carried across it.
+
 ### 1.6 Snapshot and subscription ordering
 
 **`seq` is one counter per server.** Every push-capable stream (§7's WebSocket, §8.4's public feed)
@@ -964,7 +977,11 @@ removed the athlete, and no finish exists.
   INV-2, rule 2's exception; one save cycle, 35 s at the recorded venue), or from TCP's next push of
   the race, whichever comes first. A late DNS is acceptable (maintainer answer, round 2): the athlete
   never reached the course.
-- Kayak Cross never uses this status: a whole heat leaves the list together, by design.
+- Kayak Cross never uses this status: a whole heat leaves the list together, by design. The
+  time trial, where athletes start one by one, does not use it either: leaving the set changes no
+  `status` in a Cross Phase (§7.1). A time-trial athlete removed before a finish therefore stays
+  `on-course`, the clock frozen and shown stale, until TCP's next push of the race states the
+  mark (a default; `DERIVATIONS.md` §10 item 43 (d)).
 
 **Retraction** (`DECISIONS/ADR-015`; §4 INV-7). Results move. A DNS is cleared when the athlete turns
 up, a result is deleted, a finish is moved to the right bib. Upstream states such a removal only as
@@ -1942,7 +1959,8 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    standings available at class-rank latency: upstream's own category ranks reach only the
    snapshot, a median of ~20 s after the finish. The earlier rule, one plus the number of
    entries with a strictly smaller class rank, reproduced 1,855 measured rows with 0 mismatches;
-   the two rules differ only on a class tie. When the snapshot's category rank of a placed entry
+   the two rules differ only on a class tie, and the current rule's own measurement is owed
+   (`DERIVATIONS.md` §10 item 46 (c)). When the snapshot's category rank of a placed entry
    arrives and differs from the assembled one, a `category-rank-disagreement` anomaly is
    recorded and the assembled rank stays presented; since the numbering is upstream's, such a
    difference is a defect of the assembly, never a difference the contract accepts. The check
@@ -2269,7 +2287,10 @@ stays `400`. For a new key the refusals are checked most permanent first, so the
 will not change: `404 attempt-not-found`; `409 cross`, then `team-boat`; `400 validation-failed`,
 the header and body before the course; `409 run-not-closed`; `409 upstream-disconnected` — no
 instance to address the envelope to: `SourceStatus.tcp.state` not `connected`, or `connected` with
-`upstreamInstance` `null` or `'offline'` (§2.8), or the command's socket write failed. The send
+`upstreamInstance` `null` or `'offline'` (§2.8), or the command's socket write failed. No refusal
+exists for a missing generation: an Attempt presents `run` from the observation that creates it
+(§2.6), so every Attempt a write can name has a target generation, and `validation-failed` is
+for the header, the body and the course alone (`DERIVATIONS.md` §10 item 44 (b)). The send
 (a design default): the key is reserved as in flight, the command is written to the socket and its
 acceptance awaited, and the step that creates the `WriteRequest`, applies the optimistic value and
 pushes both (§2.9) runs before the next upstream unit is applied — upstream units received

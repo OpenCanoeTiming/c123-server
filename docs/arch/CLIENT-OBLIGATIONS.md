@@ -376,3 +376,17 @@ belongs to the bib". It changed cited sections and moved no obligation above:
 - checks and flags stay the bib's: a re-pointed `entry` keeps them, and a recreated Attempt serves
   them again whoever the competitor is, which penalty-check's existing duties already cover
   (CONTRACTS §2.10).
+
+M2 P3b (2026-11-15; `DECISIONS/LOG.md`) took defaults on the questions round C had left open and
+on the write and leave rules its code needed. It changed cited sections and moved no obligation
+above:
+- a same-key retry that arrives after the server lost its keys across a restart (a failed or
+  invalid store) is answered as a new request, `202` or a refusal; a client handles it as the
+  first response it already handles (CONTRACTS §1.5);
+- no penalty write is refused for a missing run generation; the refusals a client handles are
+  §7.3's, unchanged (CONTRACTS §7.3);
+- a Kayak Cross time-trial athlete removed before a finish stays `on-course` with the last
+  `running` value until the mark arrives; a client freezes that clock as stale by its existing
+  duty (CONTRACTS §2.6);
+- `xml-table-emptied` is raised under the content-age guard; it stays in the admin log and
+  reaches no client (CONTRACTS §4; ADR-015).
