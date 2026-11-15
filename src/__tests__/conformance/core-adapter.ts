@@ -55,8 +55,9 @@ export function createMergePort(context: VectorContext): MergePort {
  *   - `classId` is the part of the id before the format token;
  *   - `format` is the id's token (or, for `pair`, the format the unit states);
  *   - `pair` is the token's role and combination (`CONTRACTS.md` §2.4). A second run names the id that carries its first run's token in the token's place,
- *     whether or not the vector holds that Phase. A first run names the second run only when that Phase has already been described here, so a first run's
- *     sibling is always a second run that names it back (DERIVATIONS §10 item 48; review N12 of PR #375); otherwise `null`. A single run states `pair: null`.
+ *     whether or not the vector holds that Phase. A first run states `siblingPhaseId: null`: its sibling is the core's own derivation, the inverse of the second runs'
+ *     stated pairs (DERIVATIONS §10 item 48; review N12 of PR #375), so a vector exercises that derivation and the adapter builds no first-run pointer.
+ *     A single run states `pair: null`.
  * The one place anything builds an id, which a vector's regular ids allow.
  */
 const PAIR_TOKENS: Record<string, { role: 'first' | 'second'; other: string; combination: 'best' | 'sum' }> = {
@@ -86,7 +87,6 @@ function withConventionalClass(port: MergePort): MergePort {
     }
     const first = elements[0];
     const added: GivenElement[] = [];
-    const before = new Set(seen);
     const state = (phaseId: string, field: string, value: unknown): void => {
       added.push({ ingestSeq: 0, phaseId, field, source: 'tcp', kind: 'result-row', observedAt: first!['observedAt'], value, confidence: 'authoritative' } as GivenElement);
     };
@@ -103,7 +103,7 @@ function withConventionalClass(port: MergePort): MergePort {
         if (row === undefined) state(phaseId, 'pair', null);
         else {
           const otherId = `${classKey}_${row.other}_${rest}`;
-          const sibling = row.role === 'second' || before.has(otherId) || named.has(otherId) ? otherId : null;
+          const sibling = row.role === 'second' ? otherId : null;
           state(phaseId, 'pair', { role: row.role, siblingPhaseId: sibling, combination: row.combination });
         }
       }

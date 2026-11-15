@@ -141,3 +141,64 @@ describe('#287 row 12: the core reads the stated sibling only (CONTRACTS §2.4, 
     expect(keyed(c, 'pair:K1M_BR2_19/all')).toEqual([]);
   });
 });
+
+describe('#287 a first run\'s sibling is derived in the core: the inverse of the second runs\' stated pairs (DERIVATIONS §2.1, §10 item 48; CONTRACTS §2.4)', () => {
+  const BASE = { source: 'tcp', kind: 'result-row', confidence: 'authoritative' };
+  /** The Phase's `date`, as the snapshot states it: an xml unit with the reader's rewrite event first. */
+  const dated = (t: number, ...days: Array<[id: string, day: string]>): Unit => [
+    el({ ingestSeq: 0, event: 'xml-rewrite-detected', observedAt: at(t), changedAfter: at(t - 5) }),
+    ...days.map(([id, day]) => el({ ingestSeq: 0, observedAt: at(t), phaseId: id, field: 'date', source: 'xml', kind: 'result-row', value: day, confidence: 'authoritative' })),
+  ];
+  const sibling = (c: ReturnType<typeof coreWith>, id: string): unknown => (c.phase(id)['pair'] as { siblingPhaseId?: unknown } | null)?.siblingPhaseId;
+  const phaseUpdates = (c: ReturnType<typeof coreWith>, from: number, id: string): Array<Record<string, any>> =>
+    (c.notifications().slice(from) as Array<Record<string, any>>).filter((m) => m['type'] === 'phase.updated' && m['phaseId'] === id);
+  const R = (id: string, format: string, role: 'first' | 'second', sibling: string | null) => ({ id, cls: 'K1M', format, role, sibling });
+  void BASE;
+
+  it('(a) item 48: a BR1 stated with sibling null, then a unit in which the BR2 states sibling BR1: the BR1 presents the BR2 and its change is notified in that unit', () => {
+    const c = coreWith([describe_(1, R('K1M_BR1_19', 'BR1', 'first', null))], { classIdsFromIds: false });
+    expect(sibling(c, 'K1M_BR1_19'), 'precondition: no second run names it yet').toBeNull();
+    const m = c.notifications().length;
+    c.applyUnit(describe_(5, R('K1M_BR2_19', 'BR2', 'second', 'K1M_BR1_19')));
+    expect(sibling(c, 'K1M_BR1_19')).toBe('K1M_BR2_19');
+    const changes = phaseUpdates(c, m, 'K1M_BR1_19');
+    expect(changes.length, 'a phase.updated for the first run in the same unit').toBeGreaterThan(0);
+    expect(JSON.stringify(changes.at(-1)!['fields']['pair'])).toContain('K1M_BR2_19');
+  });
+
+  it('(b) DERIVATIONS §2.1 example: BR1 19th, BR1 20th, then the BR2 of the 20th last: the BR1 of the 20th names it, the BR1 of the 19th stays null', () => {
+    const c = coreWith([
+      describe_(1, R('K1M_BR1_19', 'BR1', 'first', null)),
+      describe_(2, R('K1M_BR1_20', 'BR1', 'first', null)),
+      dated(3, ['K1M_BR1_19', '2026-09-19'], ['K1M_BR1_20', '2026-09-20']),
+    ], { classIdsFromIds: false });
+    expect(sibling(c, 'K1M_BR1_19')).toBeNull(); // preconditions: both first runs exist, nothing names either
+    expect(sibling(c, 'K1M_BR1_20')).toBeNull();
+    c.applyUnit(describe_(6, R('K1M_BR2_20', 'BR2', 'second', 'K1M_BR1_20')));
+    c.applyUnit(dated(7, ['K1M_BR2_20', '2026-09-20']));
+    expect(sibling(c, 'K1M_BR1_20')).toBe('K1M_BR2_20');
+    expect(sibling(c, 'K1M_BR1_19')).toBeNull();
+  });
+
+  it('(b2) item 48 shape: two BR2 naming one BR1 (a day each): the BR1 names the one on its own day', () => {
+    const c = coreWith([
+      describe_(1, R('K1M_BR1_19', 'BR1', 'first', null)),
+      describe_(2, R('K1M_BR2_19', 'BR2', 'second', 'K1M_BR1_19')),
+      describe_(3, R('K1M_BR2_20', 'BR2', 'second', 'K1M_BR1_19')),
+      dated(4, ['K1M_BR1_19', '2026-09-19'], ['K1M_BR2_19', '2026-09-19'], ['K1M_BR2_20', '2026-09-20']),
+    ], { classIdsFromIds: false });
+    expect(sibling(c, 'K1M_BR2_20')).toBe('K1M_BR1_19'); // precondition: both second runs state the one first run
+    expect(sibling(c, 'K1M_BR1_19')).toBe('K1M_BR2_19');
+  });
+
+  it('(c) a BR1 whose stated sibling names a BR2 that does not name it back presents null', () => {
+    const c = coreWith([
+      describe_(1, R('K1M_BR1_19', 'BR1', 'first', 'K1M_BR2_19')),
+      describe_(2, R('K1M_BR2_19', 'BR2', 'second', 'K1M_BR1_20')),
+      describe_(3, R('K1M_BR1_20', 'BR1', 'first', null)),
+    ], { classIdsFromIds: false });
+    expect(sibling(c, 'K1M_BR2_19'), 'precondition: the BR2 names the other first run').toBe('K1M_BR1_20');
+    expect(sibling(c, 'K1M_BR1_20')).toBe('K1M_BR2_19');
+    expect(sibling(c, 'K1M_BR1_19')).toBeNull();
+  });
+});

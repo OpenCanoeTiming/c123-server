@@ -219,14 +219,20 @@ describe('ADR-015 Rev 6 rule 4 (#365 row 5)', () => {
   });
 
   it('review note (b): a paired second-run Phase\'s pair Standing also loses the removed bib, beside its phase Standing', () => {
-    // K1M_BR2_27 is a second run by its format token alone (CONFORMANCE-VECTORS/DERIVATIONS 4.5): `coreWith`'s
-    // classId stamping (streams.ts) is all the setup a pair Standing needs, as #205's own second()-built tests use.
+    // K1M_BR2_27 is a second run by its stated pair (CONTRACTS §2.4, #287); the setup below states it.
     const P2 = 'K1M_BR2_27', A = `${P2}:11`, B = `${P2}:9`;
     const phaseKey = `phase:${P2}/all`, pairKey = `pair:${P2}/all`;
     const snap = (source: 'tcp' | 'xml', t: number, rows: unknown[]): GivenElement => ({ ingestSeq: t, observedAt: at(t), snapshot: { source, phaseId: P2, mode: 'results', rows } }) as GivenElement;
     const row = (bib: string, rank: number, order: number, total: number, pairTotal: number) => ({ bib, outcome: dur(total), placement: { rank, order }, pairTotal, judgingComplete: true });
 
     const c = coreWith([]);
+    // #287: the core reads the stated pair only. State it as a parser would (CONTRACTS §2.4): the second run names its first run, both of class K1M.
+    const P1 = 'K1M_BR1_27';
+    const stated = (phaseId: string, f: string, value: unknown): GivenElement => ({ ingestSeq: 0, phaseId, field: f, source: 'tcp', kind: 'result-row', observedAt: at(1), value, confidence: 'authoritative' }) as GivenElement;
+    c.applyUnit([
+      stated(P1, 'classId', 'K1M'), stated(P1, 'format', 'BR1'), stated(P1, 'pair', { role: 'first', siblingPhaseId: P2, combination: 'best' }),
+      stated(P2, 'classId', 'K1M'), stated(P2, 'format', 'BR2'), stated(P2, 'pair', { role: 'second', siblingPhaseId: P1, combination: 'best' }),
+    ]);
     c.applyUnit([snap('tcp', 10, [row('9', 1, 1, 80, 170), row('11', 2, 2, 85, 175)])]);
     const standingsSent = (key: string, from = 0) => c.notifications().slice(from).filter((m) => m['type'] === 'standing.updated' && (m['standing'] as { standingKey: string }).standingKey === key);
     expect(standingsSent(pairKey).at(-1)!['standing'], 'precondition: the pair Standing holds both bibs').toMatchObject({ entries: [{ bib: '9' }, { bib: '11' }] });

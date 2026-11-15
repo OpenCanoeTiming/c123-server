@@ -29,24 +29,16 @@ describe('#287 row 13: the adapter states classId, format and pair for an undesc
     expect(pairOf(p, id)).toEqual(pair);
   });
 
-  it('review N12 / item 48: a first run seen alone names no second run (null); the second run it later meets names it, and a first run seen after its second run names it back', () => {
+  it('review N12 / item 48: the adapter states a first run\'s pair with siblingPhaseId null and builds no pointer; the sibling the core presents is the second run that names it, in either arrival order', () => {
     const alone = port('K1M_BR1_19:9');
     alone.applyUnit(named('K1M_BR1_19'));
     expect(pairOf(alone, 'K1M_BR1_19')).toEqual({ role: 'first', siblingPhaseId: null, combination: 'best' });
 
-    const after = port('K1M_BR2_19:9');
-    after.applyUnit(named('K1M_BR2_19'));
-    after.applyUnit(named('K1M_BR1_19', 2));
-    expect(pairOf(after, 'K1M_BR2_19')).toMatchObject({ role: 'second', siblingPhaseId: 'K1M_BR1_19' });
-    expect(pairOf(after, 'K1M_BR1_19')).toEqual({ role: 'first', siblingPhaseId: 'K1M_BR2_19', combination: 'best' });
-  });
-
-  it('review N12: whatever the order, a first run\'s stated sibling is a second run whose own stated sibling is that first run', () => {
-    for (const order of [['K1M_BR1_19', 'K1M_BR2_19'], ['K1M_BR2_19', 'K1M_BR1_19']] as const) {
+    for (const order of [['K1M_BR2_19', 'K1M_BR1_19'], ['K1M_BR1_19', 'K1M_BR2_19']] as const) {
       const p = port(`${order[0]}:9`);
       order.forEach((id, i) => p.applyUnit(named(id, i + 1)));
-      const first = (pairOf(p, 'K1M_BR1_19') as { siblingPhaseId: string | null });
-      expect(first.siblingPhaseId === null || (pairOf(p, first.siblingPhaseId) as { siblingPhaseId: string | null }).siblingPhaseId === 'K1M_BR1_19').toBe(true);
+      expect(pairOf(p, 'K1M_BR2_19'), order.join(' then ')).toMatchObject({ role: 'second', siblingPhaseId: 'K1M_BR1_19' });
+      expect(pairOf(p, 'K1M_BR1_19'), order.join(' then ')).toEqual({ role: 'first', siblingPhaseId: 'K1M_BR2_19', combination: 'best' });
     }
   });
 

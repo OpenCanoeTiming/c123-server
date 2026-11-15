@@ -7,6 +7,8 @@ import { REC } from './fixtures/real-excerpts.js';
 import { R19 } from './fixtures/round19-excerpts.js';
 import { CLS } from './fixtures/classification-excerpts.js';
 import { connected, coreWith, tcpUnit, xmlUnit, type Unit } from './streams.js';
+import { createContextTracker } from '../../ingest/context-tracker.js';
+import { parseXmlSnapshot } from '../../ingest/index.js';
 import type { GivenElement } from '../../__tests__/conformance/port.js';
 
 // #205: Standing assembly through the merge core (CONTRACTS 2.7 and 5; DERIVATIONS 4.10; TEST-ARCHITECTURE property 15; ADR-012).
@@ -242,10 +244,19 @@ const row = (bib: string, rank: number, order: number, total: number, extra: Rec
 /** The same row, its Attempt pointing at the Entry `E<bib>` as the parsers' rows do. */
 const erow = (bib: string, rank: number, order: number, total: number, extra: Record<string, unknown> = {}) => row(bib, rank, order, total, { entry: { entryId: `E${bib}` }, ...extra });
 
-/** A TCP Schedule message through parseTcp, as the stream delivers it: `races` are the RaceIds it names. */
+/**
+ * A TCP Schedule message through parseTcp, as the stream delivers it: `races` are the RaceIds it names. A TCP Schedule states no class (DERIVATIONS §2.1),
+ * so the classes (K1M) and formats come from an XML snapshot the context tracker learned first, as the drivers do (#287); the core reads only what is stated.
+ */
 function scheduleUnit(races: string[]): Unit {
+  const rows = races.map((r) => `<Schedule><RaceId>${r}</RaceId><RaceOrder>1</RaceOrder><StartTime>2026-09-15T09:00:00+02:00</StartTime><ClassId>K1M</ClassId><DisId>${r.split('_')[1]}</DisId><CourseNr>1</CourseNr><RaceStatus>0</RaceStatus></Schedule>`).join('');
+  const tracker = createContextTracker('Europe/Prague', '2026-09-15', 'cz-rgc');
+  tracker.ctx.observedAt = at(-60);
+  tracker.learn(parseXmlSnapshot(`<?xml version="1.0" standalone="yes"?><Canoe123Data xmlns="http://siwidata.com/Canoe123/Data.xsd">${rows}</Canoe123Data>`, tracker.ctx) as never, true);
   const data = `<Canoe123 System="Main"><Schedule>${races.map((r, i) => `<Race Order="${i + 1}" RaceId="${r}" Race="K1 muži" MainTitle="K1 muži" SubTitle="Run" ShortTitle="K1M" RaceStatus="5" />`).join('')}</Schedule></Canoe123>`;
-  return tcpUnit({ recording: 'hand', chunk: 'hand', ts: 0, observedAt: at(-60), data }, {}, { phaseDates: Object.fromEntries(races.map((r) => [r, '2026-09-15'])) }); // only the named races are candidates: the default context knows other K1M Phases
+  const { observedAt: _unused, ...learned } = tracker.ctx; // only the named races are candidates: the default context knows other K1M Phases
+  void _unused;
+  return tcpUnit({ recording: 'hand', chunk: 'hand', ts: 0, observedAt: at(-60), data }, {}, { ...learned, phaseDates: Object.fromEntries(races.map((r) => [r, '2026-09-15'])) });
 }
 
 describe('#205 row 3: scopes (CONTRACTS 5 step 1 standingKey; property 15 first publications)', () => {

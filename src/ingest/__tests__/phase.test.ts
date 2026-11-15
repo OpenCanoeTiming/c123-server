@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { parseTcp, parseXmlSnapshot } from '../index.js';
 import { TCP } from './fixtures/tcp.js';
-import { ctx, xmlFixture, obsOf, allObs, instant, type El } from './helpers.js';
+import { createContextTracker } from '../context-tracker.js';
+import { ctx, xmlFixture, obsOf, allObs, instant, OBSERVED_AT, type El } from './helpers.js';
 
 // DERIVATIONS §2.1, §2.2 and CONTRACTS §2.4 (token table), §3.1 (status table).
 const slalom = () => parseXmlSnapshot(xmlFixture('slalom.xml'), ctx());
@@ -12,6 +13,19 @@ const schedule = (races: Array<{ id: string; status?: number | string; order?: n
   '<Canoe123 System="Main"><Schedule>' +
   races.map((r, i) => `<Race Order="${r.order ?? i + 1}" RaceId="${r.id}" Race="x" MainTitle="x" SubTitle="x" ShortTitle="x" RaceStatus="${r.status ?? 0}"><StartTime /></Race>`).join('') +
   '</Schedule></Canoe123>';
+
+/**
+ * Class context for a TCP Schedule (#287; DERIVATIONS §2.1, CONTRACTS §2.4): a TCP Schedule states no class, so pairing needs the classes an earlier
+ * XML snapshot taught the context tracker. This builds that ctx the way the drivers do: a snapshot of Schedule rows (ClassId K1M, DisId = the id's token,
+ * StartTime = the id's day in September), `learn`ed, then the tracker's ctx for the TCP message.
+ */
+const learnedCtx = (ids: string[], dateOf: (id: string) => string = () => '2026-09-19'): ReturnType<typeof ctx> => {
+  const rows = ids.map((id) => `<Schedule><RaceId>${id}</RaceId><RaceOrder>1</RaceOrder><StartTime>${dateOf(id)}T09:00:00+02:00</StartTime><ClassId>K1M</ClassId><DisId>${id.split('_')[1]}</DisId><CourseNr>1</CourseNr><RaceStatus>0</RaceStatus></Schedule>`).join('');
+  const tracker = createContextTracker('Europe/Prague', '2026-09-19', 'cz-rgc');
+  tracker.ctx.observedAt = OBSERVED_AT;
+  tracker.learn(parseXmlSnapshot(`<?xml version="1.0" standalone="yes"?><Canoe123Data xmlns="http://siwidata.com/Canoe123/Data.xsd">${rows}</Canoe123Data>`, tracker.ctx) as never, true);
+  return tracker.ctx as ReturnType<typeof ctx>;
+};
 
 describe('§2.1 Phase identity and structure', () => {
   it('§2.1 phaseId is RaceId verbatim (XML Schedule K1M_BR2_19)', () => {
@@ -73,7 +87,8 @@ describe('§2.1 Phase identity and structure', () => {
     const sib: Record<string, string> = { BR1: 'BR2', BR2: 'BR1', HT1: 'HT2', HT2: 'HT1', EL1: 'EL2', EL2: 'EL1', TR1: 'TR2', TR2: 'TR1', SR1: 'SR2', SR2: 'SR1', SUF: 'BR2' };
     const races = [{ id }];
     if (sib[tok as string]) races.push({ id: `K1M_${sib[tok as string]}_19` });
-    const els = parseTcp(schedule(races), ctx({ phaseDates: {} }));
+    // #287: the Schedule states no class; the classes come from the snapshot the tracker learned (the test's pairing intent is unchanged)
+    const els = parseTcp(schedule(races), learnedCtx(races.map((r) => r.id)));
     expect(ph(els, 'stage', id)).toMatchObject({ value: stage, confidence: 'authoritative' });
     expect(ph(els, 'kind', id)?.value).toBe(kind);
     expect(ph(els, 'scoringKind', id)?.value).toBe(scoring);
@@ -87,7 +102,8 @@ describe('§2.1 Phase identity and structure', () => {
     expect(ph(slalom(), 'pair', 'K1M_BR1_19')?.value).toMatchObject({ role: 'first', siblingPhaseId: 'K1M_BR2_19' });
   });
   it('§2.1 several first runs exist: the sibling is the one with the same schedule date (K1M_BR2_19 pairs with K1M_BR1_19, not K1M_BR1_20)', () => {
-    const els = parseTcp(schedule([{ id: 'K1M_BR1_20' }, { id: 'K1M_BR1_19' }, { id: 'K1M_BR2_19' }]), ctx({ phaseDates: { K1M_BR1_19: '2026-09-19', K1M_BR1_20: '2026-09-20', K1M_BR2_19: '2026-09-19' } }));
+    const day = (id: string): string => (id.endsWith('_20') ? '2026-09-20' : '2026-09-19');
+    const els = parseTcp(schedule([{ id: 'K1M_BR1_20' }, { id: 'K1M_BR1_19' }, { id: 'K1M_BR2_19' }]), learnedCtx(['K1M_BR1_20', 'K1M_BR1_19', 'K1M_BR2_19'], day)); // classes and dates learned from a snapshot (#287)
     expect((ph(els, 'pair', 'K1M_BR2_19')?.value as El).siblingPhaseId).toBe('K1M_BR1_19');
   });
   it('§2.1 date is the date part of XML.Schedule.StartTime (2026-09-19T11:04:20+02:00), source xml, authoritative', () => {
