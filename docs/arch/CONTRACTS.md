@@ -520,8 +520,9 @@ across days (Scenario E, `ARCHITECTURE.md`). A future central registry could iss
   parser's element to emit (E1, the XML layout). The date part is the `YYYY-MM-DD` as written
   before the time part, with no zone conversion: the file writes a time of day and an offset
   (recorded `2026-04-25T00:00:00+02:00`), and converting would move the day the organiser entered.
-  A date part that is not a calendar date (`2026-13-45`, `2026-02-29`) is unparseable; what follows
-  it is not read (`DERIVATIONS.md` §10 item 40).
+  The date part is the first ten characters; one that is not a calendar date (`2026-13-45`,
+  `2026-02-29`, `2026-4-25T…`) is unparseable, and what follows it is not read (`DERIVATIONS.md`
+  §10 item 40).
   An empty or whitespace-only `SubTitle`, `Location` or `Facility` leaves its optional field absent
   (recorded `<SubTitle />`, `<Location />`). A missing or unparseable `StartDate` or `EndDate`
   means the snapshot states no `details`: what is presented stays, `not-yet` before any, and an
@@ -1281,12 +1282,13 @@ else the check's `status` if a check exists, else `plain`.
   now carries.
 - **An Attempt removed upstream** (§2.6, §4 INV-7) keeps its checks and flags in the store; nothing
   deletes them. While the Attempt does not exist they are not served (`/checks` lists none for it,
-  a check or flag write, a flag's resolution included, is `404 attempt-not-found`) and no
+  a check or flag write, a flag's resolution included, is `404 attempt-not-found`,
+  `DERIVATIONS.md` §10 item 38 (k)) and no
   `check.updated` or `flag.updated` is sent. If a row with the same bib returns to the race, the
   recreated Attempt's reads serve them again, `status` derived as above, whoever the competitor
   under the bib is (maintainer, 2026-11-12; `DERIVATIONS.md` §10 item 38 (g)), and the unit that
   creates it pushes each of them, `check.updated` and `flag.updated` after its `attempt.updated`
-  (§7.2; `DERIVATIONS.md` §10 item 38 (k), (m)).
+  (§7.2; `DERIVATIONS.md` §10 item 38 (m)).
 - **The re-baseline** (§4) keeps every check and flag and recomputes `status` against the rebuilt
   values.
 - **A late correction** (a protest 30 minutes on) changes the presented penalty; every check on that
@@ -1738,9 +1740,8 @@ implementation must satisfy, not an algorithm.
     the row is retracted instead, as the TCP absent-row case (`pairTotal` and `countingRun`
     included in a paired second run), under the guard below field by field, and a later snapshot
     settles the removal. TCP's absent row only retracts, never removes. A removed Attempt is gone from every read and every Standing; on site
-    it is sent as `attempt.deleted` (§7.2), to live as `DELETE` (§8.3); an Attempt of a
-    re-baseline's scope that its read removes goes by the replace alone, `scope.replaced` and the
-    Phase replace (§7.2). A pending `WriteRequest`
+    it is sent as `attempt.deleted` (§7.2), also in a re-baseline's unit, and to live as `DELETE`
+    (§8.3), or by the Phase replace a re-baseline sends. A pending `WriteRequest`
     of it resolves `mismatched` without `confirmedValue`, as on a retraction; its checks and
     flags stay in the store (§2.10). The Entry is not removed. A moved competitor's row in the
     other race, or under the new bib, creates that Attempt by the ordinary rule; a row that
@@ -1834,8 +1835,10 @@ re-baseline, per Phase or per Event:
    or this read's own retry stats — that showed a signature other than the one this read returns,
    `null` when none (never "the last poll's", which after a run of failed polls dates the read too
    late and lets a pending write resolve against an older save, INV-2 rule 4) — met by nothing
-   step 1 discarded: an absent row's removal (INV-7) reads only the on-course listings step 1
-   kept, never the result deliveries it discarded (`DERIVATIONS.md` §10 item 38 (l)). If no valid snapshot can be read, the
+   step 1 discarded. An absent row's removal (INV-7) still counts every `tcp` delivery that named
+   the Attempt: step 1 discards a row's result values, not its identity and lifecycle `status`
+   observations, which state that the bib was in the race at that delivery (`DERIVATIONS.md` §10
+   item 38 (l)). If no valid snapshot can be read, the
    action fails with `409 source-unavailable` and changes nothing: the read precedes step 1, and
    steps 1 and 2 reach the core as one ingest unit, the `rebaseline` event followed by the snapshot's
    elements, so the discard and the rebuild are one step and `scope.replaced` goes with it;
@@ -2119,10 +2122,9 @@ Every message carries `seq` (§1.6).
   unit; the unit's `write.updated` of a pending write of it (resolved `mismatched`) precedes it and
   the `standing.updated` of each Standing that held it follows it. It sends no `check.updated`: a
   client drops the Attempt's checks and flags with it, and the store keeps them (§2.10). The
-  shape is §8.4's (maintainer, 2026-11-12; an additive message). In a re-baseline's unit an
-  Attempt of the scope that the re-read removes gets no `attempt.deleted`: `scope.replaced`
-  removes it by omission (§1.6), after its pending write's `write.updated`; one outside the scope
-  gets `attempt.deleted` as above (`DERIVATIONS.md` §10 item 38 (l)).
+  shape is §8.4's (maintainer, 2026-11-12; an additive message). A removal in a re-baseline's
+  unit is sent the same way, before the unit's `scope.replaced`, which then does not carry the
+  Attempt: every removal reaches a client as `attempt.deleted` (`DERIVATIONS.md` §10 item 38 (l)).
 - **`oncourse.updated`** carries the whole on-course set: `{ attemptIds: string[], featuredByUpstream:
   string | null, asOf: Timestamp }`, `attemptIds` in `courseOrder` (§7.1), `asOf` the ingest time of
   the unit at which the set last changed, as §7.1 defines it, so it equals what `/api/oncourse`

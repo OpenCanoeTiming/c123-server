@@ -1284,8 +1284,9 @@ previously known from a results-table observation:
   `entry` (§4.9). Only an Attempt a results-table
   row of its race has named is removed. Admitted: the snapshot's `changedAfter` is later than
   the latest delivery of every `tcp` observation of the Attempt, an on-course listing included
-  (`null` never qualifies; in a re-baseline's own read, only the listings its step 1 kept, §10
-  item 38 (l)), and the Attempt is not in the on-course set. Not admitted: retract
+  (`null` never qualifies; a re-baseline's own read included, whose step 1 keeps what each
+  delivery stated of the Attempt itself, §10 item 38 (l)), and the Attempt is not in the on-course
+  set. Not admitted: retract
   as the TCP absent-row case, `pairTotal` and `countingRun` included in a paired second run,
   under the guard below field by field; a later snapshot settles the removal. In the removal's
   unit a pending write of the Attempt resolves `mismatched` without `confirmedValue` (`CONTRACTS.md` §4 rule 4), the
@@ -1916,13 +1917,25 @@ of M2 P3a, under the same rule.
     `404 attempt-not-found` (after `flag-not-found`), and nothing is stored or pushed; a resolved
     flag returned or pushed then would serve what (g) does not serve (`CONTRACTS.md` §2.10, §7.4;
     2026-11-15, review of PR #370, CQ1);
-    (l) a removal inside a re-baseline: an Attempt of the scope that the re-read removes is removed
-    by `scope.replaced` alone, with no `attempt.deleted` (`CONTRACTS.md` §1.6: outside the replace,
-    `attempt.deleted` is the one removing message; the live Phase replace removes it the same way,
-    §8.3); its pending write's `write.updated` precedes the `scope.replaced`; an Attempt outside
-    the scope that the same read removes is sent as `attempt.deleted`. The removal's guard reads
-    only the `tcp` observations step 1 kept, the on-course listings, never the result deliveries
-    it discarded (`CONTRACTS.md` §4 step 2, "met by nothing step 1 discarded"; 2026-11-15, CQ2);
+    (l) a removal inside a re-baseline (2026-11-15, CQ2; corrected on review of PR #372).
+    *Messages:* an Attempt the re-read removes is sent as `attempt.deleted`, as every removal is,
+    with its pending write's `write.updated` before it, and the unit's `scope.replaced` follows
+    without it; on live the Phase replace removes it (`CONTRACTS.md` §8.3). A client's removal
+    handling (penalty-check's "competitor removed in Canoe123" and the dropping of the Attempt's
+    checks and flags) is keyed on `attempt.deleted`, so one signal for every removal moves no
+    client duty, and the replace that follows finds nothing left to remove (§1.6, every message
+    idempotent). *Guard:* the removal still counts every `tcp` delivery that named the Attempt,
+    a results row and an on-course listing alike; the re-baseline does not reset it. Step 1
+    discards a row's result values, but keeps what the same delivery stated of the Attempt
+    itself: its identity (`entry`, `startOrder`, `heat`, `startLane`) and its lifecycle `status`,
+    `source: 'tcp'`, which say that the bib was in upstream's race at that delivery
+    (`CONTRACTS.md` §4 step 1; step 2, "met by nothing step 1 discarded"). A file older than
+    TCP's latest naming of the bib therefore removes nothing, also in a re-baseline: otherwise a
+    re-baseline against a save not yet written would remove an Attempt TCP had just stated, resolve
+    its pending write `mismatched` as a removal, and the next push would create it again. Where
+    the snapshot is not admitted, the per-field retraction finds no result left after step 1, and
+    step 3 refills it. Both halves are the merged core's. Reopens on a recording where TCP keeps
+    naming a bib the file has dropped, so that no re-baseline can remove it;
     (m) a returning Attempt's checks and flags come back over the push: the unit that creates it
     sends, after its `attempt.updated`, one `check.updated` per check and one `flag.updated` per
     flag that its reads then serve, so a connected tablet, which dropped them on
@@ -2004,8 +2017,10 @@ of M2 P3a, under the same rule.
     raises no disagreement (E3, the core's slot paths read): it is no later than the refused
     snapshot, whose `changedAfter` is not later than the `tcp` value's latest delivery, so rule 2,
     INV-2b and INV-2c all keep the `tcp` value; and every path that takes a `tcp` value away
-    replaces the `xml` slot in the same unit: a passing XML retraction writes the `xml` marker,
+    replaces the `xml` slot in the same unit or puts a later `tcp` observation in its place: TCP's
+    own retraction writes a later `tcp` marker, which rule 2 keeps over the older `xml` slot (lower
+    ingest sequence); a passing XML retraction writes the `xml` marker,
     the re-baseline's step 1 discards both and its read restates the field, a contradiction
     (INV-2d) replaces both, and a new generation clears the run's fields. Reopens if a path is
-    added that takes a `tcp` value away and leaves the `xml` slot; the `xml` slot then takes the
-    absence as well.
+    added that takes a `tcp` value away and leaves the `xml` slot with no later `tcp` observation
+    over it; the `xml` slot then takes the absence as well.
