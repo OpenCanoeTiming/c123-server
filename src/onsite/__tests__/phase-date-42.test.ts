@@ -67,7 +67,11 @@ describe('§10 item 42, CONTRACTS §2.4 INV-5: a Phase keeps an earlier date acr
     expect(own, 'exactly one admin-log entry for the unparseable StartTime').toHaveLength(1);
 
     for (const m of wire) expect(JSON.stringify(m), `no wire message names it: ${JSON.stringify(m)}`).not.toMatch(/unparseable-field/i);
-    expect(wire.filter((m) => m['type'] === 'diagnostics.updated'), 'no diagnostics.updated for an ingest-only kind').toEqual([]);
+    // ODP's own data raises an unrelated tcp/xml source-disagreement on C1M_BR2_18:56's placement (present on main
+    // too, with no StartTime edit at all): diagnostics.updated is sent for THAT, and DERIVATIONS §0.5's rule is
+    // only that the ingest-only kind itself never reaches it, not that nothing does.
+    const diagUpdates = wire.filter((m) => m['type'] === 'diagnostics.updated') as Array<{ diagnostics: Array<{ kind: string }> }>;
+    for (const m of diagUpdates) expect(m.diagnostics.filter((d) => d.kind === 'unparseable-field'), 'no diagnostics.updated carries the ingest-only kind').toEqual([]);
     const diag = await get(env, '/api/diagnostics');
     expect(JSON.stringify(diag.body), 'GET /api/diagnostics does not carry it').not.toMatch(/unparseable-field/i);
   });
