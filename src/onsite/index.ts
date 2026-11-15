@@ -97,8 +97,10 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
 
   const base = dataDir.endsWith('/') || dataDir.endsWith('\\') ? dataDir : `${dataDir}/`;
   const adminLog = opts.adminLog ?? ((en: AdminLogEntry | IngestDiagnostic): void => {
-    if (en.kind === 'xml-table-emptied') console.error(`onsite: ${en.kind} phase=${en.phaseId} count=${en.count}`);
-    else console.error(`onsite: ${en.kind} store=${en.store}${en.eventId !== undefined ? ` event=${en.eventId}` : ''} file=${en.file} setAsideAs=${en.setAsideAs} reason=${en.reason}`);
+    if (en.kind === 'store-set-aside') console.error(`onsite: ${en.kind} store=${en.store}${en.eventId !== undefined ? ` event=${en.eventId}` : ''} file=${en.file} setAsideAs=${en.setAsideAs} reason=${en.reason}`);
+    else if (en.kind === 'xml-table-emptied') console.error(`onsite: ${en.kind} phase=${en.phaseId} count=${en.count}`);
+    // #367: every other ingest-only kind (`unparseable-field`, `gates-absent`, ...), whatever fields it carries
+    else console.error(`onsite: ${en.kind} ${JSON.stringify(en)}`);
   });
   /** A set-aside name for `file` that nothing has in the directory: an earlier set-aside is never overwritten. */
   async function setAsideName(file: string): Promise<string> {
@@ -134,7 +136,11 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   });
 
   // ------------------------------------------------------------------------------------------------ event, core, checks store
-  let event: CurrentEvent | undefined = opts.eventId === undefined ? undefined : { eventId: opts.eventId, name: opts.eventName ?? opts.eventId, details: { state: 'not-yet' } };
+  // §10 item 40 (a): a boot flag entered non-blank is the operator naming the event; blank or absent, the name awaits the snapshot's title.
+  const bootName = opts.eventName !== undefined && opts.eventName.trim() !== '' ? opts.eventName : undefined;
+  let event: CurrentEvent | undefined = opts.eventId === undefined ? undefined : {
+    eventId: opts.eventId, name: bootName ?? opts.eventId, details: { state: 'not-yet' }, nameFrom: bootName !== undefined ? 'operator' : 'snapshot',
+  };
   const newCore = (): MergeCore => createMergeCore({ ...(opts.zone !== undefined ? { zone: opts.zone } : { zone: 'Europe/Prague' }), xmlConfigured: opts.xml !== undefined });
   let core = newCore();
   let tracker: ContextTracker = newTracker();
@@ -142,6 +148,8 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   /** Classes whose creating message went out, and the last status pushed per check. Both belong to the event. */
   const classesSent = new Set<string>();
   const checkStatuses = new Map<string, string>();
+  /** §10 item 38 (m): Attempt ids live after the last unit, to tell a creating unit (a return, or the first ever) from an ordinary update. Belongs to the event. */
+  let liveAttempts = new Set<string>();
 
   /** #273 N2: one store instance per event, ever. A return to an earlier event gets the instance it had. */
   const stores = new Map<string, ChecksStore>();
@@ -246,15 +254,24 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     const live = new Set(core.attempts());
     return items.filter((c) => live.has(c.attemptId));
   };
-  /** §7.2: `check.updated` for every check whose derived `status` differs from the one last pushed. */
-  function checkStatusChanges(): J[] {
+  /**
+   * §7.2, §10 item 38 (m): `check.updated` for every check whose derived `status` differs from the one last pushed;
+   * and, for an Attempt a unit just created (`createdIds`: a return after removal, or the first ever, a restart
+   * included), every one of its stored checks (status included unchanged) and flags, after the creating
+   * `attempt.updated` (the caller appends this after `wire`, which already carries it).
+   */
+  function checkAndFlagPushes(createdIds: ReadonlySet<string>): J[] {
     if (store === undefined) return [];
     const out: J[] = [];
     for (const c of ofExisting(withStatus(store) as (J & { attemptId: string })[])) {
       const k = keyOf(c as { attemptId: string; run: number; gate: number });
-      if (checkStatuses.get(k) === c['status']) continue;
+      const created = createdIds.has(c['attemptId'] as string);
+      if (!created && checkStatuses.get(k) === c['status']) continue;
       checkStatuses.set(k, c['status'] as string);
       out.push({ type: 'check.updated', attemptId: c['attemptId'], run: c['run'], gate: c['gate'], check: c });
+    }
+    if (createdIds.size > 0) {
+      for (const f of ofExisting(store.list().flags)) if (createdIds.has(f.attemptId)) out.push({ type: 'flag.updated', flag: f as unknown as J });
     }
     return out;
   }
@@ -272,7 +289,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     if (event === undefined) return false;
     let changed = false;
     for (const el of elements) {
-      const ev = el['event'];
+      const ev = el['eventFact'];
       if (typeof ev !== 'object' || ev === null) continue;
       const { field, value } = ev as { field: string; value: unknown };
       if (field === 'details') {
@@ -280,7 +297,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
         if (cur.state === 'known' && JSON.stringify(cur.value) === JSON.stringify(value)) continue;
         event = { ...event, details: { state: 'known', value, observedAt: el.observedAt, source: 'xml', confidence: 'authoritative', provisional: false } as CurrentEvent['details'] };
         changed = true;
-      } else if (field === 'name' && opts.eventName === undefined && typeof value === 'string' && value !== event.name) {
+      } else if (field === 'name' && event.nameFrom === 'snapshot' && typeof value === 'string' && value !== event.name) {
         event = { ...event, name: value };
         changed = true;
       }
@@ -297,7 +314,11 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
       if (typeof status.tcp.timingClockOffsetSeconds === 'number') timingClockOffsetSeconds = Math.round(status.tcp.timingClockOffsetSeconds);
     }
     const eventChanged = applyEventFacts(elements);
+    const before = liveAttempts;
     const derived = core.applyUnit(elements);
+    const nowAttempts = new Set(core.attempts());
+    const createdIds = new Set([...nowAttempts].filter((id) => !before.has(id))); // §10 item 38 (m): a return after removal, or the first ever
+    liveAttempts = nowAttempts;
     for (const d of core.drainIngestDiagnostics()) adminLog(d);
     let wire = core.drainNotifications().map((m) => toWire(m, event?.eventId ?? '', classesSent));
     if (eventChanged && event !== undefined) wire = [{ type: 'event.changed', event: onsiteEvent(event) }, ...wire];
@@ -316,7 +337,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
         try { await held.put(changed, bind); } catch (e) { failure = e; log('writes store', e); }
       }
     }
-    const state = [...wire, ...checkStatusChanges()];
+    const state = [...wire, ...checkAndFlagPushes(createdIds)];
     const sent = await emit([...state, ...sourcesChange()]);
     const unitMessages = sent.filter((m) => m['type'] !== 'sources.updated');
     stepLog?.step([...elements, ...derived], unitMessages);
@@ -511,10 +532,12 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     await emit([{ type: 'flag.updated', flag }]);
     return flag as unknown as J;
   }
+  /** §10 item 38 (k): a resolution is a flag write; while its Attempt does not exist, it is `attempt-not-found`, checked after `flag-not-found`, with nothing stored or pushed. */
   async function doResolveFlag(flagId: string, input: { note?: string; resolvedBy?: string }): Promise<J> {
     const i = resolutionInput(flagId, input);
     const s = needStore();
     const was = s.list().flags.find((f) => f.flagId === flagId);
+    if (was !== undefined && !core.attempts().includes(was.attemptId)) throw Object.assign(new Error(`no Attempt for flag ${flagId}`), { code: 'attempt-not-found' });
     const flag = await s.resolveFlag(flagId, i);
     if (was?.resolution === undefined) await emit([{ type: 'flag.updated', flag }]);
     return flag as unknown as J;
@@ -554,6 +577,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
       const code = (e as { code?: string }).code;
       if (e instanceof ValidationError) return invalid(e.details);
       if (code === 'flag-not-found') return refuse(404, 'flag-not-found', (e as Error).message);
+      if (code === 'attempt-not-found') return refuse(404, 'attempt-not-found', (e as Error).message);
       if (code === 'event-not-found') return refuse(404, 'attempt-not-found', 'no event is configured');
       throw e;
     }
@@ -743,13 +767,16 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
         if (typeof e.eventId !== 'string' || e.eventId === '' || typeof e.name !== 'string') throw new ValidationError([{ field: 'event', issue: 'needs an eventId and a name' }]);
         if (event?.eventId === e.eventId) throw new ValidationError([{ field: 'eventId', issue: 'is the event that is already current' }]);
         const next = await storeFor(e.eventId);
-        event = { eventId: e.eventId, name: e.name, details: { state: 'not-yet' } };
+        // §10 item 40 (a): a blank or whitespace-only name counts as none entered; `name` then awaits the snapshot's title.
+        const entered = e.name.trim() !== '';
+        event = { eventId: e.eventId, name: entered ? e.name : e.eventId, details: { state: 'not-yet' }, nameFrom: entered ? 'operator' : 'snapshot' };
         store = next;
         wstore = await writesFor(e.eventId);
         adopted.clear();
         core = newCore();
         tracker = newTracker();
         classesSent.clear();
+        liveAttempts = new Set();
         seedCheckStatuses(next);
         stepLog?.reset();
         reader.stop();

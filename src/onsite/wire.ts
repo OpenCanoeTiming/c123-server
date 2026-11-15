@@ -3,8 +3,12 @@ import type { Message } from '../core/types.js';
 import type { EventDetails, Observed } from '@opencanoetiming/c123-contract';
 
 export type J = Record<string, unknown>;
-/** The core holds no Event (§2.2): `details` and `name` are bridge-level state, kept here alone (#283). */
-export interface CurrentEvent { eventId: string; name: string; details: Observed<EventDetails> }
+/**
+ * The core holds no Event (§2.2): `details` and `name` are bridge-level state, kept here alone (#283). `nameFrom`
+ * (#368 CQ1, DERIVATIONS §10 item 40 (a)) is internal, never served: `'operator'` once a non-blank name was entered
+ * (the boot flag or "start a new event"), so the snapshot's own title never displaces it; `'snapshot'` otherwise.
+ */
+export interface CurrentEvent { eventId: string; name: string; details: Observed<EventDetails>; nameFrom: 'operator' | 'snapshot' }
 
 /** `OnsiteEvent`. */
 export const onsiteEvent = (e: CurrentEvent): J => ({ eventId: e.eventId, name: e.name, details: e.details });
