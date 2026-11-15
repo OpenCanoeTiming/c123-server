@@ -140,6 +140,7 @@ function rehash(deltas: readonly Record<string, unknown>[]): string {
 
 function step(unit: readonly (IngestElement | Record<string, unknown>)[]): void {
   const derived = core.applyUnit(unit as IngestElement[]);
+  core.drainIngestDiagnostics(); // #367: the admin log's own route; discarded here, so the log never grows unbounded and the step log stays as it was
   const deltas = core.drainNotifications() as Record<string, unknown>[];
   steps++;
   put({ i: steps, elements: [...unit, ...derived], deltas, stateHash: rehash(deltas) });
