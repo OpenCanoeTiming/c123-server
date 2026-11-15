@@ -195,10 +195,9 @@ Each vector has:
   its `pair` standing from its first snapshot (`CONTRACTS.md` §5 step 1; `DECISIONS/LOG.md`,
   round 22). A deployable's merge reads no id for any of the three (`CONTRACTS.md` §2.3, §2.4;
   the one read of an id is the TCP parser's fallback for `format`, `DERIVATIONS.md` §2.1): with a
-  `pair` nothing has stated, its `pair` standing waits. The server's adapter states the class
-  today, and `format` and `pair` from the M2 P3b code change on (#287; `DECISIONS/LOG.md`,
-  2026-11-15); until that lands the server's core still reads those two from the id for a Phase
-  nothing has described. A parser states
+  `pair` nothing has stated, its `pair` standing waits. The server's adapter states the class, `format` and `pair` (#287; `DECISIONS/LOG.md`,
+  2026-11-15); the core reads none of the three from a Phase's id, and a Phase whose `pair` nothing has
+  stated has no `pair` standing. A parser states
   `pair` with the format, `siblingPhaseId: null` until the schedule names the first run, and that
   stated `null` makes the `pair` standing wait. The Entry is that Attempt's; where no element sets
   the Attempt's `entry` pointer, every Entry field in the vector is one Entry's. Neither needs a
