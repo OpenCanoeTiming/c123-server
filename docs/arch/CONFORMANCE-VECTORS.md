@@ -220,10 +220,9 @@ Each vector has:
   its own and never groups with a neighbour; and the seam between `given` and `then` is always a
   unit boundary, since `then` follows an asserted intermediate state, which can only exist at one.
 - **`context.xml`** states the XML source's state where a vector needs one. One vector does:
-  `two-run-br1-unavailable-no-live-no-xml` states `'unreachable'` and expects
-  `unavailable{source-unreachable}`. The on-site process never gives that input
-  (`DERIVATIONS.md` §4.5), so the vector is to be reshaped with the core change: `'not-configured'`,
-  expecting `unavailable{not-configured}` (`DERIVATIONS.md` §10 item 30).
+  `two-run-br1-unavailable-no-live-no-xml` states `'not-configured'` and expects
+  `unavailable{not-configured}`. The on-site process never gives `source-unreachable`
+  (`DERIVATIONS.md` §4.5, §10 item 30).
 
 **Which vectors each component runs.** Each component feeds its own merge function through a thin
 adapter (`TEST-ARCHITECTURE.md` §3.1); the sets overlap, and each suite asserts its own count.
@@ -374,32 +373,32 @@ check, readable under its own `run`) is not asserted.
 | Phase status transition | `phasestatus-official-to-revised-skips-unofficial` | 1 |
 | Standing assembly (§5) | relayed order and single-run tie; combined tie with no anomaly; unplaced entries; age-category assembly; age-category unplaced entries; category-rank disagreement; order disagreement; Cross never checked; behind and flags | 9 |
 
-**Expected red.** Seven vectors assert a rule the server's core does not implement yet. Five: an
-absent XML row removes the Attempt (`CONTRACTS.md` §4 INV-7; maintainer, 2026-11-11 and
-2026-11-12). Two: a category standing numbers as Canoe123 prints and lists its unplaced entries
-(`CONTRACTS.md` §5 step 4; maintainer, 2026-11-12). They are listed in the expected-red ledger
+**Expected red.** Two vectors assert a rule the server's core does not implement yet: a category
+standing numbers as Canoe123 prints and lists its unplaced entries (`CONTRACTS.md` §5 step 4;
+maintainer, 2026-11-12). They are listed in the expected-red ledger
 (`src/__tests__/conformance/expected-red.json`; a listed id runs as an expected failure, and
-`VECTORS_STRICT=1` shows it red). The core change is in the M2 server batch; the ids leave the
-ledger with it.
-- `inv2c-first-read-unknown-age-refused`. Its last snapshot lists bibs 9 and 10 and not bib 11,
-  which holds a TCP result older than the snapshot's content age: bib 11's Attempt is removed,
-  one `attempt.deleted`. Round C part 2 had it retracted; before that it stayed `known` from
-  `tcp`.
-- `retraction-xml-absent-row`: a TCP result, then an XML snapshot that lists another row and has
-  a later content age. The Attempt is removed: one `attempt.deleted`, no `attempt.updated` for
-  it. Part 2 had it retracted.
-- `retraction-xml-absent-row-guard`: the same with a content age not later than the push.
-  Nothing moves. The next rewrite removes the Attempt.
-- `retraction-xml-absent-row-then-returns`: after the removal a later snapshot carries the row
-  with a result again. A new Attempt is created, presented from `xml`, `run` 1.
-- `attempt-removed-xml-absent-start-list-row`, new (round C part 4): an Attempt known only from
-  a start-list row is removed when a later snapshot lacks its row.
+`VECTORS_STRICT=1` shows it red).
 - `standing-age-category-assembled`, an existing vector whose expected outcome changed (round C
   part 4): entries C and D share class rank 3 and are the category's second and third placed
   entries, so D's category rank is 3, not the shared 2.
 - `standing-age-category-unplaced-listed-after`, new (round C part 4): the category's `dns` and
   `dnf` entries follow its placed one with `rank: null` and `order: null`, in step 3's order; the
   other category's entries are not listed.
+
+Five vectors on an absent XML row removing the Attempt (`CONTRACTS.md` §4 INV-7; maintainer,
+2026-11-11 and 2026-11-12) left the ledger with the core change (#365, PR #370, merged c5d8417):
+- `inv2c-first-read-unknown-age-refused`. Its last snapshot lists bibs 9 and 10 and not bib 11,
+  which holds a TCP result older than the snapshot's content age: bib 11's Attempt is removed,
+  one `attempt.deleted`.
+- `retraction-xml-absent-row`: a TCP result, then an XML snapshot that lists another row and has
+  a later content age. The Attempt is removed: one `attempt.deleted`, no `attempt.updated` for
+  it.
+- `retraction-xml-absent-row-guard`: the same with a content age not later than the push.
+  Nothing moves. The next rewrite removes the Attempt.
+- `retraction-xml-absent-row-then-returns`: after the removal a later snapshot carries the row
+  with a result again. A new Attempt is created, presented from `xml`, `run` 1.
+- `attempt-removed-xml-absent-start-list-row` (round C part 4): an Attempt known only from
+  a start-list row is removed when a later snapshot lacks its row.
 
 Two vectors of these rules pass on today's core and are not listed:
 `retraction-xml-empty-table-retracts-nothing`, a TCP result and then an XML snapshot with
@@ -408,9 +407,8 @@ nothing is sent (the `xml-table-emptied` diagnostic goes to the admin log, which
 reads); and `attempt-removed-not-while-on-course` (round C part 4), an Attempt in the on-course
 set that a later snapshot lacks: it stays, and no `attempt.deleted` is sent.
 
-**Owed with the core change.** The reshape of `two-run-br1-unavailable-no-live-no-xml` (§1,
-`context.xml`): its expected outcome would change on a default, so it waits for the code and its
-review.
+The reshape of `two-run-br1-unavailable-no-live-no-xml` (§1, `context.xml`: `'not-configured'`)
+is done (#337).
 
 ---
 

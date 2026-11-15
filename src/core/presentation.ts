@@ -121,7 +121,7 @@ export function presentedFinish(a: AttemptState): string | undefined {
 
 /** §4.5: run 1 unavailable once run 2 has been observed and neither path can supply it. */
 function firstRunUnavailable(s: CoreState, phaseId: string, bib: string): unknown {
-  const reason = s.options.xmlConfigured === false ? 'not-configured' : s.options.xml === 'unreachable' ? 'source-unreachable' : undefined;
+  const reason = s.options.xmlConfigured === false ? 'not-configured' : undefined;
   if (reason === undefined || s.xmlRead) return undefined;
   const fmt = fmtFor(s, phaseId);
   if (fmt.pair?.role !== 'first') return undefined;

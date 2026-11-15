@@ -355,7 +355,7 @@ describe('ingest units (CONFORMANCE-VECTORS §1 "Ingest units"; CONTRACTS §1.6)
       return {
         ...m,
         applyUnit: (e) => { applied += e.length; m.applyUnit(e); },
-        presented: () => { seen.push({ applied }); return { outcome: applied === 0 ? { state: 'not-yet' } : { state: 'unavailable', reason: 'source-unreachable' } }; },
+        presented: () => { seen.push({ applied }); return { outcome: applied === 0 ? { state: 'not-yet' } : { state: 'unavailable', reason: 'not-configured' } }; },
       };
     };
     runVector(v, port);

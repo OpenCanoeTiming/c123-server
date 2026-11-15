@@ -187,8 +187,6 @@ export interface MergeCoreOptions {
   initialSeq?: number;
   /** The Attempt a keyless observation addresses (CONFORMANCE-VECTORS §1, `context.attemptId`). The parsers always name one. */
   attemptId?: string;
-  /** `context.xml` where a vector states it; `'unreachable'`: the XML source is configured and not answering. */
-  xml?: string;
 }
 
 /** Everything one core holds. No module state: two cores never share anything. */
