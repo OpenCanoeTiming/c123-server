@@ -2045,8 +2045,9 @@ of M2 P3a, under the same rule.
     - An empty value is unchanged: absent, no diagnostic.
 
     Evidence (E2, a scan of the seven recordings' snapshots): every value found has a calendar
-    date part followed by a time and an offset (64 distinct `Schedule.StartTime` dates, 3
-    `StartDate`, 3 `EndDate`, 61 `Birthdate`), so nothing recorded moves. No client duty moves: a
+    date part followed by a time and an offset (64 distinct `Schedule.StartTime` values on 5
+    dates, 3 distinct `StartDate` and 3 `EndDate` values, 61 distinct `Birthdate` values), so
+    nothing recorded moves. No client duty moves: a
     client shows `date`, `scheduledStart` and birth data as served, and `not-yet` as not known.
     Reopens on a recording with an invalid date part, or if organisers enter birth dates in a
     form this reads as unparseable often enough to crowd the admin log.

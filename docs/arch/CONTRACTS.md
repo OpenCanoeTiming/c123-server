@@ -2456,7 +2456,9 @@ type PhaseAttemptsPutResponse = { attempts: Attempt[] }
   `null` as `null` inside the `known` `members` value, as on site (§2.5); only Entry-level fields are
   wrapped. Such an entry is accepted and fully renderable (§2.5).
 - **`birthDate` is optional, and carried as entered.** The store keeps it as pushed; publication is
-  governed by the per-event `birthDatePublication` setting (§8.4, maintainer answer Q4).
+  governed by the per-event `birthDatePublication` setting (§8.4, maintainer answer Q4). A birth
+  date upstream states whose first ten characters are not a calendar date is absent on site, so
+  the bridge does not push it (`DERIVATIONS.md` §10 item 42).
 - **Bare values are wrapped by the store.** Class, Phase, Entry and Course bodies carry bare values,
   because a vendor-neutral bridge has no per-field provenance to offer for them. The store presents
   each such `Observed` field as `{ state: 'known', value, observedAt: <ingest time of the push>,
