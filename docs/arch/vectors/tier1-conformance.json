@@ -5051,6 +5051,209 @@
       }
     },
     {
+      "id": "retraction-tcp-absent-row-leaves-no-tcp-marker-on-counting-run",
+      "invariant": "INV-7",
+      "description": "A TCP absent-row retraction of a paired second run must leave no tcp observation of countingRun, rule 3's XML-only field (CONTRACTS §4 INV-2 rule 3; INV-7): otherwise rule 2 ranks a tcp 'not-yet' marker over the XML's next row, the same lasting not-yet as #314 (contradiction-leaves-no-tcp-marker-on-xml-only-field, beside which this vector sits). Ruled DECISIONS/LOG.md 2026-11-12 'Round C part 3, #321 CQ1'; DERIVATIONS §4.12 'Retraction from a TCP push', paired second run. Synthetic (no recording holds this exact sequence): bib 15 of a BR2 race has a tcp result and an xml row restating countingRun 1 (BetterRunNr 1); a tcp results push of the race without bib 15's row retracts outcome, placement, pairTotal and countingRun to not-yet (bib 9 untouched); the next xml snapshot whose row again carries BetterRunNr 1 presents countingRun known, source xml. Fails today: the retraction writes a tcp marker on countingRun that blocks the xml row while TCP stays connected.",
+      "context": {
+        "attemptId": "K1M_BR2_26:15",
+        "tcpConnectedThroughout": true,
+        "xmlPollIntervalSeconds": 5
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR2_26",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "9",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 60,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 60
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "pairTotal": 125,
+                "judgingComplete": true
+              },
+              {
+                "bib": "15",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 70,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 70
+                },
+                "placement": {
+                  "rank": 2,
+                  "order": 2
+                },
+                "pairTotal": 135,
+                "judgingComplete": true
+              }
+            ]
+          },
+          "observedAt": "2026-01-12T09:00:00.000Z"
+        },
+        {
+          "ingestSeq": 2,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-01-12T09:00:30.000Z",
+          "changedAfter": "2026-01-12T09:00:05.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR2_26",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "9",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 60,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 60
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "pairTotal": 125,
+                "countingRun": 1,
+                "judgingComplete": true
+              },
+              {
+                "bib": "15",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 70,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 70
+                },
+                "placement": {
+                  "rank": 2,
+                  "order": 2
+                },
+                "pairTotal": 135,
+                "countingRun": 1,
+                "judgingComplete": true
+              }
+            ]
+          },
+          "observedAt": "2026-01-12T09:00:30.000Z"
+        },
+        {
+          "ingestSeq": 4,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR2_26",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "9",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 60,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 60
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "pairTotal": 125,
+                "judgingComplete": true
+              }
+            ]
+          },
+          "observedAt": "2026-01-12T09:01:00.000Z"
+        },
+        {
+          "ingestSeq": 5,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-01-12T09:02:00.000Z",
+          "changedAfter": "2026-01-12T09:01:30.000Z"
+        },
+        {
+          "ingestSeq": 6,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR2_26",
+            "mode": "results",
+            "rows": [
+              {
+                "bib": "9",
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 60,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 60
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "pairTotal": 125,
+                "countingRun": 1,
+                "judgingComplete": true
+              },
+              {
+                "bib": "15",
+                "countingRun": 1
+              }
+            ]
+          },
+          "observedAt": "2026-01-12T09:02:00.000Z"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 2,
+          "expect": {
+            "countingRun": {
+              "state": "known",
+              "value": 1,
+              "source": "xml",
+              "provisional": false
+            }
+          }
+        },
+        {
+          "afterGivenIndex": 3,
+          "expect": {
+            "countingRun": {
+              "state": "not-yet"
+            },
+            "outcome": {
+              "state": "not-yet"
+            },
+            "placement": {
+              "state": "not-yet"
+            },
+            "pairTotal": {
+              "state": "not-yet"
+            }
+          }
+        }
+      ],
+      "expect": {
+        "countingRun": {
+          "state": "known",
+          "value": 1,
+          "source": "xml",
+          "provisional": false
+        }
+      }
+    },
+    {
       "id": "status-overrides-time",
       "invariant": "marks",
       "description": "A row carrying a mark and a time presents no-result: a duplicate finish was resolved upstream by a DNF while both rows kept the time.",

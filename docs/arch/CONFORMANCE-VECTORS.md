@@ -52,8 +52,8 @@ as recorded), the INV-2d lift, placement only when ranked, no standing re-send o
 fields provisional while run 2 runs, `status` never provisional, an Attempt unstaged before its start,
 and a first-run row wiped in place (the recorded jury re-run).
 
-**113 vectors:** 99 merge vectors, 9 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
-needed, not a target. **c123-server runs 107 of them, live-mini-server 24** (§1, "Which vectors each
+**114 vectors:** 100 merge vectors, 9 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
+needed, not a target. **c123-server runs 108 of them, live-mini-server 24** (§1, "Which vectors each
 component runs"); 18 run in both suites.
 
 **Since then** the file has changed with the contract rounds from 14 on and with #314;
@@ -228,7 +228,7 @@ Each vector has:
 **Which vectors each component runs.** Each component feeds its own merge function through a thin
 adapter (`TEST-ARCHITECTURE.md` §3.1); the sets overlap, and each suite asserts its own count.
 
-**c123-server runs 107: every vector not tagged `live-ingest`.** The tag is the rule; apart from it,
+**c123-server runs 108: every vector not tagged `live-ingest`.** The tag is the rule; apart from it,
 every merge vector is on-site material (`tcp`, `xml` and `operator-write` observations, the
 source-less `unavailable` observation, connection and operator events, scope snapshots and
 on-course listings), and all 9 `standing-assembly` and all 5 `workflow-state` vectors are the
