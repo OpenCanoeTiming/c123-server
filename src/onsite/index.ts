@@ -13,7 +13,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { XMLValidator } from 'fast-xml-parser';
 import { createXmlReader, parseTcp, parseXmlSnapshot, type Clock, type IngestContext, type IngestElement, type XmlFs, type XmlReader, type XmlReaderStatus } from '../ingest/index.js';
 import { createContextTracker, type ContextTracker } from '../ingest/context-tracker.js';
-import { createMergeCore, type MergeCore } from '../core/index.js';
+import { createMergeCore, type IngestDiagnostic, type MergeCore } from '../core/index.js';
 import { openChecksStore, ChecksFileInvalidError, type ChecksFs, type ChecksStore } from '../store/checks.js';
 import { TcpSource } from '../sources/TcpSource.js';
 import type { Source, WritableSource } from '../sources/types.js';
@@ -49,8 +49,8 @@ export interface AdminLogEntry {
 }
 
 export interface OnsiteOptions {
-  /** Where the admin log goes; default one stderr line. */
-  adminLog?: (entry: AdminLogEntry) => void;
+  /** Where the admin log goes, the core's ingest-only diagnostics included (DERIVATIONS §0.5); default one stderr line. */
+  adminLog?: (entry: AdminLogEntry | IngestDiagnostic) => void;
   port?: number;
   clock: Clock;
   fs: ChecksFs & XmlFs;
@@ -96,8 +96,9 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   let stopping = false;
 
   const base = dataDir.endsWith('/') || dataDir.endsWith('\\') ? dataDir : `${dataDir}/`;
-  const adminLog = opts.adminLog ?? ((en: AdminLogEntry): void => {
-    console.error(`onsite: ${en.kind} store=${en.store}${en.eventId !== undefined ? ` event=${en.eventId}` : ''} file=${en.file} setAsideAs=${en.setAsideAs} reason=${en.reason}`);
+  const adminLog = opts.adminLog ?? ((en: AdminLogEntry | IngestDiagnostic): void => {
+    if (en.kind === 'xml-table-emptied') console.error(`onsite: ${en.kind} phase=${en.phaseId} count=${en.count}`);
+    else console.error(`onsite: ${en.kind} store=${en.store}${en.eventId !== undefined ? ` event=${en.eventId}` : ''} file=${en.file} setAsideAs=${en.setAsideAs} reason=${en.reason}`);
   });
   /** A set-aside name for `file` that nothing has in the directory: an earlier set-aside is never overwritten. */
   async function setAsideName(file: string): Promise<string> {
@@ -292,6 +293,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     }
     const eventChanged = applyEventFacts(elements);
     const derived = core.applyUnit(elements);
+    for (const d of core.drainIngestDiagnostics()) adminLog(d);
     let wire = core.drainNotifications().map((m) => toWire(m, event?.eventId ?? '', classesSent));
     if (eventChanged && event !== undefined) wire = [{ type: 'event.changed', event: onsiteEvent(event) }, ...wire];
     wire = writesBesideAttempts(wire);
