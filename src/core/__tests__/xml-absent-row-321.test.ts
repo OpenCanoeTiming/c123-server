@@ -121,9 +121,15 @@ describe('ADR-015 Rev 5 rule 2, the guard (#321 row 3)', () => {
     const absentBib9Only = (): Array<Record<string, unknown>> => [{ bib: '9', outcome: dur(84), placement: { rank: 1, order: 1 }, judgingComplete: true }];
 
     // (a) a rewrite whose content age predates the tcp push: the guard refuses; a later rewrite retracts.
+    // Bib 11 stays listed (a finisher the stream still lists, as rows 1, 2, 4 and 5 keep it), so neither
+    // rewrite is ever admitted for removal (ADR-015 Revision 6 rule 2: an Attempt in the on-course set is
+    // never removed): both snapshots retract or not under INV-2c alone, which is what this block tests
+    // (O1, review of PR #369 -- without the listing the second rewrite is admitted and part 2 removes the
+    // Attempt instead, passing this test for the wrong reason).
     {
       const k = kit(A, P);
       const c = k.core();
+      c.applyUnit(k.listing(T('09:59:50.000'), T('09:58:20.000'), T('09:59:50.000'), { runSeconds: 90.12 }));
       c.applyUnit([push(1, 'tcp', P, 'results', row(), T('10:00:00.000'))]);
       c.applyUnit([rewrite(2, T('10:00:30.000'), T('09:59:50.000')), push(3, 'xml', P, 'results', absentBib9Only(), T('10:00:30.000'))]);
       expect(field(c, A, 'outcome')).toMatchObject({ state: 'known', source: 'tcp' });
@@ -132,6 +138,8 @@ describe('ADR-015 Rev 5 rule 2, the guard (#321 row 3)', () => {
       c.applyUnit([rewrite(4, T('10:01:00.000'), T('10:00:05.000')), push(5, 'xml', P, 'results', absentBib9Only(), T('10:01:00.000'))]);
       expect(field(c, A, 'outcome'), 'outcome').toEqual({ state: 'not-yet' });
       expect(field(c, A, 'placement'), 'placement').toEqual({ state: 'not-yet' });
+      expect(c.attempts(), 'retracted, not removed').toContain(A);
+      expect(c.oncourse().attemptIds, 'still listed').toContain(A);
     }
 
     // (b) changedAfter null (a first read, INV-2c) never qualifies: nothing retracted.
