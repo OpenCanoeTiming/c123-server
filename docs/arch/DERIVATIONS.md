@@ -627,7 +627,8 @@ withheld stale mark leaves the time presented (§4.12).
   - at a listing that shows `at-start` (§4.1: `dtStart` empty, outside a Cross heat), whatever
     `Time` that listing carries;
   - at a listing with a `dtFinish`: the `duration` inference below replaces it, and where that
-    listing's `Time` is empty nothing does, so `outcome` is `not-yet` until a row states one;
+    listing yields none — its `Time` is empty, or a slalom listing has no `Gates` (§4.6(a)) —
+    nothing does, so `outcome` is `not-yet` until a row states one;
   - at a slalom leave, on every path of §4.1's rule.
 
   A Kayak Cross leave ends nothing (§10 item 35). So no presented state pairs a `running`
@@ -2102,10 +2103,10 @@ from M2 P3b: the questions round C left open (#346) and the rules that package's
     `status` other than `on-course`** (§4.3). Four defaults inside it. No client duty moves.
     Evidence (E2, a scan of the TCP on-course stream of the seven recordings, 564,120 listings,
     2026-11-15): none of the four shapes occurs there with a `running` to lose.
-    (a) *A finish listed with an empty `Time`.* A listing with a `dtFinish` ends the stream's
-    `running`. With a `Time`, the `duration` inference replaces it. With none, no duration can
-    be inferred (§0.5: absent, not invented), and `outcome` is `not-yet` until a row states
-    one. Slalom and the Cross time trial alike, as the stream lists a finish per competitor in
+    (a) *A finish listed with no `duration` to infer.* A listing with a `dtFinish` ends the
+    stream's `running`. Ordinarily the `duration` inference replaces it. Where the listing
+    yields none — an empty `Time`, or a slalom listing without `Gates` (§0.5, `gates-absent`) —
+    nothing is invented, and `outcome` is `not-yet` until a row states one. Slalom and the Cross time trial alike, as the stream lists a finish per competitor in
     both (§4.1). `TEST-ARCHITECTURE.md` §3.2 property 4 names this listing. Recorded: 234 such
     listings, all of cp3-cross WX1_XT_26:25 and all with `dtStart` empty too, so the `running`
     had ended at the deleted start; no listing carries `dtStart`, `dtFinish` and an empty
