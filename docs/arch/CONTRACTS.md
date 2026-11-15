@@ -2301,8 +2301,11 @@ and pushes nothing — refusing rather than holding, by the same reasoning as th
 finish above. **Once the socket has accepted the command the write exists,** whatever happens to
 its durable record (§1.5): if storing it fails, the `WriteRequest` and its key stay bound in
 memory, the `202` and the push go out as usual — a same-key retry is still answered from the key
-and sends nothing — and the failure is reported to the admin audience. What is lost until the
-store writes again is the restart guarantee alone.
+and sends nothing — and the failure is reported to the admin audience: an admin log entry and
+nothing on the wire, as for a store file set aside (§2.10). What is lost until the store writes
+again is the restart guarantee alone: the next successful write of the writes store, whatever
+change it carries, also stores every `WriteRequest` and key that memory alone holds, each as last
+pushed, and a restart after it finds them.
 The command is one XML document on one line, the `Canoe123` envelope naming the
 connected instance and the correction element with the race id, bib, gate and value, followed by
 the stream's message terminator; whitespace inside the element is not a contract item.
