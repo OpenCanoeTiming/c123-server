@@ -40,10 +40,53 @@ export function fmtFor(s: CoreState, phaseId: string): Fmt {
   return fmtOf(typeof stated === 'string' ? stated : splitRaceId(phaseId).token);
 }
 
-/** The other run of a pair: the sibling the Phase's `pair` states (CONTRACTS §2.4); the id is never built or parsed for it. */
+type StatedPair = { role?: string; siblingPhaseId?: string | null } | null | undefined;
+const statedPair = (r: ResourceState | undefined): StatedPair => r?.plain.get('pair') as StatedPair;
+
+/**
+ * The other run of a pair (CONTRACTS §2.4); the id is never built or parsed for it. A second run's is the sibling its `pair` states; a
+ * first run's is derived, the second run that names it back (`deriveFirstRunSiblings`); a Phase not yet described has the same derivation.
+ */
 export function siblingPhaseId(s: CoreState, phaseId: string): string | undefined {
-  const stated = s.phases.get(phaseId)?.plain.get('pair') as { siblingPhaseId?: string | null } | null | undefined;
+  const r = s.phases.get(phaseId);
+  if (r === undefined) return namedBack(s, phaseId, namingSecondRuns(s), undefined) ?? undefined;
+  const stated = statedPair(r);
+  if (stated?.role === 'first') return r.derivedSibling ?? undefined;
   return stated?.siblingPhaseId ?? undefined;
+}
+
+/** Each Phase named by a second run's stated pair, with the second runs naming it. */
+function namingSecondRuns(s: CoreState): Map<string, string[]> {
+  const naming = new Map<string, string[]>();
+  for (const [id, r] of s.phases) {
+    const p = statedPair(r);
+    if (p?.role !== 'second' || typeof p.siblingPhaseId !== 'string') continue;
+    const list = naming.get(p.siblingPhaseId);
+    if (list === undefined) naming.set(p.siblingPhaseId, [id]);
+    else list.push(id);
+  }
+  return naming;
+}
+
+/** DERIVATIONS §10 item 48: the one second run naming the first run; where several do, the one on its day; else `null`. Candidates sorted. */
+function namedBack(s: CoreState, firstId: string, naming: ReadonlyMap<string, string[]>, day: unknown): string | null {
+  const candidates = [...(naming.get(firstId) ?? [])].sort();
+  if (candidates.length === 1) return candidates[0]!;
+  const sameDay = candidates.filter((c) => day !== undefined && s.phases.get(c)?.plain.get('date') === day);
+  return sameDay.length === 1 ? sameDay[0]! : null;
+}
+
+/** A first run's sibling, derived again for every first run; one whose sibling changed is marked, its Phase and its Attempts. */
+export function deriveFirstRunSiblings(s: CoreState): void {
+  const naming = namingSecondRuns(s);
+  for (const [id, r] of s.phases) {
+    if (statedPair(r)?.role !== 'first') continue;
+    const pick = namedBack(s, id, naming, r.plain.get('date'));
+    if (r.derivedSibling === pick) continue;
+    r.derivedSibling = pick;
+    s.dirtyPhases.add(r);
+    for (const a of r.attempts ?? []) s.dirtyAttempts.add(a);
+  }
 }
 
 /** The sibling Phase's Attempt of the same bib, where a sibling is stated and the Attempt exists. */

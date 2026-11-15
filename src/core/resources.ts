@@ -69,6 +69,9 @@ export function viewResource(r: ResourceState, kind: 'phase' | 'entry' | 'class'
   const key = kind === 'phase' ? 'phaseId' : kind === 'entry' ? 'entryId' : kind === 'class' ? 'classId' : 'courseId';
   const out: Record<string, unknown> = { [key]: r.id };
   for (const [k, v] of r.plain) out[k] = v;
+  // a first run presents its derived sibling; its stated role and combination stand (DERIVATIONS §10 item 48)
+  const pair = r.plain.get('pair') as { role?: string } | null | undefined;
+  if (kind === 'phase' && pair?.role === 'first') out['pair'] = { ...pair, siblingPhaseId: r.derivedSibling ?? null };
   for (const f of new Set([...names, ...r.fields.keys()])) out[f] = envelope(present(r.fields.get(f)), false);
   return out;
 }

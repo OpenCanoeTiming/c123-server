@@ -142,6 +142,8 @@ export interface ResourceState {
   attempts?: Set<AttemptState>;
   /** Phase only: the race's XML table has carried a row since it was last reported emptied, or it was emptied and reported (§4.12). */
   xmlTable?: 'rows' | 'emptied';
+  /** Phase only, a first run: its sibling, the second run that names it back (DERIVATIONS §10 item 48); `null` where none does. */
+  derivedSibling?: string | null;
 }
 
 /**
