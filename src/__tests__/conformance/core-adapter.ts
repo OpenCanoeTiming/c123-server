@@ -37,13 +37,14 @@ const absent = (e: unknown): boolean =>
   typeof e === 'object' && e !== null && ((e as { code?: string }).code === 'ERR_MODULE_NOT_FOUND' || /Cannot find (module|package)|Failed to load url|Failed to resolve import/i.test(String((e as Error).message)));
 
 /**
- * What the vector's `context` gives the core (round 19, #203 F5). The harness keeps content age (resolved before `applyUnit`); the core is told
- * `attemptId`, the Attempt a keyless observation addresses (CONFORMANCE-VECTORS §1; the harness has defaulted it, so it is always a string), and
- * `xml` where the vector states it (`two-run-br1-unavailable-no-live-no-xml`: `'unreachable'`), verbatim. These two option names are fixed here
- * (`MergeCoreOptions.attemptId`, `MergeCoreOptions.xml`); the core follows them and keeps no "unnamed Attempt" of its own.
+ * What the vector's `context` gives the core (round 19, #203 F5; reshaped #337). The harness keeps content age (resolved before `applyUnit`); the
+ * core is told `attemptId`, the Attempt a keyless observation addresses (CONFORMANCE-VECTORS §1; the harness has defaulted it, so it is always a
+ * string), and `xmlConfigured: false` where the vector states `context.xml: 'not-configured'` (`two-run-br1-unavailable-no-live-no-xml`); no other
+ * `context.xml` value is given on site (DERIVATIONS §4.5, §10 item 30), so no other value is mapped. `MergeCoreOptions.attemptId` and
+ * `MergeCoreOptions.xmlConfigured` are fixed here; the core follows them and keeps no "unnamed Attempt" of its own.
  */
 export function createMergePort(context: VectorContext): MergePort {
-  if (loaded.factory) return withConventionalClass(loaded.factory({ attemptId: context.attemptId, ...(context['xml'] !== undefined ? { xml: context['xml'] } : {}) }));
+  if (loaded.factory) return withConventionalClass(loaded.factory({ attemptId: context.attemptId, ...(context['xml'] === 'not-configured' ? { xmlConfigured: false } : {}) }));
   if (absent(loaded.error)) throw new CoreMissing('createMergePort (src/core)');
   throw loaded.error;
 }

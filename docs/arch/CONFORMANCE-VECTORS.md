@@ -220,10 +220,9 @@ Each vector has:
   its own and never groups with a neighbour; and the seam between `given` and `then` is always a
   unit boundary, since `then` follows an asserted intermediate state, which can only exist at one.
 - **`context.xml`** states the XML source's state where a vector needs one. One vector does:
-  `two-run-br1-unavailable-no-live-no-xml` states `'unreachable'` and expects
-  `unavailable{source-unreachable}`. The on-site process never gives that input
-  (`DERIVATIONS.md` §4.5), so the vector is to be reshaped with the core change: `'not-configured'`,
-  expecting `unavailable{not-configured}` (`DERIVATIONS.md` §10 item 30).
+  `two-run-br1-unavailable-no-live-no-xml` states `'not-configured'` and expects
+  `unavailable{not-configured}`. The on-site process never gives `source-unreachable`
+  (`DERIVATIONS.md` §4.5, §10 item 30).
 
 **Which vectors each component runs.** Each component feeds its own merge function through a thin
 adapter (`TEST-ARCHITECTURE.md` §3.1); the sets overlap, and each suite asserts its own count.
