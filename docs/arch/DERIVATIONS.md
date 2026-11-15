@@ -777,10 +777,9 @@ supplies it. Three reasons:
   with a place in replay and in the fixtures (`CONTRACTS.md` §4, Determinism), for a difference
   nobody sees.
 
-The reason stays in the closed set (`CONTRACTS.md` §1.2); nothing on site produces it. The vector
-`two-run-br1-unavailable-no-live-no-xml` still feeds the merge an XML source stated as
-unreachable, an input the process never gives; it is reshaped to the not-configured case with the
-core change (§10 item 30).
+The reason stays in the closed set (`CONTRACTS.md` §1.2); nothing on site produces it. The core
+has no option to give it (#337, PR #371), and the vector `two-run-br1-unavailable-no-live-no-xml`
+feeds the input the process does give, no XML configured (§10 item 30).
 
 `PrevRnk` in Cross means the rank in the previous round, not a previous run, and is not modelled
 (§9).
@@ -1801,9 +1800,8 @@ decision.
     run; reopens if a replay of a re-baseline over a classification Phase shows otherwise.
 30. **`unavailable{source-unreachable}` on site.** Default: the on-site process never gives it
     (§4.5); a first run's detail stays `not-yet` while a configured XML source is unreachable.
-    Today the core can give the reason only through an option that nothing but the conformance
-    harness sets (#337), and the vector `two-run-br1-unavailable-no-live-no-xml` passes on that
-    input. With the core change the option goes and the vector is reshaped to the case the
+    The core option that only the conformance harness set to give the reason is gone (#337, PR
+    #371), and the vector `two-run-br1-unavailable-no-live-no-xml` was reshaped to the case the
     process does give: no XML configured, `unavailable{not-configured}` once run 2 is observed,
     `not-yet` before. Reopens if a client needs to tell the two states apart; feeding the
     reader's state to the core as an ingest event would then be the change. The reason stays in

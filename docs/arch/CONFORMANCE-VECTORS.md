@@ -400,7 +400,7 @@ Five vectors on an absent XML row removing the Attempt (`CONTRACTS.md` §4 INV-7
 - `attempt-removed-xml-absent-start-list-row` (round C part 4): an Attempt known only from
   a start-list row is removed when a later snapshot lacks its row.
 
-Two vectors of these rules pass on today's core and are not listed:
+Two more vectors of these rules were never on the ledger:
 `retraction-xml-empty-table-retracts-nothing`, a TCP result and then an XML snapshot with
 `mode: 'start-list'` and `rows: []` and a later content age: nothing is retracted or removed and
 nothing is sent (the `xml-table-emptied` diagnostic goes to the admin log, which no vector
