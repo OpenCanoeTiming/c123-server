@@ -9,8 +9,10 @@
  *   is a resolved observation; `{ field, <key>, source, kind, state: 'unavailable', reason }` states not-applicable /
  *   not-configured; `{ field, <key>, state: 'not-yet' }` is an explicit not-yet.
  * - `{ snapshot: { source, phaseId, mode, rows } }` is a scope snapshot (INV-7).
- * - `{ event }`, `{ diagnostic }`, `{ sourceStatus }`,
- *   `{ unparseable }` (a message that could not be read), `{ unknownType }` (a TCP message type nobody models).
+ * - `{ event }` (a string-valued connection/operator signal, CONFORMANCE-VECTORS §1), `{ eventFact: { field, value,
+ *   source } }` (the Event's own `name`/`details`, #283/#368 N1 -- never under `event`, a closed set of signals),
+ *   `{ diagnostic }`, `{ sourceStatus }`, `{ unparseable }` (a message that could not be read), `{ unknownType }`
+ *   (a TCP message type nobody models).
  */
 export type IngestElement = { ingestSeq: number; observedAt: string; [key: string]: unknown };
 

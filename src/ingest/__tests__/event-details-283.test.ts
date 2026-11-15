@@ -2,11 +2,17 @@
  * #283 rows 1-5 (tier 1): `parseXmlSnapshot` emits `Event.details` from the snapshot's `Events` table.
  * Rule (merged, PR #355, a46a573): CONTRACTS §2.2 (the `details` bullet), DERIVATIONS §0.5 (ingest-only diagnostics).
  * `eventObsOf` (helpers.ts) documents the assumed element shape.
+ *
+ * #373 rows 4-6 (M2 P3a follow-up, #368 CQ2/N1/N2; DERIVATIONS §10 item 40 (b), 42): the date part
+ * is unparseable unless it names a calendar day, not merely ten digits and dashes in the right
+ * shape; and the fact's element key is its own, `eventFact`, never `event` (helpers.ts's
+ * `eventObsOf`, finding #368 N1).
  */
 import { describe, it, expect } from 'vitest';
 import { parseXmlSnapshot } from '../index.js';
 import { ctx, xmlFixture, eventObsOf, diagnostics, type El } from './helpers.js';
 import { EVENTS_JARNI_283 } from './fixtures/events-jarni-283.js';
+import type { GivenElement } from '../../__tests__/conformance/port.js';
 
 describe('CONTRACTS §2.2: Event.details from the Events table', () => {
   it('row 1: the parser emits the Events table (slalom.xml: SubTitle, Location, Facility, StartDate, EndDate all present)', () => {
@@ -66,5 +72,56 @@ describe('CONTRACTS §2.2: Event.details from the Events table', () => {
     expect(jarniDetails, 'a details observation (jarni-ne-odp excerpt)').toBeDefined();
     expect('subtitle' in jarniDetails!).toBe(false);
     expect(jarniDetails).toMatchObject({ venue: 'Areál Lídy Polesné', facility: 'SK VS ČB', startDate: '2026-04-18', endDate: '2026-04-19' });
+  });
+});
+
+describe('#373 row 4, §10 item 40 (b): a date part that is not a calendar date is unparseable, not merely ten digits and dashes', () => {
+  it('StartDate month 13 (2026-13-45T00:00:00+02:00): no details, one unparseable-field', () => {
+    const edited = xmlFixture('slalom.xml').replace('<StartDate>2026-09-19T08:30:37+02:00</StartDate>', '<StartDate>2026-13-45T00:00:00+02:00</StartDate>');
+    const els = parseXmlSnapshot(edited, ctx());
+    expect(eventObsOf(els, 'details')).toBeUndefined();
+    expect(diagnostics(els).filter((d) => d.kind === 'unparseable-field')).toHaveLength(1);
+  });
+  it('EndDate 29 February of a non-leap year (2026-02-29T00:00:00+02:00): no details, one unparseable-field, the same as StartDate', () => {
+    const edited = xmlFixture('slalom.xml').replace('<EndDate>2026-09-20T08:30:37+02:00</EndDate>', '<EndDate>2026-02-29T00:00:00+02:00</EndDate>');
+    const els = parseXmlSnapshot(edited, ctx());
+    expect(eventObsOf(els, 'details')).toBeUndefined();
+    expect(diagnostics(els).filter((d) => d.kind === 'unparseable-field')).toHaveLength(1);
+  });
+  it('29 February of a leap year (2024-02-29T00:00:00+02:00) is accepted', () => {
+    const edited = xmlFixture('slalom.xml').replace('<StartDate>2026-09-19T08:30:37+02:00</StartDate>', '<StartDate>2024-02-29T00:00:00+02:00</StartDate>');
+    const els = parseXmlSnapshot(edited, ctx());
+    expect(eventObsOf(els, 'details')?.value).toMatchObject({ startDate: '2024-02-29' });
+    expect(diagnostics(els).filter((d) => d.kind === 'unparseable-field')).toEqual([]);
+  });
+  it('what follows the date part is not read: 2026-04-25garbage is accepted as 2026-04-25 (DERIVATIONS §10 item 40 (b)\'s own example)', () => {
+    const edited = xmlFixture('slalom.xml').replace('<StartDate>2026-09-19T08:30:37+02:00</StartDate>', '<StartDate>2026-04-25garbage</StartDate>');
+    const els = parseXmlSnapshot(edited, ctx());
+    expect(eventObsOf(els, 'details')?.value).toMatchObject({ startDate: '2026-04-25' });
+    expect(diagnostics(els).filter((d) => d.kind === 'unparseable-field')).toEqual([]);
+  });
+});
+
+describe('#373 row 5, #368 N2: test gaps (exactly one details observation; an empty Facility)', () => {
+  it('row 1\'s fixture (slalom.xml) states exactly one details observation, not none and not several', () => {
+    const els = parseXmlSnapshot(xmlFixture('slalom.xml'), ctx());
+    const own = (els as El[]).filter((e) => e.eventFact && e.eventFact.field === 'details');
+    expect(own, 'exactly one details observation for this one Events table').toHaveLength(1);
+  });
+  it('an empty Facility (<Facility />) leaves the field absent, the same as an empty SubTitle or Location (row 3)', () => {
+    const edited = xmlFixture('slalom.xml').replace('<Facility>SK VS ČB</Facility>', '<Facility />');
+    const v = eventObsOf(parseXmlSnapshot(edited, ctx()), 'details')?.value as El | undefined;
+    expect(v, 'a details observation (empty Facility)').toBeDefined();
+    expect('facility' in v!).toBe(false);
+    expect(v!.venue).toBe('Areál Lídy Polesné'); // untouched: only Facility was emptied
+  });
+});
+
+describe('#373 row 6, #368 N1: the event fact\'s element key is its own, never event', () => {
+  it('no element parseXmlSnapshot emits carries the key "event" with an object value (the string-valued connection/operator signals CONFORMANCE-VECTORS §1 lists are a closed set; #368 N1)', () => {
+    const els = parseXmlSnapshot(xmlFixture('slalom.xml'), ctx()) as unknown as GivenElement[];
+    for (const e of els as unknown as Array<Record<string, unknown>>) {
+      if ('event' in e) expect(typeof e.event, `an "event" key must stay string-valued, never an object: ${JSON.stringify(e)}`).not.toBe('object');
+    }
   });
 });

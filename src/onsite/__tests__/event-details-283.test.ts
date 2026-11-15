@@ -9,6 +9,11 @@
  * No recorded on-site XML snapshot in this repo carries an `Events` table (round19-excerpts.js's `rcXml`, ODP's
  * dataset, has none at all). `eventsXml` below is a derived case built the same way datasets.ts's other derived
  * cases are (`derived()`): it inserts a synthetic `<Events>` block into the recorded ODP snapshot.
+ *
+ * #373 rows 5 and 7 (M2 P3a follow-up, #368 N2 and N3; CONTRACTS §7.2, §1.6): the test gaps #368
+ * found in rows 6-10 (a `seq` assertion on the mid-session `event.changed`, and that the pushed
+ * Event equals the hydration), and the order `applyEventFacts` and `core.applyUnit` run in within
+ * one unit.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { boot, derived, disposeAll, feedXml, get, openWs, type Env } from './onsite-harness.js';
@@ -138,5 +143,79 @@ describe('row 10: same-id event.changed on a change of the presented Event (CONT
     expect(changed).toHaveLength(1);
     expect(changed[0].event.eventId).toBe('ev-1');
     expect(changed[0].event.name).toBe('Jarní slalomy 2');
+  });
+});
+
+describe('#373 row 5, #368 N2: a mid-session event.changed carries a seq greater than the previous message\'s', () => {
+  it('the second snapshot\'s event.changed (a changed Location) has a seq greater than the connect-time event.changed\'s', async () => {
+    const env = await bootOdp();
+    await feedXml(env, snapshotAt(T0, FULL));
+    const ws = await openWs(env);
+    const connectTime = await ws.until((x) => x.type === 'event.changed');
+    ws.take(); // drain the connect-time traffic: take() does not remove what until() already matched.
+
+    await feedXml(env, snapshotAt(T1, { ...FULL, location: 'Nové Město' }));
+    await ws.barrier();
+    const midSession = ws.take().find((x: any) => x.type === 'event.changed');
+    expect(midSession, 'the Location change raises its own event.changed').toBeDefined();
+    expect(midSession.seq, 'seq only ever grows (CONTRACTS §1.6)').toBeGreaterThan(connectTime.seq);
+  });
+});
+
+describe('#373 row 5, #368 N2: after a change, the pushed Event equals the hydration', () => {
+  it('the mid-session event.changed\'s event equals GET /api/events/current taken right after it', async () => {
+    const env = await bootOdp();
+    await feedXml(env, snapshotAt(T0, FULL));
+    const ws = await openWs(env);
+    await ws.barrier();
+    ws.take();
+
+    await feedXml(env, snapshotAt(T1, { ...FULL, location: 'Nové Město' }));
+    await ws.barrier();
+    const midSession = ws.take().find((x: any) => x.type === 'event.changed');
+    expect(midSession, 'the Location change raises its own event.changed').toBeDefined();
+    const hydrated = await get(env, '/api/events/current');
+    expect(midSession.event).toEqual(hydrated.body.event);
+  });
+});
+
+describe('#373 row 7, #368 N3: order of applyEventFacts and core.applyUnit within one unit', () => {
+  it('today\'s own event.changed precedes every other message of the same unit on the wire (NOT a pin of the internal apply order -- see the comment below, review of PR #374 O1)', async () => {
+    // N3 (issue #368): "applyEventFacts runs before core.applyUnit. If applyUnit throws (its
+    // programming-error guards), the presented Event has already changed and no event.changed was
+    // sent. Not reachable from upstream data." Row 7 allows pinning either the throw case or,
+    // failing that, "state in the test which order the code guarantees".
+    //
+    // Checked for a public seam before writing this (review of PR #374, O1): the one documented
+    // programming-error guard (CONFORMANCE-VECTORS §1, "absence of changedAfter as a key is a
+    // programming error") is never reachable through the on-site harness's public surface --
+    // `createXmlReader` always stamps `changedAfter` on every xml-rewrite-detected event before
+    // `applyUnit` ever sees it, and there is no other public path (REST, TCP or XML text) to hand
+    // `core.applyUnit` a malformed element directly. So the throw case cannot be exercised from
+    // outside `src/core`/`src/onsite` (out of scope for tests), and this file cannot pin it.
+    //
+    // What follows is NOT a pin of the apply order N3 is about. It only shows that event.changed
+    // is queued ahead of this unit's other messages on the wire, which the review of PR #374 (O1)
+    // points out holds whichever order the Event is actually assigned in relative to
+    // `core.applyUnit` (today: before; after the fix: after) -- `processUnit` could push
+    // event.changed first either way. Record this explicitly: the real order guarantee (assign
+    // the Event only after `applyUnit` returns, so a throw there leaves the presented Event and
+    // `event.changed` in step) is a code-level guarantee with no observable seam from here.
+    const env = await bootOdp();
+    const ws = await openWs(env);
+    await ws.barrier();
+    ws.take();
+
+    // The first-ever snapshot both configures the Event (FULL's StartDate/EndDate -> details known,
+    // and the snapshot's own MainTitle) and carries ODP's usual Classes/Participants/Schedule/Results,
+    // so this one unit produces both an event.changed and a run of core messages.
+    await feedXml(env, snapshotAt(T0, FULL));
+    await ws.barrier();
+    const wire = ws.take();
+    const eventChanged = wire.find((x: any) => x.type === 'event.changed');
+    expect(eventChanged, 'this unit does change the Event').toBeDefined();
+    const others = wire.filter((x: any) => x.type !== 'event.changed');
+    expect(others.length, 'and does produce other messages (phase/class/entry/attempt/standing/sources)').toBeGreaterThan(0);
+    for (const m of others) expect(eventChanged.seq, `event.changed (seq ${eventChanged.seq}) precedes ${m.type} (seq ${m.seq})`).toBeLessThan(m.seq);
   });
 });

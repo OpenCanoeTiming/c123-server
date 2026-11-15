@@ -43,6 +43,7 @@ function retractStatus(s: CoreState, a: AttemptState, source: Source, el: Elemen
   if (fs === undefined || !statusRetractable(a)) return false;
   const m = marker(s, el, source, seq, 'not-started');
   if (source === 'xml') {
+    // the refused branch (DERIVATIONS §10 item 41 (b)): moves nothing of the field, its `xml` slot included
     if (!guardPasses(m.age, fs.tcp)) {
       refuse(s, 'retraction-guard');
       return false;
@@ -70,6 +71,7 @@ export function retract(s: CoreState, a: AttemptState, source: Source, el: Eleme
     const side: Source = isXmlOnly(f) ? 'xml' : source;
     const m = marker(s, el, side, seq, null);
     if (source === 'xml') {
+      // the refused branch (DERIVATIONS §10 item 41 (b)): moves nothing of the field, its `xml` slot included
       if (!guardPasses(m.age, fs.tcp)) {
         refuse(s, 'retraction-guard');
         continue;

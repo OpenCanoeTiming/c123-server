@@ -7,9 +7,14 @@
  * `C1M_BR2_18`'s `<Results>` table, so bib 56's own row can go absent while the race's table still carries a
  * row -- a genuine removal, not the wholly empty table case (ADR-015 Revision 5 rule 5 / Revision 6 rule 6).
  * Interface: onsite-harness.ts header; checks and flags: checks.test.ts, write-checks.test.ts.
+ *
+ * #373 rows 8-9 (M2 P3a follow-up; DERIVATIONS §10 item 38 (k), (m); review of PR #370 CQ1 and
+ * CQ3): resolving a flag of a removed Attempt is `404 attempt-not-found`, and a returning (or,
+ * after a restart, freshly created) Attempt's stored checks and flags are pushed after the
+ * creating `attempt.updated`.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { boot, disposeAll, feedXml, get, openWs, put, virtualClock, type Env, type J } from './onsite-harness.js';
+import { boot, disposeAll, feedXml, get, openWs, post, put, virtualClock, type Env, type J } from './onsite-harness.js';
 import { ODP, feed } from './datasets.js';
 
 afterEach(disposeAll);
@@ -138,5 +143,130 @@ describe('#365 row 9: attempt.deleted on /ws; REST stops, then resumes serving t
     } finally {
       await env2.h.stop();
     }
+  });
+});
+
+describe('#373 row 8, §10 item 38 (k): resolving a flag of a removed Attempt (review of PR #370, CQ1)', () => {
+  it('CONTRACTS §2.10, §7.4: POST /api/flags/{flagId}/resolution is 404 attempt-not-found while the Attempt is gone, pushes nothing, and succeeds once it returns', async () => {
+    const { env, run } = await closedOdp();
+    const flag = await env.h.checks.createFlag({ attemptId: ODP.attemptId, run, gate: 5, comment: 'look again' });
+
+    const removeAt = Date.parse(ODP.xmlRec().observedAt) + 3_600_000;
+    await feedXml(env, absentBib56Xml(removeAt));
+
+    const ws = await openWs(env);
+    await ws.barrier();
+    ws.take(); // drop the setup/connect traffic: only the refused resolution's own unit is checked below.
+
+    const refused = await post(env, `/api/flags/${flag.flagId}/resolution`, {});
+    expect(refused.status).toBe(404);
+    expect(refused.body.error.code).toBe('attempt-not-found');
+    await ws.barrier();
+    expect(ws.take().filter((m) => m['type'] === 'flag.updated'), 'nothing pushed for a refused resolution').toEqual([]);
+
+    // the row returns (plain return, the same competitor and gates): the flag is served again, still open.
+    const returnAt = removeAt + 600_000;
+    await feedXml(env, returnedXml(returnAt));
+    const back = await checksOf(env);
+    const servedFlag = back.flags.find((f: J) => f.flagId === flag.flagId);
+    expect(servedFlag, 'the flag is served again once the bib returns').toBeDefined();
+    expect(servedFlag.resolution, 'the refused resolution stored nothing: still open').toBeUndefined();
+
+    await ws.barrier();
+    ws.take();
+    const resolved = await post(env, `/api/flags/${flag.flagId}/resolution`, {});
+    expect(resolved.status).toBe(200);
+    expect(resolved.body.resolution).toBeDefined();
+    await ws.barrier();
+    const pushed = ws.take().filter((m) => m['type'] === 'flag.updated');
+    expect(pushed, 'the resolution, now that the Attempt exists again, pushes flag.updated').toHaveLength(1);
+    expect(pushed[0]['flag']).toMatchObject({ flagId: flag.flagId, resolution: expect.any(Object) });
+  });
+});
+
+describe('#373 row 9, §10 item 38 (m): a returning Attempt\'s checks and flags come back over the push (review of PR #370, CQ3)', () => {
+  it('(i) a connected client sees attempt.deleted, then the row returns: check.updated (status unchanged included) and flag.updated follow the creating attempt.updated', async () => {
+    const { env, run } = await closedOdp();
+    const check = await env.h.checks.putCheck({ attemptId: ODP.attemptId, run, gate: ODP.gate, valueAtCheck: ODP.penaltyInXml, checkedBy: 'judge-1' });
+    const flag = await env.h.checks.createFlag({ attemptId: ODP.attemptId, run, gate: 5, comment: 'look again' });
+
+    const removeAt = Date.parse(ODP.xmlRec().observedAt) + 3_600_000;
+    await feedXml(env, absentBib56Xml(removeAt));
+
+    const ws = await openWs(env);
+    await ws.barrier();
+    ws.take(); // drop the setup/connect traffic: only the returning row's own unit is checked below.
+
+    // a plain return (not Y's): the same gate value as the check was made against, so its derived
+    // status is unchanged (still 'verified') -- pinning that the push happens even when nothing
+    // about the status itself moved (row 9's own wording, "an unchanged status included").
+    const returnAt = removeAt + 600_000;
+    await feedXml(env, returnedXml(returnAt));
+    await ws.barrier();
+    const wire = ws.take();
+
+    const creating = wire.findIndex((m) => m['type'] === 'attempt.updated' && m['attemptId'] === ODP.attemptId);
+    expect(creating, 'the unit carries a creating attempt.updated for the returning bib').toBeGreaterThanOrEqual(0);
+
+    const checkMsgs = wire.filter((m) => m['type'] === 'check.updated' && m['attemptId'] === ODP.attemptId && m['gate'] === ODP.gate);
+    const flagMsgs = wire.filter((m) => m['type'] === 'flag.updated' && (m['flag'] as J).flagId === flag.flagId);
+    expect(checkMsgs, 'one check.updated for the one stored check, even though its derived status did not move').toHaveLength(1);
+    expect(flagMsgs, 'one flag.updated for the one stored flag').toHaveLength(1);
+    expect(checkMsgs[0]['check']).toMatchObject({ attemptId: ODP.attemptId, gate: ODP.gate, valueAtCheck: check.valueAtCheck, status: 'verified' });
+    expect(wire.indexOf(checkMsgs[0]), 'check.updated follows the creating attempt.updated').toBeGreaterThan(creating);
+    expect(wire.indexOf(flagMsgs[0]), 'flag.updated follows the creating attempt.updated').toBeGreaterThan(creating);
+  });
+
+  it('(ii) a restart with a stored check, a client hydrated before the first snapshot of the new lifetime: the check is pushed when that snapshot creates the Attempt', async () => {
+    const { env, run } = await closedOdp();
+    // valueAtCheck deliberately mismatched with the recorded gate 13 penalty (ODP.penaltyInXml, 2): the derived
+    // status is 'stale' both now and once the restarted process creates the Attempt from the same recorded data,
+    // so this is CQ3's own case -- seedCheckStatuses seeds the restarted process's remembered status from a check
+    // whose Attempt does not exist yet (nothing presented to equal: 'stale'), and the freshly derived status after
+    // creation is ALSO 'stale' (999 still disagrees with the presented 2): no status *difference*, which is
+    // exactly what a push-only-on-difference implementation misses. (Checked directly: with a matching
+    // valueAtCheck, i.e. ODP.penaltyInXml, the status moves stale -> verified across the restart and a mutant
+    // that never pushes on creation would still pass this test for the wrong reason.)
+    const check = await env.h.checks.putCheck({ attemptId: ODP.attemptId, run, gate: ODP.gate, valueAtCheck: 999, checkedBy: 'judge-1' });
+
+    const removeAt = Date.parse(ODP.xmlRec().observedAt) + 3_600_000;
+    await feedXml(env, absentBib56Xml(removeAt));
+    await env.h.stop();
+
+    const env2 = await boot({ startAt: ODP.startAt, eventDate: ODP.day, fs: env.fs, clock: virtualClock(removeAt + 600_000) });
+    try {
+      const ws = await openWs(env2); // hydrated before any read of this lifetime has named the Phase at all (F2)
+      await ws.barrier();
+      ws.take();
+
+      await feedXml(env2, returnedXml(removeAt + 1_200_000));
+      await ws.barrier();
+      const wire = ws.take();
+
+      const creating = wire.findIndex((m) => m['type'] === 'attempt.updated' && m['attemptId'] === ODP.attemptId);
+      expect(creating, 'the first-ever snapshot of this lifetime creates the Attempt').toBeGreaterThanOrEqual(0);
+      const checkMsgs = wire.filter((m) => m['type'] === 'check.updated' && m['attemptId'] === ODP.attemptId && m['gate'] === ODP.gate);
+      expect(checkMsgs, 'the check stored before the restart, for an Attempt this process never created until now, is pushed').toHaveLength(1);
+      expect(checkMsgs[0]['check']).toMatchObject({ attemptId: ODP.attemptId, gate: ODP.gate, valueAtCheck: check.valueAtCheck });
+      expect(wire.indexOf(checkMsgs[0]), 'check.updated follows the creating attempt.updated').toBeGreaterThan(creating);
+    } finally {
+      await env2.h.stop();
+    }
+  });
+
+  it('(iii) an Attempt with nothing stored sends no check.updated or flag.updated when it is created', async () => {
+    const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day });
+    const ws = await openWs(env);
+    await ws.barrier();
+    ws.take();
+
+    for (const u of ODP.units()) await feed(env, u); // bib 56's first-ever creation: no check or flag was ever stored for it.
+    await ws.barrier();
+    const wire = ws.take();
+
+    const creating = wire.findIndex((m) => m['type'] === 'attempt.updated' && m['attemptId'] === ODP.attemptId);
+    expect(creating, 'bib 56 is created in this session').toBeGreaterThanOrEqual(0);
+    expect(wire.filter((m) => m['type'] === 'check.updated' && m['attemptId'] === ODP.attemptId), 'nothing was stored: no check.updated').toEqual([]);
+    expect(wire.filter((m) => m['type'] === 'flag.updated' && (m['flag'] as J)?.attemptId === ODP.attemptId), 'nor flag.updated').toEqual([]);
   });
 });

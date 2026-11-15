@@ -89,6 +89,7 @@ for (const rec of readdirSync(dir).filter((d) => statSync(join(dir, d)).isDirect
       process.stderr.write(`EXCEPTION ${where}: ${e instanceof Error ? e.stack : String(e)}\n`);
       process.exit(1);
     }
+    core.drainIngestDiagnostics(); // #367: the admin log's own route; the counts above come from the raw elements, discarded here so the log never grows unbounded
     const after = core.counters();
     const sent = core.drainNotifications();
     for (const m of sent) {
