@@ -183,10 +183,14 @@ Each vector has:
   the adapter in that unit, as an element like any other:
   - `classId` is the part of the id before the format token;
   - `format` is the id's token;
-  - `pair` is the token's role and combination (`CONTRACTS.md` §2.4), with `siblingPhaseId` the
-    id that carries the other run's token in the token's place, whether or not the vector holds
-    that Phase: `K1M_BR2_19` names `K1M_BR1_19`. This is the one place anything builds an id, and
-    it can because a vector's ids are regular by construction.
+  - `pair` is the token's role and combination (`CONTRACTS.md` §2.4). For a second run,
+    `siblingPhaseId` is the id that carries, in the token's place, the token §2.4's pairing
+    table gives as its first run, whether or not the vector holds that Phase: `K1M_BR2_19` names
+    `K1M_BR1_19`. This is the one place anything builds an id, and it can because a vector's
+    ids are regular by construction. For a first run the adapter states `siblingPhaseId: null`,
+    as a parser does, and builds no id: a first run's sibling is the server core's to derive
+    from the second runs' stated pairs (`DERIVATIONS.md` §2.1, §10 item 49). No vector asserts
+    a first run's sibling.
 
   So a vector's Phase has a class from its first observation, and `CONTRACTS.md` §5 step 1's
   on-site precondition, a standing no earlier than its Phase, holds without a `classId` element
@@ -195,9 +199,15 @@ Each vector has:
   its `pair` standing from its first snapshot (`CONTRACTS.md` §5 step 1; `DECISIONS/LOG.md`,
   round 22). A deployable's merge reads no id for any of the three (`CONTRACTS.md` §2.3, §2.4;
   the one read of an id is the TCP parser's fallback for `format`, `DERIVATIONS.md` §2.1): with a
-  `pair` nothing has stated, its `pair` standing waits. The server's adapter states the class, `format` and `pair` (#287; `DECISIONS/LOG.md`,
-  2026-11-15); the core reads none of the three from a Phase's id, and a Phase whose `pair` nothing has
-  stated has no `pair` standing. A parser states
+  `pair` nothing has stated, its `pair` standing waits. The server's adapter states the class,
+  `format` and `pair` (#287; `DECISIONS/LOG.md`, 2026-11-15). The server's core reads no class
+  and no sibling from a Phase's id and builds no id, and a Phase whose `pair` nothing has
+  stated has no `pair` standing. One read of an id is left in that core: the token, at a
+  Phase's creation, for `format` and what follows from the format (`stage`, `kind`,
+  `scoringKind`, `heats`, and the run's role where the core reads rows by it). A TCP `Results`
+  message states no `format` today, so on site that read is live. It stays until the read
+  moves to the TCP parser, where `DERIVATIONS.md` §2.1 puts it (a follow-up of #287;
+  `DECISIONS/LOG.md`, 2026-11-16). A parser states
   `pair` with the format, `siblingPhaseId: null` until the schedule names the first run, and that
   stated `null` makes the `pair` standing wait. The Entry is that Attempt's; where no element sets
   the Attempt's `entry` pointer, every Entry field in the vector is one Entry's. Neither needs a
