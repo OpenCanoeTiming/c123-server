@@ -33,7 +33,8 @@ describe('ADR-015 Rev 5 rule 1 (#321 row 1)', () => {
     const c = k.core();
     // bib 11 finishes and stays listed: the on-course set keeps a finisher until closure (CONTRACTS §7.1).
     c.applyUnit(k.listing(T('10:40:00.000'), T('10:38:40.000'), T('10:40:00.000'), { runSeconds: 90.12 }));
-    // the race's results push: bib 9, and bib 11 DSQ'd after the finish (a mark over a time, DERIVATIONS §4.12 rule 6).
+    // the race's results push: bib 9, and bib 11 DSQ'd after the finish (a mark over a time, CONTRACTS §2.6,
+    // not a numbered rule of §4.12 -- review note 5, PR #369).
     c.applyUnit([
       push(
         1,
