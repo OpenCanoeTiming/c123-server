@@ -2108,9 +2108,10 @@ Every message carries `seq` (§1.6).
 - **`check.updated`** carries `{ attemptId, run, gate, check: GateCheck | null }`, whole; `null` means
   the check was removed. It is sent on every check write and **whenever a check's derived `status`
   changes** because the presented gate penalty changed (§2.10). **`flag.updated`** carries the whole
-  `GateFlag` under `flag`. In the unit that creates an Attempt again after its removal, one
+  `GateFlag` under `flag`. In the unit that creates an Attempt whose checks or flags the store
+  already holds (one returning after its removal, or created again by a restarted process), one
   `check.updated` per check and one `flag.updated` per flag of it follow its `attempt.updated`:
-  what its reads serve again (§2.10). Neither is ever sent on the live tier (§8.4).
+  what its reads now serve (§2.10). Neither is ever sent on the live tier (§8.4).
 - **A retraction** (§4 INV-7) or a contradiction (INV-2d) is sent as `attempt.updated` with explicit
   `not-yet` values, never by omission.
 - **`attempt.deleted`** carries `{ attemptId }`: upstream removed the Attempt (§2.6, §4 INV-7), and

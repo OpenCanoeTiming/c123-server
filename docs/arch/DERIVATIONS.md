@@ -1926,7 +1926,9 @@ of M2 P3a, under the same rule.
     (m) a returning Attempt's checks and flags come back over the push: the unit that creates it
     sends, after its `attempt.updated`, one `check.updated` per check and one `flag.updated` per
     flag that its reads then serve, so a connected tablet, which dropped them on
-    `attempt.deleted`, holds what a fresh hydration serves (`CONTRACTS.md` §1.6, "a client never
+    `attempt.deleted`, holds what a fresh hydration serves; the same holds for any Attempt created
+    while the store holds checks or flags for it, such as the first creation after a restart,
+    when a tablet that hydrated before the first snapshot was served none (`CONTRACTS.md` §1.6, "a client never
     needs to re-hydrate to learn of a new Attempt"; §7.2; 2026-11-15, CQ3). No client duty moves:
     a tablet applies them as any `check.updated` and `flag.updated`, and re-reads nothing.
     *Example (#349 CQ2):* bibs 11 (X) and 12 (Y) of `K1M_BR1_6` are swapped. Saved in one step,
