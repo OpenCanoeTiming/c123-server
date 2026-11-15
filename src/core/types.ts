@@ -146,12 +146,14 @@ export interface ResourceState {
   xmlTable?: 'rows' | 'emptied';
 }
 
-/** The core's ingest-only diagnostic (DERIVATIONS §0.5): the admin log's, never `GET /api/diagnostics` or the wire. */
-export interface IngestDiagnostic {
-  kind: 'xml-table-emptied';
-  phaseId: string;
-  count: number;
-}
+/**
+ * An ingest-only diagnostic (DERIVATIONS §0.5): the admin log's, never `GET /api/diagnostics` or the wire. The
+ * core's own (`xml-table-emptied`); every other kind is the parser's (`unknown-format-token`, `unresolved-member`,
+ * `unparseable-field`, `gates-absent`, ...), relayed here unchanged (#367).
+ */
+export type IngestDiagnostic =
+  | { kind: 'xml-table-emptied'; phaseId: string; count: number }
+  | { kind: string; [key: string]: unknown };
 
 export interface ClassificationState {
   rows: ClassificationRow[];

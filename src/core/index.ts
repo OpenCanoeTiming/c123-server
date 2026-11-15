@@ -276,7 +276,7 @@ function observe(s: CoreState, el: Element): void {
   } else observeAttempt(s, attemptFor(s, keylessAttempt(s), el.observedAt, source), el, field);
 }
 
-/** Parser diagnostics of the kinds `GET /api/diagnostics` serves; a restated row replaces its Attempt's. The ingest-only kinds reach the admin log, not this list. */
+/** Parser diagnostics of the kinds `GET /api/diagnostics` serves; a restated row replaces its Attempt's. Every other kind the parser raises is ingest-only (DERIVATIONS §0.5, #367): relayed to the admin log, never this list. */
 function applyDiagnostic(s: CoreState, el: Element, inUnit: Set<string>): void {
   const d = el['diagnostic'] as Diagnostic | { kind: string; signatures?: string[] };
   if (d.kind === 'unparseable-cell' || d.kind === 'member-sum-mismatch') {
@@ -284,6 +284,8 @@ function applyDiagnostic(s: CoreState, el: Element, inUnit: Set<string>): void {
     inUnit.add(key);
     if (!s.parserDiagnostics.has(key)) s.diagnosticsDirty = true;
     s.parserDiagnostics.set(key, d as Diagnostic);
+  } else {
+    s.ingestLog.push(d as IngestDiagnostic);
   }
 }
 
