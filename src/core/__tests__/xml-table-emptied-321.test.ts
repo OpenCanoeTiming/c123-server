@@ -3,11 +3,14 @@ import type { GivenElement } from '../../__tests__/conformance/port.js';
 import { field, kit, type Core } from './kit.js';
 
 /**
- * #321 rows 6-7 (M2 P3a part 1 of 3): ADR-015 Revision 5 rule 5 -- a wholly empty XML table (a race
- * the snapshot's schedule names with no result row at all) retracts nothing, whatever its content
- * age, and the core raises the ingest-only diagnostic `xml-table-emptied { phaseId, count }`
- * (DERIVATIONS §4.12, §0.5), counting a `tcp` result only where the snapshot's `changedAfter` is
- * later than its delivery, and an `xml`-held result unconditionally.
+ * #321 rows 6-7 (M2 P3a part 1 of 3), extended by #365 row 10 (M2 P3a part 2 of 3, the #369 re-review):
+ * ADR-015 Revision 5 rule 5 -- a wholly empty XML table (a race the snapshot's schedule names with no
+ * result row at all) retracts nothing, whatever its content age, and the core raises the ingest-only
+ * diagnostic `xml-table-emptied { phaseId, count }` (DERIVATIONS §4.12, §0.5), counting a `tcp` result
+ * only where the snapshot's `changedAfter` is later than its delivery, and an `xml`-held result
+ * unconditionally. The removal (#365) changes nothing of this rule: an emptied table removes no
+ * Attempt either (ADR-015 Revision 6 rule 6; DERIVATIONS §10 item 38 (j)), so every assertion below
+ * must stay true once the removal lands -- these are guards, not new-behaviour tests.
  *
  * `MergeCore.drainIngestDiagnostics()` (`src/core/index.ts`) is the surface: it exists once the
  * implementation lands (review note 4, PR #369) and is asserted here directly, narrowed past the
@@ -21,7 +24,14 @@ import { field, kit, type Core } from './kit.js';
  * before it is emptied: "a table that never had rows raises nothing" (DERIVATIONS §4.12) is itself
  * row 7(c), and it reads as an xml-table-specific memory -- a tcp-only result, with no xml read of
  * the race ever, is that exempt case too, not "the race was emptied" (confirmed empirically: an
- * earlier draft of row 6 without this step drained nothing at any content age).
+ * earlier draft of row 6 without this step drained nothing at any content age). #365 row 10's own
+ * re-review finding: rows 7(a) and 7(b) below never actually had this step -- `emptied()`
+ * (`src/core/retraction.ts`) returns immediately when `phase.xmlTable !== 'rows'`, before the guard
+ * it claims to exercise is even reached, so both blocks were passing through the never-had-rows
+ * branch (vacuously true for the wrong reason) rather than the guard. Fixed here by giving each its
+ * own prior xml row, in its own unit, first -- the fix for the file header's claim above, which was
+ * false for exactly these two blocks (confirmed empirically: reverting either block's added step
+ * here leaves it passing just the same, since `emptied()` never reaches `wouldRetract` without it).
  */
 const dur = (s: number) => ({ kind: 'duration', runSeconds: s, penaltySeconds: 0, totalSeconds: s });
 const emptyTable = (ingestSeq: number, phaseId: string, observedAt: string, changedAfter: string | null): GivenElement[] => [
@@ -74,28 +84,34 @@ describe('ADR-015 Rev 5 rule 5 (#321 row 6)', () => {
   });
 });
 
-describe('ADR-015 Rev 5 rule 5, the guard on the count (#321 row 7)', () => {
+describe('ADR-015 Rev 5 rule 5, the guard on the count (#321 row 7; (a), (b) rebuilt by #365 row 10)', () => {
   it('DERIVATIONS §4.12: xml-table-emptied counts a tcp result only where changedAfter is later than its delivery; a first read or a table that never had rows raises none', () => {
     const P = 'K1M_BR1_10';
 
-    // (a) changedAfter null (a first read): retracts nothing, and the only (tcp-held) candidate is refused: no diagnostic.
+    // (a) changedAfter null (a first read, e.g. after a path change or restart, DERIVATIONS §0.3): retracts
+    // nothing, and the only (tcp-held) candidate is refused: no diagnostic. The table carried a row first
+    // (its own unit), so this genuinely exercises the guard, not the never-had-rows branch (#365 row 10).
     {
       const A = `${P}:9`;
       const k = kit(A, P);
       const c = k.core();
+      c.applyUnit(k.xml('2026-01-01T09:00:00.000Z', null, { outcome: dur(79), placement: { rank: 1, order: 1 }, judgingComplete: true }));
       c.applyUnit([k.snap('tcp', '2026-01-01T10:00:00.000Z', { outcome: dur(80), placement: { rank: 1, order: 1 }, judgingComplete: true })]);
-      c.applyUnit(emptyTable(2, P, '2026-01-01T10:00:30.000Z', null));
+      c.applyUnit(emptyTable(3, P, '2026-01-01T10:00:30.000Z', null));
       expect(field(c, A, 'outcome')).toMatchObject({ state: 'known', source: 'tcp' });
       expect(drain(c)).toEqual([]);
     }
 
-    // (b) changedAfter earlier than the tcp delivery: retracts nothing, refused, no diagnostic.
+    // (b) changedAfter earlier than the tcp delivery: retracts nothing, refused, no diagnostic. Same fix:
+    // the table carried a row first, in its own unit, so the guard is what refuses here, not xmlTable being
+    // unset (#365 row 10).
     {
       const A = `${P}:9`;
       const k = kit(A, P);
       const c = k.core();
+      c.applyUnit(k.xml('2026-01-01T09:00:00.000Z', null, { outcome: dur(79), placement: { rank: 1, order: 1 }, judgingComplete: true }));
       c.applyUnit([k.snap('tcp', '2026-01-01T10:00:00.000Z', { outcome: dur(80), placement: { rank: 1, order: 1 }, judgingComplete: true })]);
-      c.applyUnit(emptyTable(2, P, '2026-01-01T10:00:30.000Z', '2026-01-01T09:59:50.000Z'));
+      c.applyUnit(emptyTable(3, P, '2026-01-01T10:00:30.000Z', '2026-01-01T09:59:50.000Z'));
       expect(field(c, A, 'outcome')).toMatchObject({ state: 'known', source: 'tcp' });
       expect(drain(c)).toEqual([]);
     }
@@ -165,5 +181,24 @@ describe('ADR-015 Rev 5 rule 5, the guard on the count (#321 row 7)', () => {
       expect(field(c, A2, 'outcome'), 'bib 2 stays known, xml').toMatchObject({ state: 'known', source: 'xml' });
       expect(drain(c)).toEqual([{ kind: 'xml-table-emptied', phaseId: P, count: 2 }]);
     }
+  });
+});
+
+describe('DERIVATIONS §4.12, §0.3 (#365 row 10)', () => {
+  it('a race whose xml table has carried rows, then a first read after a path change or restart (changedAfter null) that is empty over a tcp-held result: no xml-table-emptied', () => {
+    const P = 'K1M_BR1_21', A = `${P}:9`;
+    const k = kit(A, P);
+    const c = k.core();
+    // the table carried a row once, armed (phase.xmlTable = 'rows', src/core/types.ts), before the server's xml path
+    // changed or it restarted: that first read after the restart carries no content age (DERIVATIONS §0.3, null =
+    // no stat since start or a different signature), whatever the race looked like before.
+    c.applyUnit(k.xml('2026-01-01T09:00:00.000Z', null, { outcome: dur(79), placement: { rank: 1, order: 1 }, judgingComplete: true }));
+    c.applyUnit([k.snap('tcp', '2026-01-01T10:00:00.000Z', { outcome: dur(80), placement: { rank: 1, order: 1 }, judgingComplete: true })]);
+    expect(field(c, A, 'outcome')).toMatchObject({ state: 'known', source: 'tcp' });
+
+    c.applyUnit(emptyTable(3, P, '2026-01-01T10:05:00.000Z', null));
+    expect(field(c, A, 'outcome'), 'the tcp-held result is untouched: the guard refuses a null content age').toMatchObject({ state: 'known', value: { totalSeconds: 80 }, source: 'tcp' });
+    expect(drain(c), 'no xml-table-emptied: changedAfter null never qualifies the candidate it would count').toEqual([]);
+    expect(c.attempts(), 'ADR-015 Rev 6 rule 6, DERIVATIONS §10 item 38 (j): an emptied table removes no Attempt either').toContain(A);
   });
 });
