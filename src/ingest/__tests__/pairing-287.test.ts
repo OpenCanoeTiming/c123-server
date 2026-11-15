@@ -1,17 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { parseTcp, parseXmlSnapshot } from '../index.js';
 import { TCP } from './fixtures/tcp.js';
-import { ctx, obsOf, withAttr, type El } from './helpers.js';
+import { createContextTracker } from '../context-tracker.js';
+import { ctx, obsOf, withAttr, OBSERVED_AT, type El } from './helpers.js';
 
 /**
  * #287 (M2 P3b): sibling pairing by `classId` and `format`, never by the RaceId (CONTRACTS §2.4 "Pairing", DERIVATIONS §2.1 and its example,
  * DERIVATIONS §10 item 48; maintainer decision 2026-11-11; design-authority record item 17).
  *
- * Channel: the XML snapshot (`Schedule.ClassId`, `DisId`, `StartTime`); on TCP the class comes from the Phase table in `ctx`.
+ * Channel: the XML snapshot (`Schedule.ClassId`, `DisId`, `StartTime`); on TCP the class comes from what the context tracker (`createContextTracker`,
+ * as the recording drivers and the on-site server use it) has learned from earlier snapshots and messages.
  * Every test builds its own snapshot; nothing is shared. A precondition assert in each test keeps it from passing vacuously.
  *
- * ASSUMED SHAPE (the contract names "the Phase table in ctx" but no key): `ctx.phaseClasses` (phaseId -> classId) and `ctx.phaseFormats`
- * (phaseId -> format token), beside the existing `ctx.phaseDates`. If the implementation names them otherwise, only `tcpCtx()` below changes.
  */
 
 type Row = { id: string; cls: string; dis: string; day: string };
@@ -211,14 +211,15 @@ describe('#287 pairing by classId and format (XML snapshot: Schedule.ClassId, Di
   });
 });
 
-describe('#287 row 10 TCP path: the class comes from the Phase table in ctx and the message, never from the RaceId (DERIVATIONS §2.1 classId and pair bullets)', () => {
-  const tcpCtx = (classes: Record<string, string>, dates: Record<string, string>): Record<string, any> =>
-    ctx({
-      phaseDates: dates,
-      phaseClasses: classes, // ASSUMED key, see the file header
-      phaseFormats: Object.fromEntries(Object.keys(classes).map((id) => [id, /_(BR1|BR2)_/.exec(id)?.[1]])),
-    });
-  const resultsOf = (raceId: string, classId: string): string => withAttr(withAttr(TCP.resultsBr2, 'RaceId', 'K1M_BR2_19', raceId), 'ClassId', 'K1M', classId);
+describe('#287 row 10 TCP path: the class comes from what the context tracker has learned (snapshot or an earlier Results), never from the RaceId (DERIVATIONS §2.1 classId and pair bullets)', () => {
+  const fresh = () => createContextTracker('Europe/Prague', '2026-09-19', 'cz-rgc');
+  type Tracker = ReturnType<typeof fresh>;
+  const stamp = (t: Tracker): Tracker['ctx'] => { t.ctx.observedAt = OBSERVED_AT; return t.ctx; };
+  /** An XML snapshot read and learned, as the recording drivers and the on-site server do. */
+  const learnSnapshot = (t: Tracker, rows: Row[]): void => { t.learn(parseXmlSnapshot(xmlOf(rows), stamp(t)) as El[], true); };
+  /** A TCP message parsed with the tracker's ctx and learned. */
+  const tcp = (t: Tracker, msg: string): El[] => { const els = parseTcp(msg, stamp(t)) as El[]; t.learn(els, false); return els; };
+  const resultsOf = (base: string, raceId: string, classId: string): string => withAttr(withAttr(base, 'RaceId', base === TCP.resultsBr1 ? 'K1M_BR1_19' : 'K1M_BR2_19', raceId), 'ClassId', 'K1M', classId);
   const schedule = (ids: string[]): string =>
     '<Canoe123 System="Main"><Schedule>' + ids.map((id, i) => `<Race Order="${i + 1}" RaceId="${id}" Race="x" MainTitle="x" SubTitle="x" ShortTitle="x" RaceStatus="0"><StartTime /></Race>`).join('') + '</Schedule></Canoe123>';
   const sibTcp = (els: El[], id: string): string | null => {
@@ -226,38 +227,52 @@ describe('#287 row 10 TCP path: the class comes from the Phase table in ctx and 
     expect(p, `pair stated for ${id}`).not.toBeNull();
     return (p as El).siblingPhaseId ?? null;
   };
+  const br1: Row = { id: 'K1M_BR1_19', cls: 'K1M', dis: 'BR1', day: '2026-09-19' };
 
-  it('a Results message for K1M-X_BR2_19 (ClassId K1M-X) pairs with K1M_BR1_19, whose class K1M-X an earlier snapshot stated: ClassId + DisId, prefixes differ', () => {
-    expect(prefixOf('K1M-X_BR2_19')).not.toBe(prefixOf('K1M_BR1_19')); // precondition
-    const dates = { K1M_BR1_19: '2026-09-19', 'K1M-X_BR2_19': '2026-09-19' };
-    const els = parseTcp(resultsOf('K1M-X_BR2_19', 'K1M-X'), tcpCtx({ K1M_BR1_19: 'K1M-X' }, dates)) as El[];
-    expect(valueOf(els, 'classId', 'K1M-X_BR2_19')).toBe('K1M-X'); // precondition: the message states the class
+  it.each([
+    ['same prefix', 'K1M_BR2_19', 'K1M'],
+    ['renamed class, prefixes differ', 'K1M-X_BR2_19', 'K1M-X'],
+  ])('a snapshot learned, then a Results message for the BR2 (%s): the BR2 names the BR1 of its ClassId', (_n, br2, cls) => {
+    const t = fresh();
+    learnSnapshot(t, [{ ...br1, cls }]);
+    if (cls !== 'K1M') expect(prefixOf(br2)).not.toBe(prefixOf('K1M_BR1_19')); // precondition: the old rule cannot find it
+    const els = tcp(t, resultsOf(TCP.resultsBr2, br2, cls));
+    expect(valueOf(els, 'classId', br2)).toBe(cls); // precondition: the message states the class
+    expect(sibTcp(els, br2)).toBe('K1M_BR1_19');
+  });
+
+  it('no snapshot, a BR1 Results then a BR2 Results, both stating ClassId (renamed class): they pair without any snapshot', () => {
+    const t = fresh();
+    tcp(t, resultsOf(TCP.resultsBr1, 'K1M_BR1_19', 'K1M-X'));
+    const els = tcp(t, resultsOf(TCP.resultsBr2, 'K1M-X_BR2_19', 'K1M-X'));
     expect(sibTcp(els, 'K1M-X_BR2_19')).toBe('K1M_BR1_19');
   });
 
-  it('the first run\'s class is unknown to ctx: the sibling is null although the ids share a prefix (and with the class known they do pair)', () => {
-    const dates = { K1M_BR1_19: '2026-09-19', K1M_BR2_19: '2026-09-19' };
+  it('the class of the first run is unknown (only the BR2 Results, no snapshot, ids sharing a prefix): the sibling is null; with the snapshot learned they pair', () => {
     expect(prefixOf('K1M_BR1_19')).toBe(prefixOf('K1M_BR2_19')); // precondition: the old rule would pair them
-    const known = parseTcp(resultsOf('K1M_BR2_19', 'K1M'), tcpCtx({ K1M_BR1_19: 'K1M' }, dates)) as El[];
-    expect(sibTcp(known, 'K1M_BR2_19')).toBe('K1M_BR1_19'); // precondition: with the class known they pair
-    const unknown = parseTcp(resultsOf('K1M_BR2_19', 'K1M'), tcpCtx({}, dates)) as El[];
-    expect(sibTcp(unknown, 'K1M_BR2_19')).toBeNull();
+    const known = fresh();
+    learnSnapshot(known, [br1]);
+    expect(sibTcp(tcp(known, resultsOf(TCP.resultsBr2, 'K1M_BR2_19', 'K1M')), 'K1M_BR2_19')).toBe('K1M_BR1_19'); // precondition: pairable
+    const alone = fresh();
+    expect(sibTcp(tcp(alone, resultsOf(TCP.resultsBr2, 'K1M_BR2_19', 'K1M')), 'K1M_BR2_19')).toBeNull();
   });
 
-  it('the first run\'s class in ctx differs from the message\'s class: no pair across classes, null', () => {
-    const dates = { K1M_BR1_19: '2026-09-19', K1M_BR2_19: '2026-09-19' };
-    const els = parseTcp(resultsOf('K1M_BR2_19', 'K1M'), tcpCtx({ K1M_BR1_19: 'K1M_ST' }, dates)) as El[];
+  it('the learned class of the first run differs from the Results\' ClassId: no pair across classes, null', () => {
+    const t = fresh();
+    learnSnapshot(t, [{ ...br1, cls: 'K1M_ST' }]);
+    const els = tcp(t, resultsOf(TCP.resultsBr2, 'K1M_BR2_19', 'K1M'));
     expect(valueOf(els, 'classId', 'K1M_BR2_19')).toBe('K1M');
     expect(sibTcp(els, 'K1M_BR2_19')).toBeNull();
   });
 
-  it('a TCP Schedule states no class: with no class table both Phases have none, so neither names the other; with the table they pair', () => {
+  it('a TCP Schedule states no class: with nothing learned neither Phase has one and neither names the other; after the snapshot they pair', () => {
     const ids = ['K1M_BR1_19', 'K1M_BR2_19'];
-    const dates = { K1M_BR1_19: '2026-09-19', K1M_BR2_19: '2026-09-19' };
-    const withTable = parseTcp(schedule(ids), tcpCtx({ K1M_BR1_19: 'K1M', K1M_BR2_19: 'K1M' }, dates)) as El[];
-    expect(sibTcp(withTable, 'K1M_BR2_19')).toBe('K1M_BR1_19'); // precondition: pairable, and the ids share a prefix
-    expect(sibTcp(withTable, 'K1M_BR1_19')).toBe('K1M_BR2_19');
-    const none = parseTcp(schedule(ids), tcpCtx({}, dates)) as El[];
+    const withSnapshot = fresh();
+    learnSnapshot(withSnapshot, [br1, { id: 'K1M_BR2_19', cls: 'K1M', dis: 'BR2', day: '2026-09-19' }]);
+    const learned = tcp(withSnapshot, schedule(ids));
+    expect(sibTcp(learned, 'K1M_BR2_19')).toBe('K1M_BR1_19'); // precondition: pairable, same prefix
+    expect(sibTcp(learned, 'K1M_BR1_19')).toBe('K1M_BR2_19');
+    const none = tcp(fresh(), schedule(ids));
     expect(sibTcp(none, 'K1M_BR2_19')).toBeNull();
     expect(sibTcp(none, 'K1M_BR1_19')).toBeNull();
   });
