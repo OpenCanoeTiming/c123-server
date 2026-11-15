@@ -11,6 +11,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { boot, disposeAll, feedTcp, feedXml, get, openWs, XML_PATH, type Env } from './onsite-harness.js';
 import { feed, ODP } from './datasets.js';
+import { R19 } from '../../core/__tests__/fixtures/round19-excerpts.js';
 import type { OnsiteOptions } from '../index.js';
 
 afterEach(disposeAll);
@@ -30,6 +31,23 @@ const emptiedXml = (ms: number): { observedAt: string; data: string } => ({
   observedAt: new Date(ms).toISOString(),
   data: ODP.xmlRec().data.replace(/<Results>[\s\S]*?<\/Results>\n/, ''),
 });
+
+/**
+ * Row 7b (F2, implementer review): `C1M_BR2_18` is a paired second run, so bib 56's `countingRun`
+ * is an XML-only field (CONTRACTS §4 INV-2 rule 3) held from the earlier xml read -- an xml-held
+ * result counts whatever the content age (row 7d), so the guard on a *tcp-held* result cannot be
+ * shown on this race. No recorded excerpt here is a first-run race with both a tcp row and an xml
+ * snapshot of the same Attempt, so this one is derived: `ODP`'s own fixtures (`rcXml`, `c4RowB`,
+ * both bib 56) with every `C1M_BR2_18` RaceId and the `<DisId>BR2</DisId>` token rewritten to
+ * `C1M_BR1_18` / `BR1` -- a first-run race, structurally (checked directly against `parseTcp` /
+ * `parseXmlSnapshot`: neither emits `countingRun` or `pairTotal` for it). `BetterRunNr`, `PrevTime`
+ * and the like stay in the XML text verbatim; CONTRACTS §4 rule 3 says they are not read regardless
+ * of run.
+ */
+const FIRST_RUN_PHASE = 'C1M_BR1_18';
+const firstRunXml = (): string => ODP.xmlRec().data.replace(/C1M_BR2_18/g, FIRST_RUN_PHASE).replace('<DisId>BR2</DisId>', '<DisId>BR1</DisId>');
+const firstRunEmptiedXml = (ms: number): { observedAt: string; data: string } => ({ observedAt: new Date(ms).toISOString(), data: firstRunXml().replace(/<Results>[\s\S]*?<\/Results>\n/, '') });
+const firstRunTcpRow = (ms: number): { observedAt: string; data: string } => ({ observedAt: new Date(ms).toISOString(), data: R19.c4RowB.data.replace('C1M_BR2_18', FIRST_RUN_PHASE) });
 
 describe('#321 row 8: xml-table-emptied reaches the admin log, never the wire', () => {
   it('DERIVATIONS §0.5, §10 item 26: xml-table-emptied reaches the admin log and never GET /api/diagnostics nor diagnostics.updated', async () => {
@@ -101,19 +119,25 @@ describe('#321 row 7: the guard on xml-table-emptied\'s count (DERIVATIONS §4.1
   it('DERIVATIONS §4.12 row 7b: a file whose changedAfter predates the tcp delivery raises none', async () => {
     const log = logger();
     const env: Env = await boot({ startAt: ODP.startAt, eventDate: ODP.day, ...log.opts });
-    for (const u of ODP.units()) await feed(env, u);
+    // a first-run race (F2: see firstRunXml's comment -- not C1M_BR2_18, whose countingRun is xml-held and
+    // so counts unconditionally, row 7d): bib 56's result is tcp-held, the case this guard is about.
+    const t0 = Date.parse(ODP.startAt) + 60_000;
+    await feedTcp(env, firstRunTcpRow(t0));
+    await feedXml(env, { observedAt: new Date(t0 + 30_000).toISOString(), data: firstRunXml() });
     const lastStat = env.clock.now(); // feedXml leaves the clock one poll after the recorded instant: the reader's last stat (rebaseline.test.ts's own technique).
+    expect((await get(env, `/api/phases/${FIRST_RUN_PHASE}/attempts`)).body.attempts[0].outcome.source, 'precondition: tcp-held (rule 2, connected)').toBe('tcp');
 
     // a new tcp delivery of bib 56, after lastStat: the Attempt's last tcp delivery is now lastStat + 30s.
     const tTcp = lastStat + 30_000;
-    await feedTcp(env, ODP.rowAt(tTcp).rec);
+    await feedTcp(env, firstRunTcpRow(tTcp));
 
     // a big jump with no poll in between (VClock.jump fires no timer), then the file is rewritten and the
     // backlogged poll fires at the jumped instant: changedAfter is still the reader's last real stat, lastStat
     // (verified directly against the step log before committing this test; see the test record) -- which
     // predates tTcp, so the guard refuses the only candidate, and the diagnostic (count 0) is not raised at all.
     const much = tTcp + 3_600_000;
-    env.fs.put(XML_PATH, emptiedXml(much).data, much);
+    const emptied = firstRunEmptiedXml(much);
+    env.fs.put(XML_PATH, emptied.data, much);
     env.clock.jump(much);
     await env.clock.advance(5_000);
 
