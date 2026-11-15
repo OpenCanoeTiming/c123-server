@@ -91,3 +91,11 @@ export function instant(s: CoreState, phaseId: string, text: string | null | und
 }
 
 export const isInstant = (t: string | undefined): t is string => t !== undefined && t.includes('T');
+
+/** The Attempt fields that differ from the default of both sources carrying them. */
+const ATTEMPT_FIELDS: Readonly<Record<string, { xmlOnly: boolean }>> = {
+  countingRun: { xmlOnly: true }, // no TCP column carries it (DERIVATIONS §4.4)
+};
+
+/** INV-2 rule 3's XML-only Attempt field: never a `tcp` observation, so a retraction or contradiction of it is the xml source's own. */
+export const isXmlOnly = (field: string): boolean => ATTEMPT_FIELDS[field]?.xmlOnly === true;

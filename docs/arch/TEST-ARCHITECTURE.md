@@ -118,8 +118,8 @@ cover:
 - run generations;
 - §5's standing assembly.
 
-The count is 113 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
-a thin adapter that feeds the vectors `CONFORMANCE-VECTORS.md` §1 assigns to it (107 and 24; 18 are in
+The count is 114 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
+a thin adapter that feeds the vectors `CONFORMANCE-VECTORS.md` §1 assigns to it (108 and 24; 18 are in
 both) into its own merge function and asserts the result — proving
 both satisfy the same data-defined contract without either depending on the other's code.
 
