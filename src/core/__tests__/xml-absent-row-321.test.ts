@@ -171,8 +171,10 @@ describe('ADR-015 Rev 5 rules 2 and 4 (#321 row 4)', () => {
       expect(field(c, A, 'outcome')).toMatchObject({ state: 'known', value: { totalSeconds: 75 }, source: 'xml' });
     }
 
-    // (b) a row that returns against a standing tcp observation follows rule 2 (INV-2c): the
-    // guard refuses the returning value until its content age postdates the tcp delivery.
+    // (b) a row that returns against a standing tcp observation follows rule 2: while TCP has
+    // stayed connected since its observation was ingested, tcp wins outright (CONTRACTS §4); INV-2c's
+    // content-age guard is only rule 2's second condition (a disconnect), so a later-dated xml row
+    // never displaces a connected tcp value, whatever its own changedAfter.
     {
       const A = 'K1M_BR1_9:22', P = 'K1M_BR1_9';
       const k = kit(A, P);
@@ -200,9 +202,11 @@ describe('ADR-015 Rev 5 rules 2 and 4 (#321 row 4)', () => {
       c.applyUnit([rewrite(4, T('10:01:00.000'), T('09:59:52.000')), push(5, 'xml', P, 'results', [{ bib: '22', outcome: dur(61), placement: { rank: 4, order: 4 }, judgingComplete: true }], T('10:01:00.000'))]);
       expect(field(c, A, 'outcome')).toMatchObject({ state: 'known', value: { totalSeconds: 60 }, source: 'tcp' });
 
-      // a further return whose content age finally postdates the tcp delivery: rule 2 admits it.
+      // a further return whose content age finally postdates the tcp delivery: INV-2c's guard is only the second
+      // condition of rule 2 (CONTRACTS §4) -- TCP has stayed connected since its own observation was ingested, so
+      // tcp still wins; the row never displaces it without a disconnect first (F1, review of PR #321).
       c.applyUnit([rewrite(6, T('10:01:30.000'), T('10:00:05.000')), push(7, 'xml', P, 'results', [{ bib: '22', outcome: dur(61), placement: { rank: 4, order: 4 }, judgingComplete: true }], T('10:01:30.000'))]);
-      expect(field(c, A, 'outcome')).toMatchObject({ state: 'known', value: { totalSeconds: 61 }, source: 'xml' });
+      expect(field(c, A, 'outcome')).toMatchObject({ state: 'known', value: { totalSeconds: 60 }, source: 'tcp' });
     }
   });
 });
