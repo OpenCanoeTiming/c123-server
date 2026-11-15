@@ -307,6 +307,8 @@ the parser's four it reaches the admin log and never `GET /api/diagnostics`.
     source.
   - The snapshot's date is assigned once and never re-derived (INV-5). An inferred date is replaced
     by the snapshot's exactly once; in the recordings every inferred date agreed with it.
+  - A `StartTime` whose first ten characters are not a calendar date states neither `date` nor
+    `scheduledStart` and raises `unparseable-field` (§10 item 42).
 - **`scheduledStart`** is the same `XML.Schedule.StartTime`, whole.
 - **`programmeOrder`** is `XML.Schedule.RaceOrder`, or `Schedule.Race@Order` on TCP.
 - **`title`** is `XML.Schedule.CustomTitle`, the organiser's own race title. Where it is empty the
@@ -405,7 +407,9 @@ the parser's four it reaches the admin log and never `GET /api/diagnostics`.
   - When the element is absent, `externalId` is `null`, served as `null` inside the `known` `members`
     value (`CONTRACTS.md` §2.5); it is never wrapped.
 - **`birthDate`.**
-  - Source: `Birthdate`, as entered. Many organisers enter only the year, as `YYYY-01-01`.
+  - Source: `Birthdate`, as entered. Many organisers enter only the year, as `YYYY-01-01`. A
+    non-empty one whose first ten characters are not a calendar date is absent and raises
+    `unparseable-field` (§10 item 42).
   - The on-site serialisation derives `birthYear` from it, falling back to `XML.Participants.Year`.
 - **`club`.**
   - Source: `XML.Participants.Club`, or `Results.Participant@Club` on TCP.
@@ -1618,7 +1622,7 @@ maintainer's rule of 2026-11-11 that a disagreement moving no client obligation 
 and an item here, not a contract round (`README.md`, ground rules); each says what would reopen
 it. Round C part 4 (maintainer, 2026-11-12) closed item 31, settled items 26, 33 and 34, added
 the live side to item 25's closure, and added item 38, the defaults inside the removal
-decision. Items 40 and 41, and item 38 (k) to (m), are defaults of 2026-11-15 from the reviews
+decision. Items 40 to 42, and item 38 (k) to (m), are defaults of 2026-11-15 from the reviews
 of M2 P3a, under the same rule.
 
 1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
@@ -2024,3 +2028,25 @@ of M2 P3a, under the same rule.
     (INV-2d) replaces both, and a new generation clears the run's fields. Reopens if a path is
     added that takes a `tcp` value away and leaves the `xml` slot with no later `tcp` observation
     over it; the `xml` slot then takes the absence as well.
+42. **Every date the XML states** (2026-11-15, following item 40 (b)). Default, the smallest
+    that fits: item 40 (b)'s rule reads every date part the snapshot states, not only the
+    Event's. That is `Schedule.StartTime` (a Phase's `date`, §2.1, and the date pairing and
+    `eventTime` take from it, §0.2) and `Participants.Birthdate`/`Birthdate2` (§3). The date part
+    is the first ten characters and names a calendar day; what follows is not read. A non-empty
+    value whose date part does not is unparseable, and is absent, not invented (§0.5):
+    - `Schedule.StartTime`: the snapshot states neither `date` nor `scheduledStart` for that
+      Phase (a `Timestamp` with no calendar date is not one, `CONTRACTS.md` §1.3), and the parser
+      raises one `unparseable-field` (`where` the `phaseId`, `name` `StartTime`). The Phase keeps
+      what it holds: its inferred date while no snapshot has stated one (§2.1), else `not-yet`; a
+      date a snapshot stated earlier stays (INV-5). Pairing and `eventTime` take no date from it.
+    - `Birthdate`: the member's `birthDate` is absent, `birthYear` falls back to
+      `Participants.Year` as for an empty one, and the parser raises `unparseable-field` (`where`
+      the participant's `Id`, `name` `Birthdate` or `Birthdate2`).
+    - An empty value is unchanged: absent, no diagnostic.
+
+    Evidence (E2, a scan of the seven recordings' snapshots): every value found has a calendar
+    date part followed by a time and an offset (64 distinct `Schedule.StartTime` dates, 3
+    `StartDate`, 3 `EndDate`, 61 `Birthdate`), so nothing recorded moves. No client duty moves: a
+    client shows `date`, `scheduledStart` and birth data as served, and `not-yet` as not known.
+    Reopens on a recording with an invalid date part, or if organisers enter birth dates in a
+    form this reads as unparseable often enough to crowd the admin log.
