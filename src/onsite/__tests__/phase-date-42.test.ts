@@ -11,7 +11,7 @@
  * `xml-table-emptied-321.test.ts` / `ingest-diagnostics-367.test.ts`.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { boot, derived, disposeAll, feedXml, get, openWs, type Env } from './onsite-harness.js';
+import { boot, derived, disposeAll, feedTcp, feedXml, get, openWs, type Env } from './onsite-harness.js';
 import { ODP, feed } from './datasets.js';
 import type { OnsiteOptions } from '../index.js';
 
@@ -40,7 +40,7 @@ const phaseOf = async (env: Env): Promise<Record<string, unknown>> => {
   return p;
 };
 
-describe('§10 item 42, CONTRACTS §2.4 INV-5: a Phase keeps an earlier date across an unparseable StartTime', () => {
+describe('§10 item 42, CONTRACTS §2.4 INV-5: a Phase keeps an earlier snapshot\'s date across an unparseable StartTime (guard)', () => {
   it('the date stays; no phase.updated carries a changed date; one unparseable-field reaches adminLog, never GET /api/diagnostics nor /ws', async () => {
     const log = logger();
     const env: Env = await boot({ startAt: ODP.startAt, eventDate: ODP.day, ...log.opts });
@@ -74,5 +74,40 @@ describe('§10 item 42, CONTRACTS §2.4 INV-5: a Phase keeps an earlier date acr
     for (const m of diagUpdates) expect(m.diagnostics.filter((d) => d.kind === 'unparseable-field'), 'no diagnostics.updated carries the ingest-only kind').toEqual([]);
     const diag = await get(env, '/api/diagnostics');
     expect(JSON.stringify(diag.body), 'GET /api/diagnostics does not carry it').not.toMatch(/unparseable-field/i);
+  });
+});
+
+describe('§10 item 42, DERIVATIONS §2.1: a Phase\'s INFERRED date (TCP-only cold start) across an unparseable StartTime', () => {
+  it('the inferred date stays; scheduledStart is not known from the invalid value; one unparseable-field reaches adminLog', async () => {
+    // the test plan's own case ("Plus a core or on-site case: a Phase with an inferred date keeps
+    // it across a snapshot whose StartTime is invalid"), not the earlier-snapshot one above: TCP
+    // never states Schedule.StartTime (DERIVATIONS §2.1), so feeding only TCP units gives the Phase
+    // an INFERRED date (ctx.eventDate, before any snapshot has stated one) rather than one a
+    // snapshot stated -- the case item 42 actually changes behaviour for (review of PR #374, O2).
+    const log = logger();
+    const env: Env = await boot({ startAt: ODP.startAt, eventDate: ODP.day, ...log.opts });
+    for (const u of ODP.units()) if (u.kind === 'tcp') await feedTcp(env, u.rec); // TCP only: no XML read has stated a date yet.
+
+    const before = await phaseOf(env);
+    expect(before['date'], 'precondition: the inferred date, before any snapshot has stated one').toBe(ODP.day);
+    expect(before['scheduledStart'], 'precondition: TCP never states it').toEqual({ state: 'not-yet' });
+
+    const ws = await openWs(env);
+    await ws.barrier();
+    ws.take(); // drop the setup/connect traffic: only the invalid-StartTime snapshot's own unit is checked below.
+
+    await feedXml(env, invalidStartTimeXml(Date.parse(ODP.xmlRec().observedAt) + 3_600_000));
+    await ws.barrier();
+    const wire = ws.take();
+
+    const after = await phaseOf(env);
+    expect(after['date'], 'the inferred date stays: the snapshot states no date (item 42), so nothing displaces it').toBe(ODP.day);
+    expect(after['scheduledStart'], 'not known from the invalid value either').toEqual({ state: 'not-yet' });
+
+    const phaseUpdates = wire.filter((m) => m['type'] === 'phase.updated' && m['phaseId'] === ODP.phaseId);
+    for (const m of phaseUpdates) expect((m['fields'] as Record<string, unknown>), 'no phase.updated for this phase carries a changed date').not.toHaveProperty('date');
+
+    const own = log.entries.filter((e) => e['kind'] === 'unparseable-field' && e['where'] === ODP.phaseId && e['name'] === 'StartTime');
+    expect(own, 'exactly one admin-log entry for the unparseable StartTime').toHaveLength(1);
   });
 });
