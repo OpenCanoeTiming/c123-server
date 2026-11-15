@@ -219,7 +219,15 @@ describe('#373 row 9, §10 item 38 (m): a returning Attempt\'s checks and flags 
 
   it('(ii) a restart with a stored check, a client hydrated before the first snapshot of the new lifetime: the check is pushed when that snapshot creates the Attempt', async () => {
     const { env, run } = await closedOdp();
-    const check = await env.h.checks.putCheck({ attemptId: ODP.attemptId, run, gate: ODP.gate, valueAtCheck: ODP.penaltyInXml, checkedBy: 'judge-1' });
+    // valueAtCheck deliberately mismatched with the recorded gate 13 penalty (ODP.penaltyInXml, 2): the derived
+    // status is 'stale' both now and once the restarted process creates the Attempt from the same recorded data,
+    // so this is CQ3's own case -- seedCheckStatuses seeds the restarted process's remembered status from a check
+    // whose Attempt does not exist yet (nothing presented to equal: 'stale'), and the freshly derived status after
+    // creation is ALSO 'stale' (999 still disagrees with the presented 2): no status *difference*, which is
+    // exactly what a push-only-on-difference implementation misses. (Checked directly: with a matching
+    // valueAtCheck, i.e. ODP.penaltyInXml, the status moves stale -> verified across the restart and a mutant
+    // that never pushes on creation would still pass this test for the wrong reason.)
+    const check = await env.h.checks.putCheck({ attemptId: ODP.attemptId, run, gate: ODP.gate, valueAtCheck: 999, checkedBy: 'judge-1' });
 
     const removeAt = Date.parse(ODP.xmlRec().observedAt) + 3_600_000;
     await feedXml(env, absentBib56Xml(removeAt));
