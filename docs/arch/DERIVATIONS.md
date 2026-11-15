@@ -1026,8 +1026,8 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   no `XER` row exists: the class has no `XER` race, or an `XER` race whose table stays empty (E1,
   upstream behaviour; observed on the public Canoe123 live feeds of ICF WRR Montgomery 2026 and
   WRR Oklahoma City 2026, heats raced and the `XER` table empty). No classification
-  Standing is published then (the first-row rule below), and the heats' standings are the class's
-  only Cross results (`CONTRACTS.md` §2.4).
+  Standing is published then (the first-row rule below): the class has no overall result, and its
+  Cross results are its race Phases' own standings, the time trial's included (`CONTRACTS.md` §2.4).
 - `rank` and `order` come from `Rnk`/`RnkOrder`. `decidedIn` comes from `RecordType` (`F`, `SF`,
   `1/2`, `1/4`, `T`), verbatim: an open token, not a format (`CONTRACTS.md` §2.7). TCP's
   classification rows carry no `RecordType`: a row's `decidedIn` is `null` until the snapshot states
@@ -1051,7 +1051,8 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   round after a time trial gives every qualifier a new bib, 1..N in time-trial rank order (seeded
   into the bracket), where N is the round's size, 8, 16 or 32; no setting disables it (observed: 8
   at cp3-cross, 16 and 32 on the public live feeds of ODM 2026 Praha and the 2026 World Ranking
-  Race in Prague). Later knockout rounds, and repechages, carry the bib over unchanged. An operator
+  Race in Prague). When the start list is built automatically, later knockout rounds, and
+  repechages, carry the bib over unchanged. An operator
   who builds the heats another way, by hand, keeps the time-trial bibs (observed: the public live
   feed of WRR Oklahoma City 2026, `X8` and `X4` on the `XT` bibs; which action the operator used is
   not established, E4). **Nothing may be inferred from the `t` about

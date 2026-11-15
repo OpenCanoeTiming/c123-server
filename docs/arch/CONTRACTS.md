@@ -276,8 +276,9 @@ with no special-casing at the envelope level.
 - **Bibs** are strings, trimmed of upstream's padding before they are used anywhere. Result-table bibs
   arrive padded to four characters (`DERIVATIONS.md` §0.1). A classification row's bib (`XER`,
   `SLER`, `WWER`) is relayed as Canoe123 writes it, trimmed, with its inner padding collapsed to one
-  space (maintainer, 2026-11-15): a Kayak Cross row ranked from the time trial keeps its prefix and
-  reads `t 13` where Canoe123 writes `t   13`. Without the `t` the number can repeat within one
+  space: the maintainer decided the `XER` bib (2026-11-15), and `SLER` and `WWER` follow because
+  every classification row's bib is read by one rule (`DERIVATIONS.md` §4.10). A Kayak Cross row
+  ranked from the time trial keeps its prefix and reads `t 13` where Canoe123 writes `t   13`. Without the `t` the number can repeat within one
   classification (`DERIVATIONS.md` §4.10). A bib never joins data across Phases: across Phases a
   competitor is its `entryId` (§2.6).
 - **Gate penalties** are an integer number of seconds, or `null` for not yet judged or passed. `null`
@@ -695,8 +696,8 @@ snapshot that changed its rows, which happens when the operator recalculates, so
 `asOf` of the contributing Phases' standings to see that it lags them. `RXER` is a title for which upstream calculates nothing: a classification Phase
 that never holds rows. **A Kayak Cross class may have no classification at all**, or an `XER` whose
 table holds no rows: the operator need never press "calculate event result" (`DERIVATIONS.md`
-§4.10). No classification Standing is published then (§5 step 1), and the heats' standings are the
-class's only Cross results.
+§4.10). No classification Standing is published then (§5 step 1): the class has no overall result,
+and its Cross results are its race Phases' own standings, the time trial's included.
 
 **`date` is assigned once and never changes**, even if a correction to the Phase's results is pushed a
 week later. That is what keeps multi-day grouping correct under late correction. Before the snapshot
@@ -847,7 +848,7 @@ turn out, even a week later, to have raced under the wrong bib.
   Phase, a run is its Attempt. In Kayak Cross each round is its own Phase, and its bibs may be
   renumbered from the time trial or equal to it (`DERIVATIONS.md` §4.10): the same bib can name two
   athletes in two rounds, and one athlete can carry two bibs. A classification row is matched by
-  its `entryId` (§5 step 2). This is the bib principle ("the bib is the key of a run's data",
+  its `entryId` (`DERIVATIONS.md` §4.10; `TEST-ARCHITECTURE.md` §3.2 property 15). This is the bib principle ("the bib is the key of a run's data",
   maintainer, 2026-11-12) applied per Phase, not an exception to it.
 - Two kinds of collision cannot happen:
   - Kayak Cross's four simultaneous competitors are the same Phase with different bibs;

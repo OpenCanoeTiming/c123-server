@@ -105,8 +105,8 @@ parsed (Revision 1).
 ## Revision 3 — a count corrected; nothing joins across Phases by bib (2026-11-15)
 
 Revision 2's "all 124 competitors of one Kayak Cross event changed bib between rounds" overstates
-the recording: the 32 who reached the heats raced them under a new bib, and the other 92 raced only
-the time trial. Upstream's automatic heat build renumbers the qualifiers by time-trial rank, but an
+the recording: the 32 who reached the heats raced them under a new bib, and the other 92 did not
+reach the heats. Upstream's automatic heat build renumbers the qualifiers by time-trial rank, but an
 operator who builds the heats by hand keeps the time-trial bibs, so a round's bibs may or may not
 differ from the time trial's (`DERIVATIONS.md` §4.10). The decision stands, and the reasoning
 holds more strongly: the bib is a per-Phase fact, `(phaseId, bib)` is unaffected, and across the
