@@ -307,6 +307,8 @@ the parser's four it reaches the admin log and never `GET /api/diagnostics`.
     source.
   - The snapshot's date is assigned once and never re-derived (INV-5). An inferred date is replaced
     by the snapshot's exactly once; in the recordings every inferred date agreed with it.
+  - A `StartTime` whose first ten characters are not a calendar date states neither `date` nor
+    `scheduledStart` and raises `unparseable-field` (§10 item 42).
 - **`scheduledStart`** is the same `XML.Schedule.StartTime`, whole.
 - **`programmeOrder`** is `XML.Schedule.RaceOrder`, or `Schedule.Race@Order` on TCP.
 - **`title`** is `XML.Schedule.CustomTitle`, the organiser's own race title. Where it is empty the
@@ -405,7 +407,9 @@ the parser's four it reaches the admin log and never `GET /api/diagnostics`.
   - When the element is absent, `externalId` is `null`, served as `null` inside the `known` `members`
     value (`CONTRACTS.md` §2.5); it is never wrapped.
 - **`birthDate`.**
-  - Source: `Birthdate`, as entered. Many organisers enter only the year, as `YYYY-01-01`.
+  - Source: `Birthdate`, as entered. Many organisers enter only the year, as `YYYY-01-01`. A
+    non-empty one whose first ten characters are not a calendar date is absent and raises
+    `unparseable-field` (§10 item 42).
   - The on-site serialisation derives `birthYear` from it, falling back to `XML.Participants.Year`.
 - **`club`.**
   - Source: `XML.Participants.Club`, or `Results.Participant@Club` on TCP.
@@ -777,10 +781,9 @@ supplies it. Three reasons:
   with a place in replay and in the fixtures (`CONTRACTS.md` §4, Determinism), for a difference
   nobody sees.
 
-The reason stays in the closed set (`CONTRACTS.md` §1.2); nothing on site produces it. The vector
-`two-run-br1-unavailable-no-live-no-xml` still feeds the merge an XML source stated as
-unreachable, an input the process never gives; it is reshaped to the not-configured case with the
-core change (§10 item 30).
+The reason stays in the closed set (`CONTRACTS.md` §1.2); nothing on site produces it. The core
+has no option to give it (#337, PR #371), and the vector `two-run-br1-unavailable-no-live-no-xml`
+feeds the input the process does give, no XML configured (§10 item 30).
 
 `PrevRnk` in Cross means the rank in the previous round, not a previous run, and is not modelled
 (§9).
@@ -1026,8 +1029,8 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   no `XER` row exists: the class has no `XER` race, or an `XER` race whose table stays empty (E1,
   upstream behaviour; observed on the public Canoe123 live feeds of ICF WRR Montgomery 2026 and
   WRR Oklahoma City 2026, heats raced and the `XER` table empty). No classification
-  Standing is published then (the first-row rule below), and the heats' standings are the class's
-  only Cross results (`CONTRACTS.md` §2.4).
+  Standing is published then (the first-row rule below): the class has no overall result, and its
+  Cross results are its race Phases' own standings, the time trial's included (`CONTRACTS.md` §2.4).
 - `rank` and `order` come from `Rnk`/`RnkOrder`. `decidedIn` comes from `RecordType` (`F`, `SF`,
   `1/2`, `1/4`, `T`), verbatim: an open token, not a format (`CONTRACTS.md` §2.7). TCP's
   classification rows carry no `RecordType`: a row's `decidedIn` is `null` until the snapshot states
@@ -1051,7 +1054,8 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   round after a time trial gives every qualifier a new bib, 1..N in time-trial rank order (seeded
   into the bracket), where N is the round's size, 8, 16 or 32; no setting disables it (observed: 8
   at cp3-cross, 16 and 32 on the public live feeds of ODM 2026 Praha and the 2026 World Ranking
-  Race in Prague). Later knockout rounds, and repechages, carry the bib over unchanged. An operator
+  Race in Prague). When the start list is built automatically, later knockout rounds, and
+  repechages, carry the bib over unchanged. An operator
   who builds the heats another way, by hand, keeps the time-trial bibs (observed: the public live
   feed of WRR Oklahoma City 2026, `X8` and `X4` on the `XT` bibs; which action the operator used is
   not established, E4). **Nothing may be inferred from the `t` about
@@ -1284,7 +1288,9 @@ previously known from a results-table observation:
   `entry` (§4.9). Only an Attempt a results-table
   row of its race has named is removed. Admitted: the snapshot's `changedAfter` is later than
   the latest delivery of every `tcp` observation of the Attempt, an on-course listing included
-  (`null` never qualifies), and the Attempt is not in the on-course set. Not admitted: retract
+  (`null` never qualifies; a re-baseline's own read included, whose step 1 keeps what each
+  delivery stated of the Attempt itself, §10 item 38 (l)), and the Attempt is not in the on-course
+  set. Not admitted: retract
   as the TCP absent-row case, `pairTotal` and `countingRun` included in a paired second run,
   under the guard below field by field; a later snapshot settles the removal. In the removal's
   unit a pending write of the Attempt resolves `mismatched` without `confirmedValue` (`CONTRACTS.md` §4 rule 4), the
@@ -1300,7 +1306,8 @@ previously known from a results-table observation:
   so a first read, or a file written before the results it lacks, raises nothing — the core
   raises `xml-table-emptied` with the `phaseId` and the number of such Attempts (ingest-only,
   §0.5). It is raised once: at the first
-  such snapshot, and again only after a snapshot of the race has carried a row. A table that
+  such snapshot, and again only after an XML snapshot of the race has carried a row; a TCP push
+  carrying rows does not re-arm it (§10 item 41 (a)). A table that
   never had rows raises nothing (all 521 recorded empty XML race tables are of this kind, §0.3).
   If the race was really emptied, TCP's start-list push retracts it, or the operator
   re-baselines.
@@ -1308,13 +1315,14 @@ previously known from a results-table observation:
   presented by the ordinary rules: at once where no `tcp` observation stands, else under rule 2.
   After a removal it creates a new Attempt, `run` 1, carrying none of the removed one's result
   state (no generation, contradiction record or remembered mark); the checks and flags of its
-  bib are served again (`CONTRACTS.md` §2.10).
+  bib are served again and pushed in the unit that creates it (`CONTRACTS.md` §2.10; §10 item
+  38 (m)).
 
 **Guard (INV-2c, content age),** for the present row and the absent row alike: apply the
 retraction against a `tcp` observation only when the snapshot's
 `changedAfter` (§0.3; `null` never qualifies) is later than that observation's `observedAt`.
 Otherwise the snapshot may predate the push, and it is ignored for that field until the next
-snapshot. The same guard applies to the mark exception of INV-2 rule 2, and to any snapshot value
+snapshot, the field's earlier `xml` value included (§10 item 41 (b)). The same guard applies to the mark exception of INV-2 rule 2, and to any snapshot value
 displacing a `tcp` value during an outage. Recorded: the XML was five minutes *ahead* of TCP's rotation on one
 jury-invalidated row (C1M_BR1_19 bib 7, later re-run, §4.11), and 7 s behind TCP on a cleared DNS.
 
@@ -1614,7 +1622,8 @@ maintainer's rule of 2026-11-11 that a disagreement moving no client obligation 
 and an item here, not a contract round (`README.md`, ground rules); each says what would reopen
 it. Round C part 4 (maintainer, 2026-11-12) closed item 31, settled items 26, 33 and 34, added
 the live side to item 25's closure, and added item 38, the defaults inside the removal
-decision.
+decision. Items 40 to 42, and item 38 (k) to (m), are defaults of 2026-11-15 from the reviews
+of M2 P3a, under the same rule.
 
 1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
    hardware judge terminals on their own port and raises a flag on the scoring service for about
@@ -1800,9 +1809,8 @@ decision.
     run; reopens if a replay of a re-baseline over a classification Phase shows otherwise.
 30. **`unavailable{source-unreachable}` on site.** Default: the on-site process never gives it
     (§4.5); a first run's detail stays `not-yet` while a configured XML source is unreachable.
-    Today the core can give the reason only through an option that nothing but the conformance
-    harness sets (#337), and the vector `two-run-br1-unavailable-no-live-no-xml` passes on that
-    input. With the core change the option goes and the vector is reshaped to the case the
+    The core option that only the conformance harness set to give the reason is gone (#337, PR
+    #371), and the vector `two-run-br1-unavailable-no-live-no-xml` was reshaped to the case the
     process does give: no XML configured, `unavailable{not-configured}` once run 2 is observed,
     `not-yet` before. Reopens if a client needs to tell the two states apart; feeding the
     reader's state to the core as an ingest event would then be the change. The reason stays in
@@ -1908,7 +1916,38 @@ decision.
     (h) the Entry stays; (i) a returning row creates a new Attempt, `run` 1, carrying none of the
     removed one's result state (generation, contradiction record, remembered mark); its checks
     and flags are (g)'s, not (i)'s;
-    (j) a wholly empty table removes nothing.
+    (j) a wholly empty table removes nothing;
+    (k) a flag's resolution is a flag write: while the Attempt does not exist it is
+    `404 attempt-not-found` (after `flag-not-found`), and nothing is stored or pushed; a resolved
+    flag returned or pushed then would serve what (g) does not serve (`CONTRACTS.md` §2.10, §7.4;
+    2026-11-15, review of PR #370, CQ1);
+    (l) a removal inside a re-baseline (2026-11-15, CQ2; corrected on review of PR #372).
+    *Messages:* an Attempt the re-read removes is sent as `attempt.deleted`, as every removal is,
+    with its pending write's `write.updated` before it, and the unit's `scope.replaced` follows
+    without it; on live the Phase replace removes it (`CONTRACTS.md` §8.3). A client's removal
+    handling (penalty-check's "competitor removed in Canoe123" and the dropping of the Attempt's
+    checks and flags) is keyed on `attempt.deleted`, so one signal for every removal moves no
+    client duty, and the replace that follows finds nothing left to remove (§1.6, every message
+    idempotent). *Guard:* the removal still counts every `tcp` delivery that named the Attempt,
+    a results row and an on-course listing alike; the re-baseline does not reset it. Step 1
+    discards a row's result values, but keeps what the same delivery stated of the Attempt
+    itself: its identity (`entry`, `startOrder`, `heat`, `startLane`) and its lifecycle `status`,
+    `source: 'tcp'`, which say that the bib was in upstream's race at that delivery
+    (`CONTRACTS.md` §4 step 1; step 2, "met by nothing step 1 discarded"). A file older than
+    TCP's latest naming of the bib therefore removes nothing, also in a re-baseline: otherwise a
+    re-baseline against a save not yet written would remove an Attempt TCP had just stated, resolve
+    its pending write `mismatched` as a removal, and the next push would create it again. Where
+    the snapshot is not admitted, the per-field retraction finds no result left after step 1, and
+    step 3 refills it. Both halves are the merged core's. Reopens on a recording where TCP keeps
+    naming a bib the file has dropped, so that no re-baseline can remove it;
+    (m) a returning Attempt's checks and flags come back over the push: the unit that creates it
+    sends, after its `attempt.updated`, one `check.updated` per check and one `flag.updated` per
+    flag that its reads then serve, so a connected tablet, which dropped them on
+    `attempt.deleted`, holds what a fresh hydration serves; the same holds for any Attempt created
+    while the store holds checks or flags for it, such as the first creation after a restart,
+    when a tablet that hydrated before the first snapshot was served none (`CONTRACTS.md` §1.6, "a client never
+    needs to re-hydrate to learn of a new Attempt"; §7.2; 2026-11-15, CQ3). No client duty moves:
+    a tablet applies them as any `check.updated` and `flag.updated`, and re-reads nothing.
     *Example (#349 CQ2):* bibs 11 (X) and 12 (Y) of `K1M_BR1_6` are swapped. Saved in one step,
     both bibs stay: both Attempts stay, `entry` re-pointed, every check kept and served. Saved
     through an intermediate bib, a save that leaves bib 11 out removes `K1M_BR1_6:11` (the guard
@@ -1945,3 +1984,70 @@ decision.
     displacement happened. This corrects the first version of this item, which compared the
     retained cells (review of PR #355, CQ2). No vector asserts the case, and no client duty
     moves: a client reads `observedAt` as served.
+40. **The Event's name and dates** (#368; review of PR #366, CQ1 and CQ2; 2026-11-15). Two
+    defaults inside `CONTRACTS.md` §2.2, read from its text (E3); neither case is recorded (E4).
+    No client duty moves: a client shows `name` and `details` as served.
+    (a) *Which name wins.* "Defaults to the snapshot's own title" made the title what applies
+    where the operator has not said otherwise. The boot flag and the "start a new event" action
+    are both the operator entering a name, so both win, and the snapshot's title never displaces
+    either. An empty or whitespace-only name counts as none entered. The bridge holds, with the
+    Event, whether `name` was entered or taken from the snapshot, and persists that with the name
+    wherever it persists the Event. *Example:* the operator starts a new event named "Jarní slalom
+    2027, sobota"; the next snapshot's `MainTitle` "Jarní slalom" changes nothing and sends no
+    `event.changed`. Started with an empty name, the event takes "Jarní slalom" from that
+    snapshot, with a same-id `event.changed`. Reopens if organisers want the file's title to
+    follow edits made in Canoe123 after a name was typed; the admin UI would then offer that.
+    (b) *What an unparseable date is.* The date part is the first ten characters, `YYYY-MM-DD`,
+    and it is unparseable unless it names a calendar day: month `01`–`12`, a day the month has,
+    29 February only in a leap year. What follows it is not read: no zone conversion needs the
+    time, and the date is what the organiser entered, so `2026-04-25garbage` gives `2026-04-25`
+    and `2026-13-45T00:00:00+02:00` states no `details` and raises `unparseable-field`. Every
+    recorded snapshot carries a calendar date and a well-formed time. Reopens on a recording
+    whose time part shows that its date part is not the day the organiser meant.
+41. **Two readings inside the XML retraction** (review of PR #369, CQ-A and CQ-B; 2026-11-15).
+    Both keep the merged core; no client duty moves, no vector changes.
+    (a) *What re-arms `xml-table-emptied`* (§4.12): an XML snapshot of the race that carries a
+    row. A TCP push carrying rows does not. The emptied table is the file's, as is "a table that
+    never had rows"; under the TCP reading every push and rotation of a race live on TCP over an
+    emptied file would re-arm it, and the admin log would repeat it at every save (E3). Reopens
+    if an operator misses an emptying that came after a TCP-only stretch.
+    (b) *A refused retraction and the field's earlier `xml` value.* Where INV-2c's guard refuses
+    an XML retraction, absent row or present row, against a field's standing `tcp` observation,
+    the snapshot moves nothing of that field, its `xml` slot included: "ignored for that field" is
+    the whole field, and `DECISIONS/ADR-015` Revision 5 rule 2's "the snapshot's own earlier `xml`
+    observation is always superseded" governs a field the guard does not refuse (no `tcp`
+    observation stands, or the guard passes), as a refused classification snapshot moves nothing
+    (`TEST-ARCHITECTURE.md` §3.2 property 15). The retained `xml` value is never presented and
+    raises no disagreement (E3, the core's slot paths read): it is no later than the refused
+    snapshot, whose `changedAfter` is not later than the `tcp` value's latest delivery, so rule 2,
+    INV-2b and INV-2c all keep the `tcp` value; and every path that takes a `tcp` value away
+    replaces the `xml` slot in the same unit or puts a later `tcp` observation in its place: TCP's
+    own retraction writes a later `tcp` marker, which rule 2 keeps over the older `xml` slot (lower
+    ingest sequence); a passing XML retraction writes the `xml` marker,
+    the re-baseline's step 1 discards both and its read restates the field, a contradiction
+    (INV-2d) replaces both, and a new generation clears the run's fields. Reopens if a path is
+    added that takes a `tcp` value away and leaves the `xml` slot with no later `tcp` observation
+    over it; the `xml` slot then takes the absence as well.
+42. **Every date the XML states** (2026-11-15, following item 40 (b)). Default, the smallest
+    that fits: item 40 (b)'s rule reads every date part the snapshot states, not only the
+    Event's. That is `Schedule.StartTime` (a Phase's `date`, §2.1, and the date pairing and
+    `eventTime` take from it, §0.2) and `Participants.Birthdate`/`Birthdate2` (§3). The date part
+    is the first ten characters and names a calendar day; what follows is not read. A non-empty
+    value whose date part does not is unparseable, and is absent, not invented (§0.5):
+    - `Schedule.StartTime`: the snapshot states neither `date` nor `scheduledStart` for that
+      Phase (a `Timestamp` with no calendar date is not one, `CONTRACTS.md` §1.3), and the parser
+      raises one `unparseable-field` (`where` the `phaseId`, `name` `StartTime`). The Phase keeps
+      what it holds: its inferred date while no snapshot has stated one (§2.1), else `not-yet`; a
+      date a snapshot stated earlier stays (INV-5). Pairing and `eventTime` take no date from it.
+    - `Birthdate`: the member's `birthDate` is absent, `birthYear` falls back to
+      `Participants.Year` as for an empty one, and the parser raises `unparseable-field` (`where`
+      the participant's `Id`, `name` `Birthdate` or `Birthdate2`).
+    - An empty value is unchanged: absent, no diagnostic.
+
+    Evidence (E2, a scan of the seven recordings' snapshots): every value found has a calendar
+    date part followed by a time and an offset (64 distinct `Schedule.StartTime` values on 5
+    dates, 3 distinct `StartDate` and 3 `EndDate` values, 61 distinct `Birthdate` values), so
+    nothing recorded moves. No client duty moves: a
+    client shows `date`, `scheduledStart` and birth data as served, and `not-yet` as not known.
+    Reopens on a recording with an invalid date part, or if organisers enter birth dates in a
+    form this reads as unparseable often enough to crowd the admin log.
