@@ -24,6 +24,17 @@ const BIB9_ATTEMPT_ID = `${ODP.phaseId}:9`;
 const absentBib56Xml = (ms: number): { observedAt: string; data: string } => ({ observedAt: new Date(ms).toISOString(), data: ODP.xmlRec().data.replace(BLOCK56, BLOCK9) });
 /** The original recorded snapshot (bib 56 only), at a later instant: the row returns. */
 const returnedXml = (ms: number): { observedAt: string; data: string } => ({ observedAt: new Date(ms).toISOString(), data: ODP.xmlRec().data });
+/** Review note (c): the row that returns names ANOTHER competitor (Y, a fresh `Id`) under the bib than the one removed (X, `200678.C1M`),
+ * with gate 13 presented as 0 instead of the recorded 2 (`ODP.xmlWithGate13`, run 120: only `Pen`/`Total` change, the recorded run's own).
+ * "The data belongs to the bib" (CONTRACTS §2.6, §2.10; DERIVATIONS §10 item 38 (g)): the bib's checks are served under Y, their derived
+ * status following Y's presented gates, not X's. */
+const RETURN_AS_Y_ID = '200680.C1M';
+const returnedAsYXml = (ms: number): { observedAt: string; data: string } => ({
+  observedAt: new Date(ms).toISOString(),
+  // global: the same Id also names the Participants record; replacing both is harmless (the Attempt reads
+  // only the Results row's Id as its entry pointer) and keeps the document internally consistent.
+  data: ODP.xmlWithGate13(0, 120).rec.data.replace(/<Id>200678\.C1M<\/Id>/g, `<Id>${RETURN_AS_Y_ID}</Id>`),
+});
 
 const checksOf = async (env: Env): Promise<J> => (await get(env, `/api/phases/${ODP.phaseId}/checks`)).body;
 const attemptIds = async (env: Env): Promise<string[]> => (await get(env, `/api/phases/${ODP.phaseId}/attempts`)).body.attempts.map((a: J) => a.attemptId);
@@ -78,18 +89,24 @@ describe('#365 row 9: attempt.deleted on /ws; REST stops, then resumes serving t
     expect(refused.status).toBe(404);
     expect(refused.body.error.code).toBe('attempt-not-found');
 
-    // the row returns: a later save that carries bib 56 again.
+    // the row returns: a later save that carries bib 56 again, now under another competitor, Y, with gate 13
+    // presented as 0 instead of the recorded 2 (review note (c)).
     const returnAt = removeAt + 600_000;
-    await feedXml(env, returnedXml(returnAt));
+    await feedXml(env, returnedAsYXml(returnAt));
     await ws.barrier();
 
     const back = (await get(env, `/api/phases/${ODP.phaseId}/attempts`)).body.attempts.find((x: J) => x.attemptId === ODP.attemptId);
     expect(back, 'bib 56 is served again').toBeDefined();
     expect(back.run.value, 'run 1: a fresh Attempt, carrying none of the removed one\'s generation').toBe(1);
+    expect(back.entry.value.entryId, 'named by Y, not the removed one\'s X').toBe(RETURN_AS_Y_ID);
+    expect(back.gates.value.find((g: J) => g.number === ODP.gate).penalty, 'Y\'s own presented gate').toBe(0);
 
     const checksBack = await checksOf(env);
-    expect(checksBack.checks.map((c: J) => c.gate), 'the bib\'s check is served again (CONTRACTS §2.10)').toContain(ODP.gate);
-    expect(checksBack.checks.find((c: J) => c.gate === ODP.gate)).toMatchObject(check);
+    const servedCheck = checksBack.checks.find((c: J) => c.gate === ODP.gate);
+    expect(servedCheck, 'the bib\'s check is served again (CONTRACTS §2.10), now under Y').toMatchObject({
+      attemptId: ODP.attemptId, gate: ODP.gate, valueAtCheck: check.valueAtCheck, checkedBy: check.checkedBy, checkedAt: check.checkedAt,
+    });
+    expect(servedCheck.status, 'the derived status follows Y\'s presented gate (0), not the value it was checked against (2): stale').toBe('stale');
     expect(checksBack.flags.map((f: J) => f.flagId)).toContain(flag.flagId);
   });
 

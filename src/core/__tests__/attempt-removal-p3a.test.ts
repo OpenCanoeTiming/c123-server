@@ -56,17 +56,25 @@ describe('ADR-015 Rev 6 rule 2, DERIVATIONS §10 item 38 (c) (#365 row 3)', () =
     ]);
     expect(c.presented(A)['outcome']).toMatchObject({ state: 'known', source: 'tcp' });
 
-    // a late listing (10:41:40, after the changedAfter below) re-states the same finish: a tcp observation of the Attempt,
-    // delivered after changedAfter, "a listing included" (item 38 (c)) -- even though the result row's own delivery
-    // (10:40:59.500) predates it. This also keeps bib 11 in the on-course set (item 38 (c)'s other clause): upstream's
-    // grid is still showing it, which is exactly why a stale listing like this one must hold the removal back.
+    // a late listing (10:41:40) re-states the same finish: a tcp observation of the Attempt. Review O1: closing it
+    // right after (10:41:41, before the first rewrite below) takes it OFF the on-course set while the listing's own
+    // delivery still postdates the first changedAfter (10:41:32) -- isolating the "listings included" delivery
+    // clause (item 38 (c)) from the on-course-set clause, which this closure already satisfies. Without this
+    // closure the on-course clause alone would explain "not removed" and the delivery clause would go untested
+    // (confirmed: reverting just this closure still reads "held back, not removed" for the wrong reason).
     c.applyUnit(k.listing(T('10:41:40.000'), T('10:38:40.000'), T('10:40:00.000'), { runSeconds: 90.12 }));
+    c.applyUnit([{ ingestSeq: 4, event: 'oncourse-left', attemptId: A, observedAt: T('10:41:41.000') }]);
+    expect(c.oncourse().attemptIds, 'off course already, before the first rewrite').not.toContain(A);
 
     const m1 = c.notifications().length;
-    c.applyUnit([rewrite(2, T('10:41:37.000'), T('10:41:32.000')), push(3, 'xml', P, 'results', [{ bib: '9', outcome: dur(84), placement: { rank: 1, order: 1 }, judgingComplete: true }], T('10:41:37.000'))]);
+    // changedAfter (10:41:32) is later than the result row's own delivery (10:40:59.500) but earlier than the late
+    // listing's (10:41:40): the whole-Attempt guard refuses on tcpAt alone, off course notwithstanding. A mutant
+    // that drops listings from tcpAt (#370 review O1) would admit this snapshot and remove the Attempt here,
+    // turning this block red.
+    c.applyUnit([rewrite(5, T('10:41:42.000'), T('10:41:32.000')), push(6, 'xml', P, 'results', [{ bib: '9', outcome: dur(84), placement: { rank: 1, order: 1 }, judgingComplete: true }], T('10:41:42.000'))]);
     const unit1 = c.notifications().slice(m1);
 
-    // not removed: the guard refuses (the late listing postdates changedAfter).
+    // not removed: the guard refuses (tcpAt, the late listing's delivery, postdates changedAfter).
     expect(c.attempts(), 'held back, not removed').toContain(A);
     expect(deleted(unit1, A)).toEqual([]);
     // the per-field retraction still applies (#321's rule: its own guard reads the tcp *result row's* delivery, 10:40:59.500, which does predate changedAfter).
@@ -75,18 +83,30 @@ describe('ADR-015 Rev 6 rule 2, DERIVATIONS §10 item 38 (c) (#365 row 3)', () =
     // bib 9 is untouched.
     expect(c.presented(B)['outcome']).toMatchObject({ state: 'known', value: { totalSeconds: 84 } });
 
-    // the Attempt genuinely leaves the on-course set now (closure): no further listing follows it.
-    c.applyUnit([{ ingestSeq: 4, event: 'oncourse-left', attemptId: A, observedAt: T('10:41:45.000') }]);
-    expect(c.oncourse().attemptIds).not.toContain(A);
-
     // the next rewrite: changedAfter now postdates every tcp observation of the Attempt, the late listing included (10:41:40.000).
     const m2 = c.notifications().length;
-    c.applyUnit([rewrite(5, T('10:41:55.000'), T('10:41:50.000')), push(6, 'xml', P, 'results', [{ bib: '9', outcome: dur(84), placement: { rank: 1, order: 1 }, judgingComplete: true }], T('10:41:55.000'))]);
+    c.applyUnit([rewrite(7, T('10:41:55.000'), T('10:41:50.000')), push(8, 'xml', P, 'results', [{ bib: '9', outcome: dur(84), placement: { rank: 1, order: 1 }, judgingComplete: true }], T('10:41:55.000'))]);
     const unit2 = c.notifications().slice(m2);
 
     expect(c.attempts(), 'now admitted: removed').not.toContain(A);
     expect(deleted(unit2, A)).toHaveLength(1);
     expect(updatedFor(unit2, A), 'no attempt.updated for the removed Attempt in its unit').toEqual([]);
+  });
+
+  it('ADR-015 Rev 6 rule 2: changedAfter equal to the latest tcp delivery does not qualify ("later than", never "at or after")', () => {
+    const A = 'K1M_BR1_26:11', P = 'K1M_BR1_26';
+    const k = kit(A, P);
+    const c = k.core();
+    c.applyUnit([push(1, 'tcp', P, 'results', [{ bib: '11', outcome: dur(80), placement: { rank: 1, order: 1 }, judgingComplete: true }], T('10:00:00.000'))]);
+
+    const m = c.notifications().length;
+    // changedAfter equals the tcp delivery exactly: a mutant relaxing the comparison from `>` to `>=` (#370 review
+    // note a) would admit this and remove the Attempt.
+    c.applyUnit([rewrite(2, T('10:00:30.000'), T('10:00:00.000')), push(3, 'xml', P, 'results', [{ bib: '9', outcome: dur(84), placement: { rank: 1, order: 1 }, judgingComplete: true }], T('10:00:30.000'))]);
+    const unit = c.notifications().slice(m);
+
+    expect(c.attempts(), 'equal is not later than: never admitted').toContain(A);
+    expect(deleted(unit, A)).toEqual([]);
   });
 
   it('ADR-015 Rev 6 rule 2: changedAfter null (a first read) never qualifies for removal', () => {
@@ -195,6 +215,36 @@ describe('ADR-015 Rev 6 rule 4 (#365 row 5)', () => {
     const standingIdx = unit.indexOf(standingPushes[0]!);
     expect(deletedIdx).toBeGreaterThanOrEqual(0);
     expect(standingIdx).toBeGreaterThan(deletedIdx);
+    expect(c.attempts()).toContain(B);
+  });
+
+  it('review note (b): a paired second-run Phase\'s pair Standing also loses the removed bib, beside its phase Standing', () => {
+    // K1M_BR2_27 is a second run by its format token alone (CONFORMANCE-VECTORS/DERIVATIONS 4.5): `coreWith`'s
+    // classId stamping (streams.ts) is all the setup a pair Standing needs, as #205's own second()-built tests use.
+    const P2 = 'K1M_BR2_27', A = `${P2}:11`, B = `${P2}:9`;
+    const phaseKey = `phase:${P2}/all`, pairKey = `pair:${P2}/all`;
+    const snap = (source: 'tcp' | 'xml', t: number, rows: unknown[]): GivenElement => ({ ingestSeq: t, observedAt: at(t), snapshot: { source, phaseId: P2, mode: 'results', rows } }) as GivenElement;
+    const row = (bib: string, rank: number, order: number, total: number, pairTotal: number) => ({ bib, outcome: dur(total), placement: { rank, order }, pairTotal, judgingComplete: true });
+
+    const c = coreWith([]);
+    c.applyUnit([snap('tcp', 10, [row('9', 1, 1, 80, 170), row('11', 2, 2, 85, 175)])]);
+    const standingsSent = (key: string, from = 0) => c.notifications().slice(from).filter((m) => m['type'] === 'standing.updated' && (m['standing'] as { standingKey: string }).standingKey === key);
+    expect(standingsSent(pairKey).at(-1)!['standing'], 'precondition: the pair Standing holds both bibs').toMatchObject({ entries: [{ bib: '9' }, { bib: '11' }] });
+
+    const m = c.notifications().length;
+    c.applyUnit([
+      { ingestSeq: 20, event: 'xml-rewrite-detected', observedAt: at(20), changedAfter: at(15) } as GivenElement,
+      snap('xml', 20, [row('9', 1, 1, 80, 170)]),
+    ]);
+    const unit = c.notifications().slice(m);
+    expect(deleted(unit, A)).toHaveLength(1);
+
+    const phasePushes = standingsSent(phaseKey, m);
+    const pairPushes = standingsSent(pairKey, m);
+    expect(phasePushes, 'the phase Standing is pushed once, without bib 11').toHaveLength(1);
+    expect((phasePushes[0]!['standing'] as { entries: Array<{ bib: string }> }).entries.map((e) => e.bib)).toEqual(['9']);
+    expect(pairPushes, 'the pair Standing is pushed once too, without bib 11').toHaveLength(1);
+    expect((pairPushes[0]!['standing'] as { entries: Array<{ bib: string }> }).entries.map((e) => e.bib)).toEqual(['9']);
     expect(c.attempts()).toContain(B);
   });
 });
@@ -370,5 +420,70 @@ describe('ADR-015 Rev 7 rules 2-4, DERIVATIONS §10 item 38 example (#365 row 8)
       // the bib's checks are served again once the Attempt returns -- asserted at the onsite level (checks are not core
       // state): src/onsite/__tests__/attempt-deleted-p3a.test.ts (#365 row 9).
     }
+  });
+});
+
+describe('DERIVATIONS §10 item 38 (i) (#370 review note d)', () => {
+  it('item 38 (i): a returning Attempt carries no contradiction record of the removed one', () => {
+    const A = 'K1M_BR1_28:11', B = 'K1M_BR1_28:9', P = 'K1M_BR1_28';
+    const k = kit(A, P);
+    const c = k.core();
+
+    // a finish presented from the results table, then the on-course stream lists the same start again with no
+    // finish: INV-2d's contradiction (CONTRACTS §4).
+    c.applyUnit(k.listing(T('10:00:00.000'), T('10:00:00.000')));
+    c.applyUnit([push(1, 'tcp', P, 'results', [{ bib: '11', outcome: dur(80), placement: { rank: 1, order: 1 }, judgingComplete: true }], T('10:00:30.000'))]);
+    c.applyUnit(k.listing(T('10:00:40.000'), T('10:00:00.000')));
+    expect(c.diagnostics().filter((d) => (d as { kind: string }).kind === 'contradicted-finish' && (d as { attemptId: string }).attemptId === A), 'precondition: a contradiction record exists').toHaveLength(1);
+
+    // off the on-course set: the contradiction returns status to on-course, but the Attempt was never "listed" by
+    // name here beyond this block's own listings, so an explicit closure is what the removal's guard needs.
+    c.applyUnit([{ ingestSeq: 4, event: 'oncourse-left', attemptId: A, observedAt: T('10:00:45.000') }]);
+    expect(c.oncourse().attemptIds).not.toContain(A);
+
+    c.applyUnit([rewrite(5, T('10:01:30.000'), T('10:01:00.000')), push(6, 'xml', P, 'results', [{ bib: '9', outcome: dur(84), placement: { rank: 1, order: 1 }, judgingComplete: true }], T('10:01:30.000'))]);
+    expect(c.attempts()).not.toContain(A);
+
+    c.applyUnit([
+      rewrite(7, T('10:02:30.000'), T('10:02:00.000')),
+      push(8, 'xml', P, 'results', [
+        { bib: '9', outcome: dur(84), placement: { rank: 1, order: 1 }, judgingComplete: true },
+        { bib: '11', outcome: dur(70), placement: { rank: 1, order: 1 }, judgingComplete: true },
+      ], T('10:02:30.000')),
+    ]);
+    expect(c.attempts()).toContain(A);
+    expect(c.diagnostics().filter((d) => (d as { kind: string }).kind === 'contradicted-finish' && (d as { attemptId: string }).attemptId === A), 'no trace of the removed one\'s contradiction').toEqual([]);
+    expect(c.presented(A)['outcome']).toMatchObject({ value: { totalSeconds: 70 } });
+    expect(c.presented(B)['outcome']).toMatchObject({ value: { totalSeconds: 84 } }); // untouched throughout
+  });
+
+  it('item 38 (i): a returning Attempt carries no remembered mark of the removed one (the stale-mark diagnostic)', () => {
+    const A = 'K1M_BR1_29:9', B = 'K1M_BR1_29:8', P = 'K1M_BR1_29';
+    const k = kit(A, P);
+    const c = k.core();
+
+    // vector rerun-stale-mark-not-presented's own setup (DERIVATIONS §4.9, §4.11; ADR-017 D1, R16): a dnf mark on
+    // run 1, a re-run starts, and the stale dnf row restated before run 2's finish is withheld -- stale-mark.
+    c.applyUnit([k.obs('status', 'tcp', 'result-row', T('10:00:00.000'), 'dnf', { run: 1 })]);
+    c.applyUnit([{ ingestSeq: 2, attemptId: A, field: 'run', source: 'tcp', kind: 'inference', observedAt: T('10:05:00.000'), value: 2, eventTime: T('10:04:58.000'), confidence: 'authoritative' }]);
+    c.applyUnit([push(3, 'tcp', P, 'results', [{ bib: '9', status: 'dnf', outcome: dur(88.2), placement: { rank: 4, order: 4 }, judgingComplete: true }], T('10:06:30.250'))]);
+    expect(c.diagnostics().filter((d) => (d as { kind: string }).kind === 'stale-mark' && (d as { attemptId: string }).attemptId === A), 'precondition: a stale-mark diagnostic exists').toHaveLength(1);
+    expect(c.oncourse().attemptIds, 'no listing was ever sent: already off the on-course set').not.toContain(A);
+
+    c.applyUnit([rewrite(4, T('10:07:00.000'), T('10:06:35.000')), push(5, 'xml', P, 'results', [{ bib: '8', outcome: dur(84), placement: { rank: 1, order: 1 }, judgingComplete: true }], T('10:07:00.000'))]);
+    expect(c.attempts()).not.toContain(A);
+
+    c.applyUnit([
+      rewrite(6, T('10:08:00.000'), T('10:07:30.000')),
+      push(7, 'xml', P, 'results', [
+        { bib: '8', outcome: dur(84), placement: { rank: 1, order: 1 }, judgingComplete: true },
+        { bib: '9', outcome: dur(70), placement: { rank: 1, order: 1 }, judgingComplete: true },
+      ], T('10:08:00.000')),
+    ]);
+    expect(c.attempts()).toContain(A);
+    expect(c.diagnostics().filter((d) => (d as { kind: string }).kind === 'stale-mark' && (d as { attemptId: string }).attemptId === A), 'no trace of the removed one\'s remembered mark').toEqual([]);
+    expect(c.presented(A)['status']).toMatchObject({ value: 'finished' });
+    expect(c.presented(A)['outcome']).toMatchObject({ value: { totalSeconds: 70 } });
+    expect(c.presented(B)['outcome']).toMatchObject({ value: { totalSeconds: 84 } }); // untouched throughout
   });
 });
