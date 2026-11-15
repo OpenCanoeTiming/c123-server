@@ -206,7 +206,7 @@ Each vector has:
   Phase's creation, for `format` and what follows from the format (`stage`, `kind`,
   `scoringKind`, `heats`, and the run's role where the core reads rows by it). A TCP `Results`
   message states no `format` today, so on site that read is live. It stays until the read
-  moves to the TCP parser, where `DERIVATIONS.md` §2.1 puts it (a follow-up of #287;
+  moves to the TCP parser, where `DERIVATIONS.md` §2.1 puts it (#377, a follow-up of #287;
   `DECISIONS/LOG.md`, 2026-11-16). A parser states
   `pair` with the format, `siblingPhaseId: null` until the schedule names the first run, and that
   stated `null` makes the `pair` standing wait. The Entry is that Attempt's; where no element sets
