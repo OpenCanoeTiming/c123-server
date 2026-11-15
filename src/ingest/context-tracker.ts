@@ -12,9 +12,11 @@ export interface ContextTracker {
 
 export function createContextTracker(zone: string, eventDate: string | undefined, externalIdScheme: string): ContextTracker {
   const phaseDates: Record<string, string> = {};
+  const phaseClasses: Record<string, string> = {};
+  const phaseFormats: Record<string, string> = {};
   const phaseCourse = new Map<string, string>();
   const courseSlots = new Map<string, CourseSlot[]>();
-  const ctx: IngestContext = { observedAt: '', zone, phaseDates, courses: {}, eventDate, externalIdScheme };
+  const ctx: IngestContext = { observedAt: '', zone, phaseDates, phaseClasses, phaseFormats, courses: {}, eventDate, externalIdScheme };
   const rebuild = (): void => {
     const courses: Record<string, { courseId: string; slots: CourseSlot[] }> = {};
     for (const [phaseId, courseId] of phaseCourse) {
@@ -27,7 +29,9 @@ export function createContextTracker(zone: string, eventDate: string | undefined
     let refresh = false;
     for (const e of elements) {
       const field = e['field'];
-      if (isXml && field === 'date' && typeof e['phaseId'] === 'string') phaseDates[e['phaseId']] = e['value'] as string;
+      if (field === 'classId' && typeof e['phaseId'] === 'string' && typeof e['value'] === 'string') phaseClasses[e['phaseId']] = e['value'];
+      else if (isXml && field === 'format' && typeof e['phaseId'] === 'string' && typeof e['value'] === 'string') phaseFormats[e['phaseId']] = e['value'];
+      else if (isXml && field === 'date' && typeof e['phaseId'] === 'string') phaseDates[e['phaseId']] = e['value'] as string;
       else if (isXml && field === 'courseId' && typeof e['phaseId'] === 'string' && typeof e['value'] === 'string') {
         phaseCourse.set(e['phaseId'], e['value']);
         refresh = true;

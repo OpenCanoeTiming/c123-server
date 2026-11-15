@@ -1,5 +1,5 @@
 import { type Node, UNASSIGNED, Unit, asArray, calendarDate, classificationRow, fmtOf, isNaRace, has, int, ms, parseLayout, readDoc, splitRaceId, tx, unparseableUnit } from './common.js';
-import { type Candidates, emitCourse, emitPhase } from './phase.js';
+import { type Candidates, emitCourse, emitPhase, learnedCandidates } from './phase.js';
 import { type RowIn, buildRow, rowIsResult } from './rows.js';
 import type { CourseSlot, IngestContext, IngestElement } from './types.js';
 
@@ -144,14 +144,14 @@ export function parseXmlSnapshot(xml: string, ctx: IngestContext): IngestElement
   // dates and candidates for pairing: this snapshot first, then what the caller knows. §10 item 42: an unparseable
   // StartTime states no date here either; the diagnostic itself is raised once per Phase, in emitPhase.
   const dates = new Map<string, string | undefined>(Object.entries(ctx.phaseDates ?? {}));
-  const candidates: Candidates = new Map(dates);
+  const tokenOf = (s: Node): string => tx(s, 'DisId').trim() || splitRaceId(tx(s, 'RaceId')).token;
+  const candidates: Candidates = learnedCandidates(ctx);
   for (const s of schedule) {
     const id = tx(s, 'RaceId');
     const st = calendarDate(tx(s, 'StartTime'));
     if (st !== undefined) dates.set(id, st);
-    candidates.set(id, dates.get(id));
+    candidates.set(id, { classId: tx(s, 'ClassId').trim() || undefined, token: tokenOf(s), date: dates.get(id) });
   }
-  const tokenOf = (s: Node): string => tx(s, 'DisId').trim() || splitRaceId(tx(s, 'RaceId')).token;
 
   // §1 Class
   const crossClass = new Set<string>();

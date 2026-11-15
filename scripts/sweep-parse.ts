@@ -38,10 +38,12 @@ for (const rec of readdirSync(dir).filter((d) => statSync(join(dir, d)).isDirect
   const manifestPath = join(recDir, 'manifest.json');
   const eventDate: string | undefined = existsSync(manifestPath) ? (JSON.parse(readFileSync(manifestPath, 'utf8')) as { event?: { date?: string } }).event?.date : undefined;
   const phaseDates: Record<string, string> = {};
+  const phaseClasses: Record<string, string> = {};
+  const phaseFormats: Record<string, string> = {};
   const phaseCourse = new Map<string, string>();
   const courseSlots = new Map<string, CourseSlot[]>();
   const ctx: IngestContext = {
-    observedAt: '', zone: 'Europe/Prague', phaseDates, courses: {}, boundCourseId: undefined, eventDate, externalIdScheme: 'sweep',
+    observedAt: '', zone: 'Europe/Prague', phaseDates, phaseClasses, phaseFormats, courses: {}, boundCourseId: undefined, eventDate, externalIdScheme: 'sweep',
   };
   const rebuild = (): void => {
     const courses: Record<string, { courseId: string; slots: CourseSlot[] }> = {};
@@ -109,7 +111,9 @@ for (const rec of readdirSync(dir).filter((d) => statSync(join(dir, d)).isDirect
         if (snap !== undefined) for (const row of snap.rows) if (row.status === 'other') bump(stats.marks, 'row mark mapped to other');
         // keep the caller's context in step with what the parsers stated
         const field = e['field'];
-        if (isXml && field === 'date' && typeof e['phaseId'] === 'string') phaseDates[e['phaseId']] = e['value'] as string;
+        if (field === 'classId' && typeof e['phaseId'] === 'string' && typeof e['value'] === 'string') phaseClasses[e['phaseId']] = e['value'];
+        else if (isXml && field === 'format' && typeof e['phaseId'] === 'string' && typeof e['value'] === 'string') phaseFormats[e['phaseId']] = e['value'];
+        else if (isXml && field === 'date' && typeof e['phaseId'] === 'string') phaseDates[e['phaseId']] = e['value'] as string;
         else if (isXml && field === 'courseId' && typeof e['phaseId'] === 'string' && typeof e['value'] === 'string') { phaseCourse.set(e['phaseId'], e['value']); refresh = true; }
         else if (field === 'slots' && typeof e['courseId'] === 'string' && Array.isArray(e['value'])) {
           const have = courseSlots.get(e['courseId']);

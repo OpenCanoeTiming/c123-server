@@ -29,7 +29,6 @@ export function phaseResource(s: CoreState, phaseId: string, observedAt: string)
     p.plain.set('kind', fmt.kind);
     p.plain.set('scoringKind', fmt.scoringKind);
     p.plain.set('heats', fmt.heats);
-    p.plain.set('pair', fmt.pair === null ? null : { role: fmt.pair.role, siblingPhaseId: null, combination: fmt.pair.combination });
     s.dirtyPhases.add(p);
   }
   return p;
@@ -41,13 +40,16 @@ export function fmtFor(s: CoreState, phaseId: string): Fmt {
   return fmtOf(typeof stated === 'string' ? stated : splitRaceId(phaseId).token);
 }
 
-/** The other run of a pair: the schedule's word where it was read, else the sibling format token on the same class and round (§4.5). */
+/** The other run of a pair: the sibling the Phase's `pair` states (CONTRACTS §2.4); the id is never built or parsed for it. */
 export function siblingPhaseId(s: CoreState, phaseId: string): string | undefined {
-  const fmt = fmtFor(s, phaseId);
-  if (fmt.pair === null) return undefined;
-  const stated = s.phases.get(phaseId)?.plain.get('pair') as { siblingPhaseId?: string | null } | undefined;
-  const { classKey, rest } = splitRaceId(phaseId);
-  return stated?.siblingPhaseId ?? `${classKey}_${fmt.pair.siblings[0] ?? ''}_${rest}`;
+  const stated = s.phases.get(phaseId)?.plain.get('pair') as { siblingPhaseId?: string | null } | null | undefined;
+  return stated?.siblingPhaseId ?? undefined;
+}
+
+/** The sibling Phase's Attempt of the same bib, where a sibling is stated and the Attempt exists. */
+export function siblingAttempt(s: CoreState, phaseId: string, bib: string): AttemptState | undefined {
+  const sibling = siblingPhaseId(s, phaseId);
+  return sibling === undefined ? undefined : s.attempts.get(`${sibling}:${bib}`);
 }
 
 /** The course bound to a Phase, known only once a snapshot binds it (§4.6). */

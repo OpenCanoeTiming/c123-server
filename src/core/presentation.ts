@@ -4,7 +4,7 @@
  */
 import { r3 } from '../ingest/common.js';
 import { isNoResultMark, present, presentStatus } from './precedence.js';
-import { boundSlots, fmtFor, isInstant, siblingPhaseId } from './registry.js';
+import { boundSlots, fmtFor, isInstant, siblingAttempt } from './registry.js';
 import type { AttemptState, CoreState, Gate, Slot } from './types.js';
 
 const NOT_YET = { state: 'not-yet' } as const;
@@ -125,7 +125,7 @@ function firstRunUnavailable(s: CoreState, phaseId: string, bib: string): unknow
   if (reason === undefined || s.xmlRead) return undefined;
   const fmt = fmtFor(s, phaseId);
   if (fmt.pair?.role !== 'first') return undefined;
-  const second = s.attempts.get(`${siblingPhaseId(s, phaseId)}:${bib}`);
+  const second = siblingAttempt(s, phaseId, bib);
   if (second === undefined) return undefined;
   if (present(second.slots.get('outcome'))?.state !== 'known' && !isNoResultMark(presentStatus(second.slots.get('status'))?.value)) return undefined;
   return { state: 'unavailable', reason };

@@ -169,7 +169,9 @@ for (const [a, combination] of [['BR', 'best'], ['HT', 'best'], ['EL', 'best'], 
   def([`${a}2`], 'run', { pair: pair('second', combination, `${a}1`) });
 }
 def(['NHT2'], 'run'); // pair null until its first-run token is known (DERIVATIONS §10 item 21)
-def(['TS1', 'TS2', 'TSR', 'SP1', 'SP2'], 'run');
+def(['TSR', 'SP1', 'SP2'], 'run');
+def(['TS1'], 'run', { pair: pair('first', 'sum', 'TS2') });
+def(['TS2'], 'run', { pair: pair('second', 'sum', 'TS1') });
 def(['QF'], 'quarter-final', { progression: true });
 def(['SF', 'SFB'], 'semi-final', { progression: true });
 def(['FI', 'FIB', 'SPF', 'TSF', 'TFI'], 'final');

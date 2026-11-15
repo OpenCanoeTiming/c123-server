@@ -30,6 +30,10 @@ export interface IngestContext {
   zone?: string | undefined;
   /** phaseId -> `YYYY-MM-DD`, the Phase.date known to the caller. */
   phaseDates?: Record<string, string> | undefined;
+  /** phaseId -> `classId`, learned from a snapshot or a Results message; pairing reads it (never the RaceId). */
+  phaseClasses?: Record<string, string> | undefined;
+  /** phaseId -> format token, learned from a snapshot's `DisId`; a Phase absent here reads the token of its `RaceId` (TCP has no other). */
+  phaseFormats?: Record<string, string> | undefined;
   /** Unused by the parsers and the core; the vector harness's setting (CONFORMANCE-VECTORS §1). */
   xmlPollIntervalSeconds?: number | undefined;
   /** phaseId -> the course bound to it (slots as in CONTRACTS §2.12). */

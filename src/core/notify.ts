@@ -7,7 +7,7 @@ import { oncourseView } from './oncourse.js';
 import { presentedFinish, settled, viewAttempt } from './presentation.js';
 import { changedStandings, noteFacts, replacedStandings } from './publish.js';
 import { viewResource } from './resources.js';
-import { fmtFor, siblingPhaseId } from './registry.js';
+import { fmtFor, siblingAttempt } from './registry.js';
 import { wireWrite } from './writes.js';
 import type { AttemptState, CoreState, Diagnostic, Message, ResourceState } from './types.js';
 
@@ -95,7 +95,7 @@ export function flush(s: CoreState, xmlInUnit: boolean): void {
   // §4.5: a first run's `outcome` is `unavailable` once its second run has a result, so the sibling's change is the first run's too
   for (const a of [...s.dirtyAttempts]) {
     if (fmtFor(s, a.phaseId).pair?.role !== 'second') continue;
-    const first = s.attempts.get(`${siblingPhaseId(s, a.phaseId)}:${a.bib}`);
+    const first = siblingAttempt(s, a.phaseId, a.bib);
     if (first !== undefined) s.dirtyAttempts.add(first);
   }
   for (const a of s.dirtyAttempts) {
