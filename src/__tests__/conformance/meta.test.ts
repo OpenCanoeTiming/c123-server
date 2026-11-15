@@ -125,19 +125,15 @@ describe('expected-red ledger and modes (issue #200 rows 3, 4, 5)', () => {
     for (const id of LIVE_INGEST) expect(listed).not.toContain(id);
   });
 
-  it('expected-red after contract round C part 4 (#323): five vectors wait for the absent-XML-row removal (ADR-015 Revisions 5 and 6), two for the category standing (CONTRACTS §5 step 4)', () => {
+  it('expected-red after #365 (M2 P3a part 2): two vectors wait for the category standing (CONTRACTS §5 step 4); the five absent-XML-row-removal vectors left with #365\'s core change', () => {
     // The ratchet: ids leave as core issues land. #203 took the merge vectors, #205 the standing-assembly ones, #211 the five `check-*` workflow vectors.
     // Round C part 2 changed one vector's expected outcome by the maintainer's decision of 2026-11-11 and added three that assert the same rule;
     // the core follows in the M2 server batch (the fourth new vector, the empty table, passes today).
     // Round C part 4 changed one standing vector and added one, and moved the absent-row vectors to the removal and added one, by the maintainer's decisions of 2026-11-12.
+    // #365 (M2 P3a part 2 of 3) lands the removal in the core: the five absent-XML-row vectors leave the ledger, the two standing-age-category ones are P3c's.
     const nonMerge = serverVectors().filter((v) => !Array.isArray(v.given)).map((v) => v.id);
     expect(nonMerge.filter((id) => id.startsWith('check-')).length).toBe(5);
     expect(loadExpectedRed()).toEqual([
-      'inv2c-first-read-unknown-age-refused',
-      'retraction-xml-absent-row',
-      'retraction-xml-absent-row-guard',
-      'retraction-xml-absent-row-then-returns',
-      'attempt-removed-xml-absent-start-list-row',
       'standing-age-category-assembled',
       'standing-age-category-unplaced-listed-after',
     ]);

@@ -47,10 +47,11 @@ describe('the real vectors.test.ts in a child vitest (issue #200 rows 1, 2, 5; r
     expect(exit).toBe(0);
   }, 120_000);
 
-  it('VECTORS_STRICT=1: exactly the 108 titles again, the ledger is ignored: the seven listed ids read failed, every other passed, exit 1', () => {
-    // Strict mode shows the true state. The listed vectors assert the absent-XML-row removal (contract round C parts 2 and 4, #323), and the category standing of round C part 4, which the core does not implement yet.
+  it('VECTORS_STRICT=1: exactly the 108 titles again, the ledger is ignored: the two listed ids read failed, every other passed, exit 1', () => {
+    // Strict mode shows the true state. #365 lands the absent-XML-row removal (contract round C parts 2 and 4, #323) in the core, so only the
+    // category standing of round C part 4 (CONTRACTS §5 step 4, P3c) is still listed; the core does not implement it yet.
     const listed = new Set(loadExpectedRed().map((id) => `vector ${id}`));
-    expect(listed.size).toBe(7);
+    expect(listed.size).toBe(2);
     const { exit, results } = suite(true);
     expect(results.map((r) => r.title).sort()).toEqual([...ids].sort());
     expect(results.filter((r) => r.status !== 'passed').map((r) => r.title).sort()).toEqual([...listed].sort());
