@@ -82,6 +82,10 @@ export interface AttemptState {
   lastListedAt: number;
   /** The leave flag (DERIVATIONS §4.1): clears on re-listing. */
   left: boolean;
+  /** A results-table row of its race has named it, a start-list row included: only such an Attempt is removed (§4.12, §10 item 38 (b)). */
+  rowNamed: boolean;
+  /** The latest delivery of any `tcp` observation of it, a listing included: the whole-Attempt guard of a removal (§4.12). */
+  tcpAt?: number;
   /** The mark carried when the generation incremented (§4.12). */
   remembered?: ResultMark;
   /** A remembered mark withheld from the row last seen: the `stale-mark` diagnostic. */
@@ -224,6 +228,8 @@ export interface CoreState {
   dirtyPhases: Set<ResourceState>;
   dirtyResources: Set<{ type: 'entry' | 'class' | 'course'; resource: ResourceState }>;
   dirtyWrites: Set<WriteState>;
+  /** Attempts the unit removed (an absent XML row, §4.12): each one `attempt.deleted` at the flush. */
+  removed: AttemptState[];
   /** Phases whose Standings a unit may have changed (#205). */
   dirtyScopes: Set<string>;
   /** Ingest time of the unit in hand, for the `asOf` of the Standings it changes. */

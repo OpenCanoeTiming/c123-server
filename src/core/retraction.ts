@@ -1,11 +1,12 @@
 /**
  * What is taken back: a scope snapshot's stated absence (INV-7, DERIVATIONS §4.12) and a finish the on-course stream contradicts
- * (INV-2d). Both retain an explicit `not-yet`, with its own sequence, in place of the value: never an omission.
+ * (INV-2d). Both retain an explicit `not-yet`, with its own sequence, in place of the value: never an omission. An absent XML row
+ * admitted for the whole Attempt removes it instead (ADR-015 Revisions 6, 7).
  */
 import { choose, newerContent, present, presentStatus, isMark, isNoResultMark } from './precedence.js';
 import { finishOf } from './presentation.js';
 import { fieldSlots, retain, slotOf } from './retention.js';
-import { isInstant, isXmlOnly } from './registry.js';
+import { fmtFor, isInstant, isXmlOnly, siblingPhaseId } from './registry.js';
 import { refuse } from './counters.js';
 import { timeOf, markOf } from './generations.js';
 import { displaceOperator } from './writes.js';
@@ -93,10 +94,48 @@ export function retract(s: CoreState, a: AttemptState, source: Source, el: Eleme
 
 /**
  * INV-7's absent row: no row of a table that carries other rows carries the Attempt's bib. The one decision for such an Attempt:
- * it retracts as the TCP absent-row case, from an XML snapshot field by field under the guard (DERIVATIONS §4.12).
+ * an XML snapshot admitted for it removes it (ADR-015 Revisions 6, 7); otherwise it retracts as the TCP absent-row case, from an
+ * XML snapshot field by field under the guard (DERIVATIONS §4.12).
  */
 export function absentRow(s: CoreState, a: AttemptState, source: Source, el: Element, fields: readonly string[], seq: number): void {
-  if (hasResult(a, fields)) retract(s, a, source, el, fields, seq);
+  if (source === 'xml' && admitted(s, a)) remove(s, a, el);
+  else if (hasResult(a, fields)) retract(s, a, source, el, fields, seq);
+}
+
+/**
+ * The guard over the whole Attempt (§4.12, §10 item 38 (b), (c)): a results-table row of its race named it, `changedAfter` is later
+ * than every `tcp` observation of it, a listing included (`null` never qualifies), and it is not in the on-course set.
+ */
+function admitted(s: CoreState, a: AttemptState): boolean {
+  const age = s.rewrite?.changedAfter ?? null;
+  return a.rowNamed && !a.listed && age !== null && age > (a.tcpAt ?? -Infinity);
+}
+
+/**
+ * The removal, in the unit (ADR-015 Revision 6 rule 4): a pending write resolves `mismatched` without `confirmedValue`, the Attempt
+ * leaves every read and the Standings of its Phase, and the flush sends its one `attempt.deleted`. The Entry stays; a returning row
+ * creates a new Attempt, none of this one's result state carried (§10 item 38 (h), (i)).
+ */
+function remove(s: CoreState, a: AttemptState, el: Element): void {
+  for (const w of s.writes) {
+    if (w.attempt !== a || w.status !== 'pending') continue;
+    w.status = 'mismatched';
+    w.confirmedAt = el.observedAt;
+    s.dirtyWrites.add(w);
+  }
+  s.attempts.delete(a.id);
+  s.phases.get(a.phaseId)?.attempts?.delete(a);
+  s.dirtyAttempts.delete(a);
+  s.dirtyScopes.add(a.phaseId);
+  // §4.5: a first run's `outcome` reads its second run's result
+  const first = fmtFor(s, a.phaseId).pair?.role === 'second' ? s.attempts.get(`${siblingPhaseId(s, a.phaseId)}:${a.bib}`) : undefined;
+  if (first !== undefined) s.dirtyAttempts.add(first);
+  for (const [k, d] of s.parserDiagnostics) {
+    if (!('attemptId' in d) || d.attemptId !== a.id) continue;
+    s.parserDiagnostics.delete(k);
+    s.diagnosticsDirty = true;
+  }
+  s.removed.push(a);
 }
 
 /** Whether an absent XML row would retract anything of the Attempt now: a `tcp` result only past the guard (§4.12). */
