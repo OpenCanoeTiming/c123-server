@@ -9,7 +9,7 @@ import { applyListing, applyLeaveRule, leave, list, observeStreamOutcome, observ
 import { isMark } from './precedence.js';
 import { currentDiagnostics, flush } from './notify.js';
 import { phaseResource, attemptFor, fmtFor, resource } from './registry.js';
-import { FIRST_RUN_FIELDS, PAIR_FIELDS, SECOND_RUN_EMPTY_FIELDS, hasResult, retract } from './retraction.js';
+import { FIRST_RUN_FIELDS, PAIR_FIELDS, SECOND_RUN_EMPTY_FIELDS, absentRow, emptied, hasResult, retract } from './retraction.js';
 import { retain, fieldSlots, slotOf, tick } from './retention.js';
 import { applyRow, floorStatus, putCells, putIdentity, putStanding, rebindCells } from './rows.js';
 import { applyClassification, dirtyHandle, observeResource, refreshCourses, viewResource } from './resources.js';
@@ -17,9 +17,9 @@ import { submitWrite, wireWrite } from './writes.js';
 import { viewAttempt, viewUnknownAttempt } from './presentation.js';
 import { markOf, startGeneration } from './generations.js';
 import type { Standing } from '@opencanoetiming/c123-contract';
-import type { AttemptState, ClassificationRow, ClassificationState, CoreState, Diagnostic, Element, MergeCoreOptions, Message, Row, Source } from './types.js';
+import type { AttemptState, ClassificationRow, ClassificationState, CoreState, Diagnostic, Element, IngestDiagnostic, MergeCoreOptions, Message, Row, Source } from './types.js';
 
-export type { MergeCoreOptions } from './types.js';
+export type { IngestDiagnostic, MergeCoreOptions } from './types.js';
 
 export interface MergeCore {
   /** Merges one unit and notifies once. Returns what the core derived at it: the `oncourse-left` of the leave rule (DERIVATIONS §4.1). */
@@ -46,6 +46,8 @@ export interface MergeCore {
   notifications(): Message[];
   /** Hands over the messages so far and forgets them: a long run keeps no log (the sweep, later the WebSocket). */
   drainNotifications(): Message[];
+  /** Hands over the ingest-only diagnostics raised so far and forgets them: the admin log's (DERIVATIONS §0.5), never `diagnostics()`. */
+  drainIngestDiagnostics(): IngestDiagnostic[];
   /** The rows of a classification Phase as last admitted (DERIVATIONS §4.10), for the Standing assembly (#205). */
   classification(phaseId: string): ClassificationState | undefined;
   counters(): CoreState['counters'];
@@ -172,11 +174,15 @@ function applySnapshot(s: CoreState, el: Element, inUnit: ReadonlySet<string>): 
     s.dirtyAttempts.add(a);
   }
   clearRestated(s, source, named, inUnit);
-  if (source !== 'tcp') return; // an absent XML row, and an XML table with no rows, state nothing (INV-7)
   const fields = second ? [...FIRST_RUN_FIELDS, ...PAIR_FIELDS] : FIRST_RUN_FIELDS;
-  for (const a of phase.attempts ?? []) {
-    if (!named.has(a) && hasResult(a, fields)) retract(s, a, source, el, fields, seq);
+  if (source === 'xml') {
+    if (rows.length === 0) {
+      emptied(s, phase, fields); // an XML table with no rows retracts nothing (INV-7)
+      return;
+    }
+    phase.xmlTable = 'rows';
   }
+  for (const a of phase.attempts ?? []) if (!named.has(a)) absentRow(s, a, source, el, fields, seq);
 }
 
 const rowOfField = (el: Element, field: string): Row => {
@@ -299,7 +305,7 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
     options, counter: options.initialSeq ?? 0, epoch: 0, tcpUp: undefined, rewrite: undefined, xmlRead: false, previousTcpAt: undefined,
     attempts: new Map(), phases: new Map(), entries: new Map(), classes: new Map(), courses: new Map(), classifications: new Map(),
     listed: new Map(), oncourseAsOf: null, oncourseSent: '[[],null]', featured: null, writes: [], splitsArmed: undefined,
-    parserDiagnostics: new Map(), phaseDiagnostics: new Map(), diagnosticsSent: '[]', diagnosticsDirty: false, log: [],
+    parserDiagnostics: new Map(), phaseDiagnostics: new Map(), diagnosticsSent: '[]', diagnosticsDirty: false, log: [], ingestLog: [],
     dirtyAttempts: new Set(), dirtyPhases: new Set(), dirtyResources: new Set(), dirtyWrites: new Set(), pendingRebaseline: undefined,
     dirtyScopes: new Set(), unitAt: '', standingsSent: new Map(), standingKeys: new Map(), standingsHeld: new Map(), entryPhases: new Map(),
     counters: { generations: 0, retractions: 0, contradictions: 0, leaves: 0, refusals: {} },
@@ -355,6 +361,7 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
     retainedCell: (id) => s.writes.find((w) => w.writeId === id)?.retainedCell,
     notifications: () => s.log,
     drainNotifications: () => s.log.splice(0),
+    drainIngestDiagnostics: () => s.ingestLog.splice(0),
     classification: (phaseId) => s.classifications.get(phaseId),
     counters: () => s.counters,
   };

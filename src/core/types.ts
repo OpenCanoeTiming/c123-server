@@ -138,6 +138,15 @@ export interface ResourceState {
   pairStated?: boolean;
   /** Phase only: the attempts of this race. */
   attempts?: Set<AttemptState>;
+  /** Phase only: the race's XML table has carried a row since it was last reported emptied, or it was emptied and reported (§4.12). */
+  xmlTable?: 'rows' | 'emptied';
+}
+
+/** The core's ingest-only diagnostic (DERIVATIONS §0.5): the admin log's, never `GET /api/diagnostics` or the wire. */
+export interface IngestDiagnostic {
+  kind: 'xml-table-emptied';
+  phaseId: string;
+  count: number;
 }
 
 export interface ClassificationState {
@@ -209,6 +218,8 @@ export interface CoreState {
   diagnosticsSent: string;
   diagnosticsDirty: boolean;
   log: Message[];
+  /** Ingest-only diagnostics raised since the last drain, for the admin log. */
+  ingestLog: IngestDiagnostic[];
   dirtyAttempts: Set<AttemptState>;
   dirtyPhases: Set<ResourceState>;
   dirtyResources: Set<{ type: 'entry' | 'class' | 'course'; resource: ResourceState }>;

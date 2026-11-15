@@ -5,11 +5,11 @@
 import { choose, newerContent, present, presentStatus, isMark, isNoResultMark } from './precedence.js';
 import { finishOf } from './presentation.js';
 import { fieldSlots, retain, slotOf } from './retention.js';
-import { isInstant } from './registry.js';
+import { isInstant, isXmlOnly } from './registry.js';
 import { refuse } from './counters.js';
 import { timeOf, markOf } from './generations.js';
 import { displaceOperator } from './writes.js';
-import type { AttemptState, Contradicted, CoreState, Element, Row, Slot, Source } from './types.js';
+import type { AttemptState, Contradicted, CoreState, Element, ResourceState, Row, Slot, Source } from './types.js';
 
 export const FIRST_RUN_FIELDS = ['outcome', 'gates', 'faults', 'placement', 'underReview', 'qualified'] as const;
 export const PAIR_FIELDS = ['pairTotal', 'countingRun'] as const;
@@ -29,15 +29,20 @@ const marker = (s: CoreState, el: Element, source: Source, seq: number, value: u
 });
 
 /** INV-7's guard: an XML retraction applies to a `tcp` observation only when the snapshot's content is later than it. */
-const guardPasses = (candidate: Slot, tcp: Slot | undefined): boolean => tcp === undefined || tcp.marker === true || newerContent(candidate, tcp);
+const guardPasses = (age: number | null, tcp: Slot | undefined): boolean => tcp === undefined || tcp.marker === true || newerContent({ age } as Slot, tcp);
+
+/** Whether a retraction of `status` would take a mark or a row finish away. */
+const statusRetractable = (a: AttemptState): boolean => {
+  const shown = presentStatus(a.slots.get('status'));
+  return shown !== undefined && shown.kind === 'row' && (isMark(shown.value) || shown.value === 'finished');
+};
 
 function retractStatus(s: CoreState, a: AttemptState, source: Source, el: Element, seq: number): boolean {
   const fs = a.slots.get('status');
-  const shown = presentStatus(fs);
-  if (fs === undefined || shown === undefined || shown.kind !== 'row' || !(isMark(shown.value) || shown.value === 'finished')) return false;
+  if (fs === undefined || !statusRetractable(a)) return false;
   const m = marker(s, el, source, seq, 'not-started');
   if (source === 'xml') {
-    if (!guardPasses(m, fs.tcp)) {
+    if (!guardPasses(m.age, fs.tcp)) {
       refuse(s, 'retraction-guard');
       return false;
     }
@@ -60,15 +65,17 @@ export function retract(s: CoreState, a: AttemptState, source: Source, el: Eleme
     if (fs === undefined) continue;
     const row = choose(fs.tcp, fs.xml);
     if (row === undefined || row.marker === true) continue;
-    const m = marker(s, el, source, seq, null);
+    // an xml-only field (INV-2 rule 3) is never a tcp observation: its not-yet is the xml source's own, so the XML's next row presents
+    const side: Source = isXmlOnly(f) ? 'xml' : source;
+    const m = marker(s, el, side, seq, null);
     if (source === 'xml') {
-      if (!guardPasses(m, fs.tcp)) {
+      if (!guardPasses(m.age, fs.tcp)) {
         refuse(s, 'retraction-guard');
         continue;
       }
       delete fs.tcp;
     }
-    fs[source] = m;
+    fs[side] = m;
     delete fs.inference;
     displaceOperator(s, a, fs, f, el.observedAt);
     changed = true;
@@ -84,6 +91,38 @@ export function retract(s: CoreState, a: AttemptState, source: Source, el: Eleme
   return changed;
 }
 
+/**
+ * INV-7's absent row: no row of a table that carries other rows carries the Attempt's bib. The one decision for such an Attempt:
+ * it retracts as the TCP absent-row case, from an XML snapshot field by field under the guard (DERIVATIONS §4.12).
+ */
+export function absentRow(s: CoreState, a: AttemptState, source: Source, el: Element, fields: readonly string[], seq: number): void {
+  if (hasResult(a, fields)) retract(s, a, source, el, fields, seq);
+}
+
+/** Whether an absent XML row would retract anything of the Attempt now: a `tcp` result only past the guard (§4.12). */
+function wouldRetract(s: CoreState, a: AttemptState, fields: readonly string[]): boolean {
+  if (!hasResult(a, fields)) return false;
+  const age = s.rewrite?.changedAfter ?? null;
+  if (statusRetractable(a) && guardPasses(age, a.slots.get('status')?.tcp)) return true;
+  return fields.some((f) => {
+    const fs = a.slots.get(f);
+    const row = fs === undefined ? undefined : choose(fs.tcp, fs.xml);
+    return isResultSlot(row) && guardPasses(age, fs?.tcp);
+  });
+}
+
+/**
+ * An XML table with no rows retracts nothing (INV-7). Where the race holds a result an absent row would retract, it raises the
+ * ingest-only `xml-table-emptied` once per emptying: never for a table that has not carried a row since (§4.12).
+ */
+export function emptied(s: CoreState, phase: ResourceState, fields: readonly string[]): void {
+  if (phase.xmlTable !== 'rows') return;
+  const count = [...(phase.attempts ?? [])].filter((a) => wouldRetract(s, a, fields)).length;
+  if (count === 0) return;
+  phase.xmlTable = 'emptied';
+  s.ingestLog.push({ kind: 'xml-table-emptied', phaseId: phase.id, count });
+}
+
 /** Whether a row carries a contradicted finish: by `dtFinish` where both have one, else by run time; a mark is no finish. */
 export function carriesContradicted(a: AttemptState, row: Row): boolean {
   if (markOf(row) !== undefined) return false;
@@ -92,7 +131,6 @@ export function carriesContradicted(a: AttemptState, row: Row): boolean {
   return a.held.some((c) => (finish !== undefined && c.finishTime !== null ? finish === c.finishTime : time !== undefined && time === c.runSeconds));
 }
 
-const XML_ONLY_CONTRADICTED: ReadonlySet<string> = new Set(['countingRun']);
 const CONTRADICTED_FIELDS = ['outcome', 'placement', 'pairTotal', 'countingRun'] as const;
 
 /**
@@ -115,7 +153,7 @@ export function contradict(s: CoreState, a: AttemptState, el: Element, seq: numb
     delete fs.tcp;
     delete fs.inference;
     // an xml-only field (INV-2 rule 3) is never a tcp observation: its not-yet is the xml source's own latest observation
-    const source: Source = XML_ONLY_CONTRADICTED.has(f) ? 'xml' : 'tcp';
+    const source: Source = isXmlOnly(f) ? 'xml' : 'tcp';
     fs[source] = marker(s, el, source, seq, null);
   }
   const st = fieldSlots(a.slots, 'status');
