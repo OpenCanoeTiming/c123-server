@@ -277,18 +277,21 @@ the parser's four it reaches the admin log and never `GET /api/diagnostics`.
     `CONTRACTS.md` §2.4). For a second run it is the Phase with the same `classId` whose `format`
     is the first-run token of this one: `BR2`→`BR1`, `HT2`→`HT1`, `EL2`→`EL1`,
     `TR2`→`TR1`, `SR2`→`SR1`, `TS2`→`TS1`, `SUF`→`BR2`, `FI` and `FIB`→`SF`, `TFI`→`TSF`. For a
-    first-run token (`BR1`, `HT1`, `EL1`, `TR1`, `SR1`, `TS1`) it is the Phase the same
-    table names the other way; `BR2`, `SF` and `TSF` are only named, and keep their own `pair`.
+    first-run token (`BR1`, `HT1`, `EL1`, `TR1`, `SR1`, `TS1`) it is the second run that names
+    this Phase, the inverse of that lookup and not a lookup of its own (a default, §10 item
+    48); `BR2`, `SF` and `TSF` are only named, and keep their own `pair`.
     This mirrors upstream's own lookup: by the schedule row's `ClassId` and a fixed token table,
     never by the `RaceId` string.
-  - **The tiebreak is the day.** One match is the sibling. With several, take the one whose
-    `date` equals this Phase's. If that leaves none or more than one, `siblingPhaseId` stays
-    `null` (a default, not recorded). The rule is read from each Phase's own side. *Example,*
-    one class: a `BR1` on the 19th, a `BR1` on the 20th and a `BR2` on the 20th. The `BR2` finds
-    two first runs and names the one of the 20th. Each `BR1` finds one `BR2` and names it. With
-    the `BR2` on the 21st instead, it finds two first runs and neither on its day: `null`. With
-    a single `BR1` on the 19th and the `BR2` on the 20th, one matches: they pair across the
-    days.
+  - **The tiebreak is the day.** For a second run, one match is the sibling. With several,
+    take the one whose `date` equals this Phase's. If that leaves none or more than one,
+    `siblingPhaseId` stays `null` (a default, not recorded). A first run takes the second run
+    that names it; where several name it, the one on its day; if that leaves none or more than
+    one, `null`. *Example,* one class: a `BR1` on the 19th, a `BR1` on the 20th and a `BR2` on
+    the 20th. The `BR2` finds two first runs and names the one of the 20th, which names it
+    back. The `BR1` of the 19th is named by nothing: `null`. With the `BR2` on the 21st
+    instead, it finds two first runs and neither on its day: `null`, and so are both first
+    runs. With a single `BR1` on the 19th and the `BR2` on the 20th, one matches: they pair
+    across the days, each naming the other.
   - **No id is parsed or built.** The earlier reading, "the same class part of the id with the
     other token", fails after a class rename or a race moved to another class: the started first
     run keeps its old `RaceId` prefix, the second run's `ClassId` follows the change, and the two
@@ -661,7 +664,8 @@ withheld stale mark leaves the time presented (§4.12).
   the seven recordings.
 - **Envelope:** `source: 'tcp'`, `confidence: 'inferred'`, `provisional: true`.
 
-**Failure mode:** `not-yet` before the finish. Never `unavailable`.
+**Failure mode:** `not-yet` before the finish, and after a finish listing that yields no
+`duration` (the `running` bullet above) until a row states the outcome. Never `unavailable`.
 
 ### 4.4 `outcome` from a result row
 
@@ -1651,9 +1655,9 @@ and an item here, not a contract round (`README.md`, ground rules); each says wh
 it. Round C part 4 (maintainer, 2026-11-12) closed item 31, settled items 26, 33 and 34, added
 the live side to item 25's closure, and added item 38, the defaults inside the removal
 decision. Items 40 to 42, and item 38 (k) to (m), are defaults of 2026-11-15 from the reviews
-of M2 P3a, under the same rule. Items 43 to 47, and item 41 (c), are defaults of 2026-11-15
-from M2 P3b: the questions round C left open (#346) and the rules that package's code needed
-(#300, #318).
+of M2 P3a, under the same rule. Items 43 to 48, and item 41 (c), are defaults of 2026-11-15
+from M2 P3b: the questions round C left open (#346), the rules that package's code needed
+(#300, #318), and one from the review of its text (item 48).
 
 1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
    hardware judge terminals on their own port and raises a flag on the scoring service for about
@@ -2123,16 +2127,22 @@ from M2 P3b: the questions round C left open (#346) and the rules that package's
     leaves while staged stays `at-start` until a listing or a row (recorded: 3 such leaves in
     MX1_XT_26 and WX1_XT_26).
     (d) *A Cross time-trial athlete removed before a finish.* By (c) the Attempt stays
-    `on-course` with the clock frozen and stale, until TCP's next push of the race states the
-    mark. The XML's mark does not displace it while TCP is connected: INV-2 rule 2's exception
+    `on-course` with the clock frozen and stale, until a TCP push of the race states the mark.
+    That push is not prompt. A removal before a finish is one of rule 2's silent paths, so the
+    mark reaches TCP with another athlete's push of the race or with the rotation: for slalom's
+    marks §4.1 records a median of 20–52 s and a worst of 522 s on another athlete's push, and
+    up to about 600 s by rotation. After the last finisher of a time trial no other finish
+    follows, and only the rotation is left. The XML's mark does not displace it while TCP is
+    connected: INV-2 rule 2's exception
     reaches `not-started`, `at-start` and `left-without-finish` only. Recorded: none. Of 71
     leaves in the two recorded time trials, 68 followed a listed finish and 3 had no start.
     Giving the time trial slalom's `left-without-finish` would bring the mark at the next save.
     It would also put a status into Cross Phases that `CONTRACTS.md` §2.6 and §7.1 exclude,
     which clients would see: a round's change, not taken here.
     Gate 2 has no clause for the pairing, and none is added. The P3c recording sweep counts,
-    over the whole replays, presented `running` outcomes beside another `status`. Reopens on a
-    non-zero count, on a recording of (d), or with item 35.
+    over the whole replays, presented `running` outcomes beside another `status`, and reports
+    how long each of (c)'s three staged time-trial leaves stood `at-start` (counted here, not
+    traced). Reopens on a non-zero count, on a recording of (d), or with item 35.
 44. **Four readings in the write path** (#300 N3 to N5; #346; M2 P3b, 2026-11-15). Each is
     read from the text (E3); no recording holds a write (E4). No client duty moves.
     (a) *A same-key retry after the keys were lost.* `CONTRACTS.md` §1.5 promises that a
@@ -2206,3 +2216,21 @@ from M2 P3b: the questions round C left open (#346) and the rules that package's
     the contract package, a breaking change for nothing a client sees, since all three reasons
     render alike (`CONTRACTS.md` §1.2). Revisit once, at the 1.0 contract freeze (M6): drop
     it there if it still has no producer.
+48. **A first run's `siblingPhaseId`** (review of PR #375, CQ2; M2 P3b, 2026-11-15). The
+    maintainer's pairing decision (2026-11-11, #287) is made from the second run's side: a
+    second run's first run is the Phase with its class and the paired token, the same day
+    breaking a tie. Read "the other way" as a lookup of its own, a first run could name a
+    second run that names another first run: with a `BR1` on the 19th, a `BR1` on the 20th and
+    a `BR2` on the 20th, the `BR1` of the 19th finds one `BR2` and would name it. Default: a
+    first run's sibling is the inverse of the second runs' lookup. It names the second run
+    that names it; where several name it, the one on its day; where that leaves none or more
+    than one, `null` (§2.1; `CONTRACTS.md` §2.4). A first run's sibling therefore always names
+    it back, and a client that follows the pointer from a first run lands on its pair. The
+    second run's side is the decision's and does not move, so no `pair` standing moves. One
+    shape stays one-way: two second runs that both name one first run, which names only the
+    one on its day. A single pointer cannot hold both. Nothing recorded tells the two
+    readings apart (E2, the last snapshot of each recording, 2026-11-15): in the six slalom
+    files every paired class has two first and two second runs, one of each per day, so the
+    day pairs them and each names the other; cp3-cross has no pair. No client duty moves:
+    `siblingPhaseId` is `null` wherever no pair is stated. Reopens on a recording where a
+    class's first and second runs are not one of each per day.

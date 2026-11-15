@@ -381,12 +381,14 @@ M2 P3b (2026-11-15; `DECISIONS/LOG.md`) took defaults on the questions round C h
 on the write and leave rules its code needed. It changed cited sections and moved no obligation
 above:
 - a same-key retry that arrives after the server lost its keys across a restart (a failed or
-  invalid store) is answered as a new request, `202` or a refusal; a client handles it as the
-  first response it already handles (CONTRACTS §1.5);
+  invalid store) is answered as a new request: `202` for a write, `201` for a flag, or a
+  refusal; a client handles it as the first response it already handles (CONTRACTS §1.5);
 - no penalty write is refused for a missing run generation; the refusals a client handles are
   §7.3's, unchanged (CONTRACTS §7.3);
 - a Kayak Cross time-trial athlete removed before a finish stays `on-course` with the last
-  `running` value until the mark arrives; a client freezes that clock as stale by its existing
-  duty (CONTRACTS §2.6);
+  `running` value until the mark arrives, which can take minutes (another athlete's push, or
+  the rotation); a client freezes that clock as stale by its existing duty (CONTRACTS §2.6);
+- a first run's `pair.siblingPhaseId` names only a second run that names it back, and is `null`
+  otherwise; a client takes structure from `Phase.pair` as before (CONTRACTS §2.4);
 - `xml-table-emptied` is raised under the content-age guard; it stays in the admin log and
   reaches no client (CONTRACTS §4; ADR-015).

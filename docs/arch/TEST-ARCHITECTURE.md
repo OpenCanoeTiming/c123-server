@@ -344,7 +344,7 @@ the step index, the Attempt, the field and the property number.
    and, for the stream's own `running` outcome alone, an `oncourse-left` or `oncourse-empty`
    covering the Attempt (slalom only: a Kayak Cross leave withdraws nothing, `DERIVATIONS.md`
    §10 item 35), a listing of it with `dtStart` empty, or a listing of it with a `dtFinish` that
-   yields no `duration` (an empty `Time`, or no `Gates`) — the stream withdrawing what it alone stated (`DERIVATIONS.md` §4.3, §4.1,
+   yields no `duration` (an empty `Time`, or a slalom listing with no `Gates`) — the stream withdrawing what it alone stated (`DERIVATIONS.md` §4.3, §4.1,
    §10 item 43; `ADR-015` Revision 4), `status` as §4.1 gives it at that element (the leave's
    `left-without-finish` or `not-started`, a table `finished` or mark standing; the listing's
    `at-start` or `finished`), every other field unchanged.
