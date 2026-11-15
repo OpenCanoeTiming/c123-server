@@ -106,17 +106,17 @@ describe('#287 row 12: the core reads the stated sibling only (CONTRACTS §2.4, 
       return (m!['standings'] as Std[]).map((x) => x.standingKey);
     };
     const rebase = (t: number, phaseId: string): Unit => table(t, phaseId, 'xml', [el({ ingestSeq: 0, event: 'rebaseline', observedAt: at(t), scope: { kind: 'phase', phaseId } })]);
-    const stream = (firstSibling: string | null, secondId: string, secondClass: string): ReturnType<typeof coreWith> =>
+    const stream = (firstSibling: string | null, secondId: string, secondClass: string, secondSibling: string | null = null): ReturnType<typeof coreWith> =>
       coreWith([
         describe_(1, { id: 'K1M_BR1_19', cls: 'K1M', format: 'BR1', role: 'first', sibling: firstSibling }),
-        describe_(2, { id: secondId, cls: secondClass, format: 'BR2', role: 'second', sibling: null }),
+        describe_(2, { id: secondId, cls: secondClass, format: 'BR2', role: 'second', sibling: secondSibling }),
         table(10, secondId, 'tcp'),
         table(11, 'K1M_BR1_19', 'tcp'),
         rebase(30, 'K1M_BR1_19'),
       ], { classIdsFromIds: false });
 
-    it('control: a first run stating its second run as sibling: the re-baseline re-sends both Phases\' standings', () => {
-      const keys = replacedKeys(stream('K1M_BR2_19', 'K1M_BR2_19', 'K1M'));
+    it('control (item 48: the second run names the first run, so the first run\'s derived sibling is that second run): the re-baseline re-sends both Phases\' standings', () => {
+      const keys = replacedKeys(stream('K1M_BR2_19', 'K1M_BR2_19', 'K1M', 'K1M_BR1_19'));
       expect(keys).toContain('phase:K1M_BR1_19/all');
       expect(keys).toContain('phase:K1M_BR2_19/all');
     });
@@ -189,6 +189,21 @@ describe('#287 a first run\'s sibling is derived in the core: the inverse of the
     ], { classIdsFromIds: false });
     expect(sibling(c, 'K1M_BR2_20')).toBe('K1M_BR1_19'); // precondition: both second runs state the one first run
     expect(sibling(c, 'K1M_BR1_19')).toBe('K1M_BR2_19');
+  });
+
+  it.each([
+    ['none on its day (BR1 19th; BR2s on the 20th and 21st)', [['K1M_BR2_20', '2026-09-20'], ['K1M_BR2_21', '2026-09-21']] as Array<[string, string]>],
+    ['more than one on its day (two BR2 on the 19th)', [['K1M_BR2_19', '2026-09-19'], ['K1M_BR2_19B', '2026-09-19']] as Array<[string, string]>],
+    ['no date known for the second runs', [] as Array<[string, string]>],
+  ])('(d) item 48 tie: several second runs name one first run and %s: the first run presents null', (_n, days) => {
+    const seconds = days.length > 0 ? days.map(([id]) => id) : ['K1M_BR2_20', 'K1M_BR2_21'];
+    const c = coreWith([
+      describe_(1, R('K1M_BR1_19', 'BR1', 'first', null)),
+      ...seconds.map((id, i) => describe_(2 + i, R(id, 'BR2', 'second', 'K1M_BR1_19'))),
+      ...(days.length > 0 ? [dated(5, ['K1M_BR1_19', '2026-09-19'], ...days)] : []),
+    ], { classIdsFromIds: false });
+    for (const id of seconds) expect(sibling(c, id), `precondition: ${id} names the first run`).toBe('K1M_BR1_19');
+    expect(sibling(c, 'K1M_BR1_19')).toBeNull();
   });
 
   it('(c) a BR1 whose stated sibling names a BR2 that does not name it back presents null', () => {
