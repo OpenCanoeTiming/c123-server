@@ -32,8 +32,13 @@ const attemptIds = async (env: Env): Promise<string[]> => (await get(env, `/api/
 async function closedOdp(): Promise<{ env: Env; run: number }> {
   const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day });
   for (const u of ODP.units()) await feed(env, u);
+  // ODP.units() ends with bib 56 still listed (no TCP message after its last listing ever applies the leave
+  // rule, F1): an empty on-course message closes it, as startup-store.test.ts's prime() does, so the removal
+  // below is genuinely admitted (ADR-015 Revision 6 rule 2: an Attempt in the on-course set is never removed).
+  await feed(env, ODP.emptyAt(env.clock.now() + 1000));
   const a = (await get(env, `/api/phases/${ODP.phaseId}/attempts`)).body.attempts.find((x: J) => x.attemptId === ODP.attemptId);
   expect(a, 'precondition: bib 56 is known before the removal').toBeDefined();
+  expect((await get(env, '/api/oncourse')).body.attempts.map((x: J) => x.attemptId), 'precondition: off the on-course set').not.toContain(ODP.attemptId);
   return { env, run: a.run.value as number };
 }
 
@@ -102,9 +107,12 @@ describe('#365 row 9: attempt.deleted on /ws; REST stops, then resumes serving t
     // a fresh process, the same durable filesystem: the checks file is read back on load.
     const env2 = await boot({ startAt: ODP.startAt, eventDate: ODP.day, fs: env.fs, clock: virtualClock(removeAt + 600_000) });
     try {
-      // the freshly booted process has not yet read any xml naming bib 56 in this lifetime: still hidden -- the check
-      // survived in the store, not in a (gone) Attempt that no read has recreated yet.
-      expect((await checksOf(env2)).checks, 'hidden immediately after the restart, before any row names it again').toEqual([]);
+      // the freshly booted process holds no Phase C1M_BR2_18 at all yet (no read has named it in this
+      // lifetime, F2): GET .../checks is 404 phase-not-found, the existing contract for an unobserved Phase
+      // (messages.test.ts), not an empty list -- still "not served", in a different, earlier way.
+      const stillGone = await get(env2, `/api/phases/${ODP.phaseId}/checks`);
+      expect(stillGone.status, 'hidden immediately after the restart, before any row names the Phase again').toBe(404);
+      expect(stillGone.body.error.code).toBe('phase-not-found');
 
       await feedXml(env2, returnedXml(removeAt + 1_200_000));
       const checksBack = await checksOf(env2);
