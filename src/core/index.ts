@@ -141,6 +141,11 @@ function rebaseline(s: CoreState, el: Element): void {
   s.pendingRebaseline = scope;
 }
 
+/** A `tcp` observation of the Attempt, by its delivery (§4.12: the guard of a removal reads the latest). */
+const delivered = (a: AttemptState, el: Element): void => {
+  a.tcpAt = Math.max(a.tcpAt ?? -Infinity, Date.parse(el.observedAt));
+};
+
 const isBlank = (row: Row): boolean =>
   !('outcome' in row) && markOf(row) === undefined && row['status'] !== 'finished' && (row['placement'] === null || row['placement'] === undefined) &&
   !('underReview' in row) && !('finishTime' in row) && row['untimed'] !== true;
@@ -159,6 +164,8 @@ function applySnapshot(s: CoreState, el: Element, inUnit: ReadonlySet<string>): 
   for (const row of rows) {
     const a = attemptFor(s, `${phaseId}:${String(row['bib'])}`, el.observedAt, source);
     named.add(a);
+    a.rowNamed = true;
+    if (source === 'tcp') delivered(a, el);
     rebindCells(s, a);
     a.splitsUnarmed = s.splitsArmed === false;
     if (second && (row['timeEmpty'] === true || isBlank(row))) {
@@ -207,7 +214,9 @@ function observeAttempt(s: CoreState, a: AttemptState, el: Element, field: strin
     submitWrite(s, a, el, field, seq);
     return;
   }
+  if (source === 'tcp') delivered(a, el);
   if (el['kind'] !== 'inference') {
+    a.rowNamed = true;
     applyRow(s, a, source, el, rowOfField(el, field), seq);
     return;
   }
@@ -306,7 +315,7 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
     attempts: new Map(), phases: new Map(), entries: new Map(), classes: new Map(), courses: new Map(), classifications: new Map(),
     listed: new Map(), oncourseAsOf: null, oncourseSent: '[[],null]', featured: null, writes: [], splitsArmed: undefined,
     parserDiagnostics: new Map(), phaseDiagnostics: new Map(), diagnosticsSent: '[]', diagnosticsDirty: false, log: [], ingestLog: [],
-    dirtyAttempts: new Set(), dirtyPhases: new Set(), dirtyResources: new Set(), dirtyWrites: new Set(), pendingRebaseline: undefined,
+    dirtyAttempts: new Set(), dirtyPhases: new Set(), dirtyResources: new Set(), dirtyWrites: new Set(), removed: [], pendingRebaseline: undefined,
     dirtyScopes: new Set(), unitAt: '', standingsSent: new Map(), standingKeys: new Map(), standingsHeld: new Map(), entryPhases: new Map(),
     counters: { generations: 0, retractions: 0, contradictions: 0, leaves: 0, refusals: {} },
   };

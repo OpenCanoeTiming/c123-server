@@ -111,6 +111,11 @@ export function flush(s: CoreState, xmlInUnit: boolean): void {
     const p = s.phases.get(a.phaseId);
     if (p !== undefined) phases.add(p);
   }
+  for (const a of s.removed) {
+    if (a.diagnostics.length > 0) s.diagnosticsDirty = true;
+    const p = s.phases.get(a.phaseId);
+    if (a.finish !== undefined && p !== undefined) phases.add(p);
+  }
   for (const p of phases) {
     duplicateFinishes(s, p);
     s.diagnosticsDirty = true;
@@ -137,6 +142,17 @@ export function flush(s: CoreState, xmlInUnit: boolean): void {
     if (Object.keys(fields).length > 0) emit(s, { type: `${type}.updated`, [type === 'entry' ? 'entryId' : 'classId']: resource.id, fields });
   }
   s.dirtyResources.clear();
+
+  // §7.2: a removed Attempt's resolved write precedes its `attempt.deleted`, and the Standings that held it follow
+  for (const a of s.removed) {
+    for (const w of s.dirtyWrites) {
+      if (w.attempt !== a) continue;
+      emit(s, { type: 'write.updated', write: wireWrite(w) });
+      s.dirtyWrites.delete(w);
+    }
+    emit(s, { type: 'attempt.deleted', attemptId: a.id });
+  }
+  s.removed = [];
 
   if (s.pendingRebaseline !== undefined) {
     if (xmlInUnit) flushRebaseline(s);

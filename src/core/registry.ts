@@ -62,7 +62,7 @@ export function boundSlots(s: CoreState, phaseId: string): CourseSlot[] | undefi
 const newAttempt = (id: string, phaseId: string, bib: string, observedAt: string, source: Source): AttemptState => ({
   id, phaseId, bib, slots: new Map(),
   gen: { n: 1, recorded: false, markAtStart: [], correcting: false, needsAttribution: false, completed: false, started: false, restated: new Set(), firstEnvelope: { observedAt, source } },
-  listed: false, lastListedAt: 0, left: false, held: [], pending: [], history: {}, cells: {}, carried: new Set(), untimed: false,
+  listed: false, lastListedAt: 0, left: false, rowNamed: false, held: [], pending: [], history: {}, cells: {}, carried: new Set(), untimed: false,
   created: false, sent: new Map(), force: new Set(), diagnostics: [],
 });
 

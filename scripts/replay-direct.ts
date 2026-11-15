@@ -119,6 +119,7 @@ function rehash(deltas: readonly Record<string, unknown>[]): string {
   for (const d of deltas) {
     switch (d['type']) {
       case 'attempt.updated': setPart(`a|${String(d['attemptId'])}`, core.presented(String(d['attemptId']))); break;
+      case 'attempt.deleted': setPart(`a|${String(d['attemptId'])}`, undefined); break;
       case 'entry.updated': setPart(`e|${String(d['entryId'])}`, core.entry(String(d['entryId']))); break;
       case 'standing.updated': setPart(`s|${String((d['standing'] as { standingKey: string }).standingKey)}`, d['standing']); break;
       case 'scope.replaced': {
