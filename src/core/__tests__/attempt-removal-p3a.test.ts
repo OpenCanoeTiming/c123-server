@@ -444,16 +444,21 @@ describe('DERIVATIONS §10 item 38 (i) (#370 review note d)', () => {
     c.applyUnit([rewrite(5, T('10:01:30.000'), T('10:01:00.000')), push(6, 'xml', P, 'results', [{ bib: '9', outcome: dur(84), placement: { rank: 1, order: 1 }, judgingComplete: true }], T('10:01:30.000'))]);
     expect(c.attempts()).not.toContain(A);
 
+    // review re-review N1: the returning row restates the SAME finish (80) the contradiction was about, not a
+    // different one. INV-2d holds a row back only while it carries the contradicted finish (by its time); a
+    // different finish would present regardless of whether a stale record lingered, leaving a carried-over
+    // record untested. Presenting 80 here is the pin: a bogus surviving contradiction would hold this row back
+    // (`outcome` would stay not-yet, or retained-unpresented), not merely present a different value.
     c.applyUnit([
       rewrite(7, T('10:02:30.000'), T('10:02:00.000')),
       push(8, 'xml', P, 'results', [
         { bib: '9', outcome: dur(84), placement: { rank: 1, order: 1 }, judgingComplete: true },
-        { bib: '11', outcome: dur(70), placement: { rank: 1, order: 1 }, judgingComplete: true },
+        { bib: '11', outcome: dur(80), placement: { rank: 1, order: 1 }, judgingComplete: true },
       ], T('10:02:30.000')),
     ]);
     expect(c.attempts()).toContain(A);
     expect(c.diagnostics().filter((d) => (d as { kind: string }).kind === 'contradicted-finish' && (d as { attemptId: string }).attemptId === A), 'no trace of the removed one\'s contradiction').toEqual([]);
-    expect(c.presented(A)['outcome']).toMatchObject({ value: { totalSeconds: 70 } });
+    expect(c.presented(A)['outcome'], 'presented at once: a lingering record would have held this row back instead').toMatchObject({ value: { totalSeconds: 80 } });
     expect(c.presented(B)['outcome']).toMatchObject({ value: { totalSeconds: 84 } }); // untouched throughout
   });
 
