@@ -241,11 +241,16 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   }
   const withStatus = (s: ChecksStore): J[] => s.checksWithStatus(presentedFor(s.list().checks.map((c) => c.attemptId))) as unknown as J[];
   if (store !== undefined) seedCheckStatuses(store);
+  /** §2.10: the checks and flags the store holds stay there; only those of an Attempt that exists are served or pushed. */
+  const ofExisting = <T extends { attemptId: string }>(items: T[]): T[] => {
+    const live = new Set(core.attempts());
+    return items.filter((c) => live.has(c.attemptId));
+  };
   /** §7.2: `check.updated` for every check whose derived `status` differs from the one last pushed. */
   function checkStatusChanges(): J[] {
     if (store === undefined) return [];
     const out: J[] = [];
-    for (const c of withStatus(store)) {
+    for (const c of ofExisting(withStatus(store) as (J & { attemptId: string })[])) {
       const k = keyOf(c as { attemptId: string; run: number; gate: number });
       if (checkStatuses.get(k) === c['status']) continue;
       checkStatuses.set(k, c['status'] as string);
@@ -319,13 +324,18 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     await adoptPending();
   }
 
-  /** §2.9: a WriteRequest and the optimistic value it carries are one step: `write.updated` goes out right behind the `attempt.updated` of its Attempt. */
+  /**
+   * §2.9: a WriteRequest and the optimistic value it carries are one step: `write.updated` goes out right behind the `attempt.updated` of
+   * its Attempt; a removed Attempt's goes right before its `attempt.deleted` (§7.2).
+   */
   function writesBesideAttempts(wire: J[]): J[] {
     const out = wire.filter((m) => m['type'] !== 'write.updated');
     for (const w of wire.filter((m) => m['type'] === 'write.updated')) {
       const t = (w['write'] as { target: { phaseId: string; bib: string } }).target;
-      const at = out.map((m) => m['type'] === 'attempt.updated' && m['attemptId'] === `${t.phaseId}:${t.bib}`).lastIndexOf(true);
-      out.splice(at < 0 ? out.length : at + 1, 0, w);
+      const id = `${t.phaseId}:${t.bib}`;
+      const at = out.map((m) => m['type'] === 'attempt.updated' && m['attemptId'] === id).lastIndexOf(true);
+      const gone = out.findIndex((m) => m['type'] === 'attempt.deleted' && m['attemptId'] === id);
+      out.splice(at >= 0 ? at + 1 : gone >= 0 ? gone : out.length, 0, w);
     }
     return out;
   }
@@ -663,7 +673,10 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     checksOf: (phaseId) => {
       if (store === undefined) return { checks: [], flags: [] };
       const mine = (id: string): boolean => phaseOfAttempt(id) === phaseId;
-      return { checks: withStatus(store).filter((c) => mine(c['attemptId'] as string)), flags: store.list().flags.filter((f) => mine(f.attemptId)) as unknown as J[] };
+      return {
+        checks: ofExisting(withStatus(store) as (J & { attemptId: string })[]).filter((c) => mine(c.attemptId)),
+        flags: ofExisting(store.list().flags).filter((f) => mine(f.attemptId)) as unknown as J[],
+      };
     },
     rebaseline,
     penalty,
