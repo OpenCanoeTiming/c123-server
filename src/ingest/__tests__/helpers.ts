@@ -117,13 +117,16 @@ export function statusOf(els: GivenElement[], phaseId: string, bib: string): unk
   return (els as El[]).find((e) => e.field === 'status' && e.attemptId === `${phaseId}:${bib}`)?.value;
 }
 /**
- * Event observation (ASSUMED SHAPE, #283: `types.ts` lists `{ event }` among the element shapes but does not fix its
- * fields). Assumed `{ event: { field, value, source, observedAt } }` — the `field`/`value`/`source`/`observedAt`
- * convention every other observation uses (`obsOf`), with the top-level `event` key standing in for an id key since
- * the Event has no per-call address. If the implementation differs, only this helper changes.
+ * Event observation (ASSUMED SHAPE, #283/#368 N1: `types.ts` lists an Event fact among the element shapes but does
+ * not fix its key or fields). Assumed `{ eventFact: { field, value, source, observedAt } }` — the
+ * `field`/`value`/`source`/`observedAt` convention every other observation uses (`obsOf`), with the top-level
+ * `eventFact` key standing in for an id key since the Event has no per-call address. NOT `event`: that key already
+ * names the string-valued connection/operator signals CONFORMANCE-VECTORS §1 ("Connection and operator events")
+ * dispatches (`tcp-connected`, `xml-rewrite-detected`, ...), a closed set finding #368 N1 says an object-valued
+ * `event` fact must not join. If the implementation differs, only this helper changes.
  */
 export function eventObsOf(els: GivenElement[], field: string): El | undefined {
-  return (els as El[]).map((e) => e.event).find((ev) => ev && ev.field === field);
+  return (els as El[]).map((e) => e.eventFact).find((ev) => ev && ev.field === field);
 }
 /** Replace a Results row's attribute inside the one-row fixture (synthetic variant of the recorded row). */
 export const withAttr = (msg: string, attr: string, from: string, to: string): string => {
