@@ -180,14 +180,27 @@ describe('#373 row 5, #368 N2: after a change, the pushed Event equals the hydra
 });
 
 describe('#373 row 7, #368 N3: order of applyEventFacts and core.applyUnit within one unit', () => {
-  it('today\'s own event.changed precedes every other message of the same unit (the order N3 flags: applyEventFacts runs, and pushes, before core.applyUnit)', async () => {
+  it('today\'s own event.changed precedes every other message of the same unit on the wire (NOT a pin of the internal apply order -- see the comment below, review of PR #374 O1)', async () => {
     // N3 (issue #368): "applyEventFacts runs before core.applyUnit. If applyUnit throws (its
     // programming-error guards), the presented Event has already changed and no event.changed was
-    // sent. Not reachable from upstream data." There is no seam in OnsiteOptions to make the core
-    // throw without touching src/core (out of scope for tests), so this pins the order itself,
-    // the test plan's own alternative ("state in the test which order the code guarantees"): a
-    // unit that changes the Event AND ordinary phase/class/entry/attempt facts sends event.changed
-    // first, before anything core.applyUnit produces.
+    // sent. Not reachable from upstream data." Row 7 allows pinning either the throw case or,
+    // failing that, "state in the test which order the code guarantees".
+    //
+    // Checked for a public seam before writing this (review of PR #374, O1): the one documented
+    // programming-error guard (CONFORMANCE-VECTORS §1, "absence of changedAfter as a key is a
+    // programming error") is never reachable through the on-site harness's public surface --
+    // `createXmlReader` always stamps `changedAfter` on every xml-rewrite-detected event before
+    // `applyUnit` ever sees it, and there is no other public path (REST, TCP or XML text) to hand
+    // `core.applyUnit` a malformed element directly. So the throw case cannot be exercised from
+    // outside `src/core`/`src/onsite` (out of scope for tests), and this file cannot pin it.
+    //
+    // What follows is NOT a pin of the apply order N3 is about. It only shows that event.changed
+    // is queued ahead of this unit's other messages on the wire, which the review of PR #374 (O1)
+    // points out holds whichever order the Event is actually assigned in relative to
+    // `core.applyUnit` (today: before; after the fix: after) -- `processUnit` could push
+    // event.changed first either way. Record this explicitly: the real order guarantee (assign
+    // the Event only after `applyUnit` returns, so a throw there leaves the presented Event and
+    // `event.changed` in step) is a code-level guarantee with no observable seam from here.
     const env = await bootOdp();
     const ws = await openWs(env);
     await ws.barrier();
