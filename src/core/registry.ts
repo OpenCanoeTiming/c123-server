@@ -46,8 +46,8 @@ const statedPair = (r: ResourceState | undefined): StatedPair => r?.plain.get('p
 /**
  * The other run of a pair (CONTRACTS §2.4); the id is never built or parsed for it. One rule, by the Phase's run role (`fmtFor`):
  *   - a second run: the sibling its `pair` states;
- *   - a first run: derived, the second run of the same `classId` that names it back (DERIVATIONS §10 items 48, 49); held by
- *     `deriveFirstRunSiblings` for a described Phase, derived here for one the core has not created (no class, so none);
+ *   - a first run: derived, the second run that names it back, unless both classIds are stated and differ (DERIVATIONS §10 items 48, 49); held by
+ *     `deriveFirstRunSiblings` for a described Phase, derived here for one the core has not created;
  *   - a single run: none.
  */
 export function siblingPhaseId(s: CoreState, phaseId: string): string | undefined {
@@ -60,8 +60,8 @@ export function siblingPhaseId(s: CoreState, phaseId: string): string | undefine
 }
 
 /**
- * Each Phase named by a second run's stated pair, with the second runs naming it. `sameClass`: only while both Phases' current stated
- * `classId` are equal (item 49 b; either unknown is not equal). Without it, every second run whose pair names the Phase (§7.2 scopes).
+ * Each Phase named by a second run's stated pair, with the second runs naming it. `sameClass`: a second run stops naming a first run
+ * only when both Phases' current `classId` are stated and differ (item 49 b). Without it, every second run whose pair names the Phase (§7.2 scopes).
  */
 export function namingSecondRuns(s: CoreState, sameClass: boolean): Map<string, string[]> {
   const naming = new Map<string, string[]>();
@@ -70,7 +70,8 @@ export function namingSecondRuns(s: CoreState, sameClass: boolean): Map<string, 
     if (p?.role !== 'second' || typeof p.siblingPhaseId !== 'string') continue;
     if (sameClass) {
       const cls = r.plain.get('classId');
-      if (typeof cls !== 'string' || s.phases.get(p.siblingPhaseId)?.plain.get('classId') !== cls) continue;
+      const firstCls = s.phases.get(p.siblingPhaseId)?.plain.get('classId');
+      if (typeof cls === 'string' && typeof firstCls === 'string' && cls !== firstCls) continue;
     }
     const list = naming.get(p.siblingPhaseId);
     if (list === undefined) naming.set(p.siblingPhaseId, [id]);
