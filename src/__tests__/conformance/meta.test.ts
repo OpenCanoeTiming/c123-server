@@ -27,7 +27,7 @@ const LIVE_INGEST = [
 ];
 
 describe('vector count and ids (issue #200 rows 1, 2)', () => {
-  it('vector count and ids: the JSON, CONFORMANCE-VECTORS §1 and the server set agree (114 total, 108 server)', () => {
+  it('vector count and ids: the JSON, CONFORMANCE-VECTORS §1 and the server set agree (117 total, 111 server)', () => {
     const all = loadVectors();
     const doc = readFileSync(resolve(root, 'docs/arch/CONFORMANCE-VECTORS.md'), 'utf8');
     const total = /\*\*(\d+) vectors:/.exec(doc);
@@ -36,7 +36,7 @@ describe('vector count and ids (issue #200 rows 1, 2)', () => {
     expect(server, 'the document states the server count').not.toBeNull();
     expect(all.length).toBe(Number(total![1]));
     expect(serverVectors(all).length).toBe(Number(server![1]));
-    expect(serverVectors(all).length).toBe(108);
+    expect(serverVectors(all).length).toBe(111);
     expect(new Set(all.map((v) => v.id)).size).toBe(all.length);
   });
 
@@ -54,8 +54,8 @@ describe('vector count and ids (issue #200 rows 1, 2)', () => {
     const names: string[] = [];
     const collect: ItLike = Object.assign((name: string) => void names.push(name), { fails: (name: string) => void names.push(name) });
     registerVectorTests({ vectors: serverVectors(), port: corePort, expectedRed: loadExpectedRed(), strict: false, it: collect });
-    expect(names.length).toBe(108);
-    expect(new Set(names).size).toBe(108);
+    expect(names.length).toBe(111);
+    expect(new Set(names).size).toBe(111);
     expect(new Set(names)).toEqual(new Set(loadVectors().filter((v) => v.invariant !== 'live-ingest').map((v) => `vector ${v.id}`)));
     for (const id of LIVE_INGEST) expect(names).not.toContain(`vector ${id}`);
   });
@@ -133,9 +133,13 @@ describe('expected-red ledger and modes (issue #200 rows 3, 4, 5)', () => {
     // #365 (M2 P3a part 2 of 3) lands the removal in the core: the five absent-XML-row vectors leave the ledger, the two standing-age-category ones are P3c's.
     const nonMerge = serverVectors().filter((v) => !Array.isArray(v.given)).map((v) => v.id);
     expect(nonMerge.filter((id) => id.startsWith('check-')).length).toBe(5);
+    // M2 P3c (maintainer, 2026-11-16): a Kayak Cross time-trial leave is slalom's; three vectors wait for the core change (src/core/oncourse.ts).
     expect(loadExpectedRed()).toEqual([
       'standing-age-category-assembled',
       'standing-age-category-unplaced-listed-after',
+      'cross-time-trial-left-without-finish',
+      'cross-time-trial-left-without-finish-then-mark-from-xml',
+      'cross-time-trial-unstaged-leave-returns-to-not-started',
     ]);
   });
 

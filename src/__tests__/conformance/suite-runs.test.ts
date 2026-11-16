@@ -39,19 +39,19 @@ describe('the real vectors.test.ts in a child vitest (issue #200 rows 1, 2, 5; r
   const ids = serverVectors().map((v) => `vector ${v.id}`);
   const suite = (strict: boolean) => child(resolve(here, 'fixtures/suite-vitest.config.ts'), root, strict);
 
-  it('normal run: exactly the 108 server vectors, each one reads passed, exit 0', () => {
+  it('normal run: exactly the 111 server vectors, each one reads passed, exit 0', () => {
     const { exit, results } = suite(false);
     expect(results.map((r) => r.title).sort()).toEqual([...ids].sort());
-    expect(results.length).toBe(108);
+    expect(results.length).toBe(111);
     expect(results.filter((r) => r.status !== 'passed').map((r) => r.title)).toEqual([]);
     expect(exit).toBe(0);
   }, 120_000);
 
-  it('VECTORS_STRICT=1: exactly the 108 titles again, the ledger is ignored: the two listed ids read failed, every other passed, exit 1', () => {
+  it('VECTORS_STRICT=1: exactly the 111 titles again, the ledger is ignored: the five listed ids read failed, every other passed, exit 1', () => {
     // Strict mode shows the true state. #365 lands the absent-XML-row removal (contract round C parts 2 and 4, #323) in the core, so only the
     // category standing of round C part 4 (CONTRACTS §5 step 4, P3c) is still listed; the core does not implement it yet.
     const listed = new Set(loadExpectedRed().map((id) => `vector ${id}`));
-    expect(listed.size).toBe(2);
+    expect(listed.size).toBe(5);
     const { exit, results } = suite(true);
     expect(results.map((r) => r.title).sort()).toEqual([...ids].sort());
     expect(results.filter((r) => r.status !== 'passed').map((r) => r.title).sort()).toEqual([...listed].sort());

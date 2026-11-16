@@ -10258,6 +10258,228 @@
         },
         "attempts": []
       }
+    },
+    {
+      "id": "cross-time-trial-left-without-finish",
+      "invariant": "left-without-finish",
+      "description": "A Kayak Cross time-trial athlete who leaves the on-course list after a start and with no finish becomes left-without-finish, as in slalom; the stream's running outcome is withdrawn with the listing and no reason is inferred (maintainer, 2026-11-16; CONTRACTS §2.6, §7.1). A Cross heat keeps on-course (item 35).",
+      "context": {
+        "discipline": "cross",
+        "attemptId": "MX1_XT_26:48"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "attemptId": "MX1_XT_26:48",
+          "field": "onCourse",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-04-26T08:05:10.000Z",
+          "value": {
+            "dtStart": "2026-04-26T08:05:01.120Z",
+            "dtFinish": null
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 2,
+          "attemptId": "MX1_XT_26:48",
+          "field": "status",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-04-26T08:05:10.000Z",
+          "value": "on-course",
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 3,
+          "attemptId": "MX1_XT_26:48",
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-04-26T08:05:10.000Z",
+          "value": {
+            "kind": "running",
+            "elapsedSeconds": 8.9,
+            "penaltySeconds": 0
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 4,
+          "event": "oncourse-left",
+          "observedAt": "2026-04-26T08:05:30.000Z",
+          "attemptId": "MX1_XT_26:48"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 2,
+          "expect": {
+            "status": {
+              "state": "known",
+              "value": "on-course"
+            },
+            "outcome": {
+              "state": "known",
+              "value": {
+                "kind": "running"
+              }
+            },
+            "oncourse": [
+              "MX1_XT_26:48"
+            ]
+          }
+        }
+      ],
+      "expect": {
+        "status": {
+          "state": "known",
+          "value": "left-without-finish",
+          "source": "tcp"
+        },
+        "outcome": {
+          "state": "not-yet"
+        },
+        "oncourse": []
+      }
+    },
+    {
+      "id": "cross-time-trial-left-without-finish-then-mark-from-xml",
+      "invariant": "INV-2 rule 2 exception",
+      "description": "After a Kayak Cross time-trial athlete left without a finish, a no-result mark set on a silent path arrives in the next save and supersedes the TCP left-without-finish while TCP stays connected, as in slalom (maintainer, 2026-11-16; CONTRACTS §4 INV-2 rule 2). Before the decision the Attempt stayed on-course and the mark waited for TCP.",
+      "context": {
+        "discipline": "cross",
+        "tcpConnectedThroughout": true,
+        "attemptId": "MX1_XT_26:48"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "attemptId": "MX1_XT_26:48",
+          "field": "onCourse",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-04-26T08:05:10.000Z",
+          "value": {
+            "dtStart": "2026-04-26T08:05:01.120Z",
+            "dtFinish": null
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 2,
+          "attemptId": "MX1_XT_26:48",
+          "field": "status",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-04-26T08:05:10.000Z",
+          "value": "on-course",
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 3,
+          "event": "oncourse-left",
+          "observedAt": "2026-04-26T08:05:30.000Z",
+          "attemptId": "MX1_XT_26:48"
+        },
+        {
+          "ingestSeq": 4,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-04-26T08:06:05.000Z",
+          "changedAfter": "2026-04-26T08:06:00.000Z"
+        },
+        {
+          "ingestSeq": 5,
+          "attemptId": "MX1_XT_26:48",
+          "field": "status",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-04-26T08:06:05.000Z",
+          "value": "dnf",
+          "confidence": "authoritative"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 2,
+          "expect": {
+            "status": {
+              "state": "known",
+              "value": "left-without-finish",
+              "source": "tcp"
+            }
+          }
+        }
+      ],
+      "expect": {
+        "status": {
+          "state": "known",
+          "value": "dnf",
+          "source": "xml"
+        }
+      }
+    },
+    {
+      "id": "cross-time-trial-unstaged-leave-returns-to-not-started",
+      "invariant": "oncourse",
+      "description": "A Kayak Cross time-trial Attempt staged and then removed before any start returns to not-started, as in slalom, and never stays at-start (maintainer, 2026-11-16; DERIVATIONS §4.1; recorded: three such leaves in cp3-cross MX1_XT_26 and WX1_XT_26, each ended by a dns row 0 to 17 s later).",
+      "context": {
+        "discipline": "cross",
+        "attemptId": "MX1_XT_26:51"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "attemptId": "MX1_XT_26:51",
+          "field": "onCourse",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-04-26T08:00:44.164Z",
+          "value": {
+            "dtStart": null,
+            "dtFinish": null
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 2,
+          "attemptId": "MX1_XT_26:51",
+          "field": "status",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-04-26T08:00:44.164Z",
+          "value": "at-start",
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 3,
+          "event": "oncourse-left",
+          "observedAt": "2026-04-26T08:00:59.622Z",
+          "attemptId": "MX1_XT_26:51"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 1,
+          "expect": {
+            "status": {
+              "state": "known",
+              "value": "at-start"
+            },
+            "oncourse": [
+              "MX1_XT_26:51"
+            ]
+          }
+        }
+      ],
+      "expect": {
+        "status": {
+          "state": "known",
+          "value": "not-started"
+        },
+        "oncourse": []
+      }
     }
   ]
 }
