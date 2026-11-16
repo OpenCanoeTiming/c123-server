@@ -863,6 +863,14 @@ Only the genuinely contract-level rules are tier-1 vectors: what `stale` compare
 against `0`, team sums, `gates` not known) and the re-run and re-bib interplay
 (`CONFORMANCE-VECTORS.md` §2).
 
+**The writes store is the same kind of state** (`CONTRACTS.md` §1.5: every `WriteRequest` and
+both key maps), and so are its tests: a failed store write, the keys across a restart, and a
+`pending` write resumed after one. No recording holds a write, and no vector feeds a resumed
+one. One rule here is a duty of whatever resumes writes, not of the merge alone: all pending
+writes of one Attempt are handed to it in one unit, in the order sent
+(`DERIVATIONS.md` §6; §10 item 50 (d)). Any adapter or deployable that resumes writes tests
+that on its own hand-over, with two writes pending on one gate.
+
 **Tenant isolation** (`CONTRACTS.md` §8.1) is the same kind of thing on live-mini-server: a storage
 property, verified by that store's own integration tests, not by a tier. The cases, one line each:
 two keys, same `classId`/`phaseId`/`entryId`/`bib`, no leakage in either direction through any §8.4

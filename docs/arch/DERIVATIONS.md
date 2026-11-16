@@ -1529,8 +1529,10 @@ review R16, E2: the spike applied the stale-mark check only to rows it had attri
   - **Otherwise** it is a re-delivery and resolves nothing.
 
   After a step that resolved a write, every write left pending on the cell takes the
-  delivered value as its retained value, in its durable record too, so that a re-delivery of
-  that value is no echo in any lifetime. *Examples,* gate 3 holding `0`.
+  delivered value as its retained value, whichever source delivered it and against both: a
+  later delivery of that value, on TCP or in the XML, is the earlier write's echo arriving
+  again and no echo for this one, whatever that source itself last held. The value goes into
+  the write's durable record too, so that this holds in any lifetime. *Examples,* gate 3 holding `0`.
   - A judge writes `2`, then `50`. A row with `2` confirms the first write and leaves the
     second `pending`, `50` still presented; a row with `50` then confirms the second. One
     row with `50` instead resolves the first `mismatched` and the second `confirmed`. A
@@ -1538,6 +1540,9 @@ review R16, E2: the spike applied the stale-mark check only to rows it had attri
   - A judge writes `2` by a slip, then `0`, and upstream answers with one row stating `0`. It
     is no echo for the first write and states the second's value: the first is `mismatched`,
     the second `confirmed`.
+  - A judge writes `2`, then `50`, and an XML save confirms the first before TCP's row does.
+    TCP's row stating `2` then leaves the second `pending`, and its row stating `50` confirms
+    it.
 - The echo arrives as an event-driven result push, because a correction recalculates the race.
 - **After a restart** a stored `pending` write resumes at load (`CONTRACTS.md` §1.5), keyed by its
   target and generation, and its echo is the next results-table observation of the target cell for
@@ -2391,6 +2396,18 @@ from #345's code (several writes pending at once).
     pending write (§8.5). For the shared core, one guard: a pending write is judged at every
     delivery whether or not its value is presented, and of two operator observations the
     later-ingested is the one presented.
+    (g) *A resolution moves the later writes' retained value for both sources* (re-review of
+    PR #378, CQ3). Writes `2` and `50` are pending on a gate that holds `0`, and an XML save
+    confirms the first before TCP's row does. TCP's row stating `2` is then the first write's
+    echo on the other channel. Compared with what TCP itself last held, `0`, it reads as a
+    change and resolves the second write `mismatched`, although upstream applies it next. The
+    retained value of a write left pending is the value its command was sent over, upstream's
+    table as the earlier write's echo showed it, and both sources render that one table. So
+    §6's sentence is not per source: the delivered value replaces the record whichever source
+    resolved the earlier write, and a later delivery of it from either source is no echo. A
+    write whose command was lost then stays `pending`, as any lost echo does (`ADR-010`).
+    Near-unreachable: TCP pushes a correction at once, and a save rarely comes first. A first
+    or only write is untouched: it compares with its own source's retained value as before.
     Not taken: one write per Attempt, or per gate, at a time. Either needs a refusal, which is
     a client duty. Residuals, stated.
     - With one cell written twice, a change from elsewhere that lands between the two

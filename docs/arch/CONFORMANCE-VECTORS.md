@@ -441,6 +441,12 @@ is done (#337).
 - **Multi-organiser isolation** (`CONTRACTS.md` §8.1). That is a storage property, verified by
   live-mini-server's own store tests (`TEST-ARCHITECTURE.md` §3.5).
 - **The full wire shapes of §7 and §8.** Those are integration-level concerns.
+- **Writes resumed after a restart, and several writes pending at once.** No vector feeds
+  either: a resumed write carries a stored record no vector element has. The rules are
+  `DERIVATIONS.md` §6 and §10 item 50, and one of them binds whatever hands resumed writes to
+  a merge, a harness adapter as much as a deployable: all pending writes of one Attempt go in
+  in one unit, in the order sent (item 50 (d)). Fed one per unit, a merge resolves the first
+  before the second exists. The on-site tests carry both (`TEST-ARCHITECTURE.md` §3.5).
 
 ---
 
