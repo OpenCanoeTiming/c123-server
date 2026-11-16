@@ -3,6 +3,7 @@
  * a boundary, a refused mark). One kit per test: the ingest sequence is a closure counter, nothing is shared between tests.
  */
 import { createMergeCore } from '../index.js';
+import { fmtOf, splitRaceId } from '../../ingest/common.js';
 import type { GivenElement, MergePort } from '../../__tests__/conformance/port.js';
 
 export type Core = MergePort;
@@ -33,7 +34,44 @@ export function kit(attemptId: string, phaseId: string) {
     ];
   };
   const xml = (observedAt: string, changedAfter: string | null, row: Record<string, unknown>): Unit => [rewrite(observedAt, changedAfter), snap('xml', observedAt, row)];
-  const core = (): Core => createMergeCore({ attemptId }) as unknown as Core;
+  /**
+   * #377 (DERIVATIONS §2.1; CONFORMANCE-VECTORS §1): the core reads no id, so a Phase whose units state no `format` or `pair` is given them the way the
+   * conformance adapter does: `format` is the id's token; `pair` is the token's role and combination, a second run naming the id that carries its first
+   * run's token, a first run and a single run stating null/no sibling. A statement a test makes itself is never overridden.
+   */
+  const core = (): Core => {
+    const c = createMergeCore({ attemptId }) as unknown as Core;
+    const apply = c.applyUnit.bind(c);
+    const has = new Map<string, Set<string>>();
+    const phasesOf = (e: Record<string, any>): string[] =>
+      [e['snapshot']?.phaseId, e['phaseId'], typeof e['attemptId'] === 'string' ? (e['attemptId'] as string).slice(0, (e['attemptId'] as string).lastIndexOf(':')) : undefined]
+        .filter((x): x is string => typeof x === 'string' && x !== '');
+    c.applyUnit = (unit) => {
+      const els = unit as Record<string, any>[];
+      for (const e of els) if (typeof e['phaseId'] === 'string' && typeof e['field'] === 'string') (has.get(e['phaseId']) ?? has.set(e['phaseId'], new Set()).get(e['phaseId'])!).add(e['field']);
+      const extra: Record<string, unknown>[] = [];
+      const seen = new Set<string>();
+      for (const e of els) {
+        for (const id of phasesOf(e)) {
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const got = has.get(id) ?? has.set(id, new Set()).get(id)!;
+          const { classKey, token, rest } = splitRaceId(id);
+          const st = (f: string, value: unknown): void => {
+            got.add(f);
+            extra.push({ ingestSeq: 0, observedAt: e['observedAt'], field: f, phaseId: id, source: 'tcp', kind: 'result-row', value, confidence: 'authoritative' });
+          };
+          if (!got.has('format')) st('format', token);
+          if (!got.has('pair')) {
+            const row = fmtOf(token).pair;
+            st('pair', row === null ? null : { role: row.role, siblingPhaseId: row.role === 'second' ? `${classKey}_${row.siblings[0]}_${rest}` : null, combination: row.combination });
+          }
+        }
+      }
+      return apply([...extra, ...unit] as typeof unit);
+    };
+    return c;
+  };
   return { obs, snap, rewrite, event, listing, xml, core };
 }
 
