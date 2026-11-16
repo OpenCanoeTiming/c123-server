@@ -117,8 +117,13 @@ export interface AttemptState {
   /** What the Standing assembly reads of the presented Attempt, and its serialised form (#205): a change marks the Phase's scopes. */
   facts?: StandingFacts;
   factsText?: string;
-  /** The latest XML snapshot's category rank of its row (`CatRnk`, first-run and single-run rows with a `CatId`): step 4's check only. */
-  upstreamCategoryRank?: number;
+  /** The latest XML snapshot's row of it, for step 4's check only: its placement and its category rank (`CatRnk`, first-run and single-run rows with a `CatId`). */
+  snapshotRow?: SnapshotRow;
+}
+
+export interface SnapshotRow {
+  placement: { rank: number; order: number } | null;
+  categoryRank?: number;
 }
 
 /** The presented Attempt as a Standing entry sees it (CONTRACTS §5 steps 2, 3, 5). A running time is not in it, so a tick changes nothing. */
@@ -132,8 +137,8 @@ export interface StandingFacts {
   provisional: boolean;
   underReview: boolean;
   heat: number | null;
-  /** The snapshot's category rank, where its row carries one (CONTRACTS §5 step 4's check). */
-  upstreamCategoryRank?: number;
+  /** The latest XML snapshot's row (CONTRACTS §5 step 4's check). */
+  snapshotRow?: SnapshotRow;
 }
 
 export interface ResourceState {

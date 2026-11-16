@@ -33,7 +33,7 @@ export function noteFacts(s: CoreState, a: AttemptState, view: Record<string, un
     provisional: ['outcome', 'placement', 'pairTotal'].some((f) => known(f)?.provisional === true),
     underReview: known('underReview')?.value === true,
     heat: typeof heat === 'number' ? heat : null,
-    ...(a.upstreamCategoryRank !== undefined ? { upstreamCategoryRank: a.upstreamCategoryRank } : {}),
+    ...(a.snapshotRow !== undefined ? { snapshotRow: a.snapshotRow } : {}),
   };
   const text = JSON.stringify(facts);
   if (text === a.factsText) return;
@@ -55,6 +55,20 @@ const isEntry = (f: StandingFacts): boolean => f.placement !== null || (f.result
 
 const keyOf = (kind: string, phaseId: string, heat: number | undefined, category: string | null): string =>
   `${kind}:${phaseId}${heat === undefined ? '' : `:${heat}`}/${category ?? 'all'}`;
+
+/**
+ * CONTRACTS §5 step 4, DERIVATIONS §10 item 53 (e): the latest snapshot's category ranks, only while the whole-class standing presents the
+ * snapshot's class order (its placed entries exactly the snapshot's placed rows, each with that row's rank and order); otherwise none.
+ */
+function snapshotCategoryRanks(attempts: AttemptState[]): Record<string, number> | undefined {
+  const same = (x: { rank: number; order: number } | null, y: { rank: number; order: number } | null): boolean =>
+    x === null || y === null ? x === y : x.rank === y.rank && x.order === y.order;
+  const placedOf = (a: AttemptState) => (a.facts !== undefined && isEntry(a.facts) ? a.facts.placement : null);
+  if (!attempts.every((a) => same(a.snapshotRow?.placement ?? null, placedOf(a)))) return undefined;
+  const ranks: Record<string, number> = {};
+  for (const a of attempts) if (a.facts !== undefined && a.snapshotRow?.categoryRank !== undefined) ranks[a.facts.entryId] = a.snapshotRow.categoryRank;
+  return Object.keys(ranks).length > 0 ? ranks : undefined;
+}
 
 /** Every Standing of one Phase. A Standing with no entries is returned only where one was sent before. */
 function ofPhase(s: CoreState, phaseId: string, asOf: string): Standing[] {
@@ -79,13 +93,15 @@ function ofPhase(s: CoreState, phaseId: string, asOf: string): Standing[] {
     return out;
   }
 
-  const facts = [...(s.phases.get(phaseId)?.attempts ?? [])].flatMap((a) => (a.facts !== undefined && isEntry(a.facts) ? [a.facts] : []));
-  const inputs: EntryInput[] = facts.map((f) => ({
+  const attempts = [...(s.phases.get(phaseId)?.attempts ?? [])];
+  const facts = attempts.flatMap((a) => (a.facts !== undefined && isEntry(a.facts) ? [a.facts] : []));
+  const inputs: EntryInput[] = facts.map(({ snapshotRow: _, ...f }) => ({
     ...f, ageCategoryId: categoryOf(s, f.entryId),
   }));
+  const upstreamCategoryRanks = snapshotCategoryRanks(attempts);
   const duration = fmt.scoringKind === 'duration';
   const scoped = (kind: 'phase' | 'pair', scope: Standing['scope']): void => {
-    const common = { entries: inputs, durationScored: duration, cross: fmt.cross, combined: fmt.pair?.role === 'second' };
+    const common = { entries: inputs, durationScored: duration, cross: fmt.cross, combined: fmt.pair?.role === 'second', ...(upstreamCategoryRanks !== undefined ? { upstreamCategoryRanks } : {}) };
     const whole = assembleStanding(common, scope);
     add({ standingKey: keyOf(kind, phaseId, undefined, null), classId, scope, ageCategoryId: null, entries: whole.standing, anomalies: whole.anomalies });
     if (!duration) return;

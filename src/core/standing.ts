@@ -19,8 +19,6 @@ export interface EntryInput {
   ageCategoryId?: string | null;
   heat?: number | null;
   decidedIn?: string | null;
-  /** The snapshot's own category rank of the entry's row, where it carries one (step 4's check). */
-  upstreamCategoryRank?: number;
 }
 
 export interface StandingInput {
@@ -97,7 +95,7 @@ export function assembleStanding(given: StandingInput, scope: StandingScopeInput
     const anomalies: Anomaly[] = [];
     category.forEach((e, i) => {
       // the check reads placed entries only: an unplaced row's category rank is a list position
-      const upstream = given.upstreamCategoryRanks?.[e.entryId] ?? e.upstreamCategoryRank;
+      const upstream = given.upstreamCategoryRanks?.[e.entryId];
       if (upstream !== undefined && upstream !== i + 1) anomalies.push({ kind: 'category-rank-disagreement', entryId: standing[i]!.entryId, assembled: i + 1, upstream });
     });
     return { standing, anomalies, ageCategoryId: given.ageCategoryId };

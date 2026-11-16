@@ -17,7 +17,7 @@ import { settleWrites, submitWrite, wireWrite } from './writes.js';
 import { viewAttempt, viewUnknownAttempt } from './presentation.js';
 import { markOf, startGeneration } from './generations.js';
 import type { Standing } from '@opencanoetiming/c123-contract';
-import type { AttemptState, ClassificationRow, ClassificationState, CoreState, Diagnostic, Element, IngestDiagnostic, MergeCoreOptions, Message, Row, Source } from './types.js';
+import type { AttemptState, ClassificationRow, ClassificationState, CoreState, Diagnostic, Element, IngestDiagnostic, MergeCoreOptions, Message, Row, SnapshotRow, Source } from './types.js';
 
 export type { IngestDiagnostic, MergeCoreOptions } from './types.js';
 
@@ -150,12 +150,17 @@ const isBlank = (row: Row): boolean =>
   !('outcome' in row) && markOf(row) === undefined && row['status'] !== 'finished' && (row['placement'] === null || row['placement'] === undefined) &&
   !('underReview' in row) && !('finishTime' in row) && row['untimed'] !== true;
 
-/** CONTRACTS §5 step 4's check: the latest XML snapshot's category rank of the Attempt's row, absent where the snapshot states none. */
-function upstreamCategoryRank(s: CoreState, a: AttemptState, value: unknown): void {
-  const next = typeof value === 'number' ? value : undefined;
-  if (next === a.upstreamCategoryRank) return;
-  if (next === undefined) delete a.upstreamCategoryRank;
-  else a.upstreamCategoryRank = next;
+/** CONTRACTS §5 step 4's check: the latest XML snapshot's row of the Attempt (placement, category rank), absent where the snapshot names none. */
+function snapshotRow(s: CoreState, a: AttemptState, row: Row | undefined): void {
+  let next: SnapshotRow | undefined;
+  if (row !== undefined) {
+    const p = row['placement'] as { rank: number; order: number } | null | undefined;
+    next = { placement: p === null || p === undefined ? null : { rank: p.rank, order: p.order } };
+    if (typeof row['categoryRank'] === 'number') next.categoryRank = row['categoryRank'];
+  }
+  if (JSON.stringify(next) === JSON.stringify(a.snapshotRow)) return;
+  if (next === undefined) delete a.snapshotRow;
+  else a.snapshotRow = next;
   s.dirtyAttempts.add(a);
 }
 
@@ -175,7 +180,7 @@ function applySnapshot(s: CoreState, el: Element, inUnit: ReadonlySet<string>): 
     named.add(a);
     a.rowNamed = true;
     if (source === 'tcp') delivered(a, el);
-    if (source === 'xml') upstreamCategoryRank(s, a, row['categoryRank']);
+    if (source === 'xml') snapshotRow(s, a, row);
     rebindCells(s, a);
     a.splitsUnarmed = s.splitsArmed === false;
     if (second && (row['timeEmpty'] === true || isBlank(row))) {
@@ -198,7 +203,7 @@ function applySnapshot(s: CoreState, el: Element, inUnit: ReadonlySet<string>): 
       return;
     }
     phase.xmlTable = 'rows';
-    for (const a of phase.attempts ?? []) if (!named.has(a)) upstreamCategoryRank(s, a, undefined);
+    for (const a of phase.attempts ?? []) if (!named.has(a)) snapshotRow(s, a, undefined);
   }
   for (const a of phase.attempts ?? []) if (!named.has(a)) absentRow(s, a, source, el, fields, seq);
 }
