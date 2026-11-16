@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { boot, derived, disposeAll, feedXml, get, post, setInstance, virtualClock, type Env, type J } from './onsite-harness.js';
 import { ODP, feed } from './datasets.js';
 import { R19 } from '../../core/__tests__/fixtures/round19-excerpts.js';
-import { FLAGS, GOOD, K, adminLog, attemptOf, closedRun, courseGateCount, failWritesStore, startListOnly, startListXml, rowOver, write, writeState, writesFile } from './write-fixtures-300.js';
+import { FLAGS, GOOD, K, WRITES_FILE, adminLog, attemptOf, closedRun, courseGateCount, failWritesStore, startListOnly, startListXml, rowOver, write, writeState, writesFile } from './write-fixtures-300.js';
 
 afterEach(disposeAll);
 const cell = (g: J, n: number): number | null => g.value.find((c: J) => c.number === n).penalty;
@@ -122,11 +122,16 @@ describe('N4 (item 20): a flag creation whose store write fails', () => {
     const store = failWritesStore(env);
     const first = await write(env, GOOD, 'k1');
     expect(first.status, 'precondition: the write is admitted though its store write fails').toBe(202);
+    const writeFailures = a.entries.filter((e) => e['kind'] === 'store-write-failed');
+    expect(writeFailures, 'precondition: the write\'s own failure is one admin entry').toHaveLength(1);
     const hits = store.failures;
     expect(hits, 'precondition: the injected failure was hit').toBeGreaterThanOrEqual(1);
     const flag = await post(env, FLAGS, { gate: 5, comment: 'touched?' }, K('f1'));
     expect(store.failures, 'precondition: the flag\'s key binding hit the failing store').toBeGreaterThan(hits);
     expect(flag.status, 'a flag not durably bound is not acknowledged').toBe(500);
+    const afterFlag = a.entries.filter((e) => e['kind'] === 'store-write-failed');
+    expect(afterFlag, 'the failed flag creation adds exactly one admin entry').toHaveLength(2);
+    expect(afterFlag[1]).toMatchObject({ kind: 'store-write-failed', store: 'writes', file: WRITES_FILE });
     expect((await get(env, `/api/writes/${first.body.writeId as string}`)).status, 'the earlier write is still served').toBe(200);
     expect(issued, 'precondition: the failed creation chose a flag id').toHaveLength(1);
     store.stop();
