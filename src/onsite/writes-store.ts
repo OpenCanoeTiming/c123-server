@@ -1,8 +1,10 @@
 /**
  * Durable write requests and idempotency keys of the on-site process (CONTRACTS §1.5, §2.9, §2.10, §7.3, §7.4). One file per event, keyed by
  * `eventId`: every `WriteRequest` as last pushed, the `Idempotency-Key` map of penalty writes and the one of flag creations.
- * The §2.10 discipline, as `store/checks.ts` keeps it: temporary file, rename over the target, then memory, then acknowledge; writes are
- * serialised, and a failed write leaves memory at the previous state. Key entries older than the 24 h of §1.5 are dropped.
+ * The §2.10 discipline: temporary file, rename over the target, then acknowledge; writes are serialised. A failed write still rejects, but
+ * its records and key binding stay in memory and the next successful write stores them with its own change (CONTRACTS §7.3: what is lost
+ * until the store writes again is the restart guarantee alone; the file is the store's whole state). Key entries older than the 24 h of
+ * §1.5 are dropped.
  */
 import type { ChecksFs } from '../store/checks.js';
 
@@ -29,7 +31,7 @@ export interface WritesStore {
   byWriteKey(key: string): J | undefined;
   /** The flag id a bound, unexpired key maps to. */
   flagByKey(key: string): string | undefined;
-  /** Records the WriteRequests (and binds `bind.key` to one of them) in one durable step. */
+  /** Records the WriteRequests (and binds `bind.key` to one of them) in one durable step; rejected, memory keeps them for the next write. */
   put(writes: readonly J[], bind?: { key: string; writeId: string }): Promise<void>;
   bindFlag(key: string, flagId: string): Promise<void>;
 }
@@ -67,10 +69,9 @@ export async function openWritesStore(opts: { fs: ChecksFs; dir: string; eventId
   let tail: Promise<unknown> = Promise.resolve();
   function mutate(fn: (cur: State) => State): Promise<void> {
     const run = tail.then(async () => {
-      const next = fn(state);
-      await fs.writeFile(tmp, JSON.stringify({ version: 1, ...next }));
+      state = fn(state);
+      await fs.writeFile(tmp, JSON.stringify({ version: 1, ...state }));
       await fs.rename(tmp, target);
-      state = next;
     });
     tail = run.catch(() => undefined);
     return run;
