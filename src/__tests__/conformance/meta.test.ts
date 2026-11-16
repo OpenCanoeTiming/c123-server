@@ -134,13 +134,11 @@ describe('expected-red ledger and modes (issue #200 rows 3, 4, 5)', () => {
     const nonMerge = serverVectors().filter((v) => !Array.isArray(v.given)).map((v) => v.id);
     expect(nonMerge.filter((id) => id.startsWith('check-')).length).toBe(5);
     // M2 P3c (maintainer, 2026-11-16): a Kayak Cross time-trial leave is slalom's (three vectors), and a Phase that leaves the schedule is removed
-    // (three vectors; the fourth, an empty schedule, passes on a core that removes nothing). #305 lands the time-trial leave: its three leave the ledger.
+    // (three vectors; the fourth, an empty schedule, passes on a core that removes nothing). #305 lands the time-trial leave, #382 the Phase removal:
+    // their three each leave the ledger.
     expect(loadExpectedRed()).toEqual([
       'standing-age-category-assembled',
       'standing-age-category-unplaced-listed-after',
-      'phase-removed-when-schedule-omits-it',
-      'phase-removal-refused-by-guard',
-      'phase-removed-then-returns',
     ]);
   });
 
