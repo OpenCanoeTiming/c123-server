@@ -9,7 +9,7 @@ import { boundSlots, fmtFor } from './registry.js';
 import { refuse } from './counters.js';
 import { carriesContradicted } from './retraction.js';
 import { fieldSlots, laterAge, retain, slotOf } from './retention.js';
-import { resolveEcho } from './writes.js';
+import { followBase, resolveEcho } from './writes.js';
 import type { AttemptState, CoreState, Element, Row, Slot, Source } from './types.js';
 
 const IDENTITY = ['entry', 'startOrder', 'scheduledStart', 'heat', 'startLane'] as const;
@@ -90,6 +90,7 @@ export function putCells(s: CoreState, a: AttemptState, channel: 'tcp' | 'xml' |
   if (changed) s.dirtyAttempts.add(a);
   // rule 4 at the binding too: held results-table cells that meet the course are the observation an operator slot waits for (§6)
   if (channel !== 'inference' && fs.operator !== undefined) resolveEcho(s, a, fs, field, bound, prior, changed);
+  else if (channel === 'inference' && changed) followBase(s, a, fs, field, bound);
 }
 
 /** "at a step that carries gate cells ... or at a scope snapshot of its race" (§4.6): retained cells meet the bound course. */

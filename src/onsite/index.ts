@@ -349,6 +349,13 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
         const retainedCell = core.retainedCell(w['writeId'] as string);
         return retainedCell === undefined ? w : { ...w, retainedCell };
       });
+      // item 50: a still-pending write whose retained value moved (an earlier write on its cell was answered) is stored, not pushed
+      const named = new Set(changed.map((w) => w['writeId'] as string));
+      for (const w of held.pending()) {
+        const id = w['writeId'] as string;
+        const retainedCell = named.has(id) ? undefined : core.retainedCell(id);
+        if (retainedCell !== undefined && canon(retainedCell) !== canon(w['retainedCell'] ?? null)) changed.push({ ...w, retainedCell });
+      }
       if (changed.length > 0 || bind !== undefined) {
         try { await held.put(changed, bind); } catch (e) {
           adminLog({ kind: 'store-write-failed', store: 'writes', file: `${base}writes-${encodeURIComponent(event?.eventId ?? '')}.json`, reason: e instanceof Error ? e.message : String(e) });
