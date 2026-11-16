@@ -107,7 +107,9 @@ describe('row 10: a not-yet slot at submission records no retained cell (DERIVAT
 
   it('ruling 15 + §6 "with none retained the first delivery is a change": the first delivery with the target cell blank resolves mismatched (it stays pending on main)', () => {
     const c = wipedThenWritten();
-    c.applyUnit([snap(3, { gates: cells(null), judgingComplete: true })]);
+    // a row that states a result (a time), so it is not a blank row (a row with no result applies none of its fields); only the target cell is blank
+    c.applyUnit([snap(3, { gates: cells(null), outcome: { kind: 'duration', runSeconds: 80, penaltySeconds: 0, totalSeconds: 80 }, judgingComplete: true })]);
+    expect((c.presented(B) as any).outcome, 'precondition: the delivered row is not blank: its outcome is presented').toMatchObject({ state: 'known', value: { kind: 'duration', runSeconds: 80 } });
     expect(status(c), 'a blank target cell is a change from none: not the requested 50').toBe('mismatched');
   });
 
