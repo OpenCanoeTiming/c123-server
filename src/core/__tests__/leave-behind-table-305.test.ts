@@ -67,6 +67,29 @@ describe('CQ1: the leave recorded behind a table value (DERIVATIONS §4.12; CONT
     expectLeftWithoutFinish(c, SLALOM.id, 'same envelope as in the other order');
   });
 
+  // P3c fold-in (#383 review N1; mutant M6 of that review). The first leave's left-without-finish is recorded behind the table finish; the Attempt is listed
+  // again (a re-listing ends the leave), listed with a finish of its own, and leaves a second time: the leave of a finisher draws no left-without-finish, so it records nothing.
+  // Mutant: a re-listing leaves `gen.leftBehind` set -> the retraction returns to the FIRST leave's left-without-finish (observedAt at(30)) instead of
+  // not-started on the retraction's own instant: both asserts red.
+  it('§4.12 / §3.2: a re-listing clears the recorded leave; the Attempt listed again as a finisher and leaving a second time, the row retracted: not-started on the retraction\'s instant, never the first leave\'s left-without-finish', () => {
+    const k = kit(SLALOM.id, SLALOM.phase);
+    const c = k.core();
+    apply(c, started(k), SLALOM.id, 'start');
+    apply(c, [k.snap('tcp', at(20), FINISH_ROW)], SLALOM.id, 'table finish');
+    apply(c, [k.event('oncourse-left', LEFT_AT)], SLALOM.id, 'first leave');
+    expect(inSet(c, SLALOM.id), 'precondition (on-course stream): the first leave rule fired').toBe(false);
+    apply(c, k.listing(at(35), at(-10), at(33), { runSeconds: 28 }), SLALOM.id, 're-listing, with a finish');
+    expect(inSet(c, SLALOM.id), 'precondition (on-course stream): listed again').toBe(true);
+    apply(c, [k.event('oncourse-left', at(50))], SLALOM.id, 'second leave');
+    expect(inSet(c, SLALOM.id), 'precondition (on-course stream): the second leave rule fired').toBe(false);
+    expect(status(c, SLALOM.id).value, 'precondition: finished').toBe('finished');
+    apply(c, [k.snap('tcp', at(60), {})], SLALOM.id, 'retraction');
+    expect(field(c, SLALOM.id, 'outcome'), 'precondition: the row retracted, outcome gone').toMatchObject({ state: 'not-yet' });
+    const s = status(c, SLALOM.id);
+    expect(s, 'a finisher who left returns to not-started (§4.12); the first leave\'s record was cleared by the re-listing').toMatchObject({ state: 'known', value: 'not-started', source: 'tcp', observedAt: at(60) });
+    expect(s.value, 'never the cleared leave\'s left-without-finish').not.toBe('left-without-finish');
+  });
+
   it('§3.2: a leave behind a table mark, the mark retracted', () => {
     const k = kit(SLALOM.id, SLALOM.phase);
     const c = k.core();

@@ -185,6 +185,33 @@ describe('#382 row 12: re-baseline (item 54 (l))', () => {
   });
 });
 
+describe('#382 N (P3c fold-in, #390 review): the step log of a removal (TEST-ARCHITECTURE §3.2 step log; CONTRACTS §7.2; item 54 (d))', () => {
+  // Mutant: the step log's digest ignores `phase.deleted` (the removed Phase's Attempt and Standing parts stay in `stateHash`) -> the removal step's
+  // hash equals the previous step's (only B's parts change it) -> the "hash moves" assert is red. A removal that logs attempt.deleted deltas -> red.
+  it('item 54 (d) + step log: the removing read logs ONE phase.deleted delta for B, no attempt.deleted; the stateHash moves with it, and the process answers B\'s reads 404', async () => {
+    const lines: string[] = [];
+    const env = await odpClosed({ stepLog: (l: string) => { lines.push(l); } });
+    expect((await get(env, `/api/phases/${B}/attempts`)).status, 'precondition: B served before the removal').toBe(200);
+    const steps = (): J[] => lines.map((l) => JSON.parse(l) as J).filter((o) => Array.isArray(o['deltas']));
+    const before = steps();
+    expect(before.length, 'precondition: steps are logged').toBeGreaterThan(0);
+    expect(before.some((o) => (o['deltas'] as J[]).some((d) => d['type'] === 'phase.deleted')), 'precondition: no removal logged yet').toBe(false);
+    const prevHash = before.at(-1)!['stateHash'] as string;
+
+    await feedXml(env, removedXml(removeAtOf(env)));
+    expect((await get(env, `/api/phases/${B}/attempts`)).status, 'precondition: B is removed').toBe(404);
+
+    const after = steps().slice(before.length);
+    const removing = after.filter((o) => (o['deltas'] as J[]).some((d) => d['type'] === 'phase.deleted'));
+    expect(removing, 'exactly one logged step carries the phase.deleted').toHaveLength(1);
+    const deltas = removing[0]!['deltas'] as J[];
+    expect(deltas.filter((d) => d['type'] === 'phase.deleted' && d['phaseId'] === B), 'one phase.deleted for B').toHaveLength(1);
+    expect(deltas.filter((d) => d['type'] === 'attempt.deleted'), 'what the Phase implies is never logged as attempt.deleted').toEqual([]);
+    expect(removing[0]!['stateHash'], 'B\'s Attempts and Standings left the digest: the hash moved').not.toBe(prevHash);
+    expect(typeof removing[0]!['stateHash']).toBe('string');
+  });
+});
+
 describe('#382 row 13: the /ws payload of phase.deleted (CONTRACTS §7.2, WsPayload of packages/c123-contract)', () => {
   it('§7.2: phase.deleted is exactly { type, seq, phaseId }; a client applying it from hydration holds what hydration returns afterwards (Phase, Attempts, Standings, checks and flags gone; Class, Entries, Courses kept)', async () => {
     const env = await odpClosed();

@@ -101,7 +101,7 @@ describe('N1 Cross time trial: a finish listing with no Time ends `running` (DER
     expect(pair(c, xid)).toEqual({ status: 'finished', outcome: { state: 'not-yet' } });
     leaveAfter(c, TT, 1000, ids);
     expect(inSet(c, xid), 'precondition: the leave rule fired').toBe(false);
-    expect(pair(c, xid), 'a Cross leave changes nothing (§10 item 35)').toEqual({ status: 'finished', outcome: { state: 'not-yet' } });
+    expect(pair(c, xid), 'a Cross time-trial leave follows slalom: a stream `finished` stays (Q-TT; DERIVATIONS §4.1 "a stream `finished` stays", §4.3; CONTRACTS §3.2)').toEqual({ status: 'finished', outcome: { state: 'not-yet' } });
   });
 
   it('vector-rule #318 row 2 / DA (ii), real cp3-cross WX1_XT_26:25: the 0.00 s running listing, the deleted start (xt2), then the finish impulse with no Time (recorded 07:16:59Z): finished, not-yet; the leave changes nothing', () => {
@@ -119,7 +119,7 @@ describe('N1 Cross time trial: a finish listing with no Time ends `running` (DER
     expect(pair(c, id)).toEqual({ status: 'finished', outcome: { state: 'not-yet' } });
     step(c, other(2000), ids);
     step(c, other(4000), ids);
-    expect(pair(c, id), 'the leave changes nothing').toEqual({ status: 'finished', outcome: { state: 'not-yet' } });
+    expect(pair(c, id), 'a Cross time-trial leave follows slalom: a stream `finished` stays (Q-TT; DERIVATIONS §4.1, §4.3; CONTRACTS §3.2)').toEqual({ status: 'finished', outcome: { state: 'not-yet' } });
   });
 });
 

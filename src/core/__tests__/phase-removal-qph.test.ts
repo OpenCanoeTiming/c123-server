@@ -108,6 +108,7 @@ describe('#382 row 4: the guard (item 54 (c); vector phase-removal-refused-by-gu
   it('item 54 (c): a TCP Results of B delivered after the snapshot\'s changedAfter refuses the removal (nothing of B moves); the next read, later than it, removes', () => {
     const { w, c } = setup();
     c.applyUnit([w.snap('tcp', B, 150, [w.erow('9', 1, 80)])]);
+    expect(c.counters().refusals['removal-guard'], 'precondition: no removal refused yet').toBeUndefined();
     const m = c.notifications().length;
     c.applyUnit(w.read(160, 140, [A])); // content age 140 < the tcp delivery at 150
     expect(ofType(msgsOf(c, m), 'phase.deleted'), 'refused: older than TCP\'s push').toEqual([]);
@@ -115,11 +116,15 @@ describe('#382 row 4: the guard (item 54 (c); vector phase-removal-refused-by-gu
     expect(c.attempts()).toContain(`${B}:9`);
     expect(keys(c), 'its Standing stays').toContain(`phase:${B}/all`);
     expect(msgsOf(c, m).filter((x) => x['type'] !== 'diagnostics.updated'), 'nothing moved at all').toEqual([]);
+    // P3c fold-in (#390 review N): the refusal is counted as the guard's (item 54 (c)), once per refused removal; the admitted removal adds none.
+    // Mutant: the removal-guard refusal not counted (or counted under another reason) -> red; a removal that counts on admission too -> red at the second assert.
+    expect(c.counters().refusals['removal-guard'], 'the refused removal is counted once as the guard\'s').toBe(1);
 
     const m2 = c.notifications().length;
     c.applyUnit(w.read(200, 170, [A])); // later than every tcp delivery
     expect(ofType(msgsOf(c, m2), 'phase.deleted'), 'the next save removes').toHaveLength(1);
     expect(c.phaseIds()).not.toContain(B);
+    expect(c.counters().refusals['removal-guard'], 'an admitted removal is not a refusal').toBe(1);
   });
 
   it('item 54 (c): changedAfter EQUAL to the latest tcp delivery does not qualify ("later than"); null never qualifies', () => {
