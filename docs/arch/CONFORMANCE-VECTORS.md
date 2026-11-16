@@ -190,7 +190,9 @@ Each vector has:
     ids are regular by construction. For a first run the adapter states `siblingPhaseId: null`,
     as a parser does, and builds no id: a first run's sibling is the server core's to derive
     from the second runs' stated pairs (`DERIVATIONS.md` §2.1, §10 item 49). No vector asserts
-    a first run's sibling.
+    a first run's sibling. A first run that no element of the vector names is not described at
+    all: the second run's `pair` naming it is enough for what reads across the pair
+    (`two-run-br1-unavailable-no-live-no-xml`).
 
   So a vector's Phase has a class from its first observation, and `CONTRACTS.md` §5 step 1's
   on-site precondition, a standing no earlier than its Phase, holds without a `classId` element

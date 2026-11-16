@@ -304,19 +304,30 @@ the parser's four it reaches the admin log and never `GET /api/diagnostics`.
     - a parser states a first-run token's `pair` with its `role`, its `combination` and
       `siblingPhaseId: null`, always, and the core reads no sibling stated for a first run;
     - in every unit that changed a Phase, the core takes for each first run the second runs
-      whose stated `pair` names it and whose `classId` equals its own, applies the tiebreak
-      above, and presents the result in the first run's `pair` in that unit (`CONTRACTS.md`
-      §1.6). The live tier takes the presented `pair` in the Phase push (`CONTRACTS.md` §8.3)
-      and derives nothing.
-  - **Only a second run of the first run's class names it.** `CONTRACTS.md` §2.4's "the Phase
-    with the same `classId`" is read on the two Phases' `classId` as they stand at that step,
-    not as they stood when the second run's `pair` was stated. *Example,* §2.4's rename over
-    two snapshots: first `K1M_BR1_19` and `K1M_BR2_19`, both of class `K1M`; then `K1M_BR1_19`
-    and `K1M-X_BR2_19`, both of class `K1M-X`. No later snapshot holds `K1M_BR2_19`, so that
-    Phase keeps what was last stated of it: class `K1M` and a `pair` naming `K1M_BR1_19`. It no
-    longer names the first run, whose class is now `K1M-X`, so the first run's sibling is
-    `K1M-X_BR2_19` and not a tie between the two. A Phase the schedule no longer holds is not
-    treated specially beyond that (a default, §10 item 49).
+      whose stated `pair` names it, leaves out any whose stated `classId` differs from the
+      first run's (next bullet), applies the tiebreak above, and presents the result in the
+      first run's `pair` in that unit (`CONTRACTS.md` §1.6). The live tier takes the presented
+      `pair` in the Phase push (`CONTRACTS.md` §8.3) and derives nothing.
+  - **A second run whose class differs from the first run's does not name it.** `CONTRACTS.md`
+    §2.4's "the Phase with the same `classId`" is read on the two Phases' `classId` as they
+    stand at that step, not as they stood when the second run's `pair` was stated. *Example,*
+    §2.4's rename over two snapshots: first `K1M_BR1_19` and `K1M_BR2_19`, both of class `K1M`;
+    then `K1M_BR1_19` and `K1M-X_BR2_19`, both of class `K1M-X`. No later snapshot holds
+    `K1M_BR2_19`, so that Phase keeps what was last stated of it: class `K1M` and a `pair`
+    naming `K1M_BR1_19`. It no longer names the first run, whose class is now `K1M-X`, so the
+    first run's sibling is `K1M-X_BR2_19` and not a tie between the two. A Phase the schedule
+    no longer holds is not treated specially beyond that (a default, §10 item 49).
+  - **The class check needs both classes stated.** It looks for a statement gone stale, and
+    only a difference between two stated classes shows one. Whoever states a second run's
+    sibling has already applied the class rule: a parser names a first run only when it knows
+    the two classes are equal. So where the first run's class has not been stated, the second
+    run's `pair` is all there is, and it stands. That includes a Phase nothing has stated at
+    all. Being named makes it that second run's first run; no id is read to say so. It has no
+    `date`, so several second runs naming it leave `null`. There is no Phase to present it
+    on; it serves what reads across the pair (§4.5). This arises in the vectors, whose adapter
+    names a first run the vector may not hold (`two-run-br1-unavailable-no-live-no-xml`:
+    only `K1M_BR2_6` is described, and run 1's `outcome` is `unavailable{not-configured}`
+    through it). On site a parser names no first run whose class nothing has stated.
   - **No id is parsed or built.** The earlier reading, "the same class part of the id with the
     other token", fails after a class rename or a race moved to another class: the started first
     run keeps its old `RaceId` prefix, the second run's `ClassId` follows the change, and the two
@@ -2272,11 +2283,17 @@ from the review of #287's code (PR #376), under the same rule.
     implementation of item 48, not two that can disagree. `CONTRACTS.md` §5 step 1's "known
     means stated on the Phase" is about the second Phase's sibling, which stays the parser's
     statement.
-    (b) *A second run names a first run only while the two Phases' `classId` are equal.* This
-    is `CONTRACTS.md` §2.4's class rule, read on the fields as they stand (E3, from the text).
-    It decides §2.4's own rename example once the rename is seen over two snapshots: the Phase
-    of the rebuilt id keeps its last stated class and `pair`, and without the rule it would
-    still name the first run and tie with the rebuilt second run (§2.1's example).
+    (b) *A second run stops naming a first run when the two Phases' stated `classId` differ.*
+    This is `CONTRACTS.md` §2.4's class rule, read on the fields as they stand (E3, from the
+    text). It decides §2.4's own rename example once the rename is seen over two snapshots:
+    the Phase of the rebuilt id keeps its last stated class and `pair`, and without the rule
+    it would still name the first run and tie with the rebuilt second run (§2.1's example).
+    The check needs both classes stated. Where the first run's class has not been stated,
+    which includes a first run nothing has stated at all, the second run's `pair` stands: the
+    stater applied the class rule when it named the first run, and nothing stated since
+    contradicts it. Read as "an unknown class is not equal", the rule broke the vector
+    `two-run-br1-unavailable-no-live-no-xml`, whose first run no element describes; the
+    vector is unchanged and the adapter describes no further Phase.
     (c) *A Phase the schedule no longer holds is not otherwise special-cased* (E4: no recording
     holds a rename, a moved race or a deleted one). Nothing in the contract removes a Phase.
     It stays as last stated, with its own `pair`; a standing of it that was published stays
