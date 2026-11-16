@@ -2655,7 +2655,7 @@ review of #318's code (PR #379).
     admitted a removal, since the guard is the core's; so a later statement of a second run can
     name the removed Phase again. **The core presents no `siblingPhaseId` that names a Phase it
     has removed and not created again:** such a stated sibling is retained and presents `null`,
-    at the removal and at every later statement, until that `phaseId` is created again (j),
+    at the removal and at every later statement, until that `phaseId` is created again (j; as clients see it, (n)),
     when the stated sibling presents as stated. One rule, in the core; the parser stays
     stateless about admission. A refused removal leaves the Phase held, so a statement naming it
     presents as stated and nothing diverges. Not taken: the parser forgetting every race the
@@ -2673,6 +2673,35 @@ review of #318's code (PR #379).
     the Phase (item 38 (l)). An event re-baseline sends each `phase.deleted` before its
     `scope.replaced`; a Phase re-baseline whose read removes its own Phase sends the
     `phase.deleted` and no `scope.replaced` and answers `200` with `attempts: 0`.
+    (m) *A race the read's own tables carry is not removed by that read* (review of PR #390,
+    CQ1; E4). The decision removes a Phase when an admitted snapshot "no longer carries it", and
+    a read that holds a results-table row of the race still carries it, schedule row or not.
+    So the removal is decided over the whole read: a Phase the schedule statement omits is not
+    removed where the same read carries a scope snapshot of its race with at least one row; the
+    table is read by the ordinary rules, and a later read that carries neither removes it. A
+    table with no rows carries nothing (an emptied table is item 41's), and the empty-schedule
+    rule is unchanged. Not taken: removing and recreating the Phase in one unit, which sends
+    `phase.deleted` and then its Attempts again under a Phase the read states no class for, so
+    clients would hold Attempts of a Phase they removed; nor ignoring the table, which drops
+    rows upstream wrote. Upstream writes the two tables from one schedule, so this is not
+    expected; nothing recorded holds it.
+    (n) *"Created again" means created as clients see it* (review of PR #390, CQ2; E4): at the
+    first observation that states its class, when its whole-resource `phase.updated` goes out
+    (`CONTRACTS.md` §1.6). A classless observation of the removed id, such as a TCP on-course
+    listing of one of its Attempts, makes the core hold the id but creates no Phase for a
+    client, so a second run's stated sibling naming it keeps presenting `null` (h) until the
+    Phase's creating message has been sent; then the second run's `phase.updated` follows it in
+    the same unit. A second run never names a Phase a client has not received.
+    *Code (PR #390 follow-up):* (m) in `src/core` evaluate a read's schedule-statement removals at
+    the end of the XML unit and skip a Phase for which the unit carried a scope snapshot with a
+    row; test: an admitted read scheduling A only and carrying B's table with a row sends no
+    `phase.deleted` and keeps B and its Attempt; the next read without B's table removes it. (n)
+    clear the removed-ids marker when the Phase's creating message is sent (class known), not
+    when the core's resource is created; test: removal of `K1M_BR1_6`, a classless on-course
+    listing of `K1M_BR1_6:3` (no `phase.updated` for `K1M_BR2_6`, sibling still `null`), then a
+    statement of its class (`K1M_BR1_6` created, then `K1M_BR2_6`'s `phase.updated` naming it).
+    Both cases are unrecorded and need an upstream file that disagrees with itself or TCP
+    naming a deleted race, so the code as merged is acceptable until the follow-up lands.
     Evidence: E4, by the P3c sweep's scan (part 4 (a)): no race left the schedule in any of the seven
     recordings (one fixed set per recording over 2,032 distinct snapshots; every TCP `Schedule`
     message names the same set), and no snapshot has an empty schedule. So nothing recorded
