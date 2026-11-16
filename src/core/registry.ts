@@ -43,15 +43,15 @@ export function fmtFor(s: CoreState, phaseId: string): Fmt {
   return { ...fmt, pair: { role: p.role, combination, siblings: fmt.pair?.siblings ?? [] } };
 }
 
-/** A Phase nothing states a format or pair for, named by a second run's stated pair: a first run of that pair's combination (CONTRACTS §2.4). */
+/**
+ * A Phase nothing states a format or pair for, named by a second run's stated pair under item 49 (b) (the set `namingSecondRuns(s, true)` keeps,
+ * the one the derivation reads): a first run of that pair's combination (DERIVATIONS §10 item 49 (d); CONTRACTS §2.4).
+ */
 function namedFirstRun(s: CoreState, phaseId: string): Fmt | undefined {
-  for (const r of s.phases.values()) {
-    const p = statedPair(r);
-    if (p?.role !== 'second' || p.siblingPhaseId !== phaseId) continue;
-    const combination = p.combination === 'sum' ? 'sum' : 'best';
-    return { ...fmtOf(''), pair: { role: 'first', combination, siblings: [] } };
-  }
-  return undefined;
+  const naming = [...(namingSecondRuns(s, true).get(phaseId) ?? [])].sort();
+  if (naming.length === 0) return undefined;
+  const combination = statedPair(s.phases.get(naming[0]!))?.combination === 'sum' ? 'sum' : 'best';
+  return { ...fmtOf(''), pair: { role: 'first', combination, siblings: [] } };
 }
 
 type StatedPair ={ role?: string; siblingPhaseId?: string | null; combination?: string } | null | undefined;
