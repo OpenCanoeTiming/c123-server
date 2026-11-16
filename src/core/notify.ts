@@ -76,6 +76,12 @@ const inScope = (scope: unknown, a: AttemptState): boolean => {
 
 function flushRebaseline(s: CoreState): void {
   const scope = s.pendingRebaseline;
+  // §7.1: a Phase re-baseline whose read removed its own Phase sends the `phase.deleted` alone (DERIVATIONS §10 item 54 (l))
+  const own = scope as { kind?: string; phaseId?: string };
+  if (own.kind === 'phase' && own.phaseId !== undefined && !s.phases.has(own.phaseId)) {
+    s.pendingRebaseline = undefined;
+    return;
+  }
   const attempts = [...s.attempts.values()].filter((a) => inScope(scope, a));
   const views = attempts.map((a) => {
     const view = viewAttempt(s, a);
@@ -121,11 +127,23 @@ export function flush(s: CoreState, xmlInUnit: boolean): void {
     s.diagnosticsDirty = true;
   }
 
+  // §7.2: a removed Phase's resolved writes precede its one `phase.deleted`, which implies its Attempts and Standings; the `phase.updated`
+  // of each Phase whose sibling it was follows (DERIVATIONS §10 item 54 (d), (e), (h))
+  for (const p of s.removedPhases) {
+    for (const w of s.dirtyWrites) {
+      if (w.attempt.phaseId !== p.id || s.attempts.has(w.attempt.id)) continue;
+      emit(s, { type: 'write.updated', write: wireWrite(w) });
+      s.dirtyWrites.delete(w);
+    }
+    emit(s, { type: 'phase.deleted', phaseId: p.id });
+  }
+  s.removedPhases = [];
+
   for (const p of s.dirtyPhases) {
     s.dirtyScopes.add(p.id);
     // §2.4 (round 27): a Phase is created at the first observation that states its class; until then no message, no hydration
     if (!p.plain.has('classId')) continue;
-    const fields = withoutId(diff(viewResource(p, 'phase'), p.sent, p.created), 'phaseId');
+    const fields = withoutId(diff(viewResource(p, 'phase', s.removedIds), p.sent, p.created), 'phaseId');
     p.created = true;
     if (Object.keys(fields).length > 0) emit(s, { type: 'phase.updated', phaseId: p.id, fields });
   }

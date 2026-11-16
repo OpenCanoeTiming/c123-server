@@ -365,14 +365,15 @@ describe('row 11-12 states', () => {
     n.reader.stop();
   });
 
-  it('row 12 §0.3 valid, naming no race: the unit is the event alone, connected, lastRewriteDetectedAt advances', async () => {
+  it('row 12 §0.3 valid, naming no race: the unit is the event and an empty schedule statement, connected, lastRewriteDetectedAt advances', async () => {
     const s = setup();
     const t0 = await baseline(s);
     s.f.files[P] = { mtimeMs: 2000, size: EMPTY_DOC.length, content: EMPTY_DOC };
     await s.until(t0 + 2 * 5000 + 1500);
     expect(s.units.length).toBe(1);
-    expect(s.units[0]!.length).toBe(1);
+    expect(s.units[0]!.length, 'the event and one empty schedule statement (DERIVATIONS §0.3: removes no Phase)').toBe(2);
     expect(s.units[0]![0]!.event).toBe('xml-rewrite-detected');
+    expect((s.units[0]![1] as any).schedule).toMatchObject({ source: 'xml', phaseIds: [] });
     expect(s.last()?.state).toBe('connected');
     const det = iso(s.f.statLog[firstStatShowing(s, 2000)]!.at);
     expect(s.last()?.lastRewriteDetectedAt).toBe(det);
@@ -385,8 +386,9 @@ describe('row 11-12 states', () => {
     s.reader.start();
     await s.until(s.clock.now() + 6000);
     expect(s.units.length).toBe(1);
-    expect(s.units[0]!.length).toBe(1);
+    expect(s.units[0]!.length, 'the event and one empty schedule statement').toBe(2);
     expect(s.units[0]![0]!.changedAfter).toBeNull();
+    expect((s.units[0]![1] as any).schedule).toMatchObject({ source: 'xml', phaseIds: [] });
     expect(s.last()?.state).toBe('connected');
     s.reader.stop();
   });

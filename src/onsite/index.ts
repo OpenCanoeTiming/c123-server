@@ -371,7 +371,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
 
   /**
    * §2.9: a WriteRequest and the optimistic value it carries are one step: `write.updated` goes out right behind the `attempt.updated` of
-   * its Attempt; a removed Attempt's goes right before its `attempt.deleted` (§7.2).
+   * its Attempt; a removed Attempt's goes right before its `attempt.deleted`, a removed Phase's right before its `phase.deleted` (§7.2).
    */
   function writesBesideAttempts(wire: J[]): J[] {
     const out = wire.filter((m) => m['type'] !== 'write.updated');
@@ -380,7 +380,8 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
       const id = `${t.phaseId}:${t.bib}`;
       const at = out.map((m) => m['type'] === 'attempt.updated' && m['attemptId'] === id).lastIndexOf(true);
       const gone = out.findIndex((m) => m['type'] === 'attempt.deleted' && m['attemptId'] === id);
-      out.splice(at >= 0 ? at + 1 : gone >= 0 ? gone : out.length, 0, w);
+      const phaseGone = out.findIndex((m) => m['type'] === 'phase.deleted' && m['phaseId'] === t.phaseId);
+      out.splice(at >= 0 ? at + 1 : gone >= 0 ? gone : phaseGone >= 0 ? phaseGone : out.length, 0, w);
     }
     return out;
   }

@@ -129,8 +129,12 @@ describe('row 1: step log format (checker readStepLog)', () => {
     for (const { element: e } of flat(log.steps)) {
       expect(e['observedAt'], JSON.stringify(e)).toEqual(expect.any(String))
       const observation = typeof e['field'] === 'string' && typeof e['source'] === 'string'
-      expect(observation || typeof e['event'] === 'string' || typeof e['snapshot'] === 'object' || typeof e['diagnostic'] === 'object' || 'unparseable' in e || 'unknownType' in e || 'sourceStatus' in e, JSON.stringify(e)).toBe(true)
+      // CONFORMANCE-VECTORS §1 "Schedule statements" (#382): `{ schedule: { source: 'xml', phaseIds: string[] } }`, the races an XML snapshot's Schedule names
+      const sch = e['schedule'] as { source?: unknown; phaseIds?: unknown } | undefined
+      const schedule = typeof sch === 'object' && sch !== null && sch.source === 'xml' && Array.isArray(sch.phaseIds) && sch.phaseIds.every((x) => typeof x === 'string')
+      expect(observation || schedule || typeof e['event'] === 'string' || typeof e['snapshot'] === 'object' || typeof e['diagnostic'] === 'object' || 'unparseable' in e || 'unknownType' in e || 'sourceStatus' in e, JSON.stringify(e)).toBe(true)
     }
+    expect(flat(log.steps).some((p) => typeof p.element['schedule'] === 'object'), 'the recording\'s XML reads state their schedule (§1 schedule statement)').toBe(true)
     const fields = new Set(flat(log.steps).map((p) => p.element['field']))
     expect(fields.has('status')).toBe(true)
     expect(fields.has('onCourse')).toBe(true)

@@ -76,6 +76,17 @@ export function applyMessage(m: Model, msg: J): void {
     case 'phase.updated': applyResource(m, m.phases, 'phase', msg); break;
     case 'entry.updated': applyResource(m, m.entries, 'entry', msg); break;
     case 'class.updated': applyResource(m, m.classes, 'class', msg); break;
+    case 'phase.deleted': {
+      // CLIENT-OBLIGATIONS `phase.deleted`: the Phase, every Attempt of it, every Standing whose scope names it, and (served only while the Attempt exists) their checks and flags.
+      const id = msg['phaseId'] as string;
+      m.phases.delete(id);
+      const gone = new Set<string>();
+      for (const [k, a] of [...m.attempts]) if ((a as J)['phaseId'] === id) { gone.add(k); m.attempts.delete(k); }
+      for (const [k, st] of [...m.standings]) if (standingNames(st, { kind: 'phase', phaseId: id })) m.standings.delete(k);
+      for (const [k, c] of [...m.checks]) if (gone.has((c as J)['attemptId'])) m.checks.delete(k);
+      for (const [k, f] of [...m.flags]) if (gone.has((f as J)['attemptId'])) m.flags.delete(k);
+      break;
+    }
     case 'standing.updated': m.standings.set(msg['standing']['standingKey'], msg['standing']); break;
     case 'course.updated': m.courses.set(msg['course']['courseId'], msg['course']); break;
     case 'write.updated': break;
