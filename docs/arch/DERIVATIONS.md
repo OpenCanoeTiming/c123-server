@@ -2650,7 +2650,19 @@ review of #318's code (PR #379).
     order and covers a read that does not restate it. It is narrow on purpose: a second run
     naming a Phase nothing has stated stays as item 49 (b) has it. Each such Phase, first or
     second run, is sent as `phase.updated` after the `phase.deleted`, in one unit, so no
-    client sees a pointer to a removed Phase at a unit boundary.
+    client sees a pointer to a removed Phase at a unit boundary. *Amended 2026-11-16 (#382, PR #390):* the
+    parser keeps the pairing candidates it has learned (§2.1) and cannot know whether the core
+    admitted a removal, since the guard is the core's; so a later statement of a second run can
+    name the removed Phase again. **The core presents no `siblingPhaseId` that names a Phase it
+    has removed and not created again:** such a stated sibling is retained and presents `null`,
+    at the removal and at every later statement, until that `phaseId` is created again (j),
+    when the stated sibling presents as stated. One rule, in the core; the parser stays
+    stateless about admission. A refused removal leaves the Phase held, so a statement naming it
+    presents as stated and nothing diverges. Not taken: the parser forgetting every race the
+    latest schedule statement drops, which would make a second run lose a first run the core
+    kept whenever the guard refuses. Still narrow: a second run naming a Phase nothing has
+    stated, never held, stays as item 49 (b), (d) have it. What a client sees is (h)'s value,
+    now held across later units as well; no further duty moves.
     (i) *Classification rows and their kept `decidedIn`* go with the Phase (item 52).
     (j) *A returning Phase* is a new Phase: created whole by the ordinary rule, its `date` the
     snapshot's (INV-5's once-only date is per Phase), its Attempts `run` 1 with none of the

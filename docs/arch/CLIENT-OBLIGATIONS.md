@@ -454,3 +454,8 @@ cited section and moved no obligation above:
 - a start or finish the stream has withdrawn before the Attempt leaves counts as not observed, so
   a leave from `at-start` after a deleted start gives `not-started`; a client renders the status
   as served (CONTRACTS §2.6, §3.2; DERIVATIONS §4.1).
+
+#382's code (PR #390, 2026-11-16; `DECISIONS/LOG.md`) took one default on pairing after a removal.
+It changed a cited section and moved no obligation above:
+- a second run whose stated sibling is a removed Phase keeps presenting `siblingPhaseId: null`
+  until that Phase is created again; a client reads `Phase.pair` as before (DERIVATIONS §10).
