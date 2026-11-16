@@ -234,7 +234,8 @@ describe('item 51 (DERIVATIONS §10 item 51, §4.1 withdrawal bullet, §4.4 "Run
     step(c, sl(5000, { ...base, time: '85.00', gates: cells(13, 1) }), ids);
     expect(dur(c, xid), 'recomputed like a first finish').toEqual({ kind: 'duration', runSeconds: 85, penaltySeconds: 2, totalSeconds: 87 });
     // 5. a TCP row with a blank cell: provisional; a finish listing with Y settles it
-    const row = { ingestSeq: 0, observedAt: plus(T0, 5500), snapshot: { source: 'tcp', phaseId: SLALOM, mode: 'results', rows: [{ bib: String(X), outcome: { kind: 'duration', runSeconds: 85, penaltySeconds: 2, totalSeconds: 87 }, gates: [{ number: 3, penalty: null }, { number: 4, penalty: 2 }], placement: { rank: 4, order: 4 }, judgingComplete: false }] } };
+    const row = { ingestSeq: 0, observedAt: plus(T0, 5500), snapshot: { source: 'tcp', phaseId: SLALOM, mode: 'results', rows: [{ bib: String(X), outcome: { kind: 'duration', runSeconds: 85, penaltySeconds: 2, totalSeconds: 87 }, gates: [{ number: 1, penalty: 2 }, { number: 20, penalty: null }], placement: { rank: 4, order: 4 }, judgingComplete: false }] } };
+    expect(cells(13, 1).split(',')[19], 'precondition: the row\'s blank (gate 20) is not judged by the stream').toBe('');
     step(c, [row as never], ids);
     expect(f(c, xid, 'gates'), 'the blank cell is provisional while the run is open').toMatchObject({ provisional: true });
     step(c, sl(6000, { ...base, time: '85.00', completed: true, gates: cells(13, 1) }), ids);
