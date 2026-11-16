@@ -67,7 +67,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Tick the running time locally, if at all, only through the injected `Clock`, snapping to every new `running` value and stopping the instant `status` leaves `on-course` (CONTRACTS §2.6; TEST-ARCHITECTURE §5).
 - [ ] Stop the tick `runningStaleAfterSeconds`, a named constant of 3 s, past the client's own receipt of the last `running` value, measured on its own injected clock; freeze the display at that value and show it as stale, with its age from receipt; never subtract `observedAt` from the client clock (CONTRACTS §2.6).
 - [ ] Tie the whole on-course display to connection liveness: on site expect `sources.updated` at least every 10 s, on live a `heartbeat` message at least every 15 s; after two missed intervals mark everything shown as stale — never clear it — and repeat the §1.6 handshake, so that an `at-start` or `finished` ghost on a half-open connection or a stalled upstream cannot stand indefinitely (CONTRACTS §1.6, §7.2, §8.4; ADR-017).
-- [ ] Render `left-without-finish` as an observed removal with no reason; show a mark only once `status` carries one; never infer DNF (CONTRACTS §2.6, §3.2, §7.1; ARCHITECTURE §6.G).
+- [ ] Render `left-without-finish` as an observed removal with no reason, in a slalom Phase and in a Kayak Cross time trial alike (`stage: 'time-trial'`; never in a Cross heat); show a mark only once `status` carries one; never infer DNF (CONTRACTS §2.6, §3.2, §7.1; ARCHITECTURE §6.G).
 - [ ] Render `outcome.kind: 'no-result'` as its mark, whatever time the row carried; never let a time suppress a mark (CONTRACTS §2.6).
 - [ ] Show `non-ranked` as raced and timed but unranked, and `ral` where its `placement` puts it (CONTRACTS §2.6).
 - [ ] Show a placed row whose `outcome` is `unavailable{not-applicable}` with its placement and no time, its `status` being `finished` and its `StandingEntry.result` `null`; never detect placeholder values such as `100.00` on the client (CONTRACTS §2.6, §2.7, §3.2, §5; DERIVATIONS §4.2, §4.4).
@@ -111,10 +111,11 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Replace the whole on-course set, in the message's order, on every `oncourse.updated` (CONTRACTS §7.2, §8.4).
 - [ ] Apply `scope.replaced` as a replace, never a merge: remove every Attempt and Standing of the scope absent from the message, and leave Phases, Entries, Classes and Courses untouched (CONTRACTS §7.2, §8.4; ADR-015).
 - [ ] On `attempt.deleted` — on site over `/ws`, on live over the stream — remove the Attempt and its standing entries; keep its Entry; expect the Standings that held it as `standing.updated` in the same unit; a later `attempt.updated` for the same `attemptId` creates a new Attempt, whole, which may carry another competitor's `entry`, and the same competitor may reappear in another Phase or under another bib (CONTRACTS §1.6, §2.6, §7.2, §8.4; ADR-015).
+- [ ] On `phase.deleted` — on site over `/ws`, on live over the stream — remove the Phase, every Attempt whose `phaseId` it is, and every Standing whose scope names it (`phase`, `heat`, `classification`, a `pair` on either side; whole class and every age category); keep its Class, the Entries and the Courses; expect no `attempt.deleted` and no `standing.updated` for what it removes; the `phase.updated` of each Phase whose `pair.siblingPhaseId` named it follows in the same unit (a first run's derived again, a second run's `null`); a later `phase.updated` for the same `phaseId` creates a new Phase, whole, and a surviving second run's `pair` standing may return as `standing.updated`; a Phase the client was showing falls back to its Phase-choice default (CONTRACTS §1.6, §2.4, §7.2, §8.4; ARCHITECTURE §2; ADR-015).
 
 **Retraction and re-run**
 - [ ] Show a retraction at once: `status` back to what the on-course stream shows or `not-started`, the retracted fields `not-yet`, the entry out of the placed standing (CONTRACTS §2.6, §3.2; ARCHITECTURE §6.I).
-- [ ] Tell a removal from a retraction: a bib that leaves the race upstream (a competitor deleted, moved, or given a bib the race does not otherwise hold) arrives as `attempt.deleted`, and the Attempt leaves every list the client shows, start lists included; a re-bib or swap that leaves the bib in the race arrives as `attempt.updated` with a re-pointed `entry`, never as a removal (CONTRACTS §2.6, §4, §7.2).
+- [ ] Tell a removal from a retraction: a bib that leaves the race upstream (a competitor deleted, moved, or given a bib the race does not otherwise hold) arrives as `attempt.deleted`, and the Attempt leaves every list the client shows, start lists included; a re-bib or swap that leaves the bib in the race arrives as `attempt.updated` with a re-pointed `entry`, never as a removal; a race deleted upstream arrives as `phase.deleted`, never as `Phase.status` `cancelled`, which is a race that stays scheduled (CONTRACTS §2.4, §2.6, §3.1, §4, §7.2).
 - [ ] Show a contradicted finish as running again: `status: on-course`, `outcome: running`, no placement (CONTRACTS §2.6, §4; ARCHITECTURE §6.I).
 - [ ] On a new run generation, stop showing the old result and show the athlete as if that run had not happened; to say "re-run", read `run > 1` with the current status (CONTRACTS §2.6; ADR-013; ARCHITECTURE §6.F).
 
@@ -147,7 +148,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Use `format` and `phaseId` as Canoe123-native tokens, verbatim (CONTRACTS §7; ADR-007).
 - [ ] Show an unknown `format` token verbatim, with what the structural fields say; never invent a name and never fail to render (CONTRACTS §2.4; DERIVATIONS §9).
 - [ ] Keep the on-course set from `/api/oncourse` and `oncourse.updated`, in `courseOrder` with those lacking one last by `startOrder`; several at once and an empty set are both valid. The set is upstream's list: a finisher stays in it as `finished` or a mark until upstream closes the run, typically about 20 s but a venue setting no client may assume; leaving the set is upstream's removal, never the finish; take the set's age from `asOf` on `/api/oncourse` and on `oncourse.updated`, the instant the set last changed, which the two agree on (CONTRACTS §7.1, §7.2; ADR-009).
-- [ ] Keep a Kayak Cross heat that has left the on-course list at `on-course` until its order arrives; never treat leaving the list as a finish (CONTRACTS §7.1, §7.2; ARCHITECTURE §6.D).
+- [ ] Keep a Kayak Cross heat that has left the on-course list at `on-course` until its order arrives; never treat leaving the list as a finish; a Cross time-trial athlete who leaves is not a heat and arrives as `left-without-finish` or `not-started`, as in slalom (CONTRACTS §2.6, §7.1, §7.2; ARCHITECTURE §6.D).
 - [ ] Ignore `Standing.anomalies`, which on-site serves for the admin UI only (CONTRACTS §2.7, §5).
 - [ ] Treat `/api/sources`, `/api/diagnostics`, `diagnostics.updated` and `POST /api/rebaseline` as admin-audience only; ignore diagnostics and never expose the re-baseline (CONTRACTS §2.8, §4, §7.1, §7.2).
 - [ ] Expect an optimistic write in the targeted field as `source: 'operator-write'`, `provisional: true`, in the same push cycle as its `WriteRequest`; where the field already presents that value from an earlier pending write, `write.updated` arrives alone, so never wait for a `gates` push per write (CONTRACTS §2.9, §4; ARCHITECTURE §6.B).
@@ -168,12 +169,13 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Decide how long a finished Cross heat stays prominent as display policy, and test it at tier 3 over the gap between the order push and the next heat (ARCHITECTURE §6.D; TEST-ARCHITECTURE §3.3).
 - [ ] Show result and rank as soon as they are pushed, with the provisional mark while judging is in flight (ARCHITECTURE §2, §6.A).
 - [ ] Show `underReview` on the board (CONTRACTS §2.6; ARCHITECTURE §6.H).
-- [ ] Show "off course" at once for `left-without-finish`, and the mark when it is known (ARCHITECTURE §6.G).
+- [ ] Show "off course" at once for `left-without-finish`, in slalom and in a Kayak Cross time trial, and the mark when it is known; a removed time-trial athlete's clock is not shown frozen as on course (CONTRACTS §2.6; ARCHITECTURE §6.G).
 - [ ] Put the finisher grace period under the `Clock` and a tier-3 test; today it recomputes only when an action is dispatched. Delete stale-competitor eviction with the on-course reducer: membership of the on-course set is the server's, the set arrives whole, and a client has nothing per Attempt to time out (CONTRACTS §7.1; ARCHITECTURE §2; TEST-ARCHITECTURE §3.3; ADR-017).
 - [ ] Decide how long a finisher stays in the on-course display as display policy (`FINISHED_GRACE_PERIOD` today), from `status: finished` and the injected `Clock`; never from the Attempt leaving the set, which is upstream's closure, typically about 20 s later and a venue setting (CONTRACTS §7.1; ARCHITECTURE §2; TEST-ARCHITECTURE §3.3).
 - [ ] Route today's timing sites (`context/constants.ts`, `useDeparting.ts`, `useAutoScroll.ts`, `useHighlight.ts`) through the `Clock` (TEST-ARCHITECTURE §5).
 - [ ] Do not expose the re-baseline on a venue board (CONTRACTS §4).
 - [ ] Drop an Attempt named by `attempt.deleted` from every start list, result list and on-course view the board holds; a removed Attempt is never in the on-course set when the message arrives (CONTRACTS §4, §7.2).
+- [ ] Drop a Phase named by `phase.deleted`, with its Attempts and Standings, from every race selector, start list, result list and on-course view the board holds; none of its Attempts is in the on-course set when the message arrives (CONTRACTS §2.4, §4, §7.2).
 - [ ] Keep client configuration and remote control (ConfigPush, `clientId`, per-IP records) on today's mechanism, outside the contract, pinned by regression tests (ARCHITECTURE §8).
 
 ---
@@ -223,6 +225,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Keep a check with the Attempt it was made on: a retraction, a contradiction, a result moved to another bib or a re-pointed `entry` never moves or deletes it (CONTRACTS §2.10; ADR-016).
 - [ ] Expect checks, flags and pending writes to survive a re-baseline, with each check's `status` recomputed (CONTRACTS §2.10, §4).
 - [ ] On `attempt.deleted`, drop the Attempt with its checks and flags from the tablet's view; no `check.updated` comes for them and the server keeps them; a pending write of it arrives first as `mismatched` without `confirmedValue`, to be shown as "competitor removed in Canoe123"; a later check, flag or penalty write for it, a flag's resolution included, is `404 attempt-not-found`; if the same `attemptId` returns, its checks and flags come back as `check.updated` and `flag.updated` after the `attempt.updated` that creates it, and with any later hydration, whoever the competitor under the bib now is (CONTRACTS §2.10, §4, §7.1, §7.2).
+- [ ] On `phase.deleted`, drop the Phase and its Attempts with their checks and flags from the tablet's view, as for `attempt.deleted` but with no message per Attempt; a pending write of any of them arrives first as `mismatched` without `confirmedValue`, to be shown as "race removed in Canoe123"; while the Phase does not exist its reads answer `404 phase-not-found` and a check, flag or write on its Attempts `404 attempt-not-found`; if it returns, its Attempts' checks and flags come back as for a returning Attempt (CONTRACTS §2.4, §2.10, §4, §7.1, §7.2).
 - [ ] Drop its own event fingerprint; the server keys the store by `eventId` (CONTRACTS §2.10; ARCHITECTURE §3; ADR-016).
 - [ ] Follow the rendering clients' Phase-choice default in the race selector and let the judge override it (ARCHITECTURE §2).
 
@@ -232,7 +235,7 @@ moved since this derivation); the duties themselves are the lines below.
 
 **Boundary**
 - [ ] Store exactly what the ingest contract asserts, per tenant, durable across on-site disconnection (ARCHITECTURE §3).
-- [ ] Apply INV-1, INV-3, INV-4, INV-5, INV-6 and INV-2 rule 4, and honour explicit `not-yet`, `DELETE` and the Phase replace; apply none of INV-2 rules 1 to 3, INV-2b, INV-2c, INV-2d or INV-7 (CONTRACTS §4, §8.3; ARCHITECTURE §3).
+- [ ] Apply INV-1, INV-3, INV-4, INV-5, INV-6 and INV-2 rule 4, and honour explicit `not-yet`, both `DELETE`s (Attempt and Phase) and the Phase replace; apply none of INV-2 rules 1 to 3, INV-2b, INV-2c, INV-2d or INV-7 (CONTRACTS §4, §8.3; ARCHITECTURE §3).
 - [ ] Among bridge observations of one field, present the later-ingested one (CONTRACTS §4, §8.3).
 - [ ] Never lower a stored Attempt's `run`: a push or a Phase replace carrying a lower `run` leaves `run` as stored and applies its other fields (CONTRACTS §8.3; DERIVATIONS §10).
 - [ ] Accept `stage` on the Phase push and serve it; it is structural, not a vendor token (CONTRACTS §2.4, §8.3; ADR-007).
@@ -256,6 +259,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Treat an identical re-delivery as a no-op with no client-visible notification (CONTRACTS §4, §8.3).
 - [ ] Apply Attempt pushes partially: an omitted field is untouched, and an explicit `{ "state": "not-yet" }` resets it (CONTRACTS §8.3).
 - [ ] Implement `DELETE /ingest/v2/attempts/{phaseId}/{bib}`: `204` whether or not it existed; remove the Attempt and its standing entries (CONTRACTS §8.3).
+- [ ] Implement `DELETE /ingest/v2/phases/{phaseId}`: `204` whether or not it existed; remove the Phase, every Attempt of it, its classification rows and every Standing whose scope names it; a later `PUT` of the Phase creates it again (CONTRACTS §8.3).
 - [ ] Implement `PUT /ingest/v2/phases/{phaseId}/attempts` as a replace: Attempts absent from the body are removed (CONTRACTS §8.3; ADR-015).
 - [ ] Implement `PUT /ingest/v2/oncourse` as a whole replace of the on-course set, in course order, with `featuredByUpstream`; stub an `attemptId` not yet pushed (CONTRACTS §8.3).
 - [ ] Never be upsert-only: a retraction, a contradiction and a run-generation change arrive as explicit `not-yet` and must take effect (CONTRACTS §8.3; ADR-005; ADR-015).
@@ -267,7 +271,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Expect no `format` token on a Phase; store `kind`, `scoringKind`, `pair` and `heats`, and serve `LivePhase` (CONTRACTS §8.3; ADR-007).
 - [ ] Take one resource changing as the unit of transfer, never a file, a day or an event (CONTRACTS §8.3; ADR-005).
 - [ ] When pushes stop, keep the last on-course set and the last running values; clear nothing by the passage of time (CONTRACTS §8.3).
-- [ ] Emit per push, one request being one ingest unit (CONTRACTS §1.6): `attempt.updated` for a partial Attempt push, `attempt.deleted` for a `DELETE`, `scope.replaced` for a Phase replace, the matching `*.updated` for Class, Phase, Entry and Course, `oncourse.updated` for the on-course set, then `standing.updated` for every affected Standing (CONTRACTS §8.3, §8.4).
+- [ ] Emit per push, one request being one ingest unit (CONTRACTS §1.6): `attempt.updated` for a partial Attempt push, `attempt.deleted` for an Attempt `DELETE`, `phase.deleted` for a Phase `DELETE` (with no `standing.updated` for the Standings it removes), `scope.replaced` for a Phase replace, the matching `*.updated` for Class, Phase, Entry and Course, `oncourse.updated` for the on-course set, then `standing.updated` for every affected Standing (CONTRACTS §8.3, §8.4).
 
 **Validation**
 - [ ] Reject a malformed body with `400 validation-failed` and `error.details: [{field, issue}]` naming each refused field (CONTRACTS §1.4, §8.3).
@@ -292,7 +296,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Serve `GET /public/events/{eventId}/oncourse`, and push `oncourse.updated`, each with the set as last pushed, in course order, `featuredByUpstream`, and `asOf` the push's ingest time, `null` on the read before the event's first on-course push (CONTRACTS §7.2, §8.4).
 - [ ] Serve every public `Standing`, in reads and on the stream, without `anomalies` (CONTRACTS §2.7, §8.4).
 - [ ] Apply the per-event `birthDatePublication` setting, provisioned out of band with the key: `'year'` by default, serving `birthYear` only, `null` where no `birthDate` was pushed; `'full'` serving `birthDate` as pushed, absent where none was; `'none'` serving neither key; the same in reads and on the stream (CONTRACTS §8.4).
-- [ ] Serve `GET /public/events/{eventId}/stream` as `text/event-stream`, carrying `attempt.updated`, `attempt.deleted`, `phase.updated`, `entry.updated`, `class.updated`, `course.updated`, `standing.updated`, `oncourse.updated` and `scope.replaced`, each with its `seq`, and a `heartbeat` `{ type: 'heartbeat', asOfSeq, serverTime }` at least every 15 s; every frame a default `message` event whose `data` is one JSON object carrying `type` (CONTRACTS §1.6, §8.4).
+- [ ] Serve `GET /public/events/{eventId}/stream` as `text/event-stream`, carrying `attempt.updated`, `attempt.deleted`, `phase.updated`, `phase.deleted`, `entry.updated`, `class.updated`, `course.updated`, `standing.updated`, `oncourse.updated` and `scope.replaced`, each with its `seq`, and a `heartbeat` `{ type: 'heartbeat', asOfSeq, serverTime }` at least every 15 s; every frame a default `message` event whose `data` is one JSON object carrying `type` (CONTRACTS §1.6, §8.4).
 - [ ] Never send `write.updated`, `sources.updated`, `check.updated`, `flag.updated`, `event.changed` or `diagnostics.updated` on the stream (CONTRACTS §2.10, §4, §8.4).
 - [ ] Encode every envelope as the wire encoding requires, `eventTime` omitted rather than `null`, so that every envelope and error validates against the two wire schemas (CONTRACTS §1.2, §1.7).
 
@@ -318,6 +322,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Take each on-course athlete's `status`, `running` outcome, judged `gates` and `timeToBeat` from `attempt.updated` (CONTRACTS §8.3).
 - [ ] Show a listed Attempt whose `status` is `finished` or a mark as a finisher still on upstream's list; how long it stays visible is the client's own policy (CONTRACTS §8.3, §8.4; ARCHITECTURE §2).
 - [ ] On `attempt.deleted`, remove the Attempt and its standing entries (CONTRACTS §8.4).
+- [ ] On `phase.deleted`, remove the Phase, its Attempts and every Standing whose scope names it (CONTRACTS §8.4).
 - [ ] Show a classification Standing (`XER`, `SLER`, `WWER`) as delivered, dated by its `asOf`, which lags the contributing Phases until the operator recalculates; a Kayak Cross class may have none, and then shows every Cross Phase's own standing, the time trial included, and no overall result (CONTRACTS §2.4, §5, §8.3).
 - [ ] Label a Phase from its organiser-authored `title` when present, else from `stage`, `pair.role`, `combination`, `heats`, `scoringKind` and `kind`; expect no `format` token; `stage` is what tells a Cross semi-final from its final (CONTRACTS §2.4, §8.3; ADR-007; DERIVATIONS §9).
 - [ ] Show birth data only as served: `birthYear`, `birthDate` or neither, per the event's publication setting (CONTRACTS §8.4).
@@ -387,7 +392,8 @@ above:
   §7.3's, unchanged (CONTRACTS §7.3);
 - a Kayak Cross time-trial athlete removed before a finish stays `on-course` with the last
   `running` value until the mark arrives, which can take minutes (another athlete's push, or
-  the rotation); a client freezes that clock as stale by its existing duty (CONTRACTS §2.6);
+  the rotation); a client freezes that clock as stale by its existing duty (CONTRACTS §2.6)
+  (replaced by M2 P3c, 2026-11-16: the time trial now follows slalom, below);
 - a first run's `pair.siblingPhaseId` names only a second run that names it back, and is `null`
   otherwise; a client takes structure from `Phase.pair` as before (CONTRACTS §2.4);
 - `xml-table-emptied` is raised under the content-age guard; it stays in the admin log and
@@ -396,7 +402,8 @@ above:
 The review of #287's code (PR #376, 2026-11-16; `DECISIONS/LOG.md`) took one more default on
 pairing. It changed cited sections and moved no obligation above:
 - the server derives a first run's `pair.siblingPhaseId` from the second runs of the first
-  run's class, and a Phase whose race has left the schedule stays as last stated; a client
+  run's class, and a Phase whose race has left the schedule stays as last stated (that half
+  replaced by M2 P3c, 2026-11-16: such a Phase is removed, below); a client
   reads `Phase.pair` as before, and the sibling may be `null` (DERIVATIONS §2.1).
 
 #345's code (2026-11-16; `DECISIONS/LOG.md`) took one default on the write path. It changed a
@@ -416,3 +423,28 @@ on-course stream. It changed cited sections and moved no obligation above:
 - a stream finish withdrawn after upstream's `Completed` no longer keeps the run closed, so the
   next finish's time and penalties are inferred afresh; a client shows `outcome` and
   `provisional` as served (DERIVATIONS §4.1).
+
+M2 P3c (2026-11-16; `DECISIONS/LOG.md`) wrote the maintainer's answer of that day on the Kayak
+Cross time trial ("yes, as recommended"). It moved the duties above:
+- a Cross time-trial athlete who leaves upstream's on-course list without a finish is
+  `left-without-finish` (`not-started` if never started), as in slalom, and the mark follows at
+  the next save; a rendering client renders that status in a time-trial Phase too, and the
+  scoreboard shows "off course" at once instead of a frozen clock. A Cross heat is unchanged:
+  it stays `on-course` until its order arrives (CONTRACTS §2.6, §3.2, §7.1; DERIVATIONS §4.1).
+
+The same text took defaults that changed cited sections and moved no obligation above:
+- a classification entry that the latest admitted save leaves out reads `decidedIn: null` on a
+  later TCP build until a save states it; a re-baseline keeps classification rows; a client
+  shows `decidedIn` as served (CONTRACTS §4; DERIVATIONS §4.10);
+- the category-rank check reads first-run and single-run rows only, and the measured rule
+  stands with 0 mismatches; category ranks are served as before (CONTRACTS §5).
+
+M2 P3c also wrote the maintainer's answer of 2026-11-16 on a race that leaves upstream's schedule
+("yes, as recommended"; `DECISIONS/ADR-015` Revision 9). It moved the duties above: a Phase whose
+race an admitted save no longer schedules is removed with its Attempts and Standings, sent as
+`phase.deleted` on site and on the public stream, and the bridge sends
+`DELETE /ingest/v2/phases/{phaseId}` to live; every rendering client removes the Phase with what
+it holds, penalty-check drops the Attempts' checks and flags from view, and live-mini-server
+implements the Phase `DELETE` and emits `phase.deleted` (CONTRACTS §2.4, §4, §7.2, §8.3, §8.4).
+It also closes the gap the review of #287's code left above: a deleted second run no longer goes
+on naming the first run.

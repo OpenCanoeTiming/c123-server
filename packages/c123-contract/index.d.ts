@@ -254,6 +254,7 @@ export type WsPayload =
   | { type: 'attempt.updated'; attemptId: string; fields: Partial<Omit<Attempt, 'attemptId'>> }
   | { type: 'attempt.deleted'; attemptId: string }
   | { type: 'phase.updated'; phaseId: string; fields: Partial<Omit<Phase, 'phaseId'>> }
+  | { type: 'phase.deleted'; phaseId: string }
   | { type: 'entry.updated'; entryId: string; fields: Partial<Omit<OnsiteEntry, 'entryId'>> }
   | { type: 'class.updated'; classId: string; fields: Partial<Omit<Class, 'classId'>> }
   | { type: 'standing.updated'; standing: Standing }
@@ -317,6 +318,7 @@ export type PublicStreamMessage =
   | { seq: number; type: 'attempt.updated'; attemptId: string; fields: Partial<Omit<Attempt, 'attemptId'>> }
   | { seq: number; type: 'attempt.deleted'; attemptId: string }
   | { seq: number; type: 'phase.updated'; phaseId: string; fields: Partial<Omit<LivePhase, 'phaseId'>> }
+  | { seq: number; type: 'phase.deleted'; phaseId: string }
   | { seq: number; type: 'entry.updated'; entryId: string; fields: Partial<Omit<PublicEntry, 'entryId'>> }
   | { seq: number; type: 'class.updated'; classId: string; fields: Partial<Omit<Class, 'classId'>> }
   | { seq: number; type: 'course.updated'; course: Course }

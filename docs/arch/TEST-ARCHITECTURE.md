@@ -118,8 +118,8 @@ cover:
 - run generations;
 - §5's standing assembly.
 
-The count is 114 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
-a thin adapter that feeds the vectors `CONFORMANCE-VECTORS.md` §1 assigns to it (108 and 24; 18 are in
+The count is 121 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
+a thin adapter that feeds the vectors `CONFORMANCE-VECTORS.md` §1 assigns to it (115 and 24; 18 are in
 both) into its own merge function and asserts the result — proving
 both satisfy the same data-defined contract without either depending on the other's code.
 
@@ -342,8 +342,8 @@ the step index, the Attempt, the field and the property number.
    the Attempt's race (property 5); a listing of the Attempt that increments `run` in the same delta
    (property 10) or contradicts a finish (property 7); a `rebaseline` of its scope (property 13);
    and, for the stream's own `running` outcome alone, an `oncourse-left` or `oncourse-empty`
-   covering the Attempt (slalom only: a Kayak Cross leave withdraws nothing, `DERIVATIONS.md`
-   §10 item 35), a listing of it with `dtStart` empty, or a listing of it with a `dtFinish` that
+   covering the Attempt (slalom and the Kayak Cross time trial: a Kayak Cross heat's leave
+   withdraws nothing, `DERIVATIONS.md` §10 item 35; the time trial since 2026-11-16, §4.1), a listing of it with `dtStart` empty, or a listing of it with a `dtFinish` that
    yields no `duration` (an empty `Time`, or a slalom listing with no `Gates`) — the stream withdrawing what it alone stated (`DERIVATIONS.md` §4.3, §4.1,
    §10 item 43; `ADR-015` Revision 4), `status` as §4.1 gives it at that element (the leave's
    `left-without-finish` or `not-started`, a table `finished` or mark standing; the listing's
@@ -426,7 +426,14 @@ the step index, the Attempt, the field and the property number.
      removal, `entry` re-pointed (the bib is the key of a run's data, maintainer, 2026-11-12). *Example:* bib 11
      presents a `tcp` result and is off course; an `xml` snapshot of the race lists bibs 9 and 10
      only and its content age is later than bib 11's push: bib 11's Attempt is removed in that
-     step. The same snapshot with `changedAfter: null` leaves it, by (c).
+     step. The same snapshot with `changedAfter: null` leaves it, by (c). **A race the
+     snapshot's schedule no longer names removes its Phase** (`CONTRACTS.md` §4 INV-7;
+     `DECISIONS/ADR-015` Revision 9), where an XML schedule named it before and the snapshot is
+     admitted for the whole Phase (every `tcp` observation of it or its Attempts older than
+     `changedAfter`, none of its Attempts in the on-course set): in that step the Phase and its
+     Attempts are gone and one `phase.deleted` names it, with no `attempt.deleted` for them; a
+     schedule that names no race removes nothing. The gate-2 checker's clause for this is owed
+     with the core change (M2 P3c).
 6. **Precedence (INV-2 rules 1–3).** (a) Once a result field presents a `result-row` observation, it
    never afterwards presents an `inference` for the same generation, except through a contradiction
    (property 7) or after a retraction (property 5). (b) `gates` is merged cell by cell: while
@@ -887,7 +894,7 @@ nothing; a public read of an unknown `eventId` is `404`, never another organiser
 
 **One format, used four ways**, because it is the same thing every time — a sequence of the same
 `{seq, type, …}` deltas `CONTRACTS.md` §7.2/§8.4 define — `attempt.updated`, `attempt.deleted`,
-`phase.updated`, `entry.updated`, `class.updated`, `course.updated`, `standing.updated`,
+`phase.updated`, `phase.deleted`, `entry.updated`, `class.updated`, `course.updated`, `standing.updated`,
 `oncourse.updated`, `scope.replaced`, `event.changed`, `write.updated`, `sources.updated`,
 `diagnostics.updated`, `check.updated`, `flag.updated`, each with the payload keys those sections give — as `CONTRACTS.md`
 §7.2/§8.4 already define, with a file-level header:

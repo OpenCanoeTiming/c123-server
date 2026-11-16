@@ -10258,6 +10258,694 @@
         },
         "attempts": []
       }
+    },
+    {
+      "id": "cross-time-trial-left-without-finish",
+      "invariant": "left-without-finish",
+      "description": "A Kayak Cross time-trial athlete who leaves the on-course list after a start and with no finish becomes left-without-finish, as in slalom; the stream's running outcome is withdrawn with the listing and no reason is inferred (maintainer, 2026-11-16; CONTRACTS §2.6, §7.1). A Cross heat keeps on-course (item 35).",
+      "context": {
+        "discipline": "cross",
+        "attemptId": "MX1_XT_26:48"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "attemptId": "MX1_XT_26:48",
+          "field": "onCourse",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-04-26T08:05:10.000Z",
+          "value": {
+            "dtStart": "2026-04-26T08:05:01.120Z",
+            "dtFinish": null
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 2,
+          "attemptId": "MX1_XT_26:48",
+          "field": "status",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-04-26T08:05:10.000Z",
+          "value": "on-course",
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 3,
+          "attemptId": "MX1_XT_26:48",
+          "field": "outcome",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-04-26T08:05:10.000Z",
+          "value": {
+            "kind": "running",
+            "elapsedSeconds": 8.9,
+            "penaltySeconds": 0
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 4,
+          "event": "oncourse-left",
+          "observedAt": "2026-04-26T08:05:30.000Z",
+          "attemptId": "MX1_XT_26:48"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 2,
+          "expect": {
+            "status": {
+              "state": "known",
+              "value": "on-course"
+            },
+            "outcome": {
+              "state": "known",
+              "value": {
+                "kind": "running"
+              }
+            },
+            "oncourse": [
+              "MX1_XT_26:48"
+            ]
+          }
+        }
+      ],
+      "expect": {
+        "status": {
+          "state": "known",
+          "value": "left-without-finish",
+          "source": "tcp"
+        },
+        "outcome": {
+          "state": "not-yet"
+        },
+        "oncourse": []
+      }
+    },
+    {
+      "id": "cross-time-trial-left-without-finish-then-mark-from-xml",
+      "invariant": "INV-2 rule 2 exception",
+      "description": "After a Kayak Cross time-trial athlete left without a finish, a no-result mark set on a silent path arrives in the next save and supersedes the TCP left-without-finish while TCP stays connected, as in slalom (maintainer, 2026-11-16; CONTRACTS §4 INV-2 rule 2). Before the decision the Attempt stayed on-course and the mark waited for TCP.",
+      "context": {
+        "discipline": "cross",
+        "tcpConnectedThroughout": true,
+        "attemptId": "MX1_XT_26:48"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "attemptId": "MX1_XT_26:48",
+          "field": "onCourse",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-04-26T08:05:10.000Z",
+          "value": {
+            "dtStart": "2026-04-26T08:05:01.120Z",
+            "dtFinish": null
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 2,
+          "attemptId": "MX1_XT_26:48",
+          "field": "status",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-04-26T08:05:10.000Z",
+          "value": "on-course",
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 3,
+          "event": "oncourse-left",
+          "observedAt": "2026-04-26T08:05:30.000Z",
+          "attemptId": "MX1_XT_26:48"
+        },
+        {
+          "ingestSeq": 4,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-04-26T08:06:05.000Z",
+          "changedAfter": "2026-04-26T08:06:00.000Z"
+        },
+        {
+          "ingestSeq": 5,
+          "attemptId": "MX1_XT_26:48",
+          "field": "status",
+          "source": "xml",
+          "kind": "result-row",
+          "observedAt": "2026-04-26T08:06:05.000Z",
+          "value": "dnf",
+          "confidence": "authoritative"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 2,
+          "expect": {
+            "status": {
+              "state": "known",
+              "value": "left-without-finish",
+              "source": "tcp"
+            }
+          }
+        }
+      ],
+      "expect": {
+        "status": {
+          "state": "known",
+          "value": "dnf",
+          "source": "xml"
+        }
+      }
+    },
+    {
+      "id": "cross-time-trial-unstaged-leave-returns-to-not-started",
+      "invariant": "oncourse",
+      "description": "A Kayak Cross time-trial Attempt staged and then removed before any start returns to not-started, as in slalom, and never stays at-start (maintainer, 2026-11-16; DERIVATIONS §4.1; recorded: three such leaves in cp3-cross MX1_XT_26 and WX1_XT_26, each ended by a dns row 0 to 17 s later).",
+      "context": {
+        "discipline": "cross",
+        "attemptId": "MX1_XT_26:51"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "attemptId": "MX1_XT_26:51",
+          "field": "onCourse",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-04-26T08:00:44.164Z",
+          "value": {
+            "dtStart": null,
+            "dtFinish": null
+          },
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 2,
+          "attemptId": "MX1_XT_26:51",
+          "field": "status",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-04-26T08:00:44.164Z",
+          "value": "at-start",
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 3,
+          "event": "oncourse-left",
+          "observedAt": "2026-04-26T08:00:59.622Z",
+          "attemptId": "MX1_XT_26:51"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 1,
+          "expect": {
+            "status": {
+              "state": "known",
+              "value": "at-start"
+            },
+            "oncourse": [
+              "MX1_XT_26:51"
+            ]
+          }
+        }
+      ],
+      "expect": {
+        "status": {
+          "state": "known",
+          "value": "not-started"
+        },
+        "oncourse": []
+      }
+    },
+    {
+      "id": "phase-removed-when-schedule-omits-it",
+      "invariant": "INV-7",
+      "description": "A second run whose race the next admitted XML schedule no longer names is removed with its Attempts: one phase.deleted, no attempt.deleted. The first run that named it as its sibling is derived again in the unit: one phase.updated carrying its pair, whose siblingPhaseId is then null (maintainer, 2026-11-16; ADR-015 Revision 9; closes DERIVATIONS §10 item 49 (c); a Phase's pair is a structural value, not an envelope, so its value is pinned by a core test).",
+      "context": {
+        "xmlPollIntervalSeconds": 5,
+        "phase": "K1M_BR1_6",
+        "attemptId": "K1M_BR1_6:1"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T09:00:00.000Z",
+          "changedAfter": null
+        },
+        {
+          "ingestSeq": 2,
+          "schedule": {
+            "source": "xml",
+            "phaseIds": [
+              "K1M_BR1_6",
+              "K1M_BR2_6"
+            ]
+          },
+          "observedAt": "2026-09-15T09:00:00.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "start-list",
+            "rows": [
+              {
+                "bib": "1"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T09:00:00.000Z"
+        },
+        {
+          "ingestSeq": 4,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR2_6",
+            "mode": "start-list",
+            "rows": [
+              {
+                "bib": "9"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T09:00:00.000Z"
+        },
+        {
+          "ingestSeq": 5,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T09:10:05.000Z",
+          "changedAfter": "2026-09-15T09:10:00.000Z"
+        },
+        {
+          "ingestSeq": 6,
+          "schedule": {
+            "source": "xml",
+            "phaseIds": [
+              "K1M_BR1_6"
+            ]
+          },
+          "observedAt": "2026-09-15T09:10:05.000Z"
+        },
+        {
+          "ingestSeq": 7,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "start-list",
+            "rows": [
+              {
+                "bib": "1"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T09:10:05.000Z"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 3,
+          "expect": {
+            "attempts": [
+              "K1M_BR1_6:1",
+              "K1M_BR2_6:9"
+            ]
+          }
+        }
+      ],
+      "expect": {
+        "attempts": [
+          "K1M_BR1_6:1"
+        ],
+        "notifications": {
+          "phase.deleted": {
+            "count": 1,
+            "afterGivenIndex": 3
+          },
+          "phase.updated": {
+            "count": 1,
+            "afterGivenIndex": 3,
+            "fields": [
+              "pair"
+            ]
+          },
+          "attempt.deleted": 0
+        }
+      }
+    },
+    {
+      "id": "phase-kept-when-schedule-table-empty",
+      "invariant": "INV-7",
+      "description": "An admitted XML snapshot whose schedule names no race removes nothing: one read of the lagging source does not clear an event (maintainer, 2026-11-16; ADR-015 Revision 9). The core logs xml-schedule-emptied, which no vector reads. Passes on a core that removes no Phase; it guards the removal's empty-schedule case.",
+      "context": {
+        "xmlPollIntervalSeconds": 5,
+        "attemptId": "K1M_BR1_6:1"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T09:00:00.000Z",
+          "changedAfter": null
+        },
+        {
+          "ingestSeq": 2,
+          "schedule": {
+            "source": "xml",
+            "phaseIds": [
+              "K1M_BR1_6"
+            ]
+          },
+          "observedAt": "2026-09-15T09:00:00.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_6",
+            "mode": "start-list",
+            "rows": [
+              {
+                "bib": "1"
+              },
+              {
+                "bib": "2"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T09:00:00.000Z"
+        },
+        {
+          "ingestSeq": 4,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T09:10:05.000Z",
+          "changedAfter": "2026-09-15T09:10:00.000Z"
+        },
+        {
+          "ingestSeq": 5,
+          "schedule": {
+            "source": "xml",
+            "phaseIds": []
+          },
+          "observedAt": "2026-09-15T09:10:05.000Z"
+        }
+      ],
+      "expect": {
+        "attempts": [
+          "K1M_BR1_6:1",
+          "K1M_BR1_6:2"
+        ],
+        "notifications": {
+          "phase.deleted": 0,
+          "attempt.deleted": 0
+        }
+      }
+    },
+    {
+      "id": "phase-removal-refused-by-guard",
+      "invariant": "INV-7",
+      "description": "A save that no longer schedules a race removes its Phase only when its content age is later than every TCP delivery naming the Phase or its Attempts: a file written before TCP's push of the race removes nothing, and the next save removes it (maintainer, 2026-11-16; ADR-015 Revision 9).",
+      "context": {
+        "tcpConnectedThroughout": true,
+        "xmlPollIntervalSeconds": 5,
+        "phase": "K1M_BR1_7",
+        "attemptId": "K1M_BR1_7:11"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:30:05.000Z",
+          "changedAfter": "2026-09-15T10:30:00.000Z"
+        },
+        {
+          "ingestSeq": 2,
+          "schedule": {
+            "source": "xml",
+            "phaseIds": [
+              "K1M_BR1_6",
+              "K1M_BR1_7"
+            ]
+          },
+          "observedAt": "2026-09-15T10:30:05.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_7",
+            "mode": "start-list",
+            "rows": [
+              {
+                "bib": "11"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:30:05.000Z"
+        },
+        {
+          "ingestSeq": 4,
+          "snapshot": {
+            "source": "tcp",
+            "phaseId": "K1M_BR1_7",
+            "mode": "results",
+            "rows": [
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 90.12,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 90.12
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "judgingComplete": true,
+                "bib": "11"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T10:40:59.500Z"
+        },
+        {
+          "ingestSeq": 5,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:41:00.000Z",
+          "changedAfter": "2026-09-15T10:40:55.000Z"
+        },
+        {
+          "ingestSeq": 6,
+          "schedule": {
+            "source": "xml",
+            "phaseIds": [
+              "K1M_BR1_6"
+            ]
+          },
+          "observedAt": "2026-09-15T10:41:00.000Z"
+        },
+        {
+          "ingestSeq": 7,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T10:41:37.000Z",
+          "changedAfter": "2026-09-15T10:41:32.000Z"
+        },
+        {
+          "ingestSeq": 8,
+          "schedule": {
+            "source": "xml",
+            "phaseIds": [
+              "K1M_BR1_6"
+            ]
+          },
+          "observedAt": "2026-09-15T10:41:37.000Z"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 5,
+          "expect": {
+            "attempts": [
+              "K1M_BR1_7:11"
+            ],
+            "outcome": {
+              "state": "known",
+              "value": {
+                "kind": "duration",
+                "totalSeconds": 90.12
+              },
+              "source": "tcp"
+            }
+          }
+        }
+      ],
+      "expect": {
+        "attempts": [],
+        "notifications": {
+          "phase.deleted": {
+            "count": 1,
+            "afterGivenIndex": 5
+          }
+        }
+      }
+    },
+    {
+      "id": "phase-removed-then-returns",
+      "invariant": "INV-7",
+      "description": "A Phase removed because the schedule no longer named it is a new Phase when a later save schedules it again: created whole, its Attempt created from its row, run 1 and presented from xml, carrying none of the removed Attempt's result state: the removed one was in generation 2, which no retraction lowers (maintainer, 2026-11-16; ADR-015 Revision 9 rule 7).",
+      "context": {
+        "tcpConnectedThroughout": true,
+        "xmlPollIntervalSeconds": 5,
+        "phase": "K1M_BR1_7",
+        "attemptId": "K1M_BR1_7:11"
+      },
+      "given": [
+        {
+          "ingestSeq": 1,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T09:00:00.000Z",
+          "changedAfter": null
+        },
+        {
+          "ingestSeq": 2,
+          "schedule": {
+            "source": "xml",
+            "phaseIds": [
+              "K1M_BR1_6",
+              "K1M_BR1_7"
+            ]
+          },
+          "observedAt": "2026-09-15T09:00:00.000Z"
+        },
+        {
+          "ingestSeq": 3,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_7",
+            "mode": "start-list",
+            "rows": [
+              {
+                "bib": "11"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T09:00:00.000Z"
+        },
+        {
+          "ingestSeq": 4,
+          "attemptId": "K1M_BR1_7:11",
+          "field": "run",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T09:05:00.000Z",
+          "value": 2,
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 5,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T09:10:05.000Z",
+          "changedAfter": "2026-09-15T09:10:00.000Z"
+        },
+        {
+          "ingestSeq": 6,
+          "schedule": {
+            "source": "xml",
+            "phaseIds": [
+              "K1M_BR1_6"
+            ]
+          },
+          "observedAt": "2026-09-15T09:10:05.000Z"
+        },
+        {
+          "ingestSeq": 7,
+          "event": "xml-rewrite-detected",
+          "observedAt": "2026-09-15T09:20:05.000Z",
+          "changedAfter": "2026-09-15T09:20:00.000Z"
+        },
+        {
+          "ingestSeq": 8,
+          "schedule": {
+            "source": "xml",
+            "phaseIds": [
+              "K1M_BR1_6",
+              "K1M_BR1_7"
+            ]
+          },
+          "observedAt": "2026-09-15T09:20:05.000Z"
+        },
+        {
+          "ingestSeq": 9,
+          "snapshot": {
+            "source": "xml",
+            "phaseId": "K1M_BR1_7",
+            "mode": "results",
+            "rows": [
+              {
+                "outcome": {
+                  "kind": "duration",
+                  "runSeconds": 90.12,
+                  "penaltySeconds": 0,
+                  "totalSeconds": 90.12
+                },
+                "placement": {
+                  "rank": 1,
+                  "order": 1
+                },
+                "judgingComplete": true,
+                "finishTime": "2026-09-15T09:15:00.000Z",
+                "bib": "11"
+              }
+            ]
+          },
+          "observedAt": "2026-09-15T09:20:05.000Z"
+        }
+      ],
+      "expectSequence": [
+        {
+          "afterGivenIndex": 3,
+          "expect": {
+            "run": {
+              "state": "known",
+              "value": 2
+            }
+          }
+        },
+        {
+          "afterGivenIndex": 5,
+          "expect": {
+            "attempts": []
+          }
+        }
+      ],
+      "expect": {
+        "attempts": [
+          "K1M_BR1_7:11"
+        ],
+        "run": {
+          "state": "known",
+          "value": 1
+        },
+        "outcome": {
+          "state": "known",
+          "value": {
+            "kind": "duration",
+            "totalSeconds": 90.12
+          },
+          "source": "xml"
+        },
+        "notifications": {
+          "phase.deleted": {
+            "count": 1,
+            "afterGivenIndex": 4
+          }
+        }
+      }
     }
   ]
 }
