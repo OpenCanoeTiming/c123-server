@@ -453,4 +453,4 @@ on naming the first run.
 cited section and moved no obligation above:
 - a start or finish the stream has withdrawn before the Attempt leaves counts as not observed, so
   a leave from `at-start` after a deleted start gives `not-started`; a client renders the status
-  as served (DERIVATIONS §4.1).
+  as served (CONTRACTS §2.6, §3.2; DERIVATIONS §4.1).

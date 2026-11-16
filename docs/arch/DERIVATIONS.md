@@ -1441,7 +1441,7 @@ jury-invalidated row (C1M_BR1_19 bib 7, later re-run, §4.11), and 7 s behind TC
 **After a retraction,** `status` is what the on-course stream currently shows for the Attempt
 (`at-start`, `on-course`, or a `finished` it still lists), else `not-started`. What the stream
 shows is its latest inference for the generation, the leave's included: where the leave drew
-`left-without-finish` (§4.1: a start observed and no finish ever listed) that is the status, in
+`left-without-finish` (§4.1: a start and no finish standing at the leave) that is the status, in
 either order of the leave and the retracted row. So the leave's inference is recorded when it
 is drawn, also while a table `finished` or mark outranks it and it is not presented. A finisher
 who left the list at closure has no such inference and returns to `not-started` (recorded: the
