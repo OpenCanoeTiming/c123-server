@@ -69,7 +69,6 @@ describe('CQ1: the leave recorded behind a table value (DERIVATIONS §4.12; CONT
 
   it('§3.2: a leave behind a table mark, the mark retracted', () => {
     const k = kit(SLALOM.id, SLALOM.phase);
-    const other = kit('K1M_BR1_6:11', SLALOM.phase);
     const c = k.core();
     apply(c, started(k), SLALOM.id, 'start');
     // an XML mark cannot outrank an on-course stream (INV-2 rule 2), so the leave comes first and the admitted XML snapshot's DNF follows it
@@ -78,11 +77,8 @@ describe('CQ1: the leave recorded behind a table value (DERIVATIONS §4.12; CONT
     expectLeftWithoutFinish(c, SLALOM.id, 'precondition: the leave presented left-without-finish');
     apply(c, k.xml(at(35), at(32), { status: 'dnf' }), SLALOM.id, 'xml mark');
     expect(status(c, SLALOM.id), 'precondition (XML snapshot): the mark supersedes the leave (INV-2 rule 2 exception)').toMatchObject({ state: 'known', value: 'dnf', source: 'xml' });
-    // a later XML snapshot carries another row of the race and not this bib: the mark is retracted (INV-7)
-    apply(c, [
-      k.rewrite(at(45), at(41)),
-      other.snap('xml', at(45), { outcome: dur(80), placement: { rank: 1, order: 1 }, judgingComplete: true }),
-    ], SLALOM.id, 'xml retraction');
+    // a later admitted XML snapshot keeps this bib's row with no mark and no time (the result deleted, the row kept): INV-7's retraction, not a removal
+    apply(c, k.xml(at(45), at(41), {}), SLALOM.id, 'xml retraction');
     expectLeftWithoutFinish(c, SLALOM.id, 'the mark gone: left-without-finish, the leave\'s envelope');
   });
 
