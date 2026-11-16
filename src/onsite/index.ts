@@ -400,19 +400,26 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     const waiting = wstore.pending().filter((w) => !adopted.has(w['writeId'] as string));
     if (waiting.length === 0) return;
     const known = new Set(core.attempts());
-    for (const w of waiting) {
+    // item 50 (d): an Attempt's stored pending writes resume in one unit, in the order sent, so its first delivery is judged once against all
+    const byAttempt = new Map<string, J[]>();
+    const order = waiting.map((w, i) => ({ w, i })).sort((x, y) => String(x.w['submittedAt']).localeCompare(String(y.w['submittedAt'])) || x.i - y.i);
+    for (const { w } of order) {
       const t = w['target'] as { phaseId: string; bib: string; run: number };
       const aid = `${t.phaseId}:${t.bib}`;
       const run = known.has(aid) ? runOf(aid) : undefined;
-      if (run === undefined) continue;
-      const id = w['writeId'] as string;
-      if (run < t.run) continue;
-      adopted.add(id);
-      const v = w['requestedValue'] as { gate: number; value: number };
-      await processUnit([{
-        ingestSeq: 0, attemptId: aid, field: 'gates', source: 'operator-write', kind: 'operator', observedAt: w['submittedAt'] as string,
-        value: [{ number: v.gate, penalty: v.value }], confidence: 'authoritative', run: t.run, writeId: id, retainedCell: w['retainedCell'] ?? null,
-      }]);
+      if (run === undefined || run < t.run) continue;
+      byAttempt.set(aid, [...(byAttempt.get(aid) ?? []), w]);
+    }
+    for (const [aid, ws] of byAttempt) {
+      for (const w of ws) adopted.add(w['writeId'] as string);
+      await processUnit(ws.map((w) => {
+        const t = w['target'] as { run: number };
+        const v = w['requestedValue'] as { gate: number; value: number };
+        return {
+          ingestSeq: 0, attemptId: aid, field: 'gates', source: 'operator-write', kind: 'operator', observedAt: w['submittedAt'] as string,
+          value: [{ number: v.gate, penalty: v.value }], confidence: 'authoritative', run: t.run, writeId: w['writeId'] as string, retainedCell: w['retainedCell'] ?? null,
+        };
+      }));
     }
   }
   const unit = (elements: IngestElement[]): void => { background(() => processUnit(elements)); };
@@ -699,7 +706,13 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     // The key and the flag live in two files: the key is bound first, to an id chosen ahead, and the flag is created under that id.
     // A kill between the two leaves a bound key with no flag; its retry creates the flag under the bound id, so there is never a second one.
     const flagId = bound ?? opts.newId?.() ?? `flag-${randomUUID()}`;
-    if (bound === undefined) await wstore.bindFlag(key as string, flagId);
+    if (bound === undefined) {
+      // §2.10: a flag whose key binding failed is not acknowledged and leaves its key unbound; the failure goes to the admin log (as item 18's)
+      try { await wstore.bindFlag(key as string, flagId); } catch (e) {
+        adminLog({ kind: 'store-write-failed', store: 'writes', file: `${base}writes-${encodeURIComponent(event?.eventId ?? '')}.json`, reason: e instanceof Error ? e.message : String(e) });
+        throw e;
+      }
+    }
     const flag = await doCreateFlag({ attemptId: aid, run: currentOf(aid), gate: b.gate, comment: b.comment, ...(b.suggestedValue !== undefined ? { suggestedValue: b.suggestedValue } : {}), ...(b.createdBy !== undefined ? { createdBy: b.createdBy } : {}) }, flagId);
     return { status: 201, body: flag };
   });

@@ -67,11 +67,17 @@ export async function openWritesStore(opts: { fs: ChecksFs; dir: string; eventId
   }
 
   let tail: Promise<unknown> = Promise.resolve();
-  function mutate(fn: (cur: State) => State): Promise<void> {
+  /** `undo`: what a failed write takes back out of memory (its own change only; earlier memory-only records stay). */
+  function mutate(fn: (cur: State) => State, undo?: (cur: State) => State): Promise<void> {
     const run = tail.then(async () => {
       state = fn(state);
-      await fs.writeFile(tmp, JSON.stringify({ version: 1, ...state }));
-      await fs.rename(tmp, target);
+      try {
+        await fs.writeFile(tmp, JSON.stringify({ version: 1, ...state }));
+        await fs.rename(tmp, target);
+      } catch (e) {
+        if (undo !== undefined) state = undo(state);
+        throw e;
+      }
     });
     tail = run.catch(() => undefined);
     return run;
@@ -104,7 +110,11 @@ export async function openWritesStore(opts: { fs: ChecksFs; dir: string; eventId
         flagKeys: fresh(cur.flagKeys),
       };
     }),
-    bindFlag: (key, flagId) => mutate((cur) => ({ ...cur, writeKeys: fresh(cur.writeKeys), flagKeys: { ...fresh(cur.flagKeys), [key]: { id: flagId, boundAt: clock.now() } } })),
+    // §2.10, §7.4: a flag key whose binding failed is not acknowledged, so it is not kept bound in memory
+    bindFlag: (key, flagId) => mutate(
+      (cur) => ({ ...cur, writeKeys: fresh(cur.writeKeys), flagKeys: { ...fresh(cur.flagKeys), [key]: { id: flagId, boundAt: clock.now() } } }),
+      (cur) => ({ ...cur, flagKeys: Object.fromEntries(Object.entries(cur.flagKeys).filter(([k, e]) => k !== key || e.id !== flagId)) }),
+    ),
   };
 }
 
