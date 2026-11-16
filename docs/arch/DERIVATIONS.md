@@ -152,8 +152,10 @@ read also states which races the snapshot's `Schedule` table names: the parser e
 schedule statement per read, the `RaceId`s of its schedule rows (the `<unassigned>` placeholder
 and class `NA` excluded, §0.4), before the read's race tables. The core removes a Phase that a
 schedule statement no longer names, under the guard of §4.12; an empty statement removes
-nothing. TCP's `Schedule` message states no such thing: it never removes. No recording holds one: every first snapshot of the seven carried Participants, Classes,
-Schedule, Results, CourseData and Events.
+nothing; the conditions in full, the read's own tables included, are §4.12 and §10 item 54.
+TCP's `Schedule` message states no such thing: it never removes. No recording holds a valid and
+empty file: every first snapshot of the seven carried Participants, Classes, Schedule, Results,
+CourseData and Events.
 
 ### 0.4 Ingest filters
 
@@ -1420,7 +1422,8 @@ previously known from a results-table observation:
   and their `phase.updated` follow. **An empty schedule
   statement removes nothing;** where at least one Phase would have been removed, the guard
   applied, the core raises `xml-schedule-emptied` with the number of such Phases (ingest-only,
-  §0.5), once, re-armed by a schedule statement that names a race. Defaults: §10 item 54. No
+  §0.5), once, re-armed by a schedule statement that names a race. Defaults: §10 item 54,
+  among them that a race the same read's tables still carry is not removed by it (m). No
   recording holds a race leaving the schedule or an empty schedule (E4; the P3c sweep's scan, 2,032
   distinct snapshots).
 - **A row that returns** after an absent-row retraction is a new `xml` observation and is
@@ -1440,7 +1443,8 @@ jury-invalidated row (C1M_BR1_19 bib 7, later re-run, §4.11), and 7 s behind TC
 
 **After a retraction,** `status` is what the on-course stream currently shows for the Attempt
 (`at-start`, `on-course`, or a `finished` it still lists), else `not-started`. What the stream
-shows is its latest inference for the generation, the leave's included: where the leave drew
+shows is its latest inference for the generation, the leave's `left-without-finish` included:
+where the leave (an `oncourse-left` or an `oncourse-empty`, §4.1) drew
 `left-without-finish` (§4.1: a start and no finish standing at the leave) that is the status, in
 either order of the leave and the retracted row. So the leave's inference is recorded when it
 is drawn, also while a table `finished` or mark outranks it and it is not presented. A finisher

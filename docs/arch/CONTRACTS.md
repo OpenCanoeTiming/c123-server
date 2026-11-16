@@ -733,7 +733,8 @@ and its Cross results are its race Phases' own standings, the time trial's inclu
 `DECISIONS/ADR-015` Revision 9). It is removed at the first admitted XML snapshot whose schedule
 no longer names its race: deleted upstream, or rebuilt under another `RaceId` after a class rename
 (§4 INV-7). Only a Phase an XML schedule has named is removed, a snapshot whose schedule names no
-race removes nothing, and the content-age guard covers the whole Phase. The removal takes the
+race removes nothing, and the content-age guard covers the whole Phase (the conditions in full,
+the read's own tables included: `DERIVATIONS.md` §10 item 54). The removal takes the
 Phase's Attempts, its classification rows and every Standing whose scope names it, and is sent as
 one `phase.deleted` (§7.2) and to live as `DELETE` (§8.3). A first run whose sibling was removed
 names another second run or `null`, and a second run whose first run was removed names `null`

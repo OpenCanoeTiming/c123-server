@@ -471,3 +471,8 @@ changed a cited section and moved no obligation above:
 - the category-rank check compares only while the class standing presents the snapshot's class
   order, so no transient anomaly follows a save that lags a TCP push; anomalies are admin-only and
   ranks are served as before (CONTRACTS §5).
+
+The P3c fold-in (2026-11-16) aligned wording and moved no obligation above: the retraction's
+fallback to `left-without-finish` is drawn at either leave element, `oncourse-left` or
+`oncourse-empty`, as the core already does, and the Phase removal's full conditions are
+deferred to one place; a client renders what is served (CONTRACTS §2.4; TEST-ARCHITECTURE §3.2).
