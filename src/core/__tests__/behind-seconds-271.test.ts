@@ -19,23 +19,39 @@ describe('#271 CQ3: behindSeconds of an untimed second-run row (CONTRACTS §5 st
   const pairFact = el({ ingestSeq: 1, observedAt: at(1), field: 'pair', phaseId: P2, source: 'tcp', kind: 'result-row', value: { role: 'second', siblingPhaseId: P1, combination: 'best' }, confidence: 'authoritative' });
   const timed = (bib: string, rank: number, run: number, pairTotal: number) => ({ bib, entry: { entryId: `E${bib}` }, outcome: duration(run), placement: { rank, order: rank }, pairTotal, judgingComplete: true });
 
-  it('§5 step 6: an entry whose run-2 row is untimed has behindSeconds null in its phase and pair standings, the timed entries keep the combined gap', () => {
+  const untimedNa = { state: 'unavailable', reason: 'not-applicable' };
+  const build = (second: Record<string, unknown>) => {
     const c = coreWith([]);
     c.applyUnit([pairFact]);
     c.applyUnit([el({ ingestSeq: 5, observedAt: at(10), snapshot: { source: 'tcp', phaseId: P2, mode: 'results', rows: [
       timed('1', 1, 80, 170),
-      { bib: '2', entry: { entryId: 'E2' }, placement: { rank: 2, order: 2 }, pairTotal: 175, timeEmpty: true, judgingComplete: true },
+      { bib: '2', entry: { entryId: 'E2' }, placement: { rank: 2, order: 2 }, pairTotal: 175, judgingComplete: true, ...second },
       timed('3', 3, 82, 180),
     ] } })]);
+    return c;
+  };
+
+  it('§5 step 6 + step 2: an entry whose row is untimed (outcome unavailable{not-applicable}) has behindSeconds null in its phase and pair standings, the timed entries keep the combined gap', () => {
+    const c = build({ outcome: untimedNa });
+    expect(c.presented(`${P2}:2`)['outcome'], 'precondition: the Attempt presents the untimed outcome').toMatchObject({ state: 'unavailable', reason: 'not-applicable' });
     for (const key of [`phase:${P2}/all`, `pair:${P2}/all`]) {
       const s = stds(c, key).at(-1);
       expect(s, `${key} published`).toBeDefined();
       const untimed = s!.entries.find((e) => e['bib'] === '2')!;
       expect(untimed['rank'], `${key}: precondition, the untimed entry is placed`).toBe(2);
-      expect(untimed['result'], `${key}: precondition, it has no run-2 time`).not.toMatchObject({ kind: 'duration' });
+      expect(untimed['result'], `${key}: precondition, step 2 gives no result`).toBeNull();
       expect(behind(s!), key).toEqual([['1', 0], ['2', null], ['3', 10]]);
     }
     expect(stds(c, `pair:${P2}/all`).at(-1)!.entries.find((e) => e['bib'] === '2')!['pairTotalSeconds'], 'precondition: it has a pairTotal').toBe(175);
+  });
+
+  it('§5 step 6 (guard): a pending second-run row (timeEmpty, outcome not yet) has a numeric ranked value, pairTotal: behindSeconds is the combined gap', () => {
+    const c = build({ timeEmpty: true });
+    for (const key of [`phase:${P2}/all`, `pair:${P2}/all`]) {
+      const s = stds(c, key).at(-1)!;
+      expect(s.entries.find((e) => e['bib'] === '2')!['result'], `${key}: precondition, pending`).toEqual({ kind: 'pending' });
+      expect(behind(s), key).toEqual([['1', 0], ['2', 5], ['3', 10]]);
+    }
   });
 });
 
