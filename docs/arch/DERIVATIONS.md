@@ -2429,7 +2429,9 @@ review of #318's code (PR #379).
     `combination`; no id is read to say so. That sentence covers a Phase nothing has stated at
     all, which the core does not hold and which serves only what reads across the pair (§4.5;
     `two-run-br1-unavailable-no-live-no-xml`). Default, the same reading for a Phase the core
-    holds (its class stated, say) with neither `format` nor `pair` stated: it is that first run,
+    holds (its class stated, say) with neither `format` nor `pair` stated, named by a second run
+    that names it under (b), that is whose stated `classId` does not differ from its own: it is
+    that first run,
     its `pair` presented as `{ role: 'first', combination, siblingPhaseId }` with the sibling
     item 48's inverse; its `format`, `stage`, `kind`, `scoringKind` and `heats` are not presented
     until a `format` is stated, and the core reads them meanwhile as `CONTRACTS.md` §2.4's
