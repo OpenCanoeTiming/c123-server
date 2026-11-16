@@ -10797,8 +10797,9 @@
     {
       "id": "phase-removed-then-returns",
       "invariant": "INV-7",
-      "description": "A Phase removed because the schedule no longer named it is a new Phase when a later save schedules it again: created whole, its Attempt created from its row, run 1, presented from xml (maintainer, 2026-11-16; ADR-015 Revision 9).",
+      "description": "A Phase removed because the schedule no longer named it is a new Phase when a later save schedules it again: created whole, its Attempt created from its row, run 1 and presented from xml, carrying none of the removed Attempt's result state: the removed one was in generation 2, which no retraction lowers (maintainer, 2026-11-16; ADR-015 Revision 9 rule 7).",
       "context": {
+        "tcpConnectedThroughout": true,
         "xmlPollIntervalSeconds": 5,
         "phase": "K1M_BR1_7",
         "attemptId": "K1M_BR1_7:11"
@@ -10837,12 +10838,22 @@
         },
         {
           "ingestSeq": 4,
+          "attemptId": "K1M_BR1_7:11",
+          "field": "run",
+          "source": "tcp",
+          "kind": "inference",
+          "observedAt": "2026-09-15T09:05:00.000Z",
+          "value": 2,
+          "confidence": "authoritative"
+        },
+        {
+          "ingestSeq": 5,
           "event": "xml-rewrite-detected",
           "observedAt": "2026-09-15T09:10:05.000Z",
           "changedAfter": "2026-09-15T09:10:00.000Z"
         },
         {
-          "ingestSeq": 5,
+          "ingestSeq": 6,
           "schedule": {
             "source": "xml",
             "phaseIds": [
@@ -10852,13 +10863,13 @@
           "observedAt": "2026-09-15T09:10:05.000Z"
         },
         {
-          "ingestSeq": 6,
+          "ingestSeq": 7,
           "event": "xml-rewrite-detected",
           "observedAt": "2026-09-15T09:20:05.000Z",
           "changedAfter": "2026-09-15T09:20:00.000Z"
         },
         {
-          "ingestSeq": 7,
+          "ingestSeq": 8,
           "schedule": {
             "source": "xml",
             "phaseIds": [
@@ -10869,7 +10880,7 @@
           "observedAt": "2026-09-15T09:20:05.000Z"
         },
         {
-          "ingestSeq": 8,
+          "ingestSeq": 9,
           "snapshot": {
             "source": "xml",
             "phaseId": "K1M_BR1_7",
@@ -10897,7 +10908,16 @@
       ],
       "expectSequence": [
         {
-          "afterGivenIndex": 4,
+          "afterGivenIndex": 3,
+          "expect": {
+            "run": {
+              "state": "known",
+              "value": 2
+            }
+          }
+        },
+        {
+          "afterGivenIndex": 5,
           "expect": {
             "attempts": []
           }
@@ -10922,7 +10942,7 @@
         "notifications": {
           "phase.deleted": {
             "count": 1,
-            "afterGivenIndex": 3
+            "afterGivenIndex": 4
           }
         }
       }
