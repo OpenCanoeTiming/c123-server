@@ -5,8 +5,9 @@
  * vector, §10 item 50 (e), CONTRACTS §4 rule 4), N4 (a flag whose store write fails is not acknowledged, its key stays unbound, CONTRACTS §2.10, §7.4).
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { boot, disposeAll, feedXml, get, post, setInstance, virtualClock, type Env, type J } from './onsite-harness.js';
+import { boot, derived, disposeAll, feedXml, get, post, setInstance, virtualClock, type Env, type J } from './onsite-harness.js';
 import { ODP, feed } from './datasets.js';
+import { R19 } from '../../core/__tests__/fixtures/round19-excerpts.js';
 import { FLAGS, GOOD, K, adminLog, attemptOf, closedRun, courseGateCount, failWritesStore, startListOnly, startListXml, rowOver, write, writeState, writesFile } from './write-fixtures-300.js';
 
 afterEach(disposeAll);
@@ -43,6 +44,34 @@ describe('O1 (item 20): TCP-first restart with two writes on one gate', () => {
       expect((await writeState(env, b.body.writeId)).status).toBe('confirmed');
     });
   }
+});
+
+describe("O1 (item 20), the shape that reaches it: the course is bound before the TCP row creates the Attempt", () => {
+  it('item 50 (d) / §6: gate holds 0, A asks 2, B asks 50; restart; an XML snapshot binds the course without listing the bib; then the TCP row stating 2 creates the Attempt: A confirmed, B pending with retained 2', async () => {
+    const env1 = await closedRun();
+    expect(cell((await attemptOf(env1)).gates, 3), 'precondition: the cell holds 0').toBe(0);
+    const a = await write(env1, { gate: 3, value: 2 }, 'ka');
+    const b = await write(env1, { gate: 3, value: 50 }, 'kb');
+    expect([a.status, b.status], 'precondition: both admitted').toEqual([202, 202]);
+    await env1.h.stop();
+    const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day, fs: env1.fs, clock: virtualClock(env1.clock.now() + 60_000) });
+    await setInstance(env, 'Main');
+    await feedXml(env, derived(R19.rcXml, { edit: (d) => d.replace(/<Results>[\s\S]*?<\/Results>/, '') }));
+    expect(await courseGateCount(env), 'precondition: the course is bound (19 gates)').toBe(19);
+    expect(await attemptOf(env), 'precondition: the Attempt does not exist before the TCP row').toBeUndefined();
+    expect([(await writeState(env, a.body.writeId)).status, (await writeState(env, b.body.writeId)).status], 'precondition: both still pending').toEqual(['pending', 'pending']);
+    await feed(env, rowOver(env, { 3: 2 }));
+    expect(await attemptOf(env), 'the row created the Attempt').toBeDefined();
+    expect((await writeState(env, a.body.writeId)).status).toBe('confirmed');
+    expect((await writeState(env, b.body.writeId)).status).toBe('pending');
+    const g = (await attemptOf(env)).gates;
+    expect(g).toMatchObject({ source: 'operator-write', provisional: true });
+    expect(cell(g, 3), '50 is presented').toBe(50);
+    await feed(env, rowOver(env, { 3: 2 }));
+    expect((await writeState(env, b.body.writeId)).status, 'B\'s retained value is 2: a re-sent 2 is a re-delivery').toBe('pending');
+    await feed(env, rowOver(env, { 3: 50 }));
+    expect((await writeState(env, b.body.writeId)).status).toBe('confirmed');
+  });
 });
 
 describe('N2 (item 20): a write resumed before its course binds', () => {
