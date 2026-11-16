@@ -603,7 +603,15 @@ row (§4.12; `CONTRACTS.md` §2.6).
   observed becomes `left-without-finish`, `confidence: 'authoritative'`. What is asserted is that
   upstream removed the athlete; no reason is inferred. An Attempt unstaged before any start returns to
   `not-started` (observed: bib 68 staged for 5 s into the next day's race, then removed); listed again
-  in the same generation, it returns to `at-start` or `on-course` as a newer inference.
+  in the same generation, it returns to `at-start` or `on-course` as a newer inference. **"Observed"
+  is read on the stream's state at the leave:** a start the stream has since withdrawn (a later
+  listing with `dtStart` empty) and a finish it has since withdrawn (the withdrawal below) count as
+  not observed, so the leave yields what the Attempt's last listing showed: `at-start` gives
+  `not-started`, `on-course` gives `left-without-finish`, a stream `finished` stays. The generation's
+  recorded start is kept all the same (§4.11); only the leave reads the current state. One rule for
+  slalom and the time trial (E1: cp3-cross WX1_XT_26:25, start listed, deleted at 07:15:34, a finish
+  impulse with no start at 07:16:59 withdrawn at 07:20:57, staged until it left at 07:30:02:
+  `not-started`, then the `dns` row; a default, `DECISIONS/LOG.md` 2026-11-16).
 - **Why a separate status.** Removal before a finish with DNF or DSQ, and DNS from the start judge's
   terminal, push nothing on TCP (observed upstream behaviour). Of 145 recorded transitions:
   - 59 arrived in their own immediate push;
@@ -1433,7 +1441,7 @@ jury-invalidated row (C1M_BR1_19 bib 7, later re-run, §4.11), and 7 s behind TC
 **After a retraction,** `status` is what the on-course stream currently shows for the Attempt
 (`at-start`, `on-course`, or a `finished` it still lists), else `not-started`. What the stream
 shows is its latest inference for the generation, the leave's included: where the leave drew
-`left-without-finish` (§4.1: a start observed and no finish ever listed) that is the status, in
+`left-without-finish` (§4.1: a start and no finish standing at the leave) that is the status, in
 either order of the leave and the retracted row. So the leave's inference is recorded when it
 is drawn, also while a table `finished` or mark outranks it and it is not presented. A finisher
 who left the list at closure has no such inference and returns to `not-started` (recorded: the

@@ -60,7 +60,8 @@ describe('a leave withdraws the stream\'s running outcome whatever is presented 
     const status = f(c, X, 'status').value;
     expect(f(c, X, 'outcome').value?.kind).not.toBe('running');
     expect(f(c, X, 'outcome')).toEqual({ state: 'not-yet' });
-    expect(['not-started', 'dns'], `status ${String(status)}`).toContain(status);
+    // CONTRACTS §3.2 / DERIVATIONS §4.12 (#305 CQ1): a start was observed (running 17 s), so the retraction returns to the leave's left-without-finish
+    expect(status, 'status after the retraction').toBe('left-without-finish');
   });
 
   it('rule P4 / #312 row 1: no running outcome is presented at any step while status is not-started or a mark', () => {
@@ -69,7 +70,7 @@ describe('a leave withdraws the stream\'s running outcome whatever is presented 
     for (const u of steps) {
       c.applyUnit(u);
       const s = f(c, X, 'status').value;
-      if (s === 'not-started' || s === 'dns' || s === 'dnf' || s === 'dsq') expect(f(c, X, 'outcome').value?.kind, `status ${String(s)}`).not.toBe('running');
+      if (s === 'not-started' || s === 'left-without-finish' || s === 'dns' || s === 'dnf' || s === 'dsq') expect(f(c, X, 'outcome').value?.kind, `status ${String(s)}`).not.toBe('running');
     }
   });
 

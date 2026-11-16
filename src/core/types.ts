@@ -69,6 +69,8 @@ export interface Generation {
   restated: Set<string>;
   /** `Completed="Y"` was seen on a listing carrying its finish, or a result stated `runClosed` (§4.4). */
   completed: boolean;
+  /** The leave's `status` inference drawn behind a presented table `finished` or mark: recorded, not presented, a retraction's fallback (§4.12). */
+  leftBehind?: Slot;
   firstEnvelope: { observedAt: string; source: Source };
 }
 

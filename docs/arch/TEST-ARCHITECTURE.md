@@ -379,7 +379,8 @@ the step index, the Attempt, the field and the property number.
      `outcome.kind: 'running'`).
    - **(b) `status` afterwards** is what the on-course listing shows for the Attempt (`at-start`,
      `on-course`, or an inferred `finished` that still stands; after an `oncourse-left` of the
-     generation with a start observed, no finish ever listed and no re-listing since, the
+     generation with a start and no finish standing at the leave (one the stream withdrew is not
+     standing, `DERIVATIONS.md` §4.1) and no re-listing since, the
      leave's `left-without-finish`, `DERIVATIONS.md` §4.12), else `not-started`; a
      `finished → on-course` at this step is this property's, not property 7's.
    - **(c) The content-age guard.** For an `xml` snapshot retracting or displacing a

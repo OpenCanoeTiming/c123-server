@@ -986,9 +986,12 @@ and the run is raced again. Meanwhile, it looks as if the athlete never did that
   accruing.
 
 **Left without a finish.** In slalom and in a Kayak Cross time trial (`XT`, `XT1`, `XT2`), an
-athlete can leave upstream's on-course list without a finish ever being recorded. `status` is then
+athlete can leave upstream's on-course list after a start and without a finish. `status` is then
 `left-without-finish`. This is an observed fact: upstream removed the athlete, and no finish
-exists.
+exists. **The leave reads the stream's state at the leave** (`DERIVATIONS.md` §4.1): a start or
+a finish the stream has since withdrawn counts as not observed, so an Attempt last listed
+`at-start` leaves to `not-started`, one last listed `on-course` to `left-without-finish`, and a
+stream `finished` stays.
 - **The reason is not yet known**, and `outcome` stays pending — `not-yet`, the stream's `running`
   inference withdrawn with the listing (`DERIVATIONS.md` §4.3; `{ kind: 'pending' }` is a
   Standing's `result`, §2.7). It is **never** inferred as `dnf`.
@@ -1495,8 +1498,10 @@ reliable signal that a Phase's results changed is ordinary field-level change: a
     a timed row after an outage or a cold start (`DERIVATIONS.md` §0.3, §4.1: empty mark with a time
     means `finished`), an untimed row (§2.6), or a Kayak Cross result whose heat's listing was missed
     (`DERIVATIONS.md` §4.2).
-  - `at-start → not-started`, when the Attempt is unstaged before any start (observed: a bib staged
-    for 5 s in the next day's race, then removed).
+  - `at-start → not-started`, when the Attempt leaves the list with no start standing at the leave:
+    unstaged before any start (observed: a bib staged for 5 s in the next day's race, then
+    removed), or after the stream withdrew its start (recorded: cp3-cross WX1_XT_26:25;
+    `DERIVATIONS.md` §4.1).
   - `left-without-finish → at-start | on-course`, when upstream lists it again in the same
     generation; this is also what makes a false leave under `DERIVATIONS.md` §4.1's leave rule
     harmless.
@@ -1510,8 +1515,9 @@ reliable signal that a Phase's results changed is ordinary field-level change: a
   - `not-started | at-start → dns`;
   - `on-course → dnf | dsq | dsq-r | dqb | cap | ral | other`.
 - **Left without a finish** (slalom and the Kayak Cross time trial, §2.6; never a Cross heat):
-  - `at-start | on-course → left-without-finish`, observed when the Attempt leaves upstream's
-    on-course list with no finish recorded;
+  - `on-course → left-without-finish`, observed when the Attempt leaves upstream's on-course list
+    with a start and no finish standing at the leave (a start or finish the stream withdrew is
+    not standing, `DERIVATIONS.md` §4.1);
   - `left-without-finish → dns | dnf | dsq | dsq-r | dqb | cap | ral | other`, when the mark arrives;
   - `left-without-finish → finished`, when a finish is recorded afterwards (a manually entered
     finish).
@@ -1531,7 +1537,7 @@ reliable signal that a Phase's results changed is ordinary field-level change: a
     left-without-finish`, on a retraction (§4 INV-7): the row vanished, or a DNS was cleared; the
     target is what the on-course stream currently shows — its latest inference for the
     generation, so `left-without-finish` where the leave drew it (slalom and the Cross time
-    trial: a start observed and no finish ever listed), whichever of the leave and the retracted row came first — else
+    trial: a start and no finish standing at the leave, §2.6), whichever of the leave and the retracted row came first — else
     `not-started`, as after a finisher's ordinary closure.
 - **Re-run** (`DECISIONS/ADR-013`): `finished` or any no-result status `→ at-start | on-course`,
   **only together with a `run` increment.** This is the one transition that retracts known facts. It

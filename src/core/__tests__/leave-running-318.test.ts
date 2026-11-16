@@ -139,7 +139,7 @@ describe('N3: a listing that shows at-start states no `running`, whatever its Ti
     expect(pair(c, xid)).toEqual({ status: 'not-started', outcome: { state: 'not-yet' } });
   });
 
-  it('vector-rule #318 row 6 / DA (v), Cross time trial: dtStart empty + Time 17.00 in K1W_XT_19: at-start, not-yet; after the leave still at-start (§7.1)', () => {
+  it('vector-rule #318 row 6 / DA (v), Cross time trial: dtStart empty + Time 17.00 in K1W_XT_19: at-start, not-yet; after the leave not-started (Q-TT, vector cross-time-trial-unstaged-leave-returns-to-not-started; was: still at-start)', () => {
     const xid = `${TT}:${X}`;
     const ids = [xid, `${TT}:${Y}`];
     const c = coreWith([connected(T0)]);
@@ -149,7 +149,7 @@ describe('N3: a listing that shows at-start states no `running`, whatever its Ti
     expect(pair(c, xid)).toEqual({ status: 'at-start', outcome: { state: 'not-yet' } });
     leaveAfter(c, TT, 0, ids);
     expect(inSet(c, xid), 'precondition: the leave rule fired').toBe(false);
-    expect(pair(c, xid), 'a Cross leave changes nothing').toEqual({ status: 'at-start', outcome: { state: 'not-yet' } });
+    expect(pair(c, xid), 'a Cross time-trial leave follows slalom (Q-TT; DERIVATIONS §4.1)').toEqual({ status: 'not-started', outcome: { state: 'not-yet' } });
   });
 });
 
