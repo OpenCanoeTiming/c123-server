@@ -32,6 +32,7 @@ function hasStoppedListing(a: AttemptState, now: number, previousTcpAt: number |
 export function list(s: CoreState, a: AttemptState, el: Element): void {
   a.lastListedAt = Date.parse(el.observedAt);
   a.left = false;
+  delete a.gen.leftBehind;
   if (!a.listed) {
     a.listed = true;
     s.listed.set(a.id, a);
@@ -159,30 +160,30 @@ function dropRunning(a: AttemptState): void {
   if ((fs.inference?.value as { kind?: string } | undefined)?.kind === 'running') delete fs.inference;
 }
 
-/** The Attempt left upstream's list: `left-without-finish`, or back to `not-started` if it never started. Slalom only (§4.1). */
+/**
+ * The Attempt left upstream's list: `left-without-finish`, or back to `not-started` if it never started. Slalom and the Cross
+ * time trial (§4.1); a Cross heat's leave changes nothing (§4.2, §10 item 35). Behind a table `finished` or mark the leave's
+ * inference is recorded all the same and not presented (§4.12: a retraction falls back to it).
+ */
 export function leave(s: CoreState, a: AttemptState, el: Element): void {
   a.listed = false;
   a.left = true;
   s.listed.delete(a.id);
   s.counters.leaves++;
   s.dirtyAttempts.add(a);
-  if (fmtFor(s, a.phaseId).cross) return;
+  if (fmtFor(s, a.phaseId).heats) return;
   const cur = streamStatus(a);
   if (cur === 'finished' || a.gen.finish !== undefined) {
     dropRunning(a); // backstop: unreachable while a finish listing drops `running` (applyListing)
     return;
   }
-  // §3.2, INV-1: a finish or a mark presented from a results table has no way back to `left-without-finish`
-  const shown = presentStatus(a.slots.get('status'));
-  if (shown?.kind === 'row' && (shown.value === 'finished' || isMark(shown.value))) {
-    delete fieldSlots(a.slots, 'outcome').inference; // the stream's `running` goes with the listing; `status` stays
-    return;
-  }
   const seq = tick(s);
-  if (cur === 'on-course' || a.gen.start !== undefined) {
-    setStream(s, a, el, 'left-without-finish', seq);
-    delete fieldSlots(a.slots, 'outcome').inference;
-  } else if (cur === 'at-start') setStream(s, a, el, 'not-started', seq);
+  const drawn = cur === 'on-course' || a.gen.start !== undefined ? 'left-without-finish' : cur === 'at-start' ? 'not-started' : undefined;
+  if (drawn === undefined) return;
+  if (drawn === 'left-without-finish') delete fieldSlots(a.slots, 'outcome').inference;
+  // §3.2, INV-1: a finish or a mark presented from a results table has no way back to `left-without-finish`; the leave is recorded behind it
+  if (tablePresentsResult(a)) a.gen.leftBehind = slotOf(s, el, 'tcp', 'inference', drawn, seq);
+  else setStream(s, a, el, drawn, seq);
 }
 
 /** The rule's one evaluation, after a TCP unit is merged, so the unit's own listings count. Returns the leaves it derived, as `oncourse-left` elements. */

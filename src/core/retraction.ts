@@ -51,10 +51,16 @@ function retractStatus(s: CoreState, a: AttemptState, source: Source, el: Elemen
     delete fs.tcp;
   }
   fs[source] = m;
-  // "what the on-course stream currently shows, else not-started"
-  if (!a.listed) {
+  // "what the on-course stream currently shows, else not-started": after a leave, the leave's own inference (§4.12); a Cross
+  // heat's leave changes nothing, so its stream still shows `on-course` (§4.2)
+  const leaveDrew = fs.inference?.value === 'left-without-finish' || fs.inference?.value === 'not-started';
+  if (!a.listed && !leaveDrew && !fmtFor(s, a.phaseId).heats) {
     delete fs.inference;
     delete a.gen.finish;
+  }
+  if (!a.listed && a.gen.leftBehind !== undefined) {
+    fs.inference = a.gen.leftBehind;
+    delete a.gen.leftBehind;
   }
   return true;
 }
@@ -203,6 +209,7 @@ export function contradict(s: CoreState, a: AttemptState, el: Element, seq: numb
   retain(st, 'inference', slotOf(s, el, 'tcp', 'inference', 'on-course', seq));
   delete a.gen.finish;
   a.gen.restated.clear();
+  a.gen.completed = false; // §10 item 51: the closure goes with the contradicted finish
   a.gen.recorded = false; // the athlete is on course with that start: the row described no finish of this run (§4.11)
   a.held.push(record);
   a.contradiction = record;
