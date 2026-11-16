@@ -74,9 +74,10 @@ describe('retained cells re-delivered after a reconnect (#295, CONTRACTS INV-5 a
   const outageXml = (kind: Kind, bound: boolean): Unit =>
     kind === 'refused' ? xmlCells(7000, bound, T(base, -4000)) : kind === 'later-equal' ? xmlCells(7000, bound, T(base, 2000), '  0') : xmlCells(7000, bound, T(base, 2000));
   /** TCP C at 0, outage, D, reconnect, C re-sent at 8500, then the binding snapshot (age 5000, before the re-delivery's 8500). `bound`: the course is bound from the start. */
-  const outageStream = (kind: Kind, bound: boolean) => {
+  const outageStream = (kind: Kind, bound: boolean, listed = false) => {
     const core = coreWith([connected(T(base, -1000))]);
     if (bound) core.applyUnit(bindingPlain(-500));
+    if (listed) core.applyUnit(tcpUnit(derive(base, { observedAt: T(base, -200) }), DAY, bound ? {} : { courses: {} })); // the Attempt is also on the on-course stream
     core.applyUnit(tcp(0));
     core.applyUnit(disconnected(T(base, 500)));
     core.applyUnit(outageXml(kind, bound));
@@ -134,17 +135,25 @@ describe('retained cells re-delivered after a reconnect (#295, CONTRACTS INV-5 a
     });
   }
 
-  // #354 N3: only rule 2's connection continuity decides. The binding snapshot restates D with a content age (9000) LATER than TCP's re-delivery (8500), so
-  // INV-2c alone would let the xml observation take over; TCP stays only because it has stayed connected since its re-delivery (INV-2 rule 2: the later epoch).
+  for (const kind of ['later-differs', 'later-equal', 'refused'] as const) {
+    it(`property 1 (TEST-ARCHITECTURE §3.2, §4.6, review N1, ${kind}): the Attempt also listed on the on-course stream in the same sequence: the final gates envelope equals the bound-throughout stream's`, () => {
+      const throughout = outageStream(kind, true, true);
+      expect(gatesOf(outageStream(kind, false, true))).toEqual(gatesOf(throughout));
+    });
+  }
+
+  // #354 N3: only rule 2's connection continuity decides. D's content age (-4000) is earlier than C's, so INV-2c refuses it during the outage and the TCP re-delivery is
+  // identical to what is held (the non-displaced branch: only the connection epoch moves). The binding snapshot restates D with a content age (9000) LATER than
+  // TCP's re-delivery (8500), so INV-2c alone would let xml take over; TCP stays only because it has stayed connected since its re-delivery (INV-2 rule 2: the later epoch).
   it('obligation INV-2 rule 2 (#354 N3): an XML restatement with a later content age than the re-delivery does not displace TCP, which stayed connected since it', () => {
     const final = (reconnect: boolean) => {
       const core = coreWith([connected(T(base, -1000))]);
       core.applyUnit(tcp(0));
       core.applyUnit(disconnected(T(base, 500)));
-      core.applyUnit(xmlCells(7000, false)); // D, age 2000: displaces C during the outage
+      core.applyUnit(xmlCells(7000, false, T(base, -4000))); // D, age before C's: refused, TCP's C stays held through the outage
       if (reconnect) {
         core.applyUnit(connected(T(base, 8000)));
-        core.applyUnit(tcp(8500));
+        core.applyUnit(tcp(8500)); // C re-delivered, identical, not displaced
       }
       core.applyUnit(xmlCells(10000, true, T(base, 9000))); // binds, restates D at age 9000 (later than 8500)
       return gatesOf(core);
@@ -153,7 +162,7 @@ describe('retained cells re-delivered after a reconnect (#295, CONTRACTS INV-5 a
     expect(pre.source).toBe('xml');
     const g = final(true);
     expect(g.source).toBe('tcp');
-    expect(penalties(g)).toEqual(CELLS_C); // the instant is rows 1-4's question, not this row's: green on main, so only the epoch can turn it red
+    expect(penalties(g)).toEqual(CELLS_C);
   });
 
   it('INV-5: identical cells re-delivered on one connection: no notification, envelope unchanged at the binding', () => {
