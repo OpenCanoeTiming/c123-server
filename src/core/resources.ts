@@ -4,6 +4,7 @@
  */
 import { fmtOf } from '../ingest/common.js';
 import { present } from './precedence.js';
+import { fmtFor } from './registry.js';
 import { envelope } from './presentation.js';
 import { fieldSlots, retain, slotOf } from './retention.js';
 import { refuse } from './counters.js';
@@ -84,7 +85,7 @@ export function dirtyHandle(type: 'entry' | 'class' | 'course', r: ResourceState
   return h;
 }
 
-export function viewResource(r: ResourceState, kind: 'phase' | 'entry' | 'class' | 'course'): Record<string, unknown> {
+export function viewResource(r: ResourceState, kind: 'phase' | 'entry' | 'class' | 'course', s?: CoreState): Record<string, unknown> {
   const names = kind === 'phase' ? PHASE_FIELDS : kind === 'entry' ? ENTRY_FIELDS : kind === 'class' ? CLASS_FIELDS : COURSE_FIELDS;
   const key = kind === 'phase' ? 'phaseId' : kind === 'entry' ? 'entryId' : kind === 'class' ? 'classId' : 'courseId';
   const out: Record<string, unknown> = { [key]: r.id };
@@ -92,6 +93,11 @@ export function viewResource(r: ResourceState, kind: 'phase' | 'entry' | 'class'
   // a first run presents its derived sibling; its stated role and combination stand (DERIVATIONS §10 item 48)
   const pair = r.plain.get('pair') as { role?: string } | null | undefined;
   if (kind === 'phase' && pair?.role === 'first') out['pair'] = { ...pair, siblingPhaseId: r.derivedSibling ?? null };
+  // DERIVATIONS §10 item 49 (d): neither `format` nor `pair` stated, named by a second run: that pair's first run; nothing else follows until a format is stated
+  if (kind === 'phase' && s !== undefined && !r.plain.has('pair') && !r.plain.has('format')) {
+    const named = fmtFor(s, r.id).pair;
+    if (named?.role === 'first') out['pair'] = { role: 'first', siblingPhaseId: r.derivedSibling ?? null, combination: named.combination };
+  }
   for (const f of new Set([...names, ...r.fields.keys()])) out[f] = envelope(present(r.fields.get(f)), false);
   return out;
 }
