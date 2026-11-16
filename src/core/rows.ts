@@ -143,7 +143,7 @@ function writeRow(s: CoreState, a: AttemptState, source: Source, el: Element, ro
   const extra: Partial<Slot> = 'judgingComplete' in row ? { judgingComplete: row['judgingComplete'] as boolean | null } : {};
   const placed = row['placement'] !== null && row['placement'] !== undefined;
   // §4.11: judged against the table before this row, recorded only once the guard admits it (a refused mark records nothing)
-  const records = recordsGeneration(a, mark, time);
+  const records = recordsGeneration(a, mark, time, markRefusedByGuard(fieldSlots(a.slots, 'status')));
 
   // §4.4 the untimed flag: read from the snapshot row, inherited by the Attempt's TCP rows
   if (row['untimed'] === true) {
