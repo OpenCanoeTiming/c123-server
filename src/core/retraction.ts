@@ -51,9 +51,10 @@ function retractStatus(s: CoreState, a: AttemptState, source: Source, el: Elemen
     delete fs.tcp;
   }
   fs[source] = m;
-  // "what the on-course stream currently shows, else not-started": after a leave, the leave's own inference (§4.12); a Cross
-  // heat's leave changes nothing, so its stream still shows `on-course` (§4.2)
-  const leaveDrew = fs.inference?.value === 'left-without-finish' || fs.inference?.value === 'not-started';
+  // "what the on-course stream currently shows, else not-started": after a leave, its `left-without-finish` with the leave's
+  // envelope (§4.12); a leave's `not-started` is not retained, so the marker presents on the retraction's own instant and source;
+  // a Cross heat's leave changes nothing, so its stream still shows `on-course` (§4.2)
+  const leaveDrew = fs.inference?.value === 'left-without-finish';
   if (!a.listed && !leaveDrew && !fmtFor(s, a.phaseId).heats) {
     delete fs.inference;
     delete a.gen.finish;
@@ -64,7 +65,7 @@ function retractStatus(s: CoreState, a: AttemptState, source: Source, el: Elemen
   }
   // INV-2 rule 2, INV-2c: the fallback stands where the retraction stood, so the XML displaces it only with content later than
   // the retracting delivery; the leave's envelope is kept (as a re-delivery advances the age, not `observedAt`)
-  if (!a.listed && fs.inference !== undefined && (fs.inference.value === 'left-without-finish' || fs.inference.value === 'not-started')) {
+  if (!a.listed && fs.inference !== undefined && fs.inference.value === 'left-without-finish') {
     fs.inference = { ...fs.inference, age: laterAge(fs.inference.age, m.age) };
   }
   return true;
