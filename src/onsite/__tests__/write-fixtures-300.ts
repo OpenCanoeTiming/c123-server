@@ -5,7 +5,7 @@
  */
 import { expect } from 'vitest';
 import { boot, derived, feedXml, get, post, setInstance, virtualClock, type Env, type J } from './onsite-harness.js';
-import { ODP, feed } from './datasets.js';
+import { ODP, feed, type Unit } from './datasets.js';
 import { R19 } from '../../core/__tests__/fixtures/round19-excerpts.js';
 import type { OnsiteOptions } from '../index.js';
 
@@ -92,3 +92,24 @@ export function writesFile(env: Env): { writes: J[]; writeKeys: Record<string, J
   const t = env.fs.files.get(WRITES_FILE);
   return t === undefined ? undefined : JSON.parse(t);
 }
+
+/** A TCP results row of bib 56 restating the presented run (R19.c4RowA, Time 81.62) with the given gate cells changed (base: 0, gate 13 = 2); Pen and Total follow. */
+export function rowOver(env: Env, over: Record<number, 0 | 2 | 50>, ms = env.clock.now() + 1000): Unit {
+  return { kind: 'tcp', rec: derived(R19.c4RowA, {
+    observedAt: new Date(ms).toISOString(),
+    edit: (d) => {
+      let pen = 0;
+      const e = d.replace(/Gates="([^"]*)"/, (_m, g: string) => {
+        const out: string[] = [];
+        for (let i = 1; i <= 19; i++) {
+          const v = over[i] ?? Number(g.slice((i - 1) * 3, i * 3).trim() || '0');
+          pen += v;
+          out.push(String(v).padStart(3, ' '));
+        }
+        return `Gates="${out.join('')}${g.slice(57)}"`;
+      });
+      return e.replace(/ Pen="\d+"/, ` Pen="${pen}"`).replace(/ Total="[^"]*"/, ` Total="${(81.62 + pen).toFixed(2)}"`);
+    },
+  }) };
+}
+export const writeState = async (env: Env, id: string): Promise<J> => (await get(env, `/api/writes/${id}`)).body;
