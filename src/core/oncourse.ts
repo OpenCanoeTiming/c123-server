@@ -109,6 +109,7 @@ export function applyListing(s: CoreState, a: AttemptState, el: Element, value: 
       s.dirtyAttempts.add(a);
     }
     a.gen.finish = { ...a.gen.finish, eventTime: finish };
+    dropRunning(a); // §4.3: a finish ends the stream's `running`; the unit's `duration`, where there is one, follows
     setStream(s, a, el, 'finished', seq, finish);
     return;
   }
@@ -151,6 +152,12 @@ export function observeStreamOutcome(s: CoreState, a: AttemptState, el: Element,
   settlePending(s, a);
 }
 
+/** Deletes the stream's outcome inference where it is a `running` one; a `duration` stays. */
+function dropRunning(a: AttemptState): void {
+  const fs = fieldSlots(a.slots, 'outcome');
+  if ((fs.inference?.value as { kind?: string } | undefined)?.kind === 'running') delete fs.inference;
+}
+
 /** The Attempt left upstream's list: `left-without-finish`, or back to `not-started` if it never started. Slalom only (§4.1). */
 export function leave(s: CoreState, a: AttemptState, el: Element): void {
   a.listed = false;
@@ -160,7 +167,10 @@ export function leave(s: CoreState, a: AttemptState, el: Element): void {
   s.dirtyAttempts.add(a);
   if (fmtFor(s, a.phaseId).cross) return;
   const cur = streamStatus(a);
-  if (cur === 'finished' || a.gen.finish !== undefined) return;
+  if (cur === 'finished' || a.gen.finish !== undefined) {
+    dropRunning(a);
+    return;
+  }
   // §3.2, INV-1: a finish or a mark presented from a results table has no way back to `left-without-finish`
   const shown = presentStatus(a.slots.get('status'));
   if (shown?.kind === 'row' && (shown.value === 'finished' || isMark(shown.value))) {
