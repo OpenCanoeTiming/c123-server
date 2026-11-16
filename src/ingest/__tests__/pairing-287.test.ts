@@ -10,6 +10,8 @@ import { ctx, obsOf, withAttr, OBSERVED_AT, type El } from './helpers.js';
  *
  * Channel: the XML snapshot (`Schedule.ClassId`, `DisId`, `StartTime`); on TCP the class comes from what the context tracker (`createContextTracker`,
  * as the recording drivers and the on-site server use it) has learned from earlier snapshots and messages.
+ * ITEM 49 (a) (DERIVATIONS §10): a parser states a first run's `pair` with `siblingPhaseId: null`, always; the core derives the first run's sibling. So every first-run
+ * expectation here is `null`, and the first-run pairing is asserted one tier up, in `src/core/__tests__/pairing-pipeline-287.test.ts` (parser, tracker, core).
  * Every test builds its own snapshot; nothing is shared. A precondition assert in each test keeps it from passing vacuously.
  *
  */
@@ -33,7 +35,7 @@ const valueOf = (els: El[], field: string, id: string): unknown => obsOf(els as 
 const prefixOf = (id: string): string => id.replace(/_[A-Z0-9]+_\d+(_[A-Z]+)?$/, '');
 
 describe('#287 pairing by classId and format (XML snapshot: Schedule.ClassId, DisId, StartTime)', () => {
-  it('row 1, CONTRACTS §2.4 Pairing example, DERIVATIONS §2.1: K1M_ST_BR1_6 + K1M_ST_BR2_6, both ClassId K1M_ST, each names the other (underscore class)', () => {
+  it('row 1, CONTRACTS §2.4 Pairing example, DERIVATIONS §2.1: K1M_ST_BR1_6 + K1M_ST_BR2_6, both ClassId K1M_ST, the second run names the first, the first run states null (item 49 a)', () => {
     const els = parse([
       { id: 'K1M_ST_BR1_6', cls: 'K1M_ST', dis: 'BR1', day: '2026-09-06' },
       { id: 'K1M_ST_BR2_6', cls: 'K1M_ST', dis: 'BR2', day: '2026-09-06' },
@@ -41,19 +43,19 @@ describe('#287 pairing by classId and format (XML snapshot: Schedule.ClassId, Di
     expect(valueOf(els, 'classId', 'K1M_ST_BR2_6')).toBe('K1M_ST');
     expect(valueOf(els, 'format', 'K1M_ST_BR1_6')).toBe('BR1');
     expect(sibOf(els, 'K1M_ST_BR2_6')).toBe('K1M_ST_BR1_6');
-    expect(sibOf(els, 'K1M_ST_BR1_6')).toBe('K1M_ST_BR2_6');
+    expect(sibOf(els, 'K1M_ST_BR1_6')).toBeNull();
     expect(pairOf(els, 'K1M_ST_BR2_6')).toMatchObject({ role: 'second', combination: 'best' });
     expect(pairOf(els, 'K1M_ST_BR1_6')).toMatchObject({ role: 'first', combination: 'best' });
   });
 
-  it('row 2, CONTRACTS §2.4 Pairing example: K1M-ZS_BR1_25 + K1M-ZS_BR2_25, both ClassId K1M-ZS, each names the other (hyphenated class)', () => {
+  it('row 2, CONTRACTS §2.4 Pairing example: K1M-ZS_BR1_25 + K1M-ZS_BR2_25, both ClassId K1M-ZS, the second run names the first, the first run states null (hyphenated class)', () => {
     const els = parse([
       { id: 'K1M-ZS_BR2_25', cls: 'K1M-ZS', dis: 'BR2', day: '2026-04-25' },
       { id: 'K1M-ZS_BR1_25', cls: 'K1M-ZS', dis: 'BR1', day: '2026-04-25' },
     ]);
     expect(valueOf(els, 'classId', 'K1M-ZS_BR1_25')).toBe('K1M-ZS');
     expect(sibOf(els, 'K1M-ZS_BR2_25')).toBe('K1M-ZS_BR1_25');
-    expect(sibOf(els, 'K1M-ZS_BR1_25')).toBe('K1M-ZS_BR2_25');
+    expect(sibOf(els, 'K1M-ZS_BR1_25')).toBeNull();
   });
 
   it('row 3, CONTRACTS §2.4 Pairing examples: MX1J_XT_26_JUN (ClassId MX1J, DisId XT) is a single run, pair null', () => {
@@ -63,17 +65,17 @@ describe('#287 pairing by classId and format (XML snapshot: Schedule.ClassId, Di
     expect(pairOf(els, 'MX1J_XT_26_JUN')).toBeNull();
   });
 
-  it('row 4, DERIVATIONS §2.1 "no id is parsed" (constructed): X_BR1_26_JUN + X_BR2_26_JUN, ClassId X, each names the other across the _JUN suffix', () => {
+  it('row 4, DERIVATIONS §2.1 "no id is parsed" (constructed): X_BR1_26_JUN + X_BR2_26_JUN, ClassId X, the second run names the first across the _JUN suffix, the first run states null', () => {
     const els = parse([
       { id: 'X_BR1_26_JUN', cls: 'X', dis: 'BR1', day: '2026-04-26' },
       { id: 'X_BR2_26_JUN', cls: 'X', dis: 'BR2', day: '2026-04-26' },
     ]);
     expect(valueOf(els, 'format', 'X_BR2_26_JUN')).toBe('BR2');
     expect(sibOf(els, 'X_BR2_26_JUN')).toBe('X_BR1_26_JUN');
-    expect(sibOf(els, 'X_BR1_26_JUN')).toBe('X_BR2_26_JUN');
+    expect(sibOf(els, 'X_BR1_26_JUN')).toBeNull();
   });
 
-  it('row 5, CONTRACTS §2.4 Pairing (rename example): K1M_BR1_19 + K1M-X_BR2_19, both ClassId K1M-X, each names the other although the RaceId prefixes differ', () => {
+  it('row 5, CONTRACTS §2.4 Pairing (rename example): K1M_BR1_19 + K1M-X_BR2_19, both ClassId K1M-X, the second run names the first although the RaceId prefixes differ; the first run states null', () => {
     const rows: Row[] = [
       { id: 'K1M_BR1_19', cls: 'K1M-X', dis: 'BR1', day: '2026-09-19' },
       { id: 'K1M-X_BR2_19', cls: 'K1M-X', dis: 'BR2', day: '2026-09-19' },
@@ -83,7 +85,7 @@ describe('#287 pairing by classId and format (XML snapshot: Schedule.ClassId, Di
       const els = parse(order);
       expect(valueOf(els, 'classId', 'K1M_BR1_19')).toBe('K1M-X');
       expect(sibOf(els, 'K1M-X_BR2_19')).toBe('K1M_BR1_19');
-      expect(sibOf(els, 'K1M_BR1_19')).toBe('K1M-X_BR2_19');
+      expect(sibOf(els, 'K1M_BR1_19')).toBeNull();
     }
   });
 
@@ -95,12 +97,12 @@ describe('#287 pairing by classId and format (XML snapshot: Schedule.ClassId, Di
     const pick = (rows: Row[]): Row[] => order.filter((i) => rows[i] !== undefined).map((i) => rows[i] as Row);
     const R = (id: string, dis: string, day: string): Row => ({ id, cls: 'K1M', dis, day });
 
-    it('row 6, DERIVATIONS §2.1 example, §10 item 48: BR1 19th, BR1 20th, BR2 20th: the BR2 names the BR1 of the 20th, which names it back; the BR1 of the 19th is null', () => {
+    it('row 6, DERIVATIONS §2.1 example, §10 item 48: BR1 19th, BR1 20th, BR2 20th: the BR2 names the BR1 of the 20th; both BR1 state null (the core derives the first run side)', () => {
       const els = parse(pick([R('K1M_BR1_19', 'BR1', '2026-09-19'), R('K1M_BR1_20', 'BR1', '2026-09-20'), R('K1M_BR2_20', 'BR2', '2026-09-20')]));
       expect(valueOf(els, 'date', 'K1M_BR1_19')).toBe('2026-09-19'); // precondition: the days really differ
       expect(valueOf(els, 'date', 'K1M_BR1_20')).toBe('2026-09-20');
       expect(sibOf(els, 'K1M_BR2_20')).toBe('K1M_BR1_20');
-      expect(sibOf(els, 'K1M_BR1_20')).toBe('K1M_BR2_20');
+      expect(sibOf(els, 'K1M_BR1_20')).toBeNull();
       expect(sibOf(els, 'K1M_BR1_19')).toBeNull();
     });
 
@@ -113,15 +115,15 @@ describe('#287 pairing by classId and format (XML snapshot: Schedule.ClassId, Di
       expect(sibOf(els, 'K1M_BR1_20')).toBeNull();
     });
 
-    it('row 8, DERIVATIONS §2.1 example: BR1 19th, BR2 20th: a single match pairs across the days, each names the other', () => {
+    it('row 8, DERIVATIONS §2.1 example: BR1 19th, BR2 20th: a single match pairs across the days: the BR2 names the BR1, the BR1 states null', () => {
       const els = parse(pick([R('K1M_BR1_19', 'BR1', '2026-09-19'), R('K1M_BR2_20', 'BR2', '2026-09-20')]));
       expect(valueOf(els, 'date', 'K1M_BR1_19')).not.toBe(valueOf(els, 'date', 'K1M_BR2_20'));
       expect(sibOf(els, 'K1M_BR2_20')).toBe('K1M_BR1_19');
-      expect(sibOf(els, 'K1M_BR1_19')).toBe('K1M_BR2_20');
+      expect(sibOf(els, 'K1M_BR1_19')).toBeNull();
     });
   });
 
-  it('row 8b, DERIVATIONS §10 item 48 (the recorded shape, six of seven recordings): two BR1 and two BR2 of one class, one of each per day: each Phase names its same-day partner', () => {
+  it('row 8b, DERIVATIONS §10 item 48 (the recorded shape, six of seven recordings): two BR1 and two BR2 of one class, one of each per day: each BR2 names its same-day BR1, each BR1 states null', () => {
     const R = (id: string, dis: string, day: string): Row => ({ id, cls: 'K1M', dis, day });
     const rows = [
       R('K1M_BR1_19', 'BR1', '2026-09-19'), R('K1M_BR2_19', 'BR2', '2026-09-19'),
@@ -130,9 +132,9 @@ describe('#287 pairing by classId and format (XML snapshot: Schedule.ClassId, Di
     for (const order of [rows, [...rows].reverse(), [rows[2], rows[1], rows[3], rows[0]] as Row[]]) {
       const els = parse(order);
       expect(sibOf(els, 'K1M_BR2_19')).toBe('K1M_BR1_19');
-      expect(sibOf(els, 'K1M_BR1_19')).toBe('K1M_BR2_19');
+      expect(sibOf(els, 'K1M_BR1_19')).toBeNull();
       expect(sibOf(els, 'K1M_BR2_20')).toBe('K1M_BR1_20');
-      expect(sibOf(els, 'K1M_BR1_20')).toBe('K1M_BR2_20');
+      expect(sibOf(els, 'K1M_BR1_20')).toBeNull();
     }
   });
 
@@ -161,18 +163,18 @@ describe('#287 pairing by classId and format (XML snapshot: Schedule.ClassId, Di
     ]);
     expect(prefixOf('K1M_BR2_6')).toBe(prefixOf('K1M_BR1_6')); // precondition: the old rule would take K1M_BR1_6
     expect(sibOf(els, 'K1M_BR2_6')).toBe('K1M_ST_BR1_6');
-    expect(sibOf(els, 'K1M_ST_BR1_6')).toBe('K1M_BR2_6');
+    expect(sibOf(els, 'K1M_ST_BR1_6')).toBeNull();
     expect(sibOf(els, 'K1M_BR1_6')).toBeNull(); // named by no second run of its class
   });
 
-  it('CONTRACTS §2.4 Pairing table (guard): HT, EL, TR, SR second runs name their first-run token; SUF names BR2, which keeps its own pair with BR1', () => {
+  it('CONTRACTS §2.4 Pairing table (guard): HT, EL, TR, SR second runs name their first-run token (first runs state null); SUF names BR2, which keeps its own pair with BR1', () => {
     const cases: Array<[first: string, second: string, combination: string]> = [
       ['HT1', 'HT2', 'best'], ['EL1', 'EL2', 'best'], ['TR1', 'TR2', 'best'], ['SR1', 'SR2', 'sum'],
     ];
     for (const [a, b, combination] of cases) {
       const els = parse([{ id: `K1M_${a}_19`, cls: 'K1M', dis: a, day: '2026-09-19' }, { id: `K1M_${b}_19`, cls: 'K1M', dis: b, day: '2026-09-19' }]);
       expect(pairOf(els, `K1M_${b}_19`), b).toMatchObject({ role: 'second', siblingPhaseId: `K1M_${a}_19`, combination });
-      expect(pairOf(els, `K1M_${a}_19`), a).toMatchObject({ role: 'first', siblingPhaseId: `K1M_${b}_19`, combination });
+      expect(pairOf(els, `K1M_${a}_19`), a).toMatchObject({ role: 'first', siblingPhaseId: null, combination });
     }
     const els = parse([
       { id: 'K1M_BR1_19', cls: 'K1M', dis: 'BR1', day: '2026-09-19' },
@@ -181,7 +183,7 @@ describe('#287 pairing by classId and format (XML snapshot: Schedule.ClassId, Di
     ]);
     expect(pairOf(els, 'K1M_SUF_19')).toMatchObject({ role: 'second', siblingPhaseId: 'K1M_BR2_19', combination: 'sum' });
     expect(pairOf(els, 'K1M_BR2_19')).toMatchObject({ role: 'second', siblingPhaseId: 'K1M_BR1_19', combination: 'best' });
-    expect(pairOf(els, 'K1M_BR1_19')).toMatchObject({ role: 'first', siblingPhaseId: 'K1M_BR2_19' });
+    expect(pairOf(els, 'K1M_BR1_19')).toMatchObject({ role: 'first', siblingPhaseId: null });
   });
 
   it('row 11, CONTRACTS §2.4 NHT bullet (closing DERIVATIONS §10 item 31): NHT1 and NHT2 are single runs, pair null, no pair between them', () => {
@@ -200,14 +202,14 @@ describe('#287 pairing by classId and format (XML snapshot: Schedule.ClassId, Di
     }
   });
 
-  it('row 11, CONTRACTS §2.4 format table (#287 issue comment, TS1/TS2 "a sum pair if not already"): TS1 + TS2 of one class are a sum pair, each names the other', () => {
+  it('row 11, CONTRACTS §2.4 format table (#287 issue comment, TS1/TS2 "a sum pair if not already"): TS1 + TS2 of one class are a sum pair: TS2 names TS1, TS1 states null', () => {
     const els = parse([
       { id: 'K1M_TS1_19', cls: 'K1M', dis: 'TS1', day: '2026-09-19' },
       { id: 'K1M_TS2_19', cls: 'K1M', dis: 'TS2', day: '2026-09-19' },
     ]);
     expect(valueOf(els, 'format', 'K1M_TS2_19')).toBe('TS2');
     expect(pairOf(els, 'K1M_TS2_19')).toEqual({ role: 'second', siblingPhaseId: 'K1M_TS1_19', combination: 'sum' });
-    expect(pairOf(els, 'K1M_TS1_19')).toEqual({ role: 'first', siblingPhaseId: 'K1M_TS2_19', combination: 'sum' });
+    expect(pairOf(els, 'K1M_TS1_19')).toEqual({ role: 'first', siblingPhaseId: null, combination: 'sum' });
   });
 });
 
@@ -265,13 +267,13 @@ describe('#287 row 10 TCP path: the class comes from what the context tracker ha
     expect(sibTcp(els, 'K1M_BR2_19')).toBeNull();
   });
 
-  it('a TCP Schedule states no class: with nothing learned neither Phase has one and neither names the other; after the snapshot they pair', () => {
+  it('a TCP Schedule states no class: with nothing learned neither Phase has one and neither names the other; after the snapshot the second run names the first, the first run states null', () => {
     const ids = ['K1M_BR1_19', 'K1M_BR2_19'];
     const withSnapshot = fresh();
     learnSnapshot(withSnapshot, [br1, { id: 'K1M_BR2_19', cls: 'K1M', dis: 'BR2', day: '2026-09-19' }]);
     const learned = tcp(withSnapshot, schedule(ids));
     expect(sibTcp(learned, 'K1M_BR2_19')).toBe('K1M_BR1_19'); // precondition: pairable, same prefix
-    expect(sibTcp(learned, 'K1M_BR1_19')).toBe('K1M_BR2_19');
+    expect(sibTcp(learned, 'K1M_BR1_19')).toBeNull();
     const none = tcp(fresh(), schedule(ids));
     expect(sibTcp(none, 'K1M_BR2_19')).toBeNull();
     expect(sibTcp(none, 'K1M_BR1_19')).toBeNull();

@@ -128,6 +128,28 @@ describe('#287 row 12: the core reads the stated sibling only (CONTRACTS §2.4, 
       expect(keys).toContain('phase:K1M_BR1_19/all');
       expect(keys.filter((k) => k.includes('K1M_BR2_19'))).toEqual([]);
     });
+    it('N1, CONTRACTS §7.2 "pair on either side": a first run named by two second runs (different days, the derived sibling is the same-day one): its re-baseline\'s scope.replaced carries both pair standings', () => {
+      const day = (t: number, ...d: Array<[string, string]>): Unit => [
+        el({ ingestSeq: 0, event: 'xml-rewrite-detected', observedAt: at(t), changedAfter: at(t - 5) }),
+        ...d.map(([id, v]) => el({ ingestSeq: 0, observedAt: at(t), phaseId: id, field: 'date', source: 'xml', kind: 'result-row', value: v, confidence: 'authoritative' })),
+      ];
+      const c = coreWith([
+        describe_(1, { id: 'K1M_BR1_19', cls: 'K1M', format: 'BR1', role: 'first', sibling: null }),
+        describe_(2, { id: 'K1M_BR2_19', cls: 'K1M', format: 'BR2', role: 'second', sibling: 'K1M_BR1_19' }),
+        describe_(3, { id: 'K1M_BR2_20', cls: 'K1M', format: 'BR2', role: 'second', sibling: 'K1M_BR1_19' }),
+        day(4, ['K1M_BR1_19', '2026-09-19'], ['K1M_BR2_19', '2026-09-19'], ['K1M_BR2_20', '2026-09-20']),
+        table(10, 'K1M_BR2_19', 'tcp'),
+        table(11, 'K1M_BR2_20', 'tcp'),
+        table(12, 'K1M_BR1_19', 'tcp'),
+        rebase(30, 'K1M_BR1_19'),
+      ], { classIdsFromIds: false });
+      expect((c.phase('K1M_BR1_19')['pair'] as { siblingPhaseId: string }).siblingPhaseId, 'precondition: the derived sibling is the same-day second run').toBe('K1M_BR2_19');
+      expect(keyed(c, 'pair:K1M_BR2_19/all').length, 'precondition: both pair standings were published').toBeGreaterThan(0);
+      expect(keyed(c, 'pair:K1M_BR2_20/all').length).toBeGreaterThan(0);
+      const keys = replacedKeys(c);
+      expect(keys).toContain('pair:K1M_BR2_19/all');
+      expect(keys).toContain('pair:K1M_BR2_20/all');
+    });
   });
 
   it('CONFORMANCE-VECTORS §1 "a deployable\'s merge reads no id": a second run whose class and format are stated but whose pair nothing has stated has no pair standing, though K1M_BR1_19 exists', () => {
