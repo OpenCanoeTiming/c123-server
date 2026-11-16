@@ -170,6 +170,8 @@ export interface WriteState extends WriteRequest {
   fieldName: string;
   /** The TCP source's retained value of the target cell at submission, `null` when none was retained (DERIVATIONS §6); not on the wire. */
   retainedCell: { penalty: Gate['penalty'] } | null;
+  /** A resolution of an earlier write on the cell moved `retainedCell` in this lifetime (item 50 (g)); not on the wire, not stored. */
+  retainedMoved?: boolean;
 }
 
 export interface Counters {
@@ -228,6 +230,8 @@ export interface CoreState {
   dirtyPhases: Set<ResourceState>;
   dirtyResources: Set<{ type: 'entry' | 'class' | 'course'; resource: ResourceState }>;
   dirtyWrites: Set<WriteState>;
+  /** Attempts and fields that took a resumed write in this unit: their first delivery is judged once, after the unit's last one (item 50 (d)). */
+  resumed?: Map<AttemptState, Set<string>>;
   /** Attempts the unit removed (an absent XML row, §4.12): each one `attempt.deleted` at the flush. */
   removed: AttemptState[];
   /** Phases whose Standings a unit may have changed (#205). */

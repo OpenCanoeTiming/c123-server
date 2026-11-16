@@ -27,7 +27,7 @@ function put(s: CoreState, a: AttemptState, source: Source, el: Element, field: 
   const shown = view(fs);
   const changed = retain(fs, source, slot, view);
   if (changed || view(fs) !== shown || (fs.tcp !== undefined && fs.xml !== undefined)) s.dirtyAttempts.add(a); // INV-2b is compared at a re-delivery too
-  if (fs.operator !== undefined) resolveEcho(s, a, fs, field, slot, prior, changed);
+  resolveEcho(s, a, fs, field, slot, prior, changed);
   if (source !== 'xml' || !changed) return;
   if (fs.tcp !== undefined && refusedByGuard(fs.tcp, slot)) refuse(s, 'content-age');
   else if (field === 'status' && isMark(slot.value) && presentStatus(fs)?.value !== slot.value) refuse(s, 'xml-mark');
@@ -89,7 +89,7 @@ export function putCells(s: CoreState, a: AttemptState, channel: 'tcp' | 'xml' |
   const changed = retain(fs, channel, bound);
   if (changed) s.dirtyAttempts.add(a);
   // rule 4 at the binding too: held results-table cells that meet the course are the observation an operator slot waits for (§6)
-  if (channel !== 'inference' && fs.operator !== undefined) resolveEcho(s, a, fs, field, bound, prior, changed);
+  if (channel !== 'inference') resolveEcho(s, a, fs, field, bound, prior, changed);
 }
 
 /** "at a step that carries gate cells ... or at a scope snapshot of its race" (§4.6): retained cells meet the bound course. */

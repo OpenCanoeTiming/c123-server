@@ -13,7 +13,7 @@ import { FIRST_RUN_FIELDS, PAIR_FIELDS, SECOND_RUN_EMPTY_FIELDS, absentRow, empt
 import { retain, fieldSlots, slotOf, tick } from './retention.js';
 import { applyRow, floorStatus, putCells, putIdentity, putStanding, rebindCells } from './rows.js';
 import { applyClassification, dirtyHandle, observeResource, refreshCourses, viewResource } from './resources.js';
-import { submitWrite, wireWrite } from './writes.js';
+import { settleWrites, submitWrite, wireWrite } from './writes.js';
 import { viewAttempt, viewUnknownAttempt } from './presentation.js';
 import { markOf, startGeneration } from './generations.js';
 import type { Standing } from '@opencanoetiming/c123-contract';
@@ -335,6 +335,7 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
         for (const a of s.attempts.values()) s.dirtyAttempts.add(a);
       }
       if (s.dirtyPhases.size > 0) deriveFirstRunSiblings(s);
+      settleWrites(s, s.unitAt);
       flush(s, xml);
       return derived;
     },

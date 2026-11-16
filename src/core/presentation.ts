@@ -18,9 +18,17 @@ export function envelope(slot: Slot | undefined, provisional: boolean, eventTime
   };
 }
 
-/** INV-2 rule 1's exception: while the Attempt is listed each cell takes the newest judged value of either kind. */
-function presentGates(a: AttemptState): Slot | undefined {
-  const fs = a.slots.get('gates');
+/**
+ * INV-2 rule 1's exception: while the Attempt is listed each cell takes the newest judged value of either kind. `belowOperator`: the vector
+ * presented from rules 1-3 alone, the base of a write's whole vector (rule 4).
+ */
+export function presentGates(a: AttemptState, belowOperator = false): Slot | undefined {
+  const all = a.slots.get('gates');
+  let fs = all;
+  if (belowOperator && all !== undefined) {
+    fs = { ...all };
+    delete fs.operator;
+  }
   const shown = present(fs);
   if (fs === undefined || shown === undefined || fs.operator !== undefined || shown.kind === 'inference' || shown.state !== 'known') return shown;
   const inf = fs.inference;

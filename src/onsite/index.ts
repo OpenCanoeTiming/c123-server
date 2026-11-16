@@ -38,15 +38,23 @@ export interface OnsiteDiscovery extends EventEmitter {
   reset(): void;
 }
 
-/** #273: a store file that failed validation was renamed aside and the store opened empty. Admin log only; nothing goes on the wire. */
-export interface AdminLogEntry {
+/**
+ * #273: a store file that failed validation was renamed aside and the store opened empty. #300: a write of the writes store failed; what it
+ * carried stays in memory until the next successful one (CONTRACTS §7.3). Admin log only; nothing goes on the wire.
+ */
+export type AdminLogEntry = {
   kind: 'store-set-aside';
   store: 'checks' | 'writes' | 'seq';
   eventId?: string;
   file: string;
   setAsideAs: string;
   reason: string;
-}
+} | {
+  kind: 'store-write-failed';
+  store: 'writes';
+  file: string;
+  reason: string;
+};
 
 export interface OnsiteOptions {
   /** Where the admin log goes, the core's ingest-only diagnostics included (DERIVATIONS §0.5); default one stderr line. */
@@ -98,6 +106,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   const base = dataDir.endsWith('/') || dataDir.endsWith('\\') ? dataDir : `${dataDir}/`;
   const adminLog = opts.adminLog ?? ((en: AdminLogEntry | IngestDiagnostic): void => {
     if (en.kind === 'store-set-aside') console.error(`onsite: ${en.kind} store=${en.store}${en.eventId !== undefined ? ` event=${en.eventId}` : ''} file=${en.file} setAsideAs=${en.setAsideAs} reason=${en.reason}`);
+    else if (en.kind === 'store-write-failed') console.error(`onsite: ${en.kind} store=${en.store} file=${en.file} reason=${en.reason}`);
     else if (en.kind === 'xml-table-emptied') console.error(`onsite: ${en.kind} phase=${en.phaseId} count=${en.count}`);
     // #367: every other ingest-only kind (`unparseable-field`, `gates-absent`, ...), whatever fields it carries
     else console.error(`onsite: ${en.kind} ${JSON.stringify(en)}`);
@@ -329,8 +338,9 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     let wire = core.drainNotifications().map((m) => toWire(m, event?.eventId ?? '', classesSent));
     if (eventChanged && event !== undefined) wire = [{ type: 'event.changed', event: onsiteEvent(event) }, ...wire];
     wire = writesBesideAttempts(wire);
-    // §2.9: every WriteRequest change is durable before it is pushed; a re-adopted write restating what the store holds is no change (§1.6)
-    let failure: unknown;
+    // §2.9: every WriteRequest change is durable before it is pushed; a re-adopted write restating what the store holds is no change (§1.6).
+    // §7.3: once the socket accepted the command the write exists; a failed store write keeps it in memory, is reported on the admin log
+    // and is answered and pushed as usual
     if (wstore !== undefined) {
       const held = wstore;
       wire = wire.filter((m) => m['type'] !== 'write.updated' || canon(held.get((m['write'] as J)['writeId'] as string)) !== canon(m['write']));
@@ -339,15 +349,23 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
         const retainedCell = core.retainedCell(w['writeId'] as string);
         return retainedCell === undefined ? w : { ...w, retainedCell };
       });
+      // item 50: a still-pending write whose retained value moved (an earlier write on its cell was answered) is stored, not pushed
+      const named = new Set(changed.map((w) => w['writeId'] as string));
+      for (const w of held.pending()) {
+        const id = w['writeId'] as string;
+        const retainedCell = named.has(id) ? undefined : core.retainedCell(id);
+        if (retainedCell !== undefined && canon(retainedCell) !== canon(w['retainedCell'] ?? null)) changed.push({ ...w, retainedCell });
+      }
       if (changed.length > 0 || bind !== undefined) {
-        try { await held.put(changed, bind); } catch (e) { failure = e; log('writes store', e); }
+        try { await held.put(changed, bind); } catch (e) {
+          adminLog({ kind: 'store-write-failed', store: 'writes', file: `${base}writes-${encodeURIComponent(event?.eventId ?? '')}.json`, reason: e instanceof Error ? e.message : String(e) });
+        }
       }
     }
     const state = [...wire, ...checkAndFlagPushes(createdIds)];
     const sent = await emit([...state, ...sourcesChange()]);
     const unitMessages = sent.filter((m) => m['type'] !== 'sources.updated');
     stepLog?.step([...elements, ...derived], unitMessages);
-    if (failure !== undefined && bind !== undefined) throw failure;
     await adoptPending();
   }
 
@@ -374,33 +392,34 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
    * Pending writes the store holds from an earlier lifetime resume at load (round 28-3b, DERIVATIONS §6): each is put back into the core as
    * the operator's provisional value as soon as the core knows its Attempt (the restarted core starts empty), with no on-course condition.
    * Its record's `retainedCell` is the TCP source's retained value again (absent: none retained), so §6's ordinary comparison decides.
-   * A write whose generation the core has passed is superseded; one whose generation it does not present yet waits (item 25).
+   * The core decides `superseded` where its generation has passed the stored one (DERIVATIONS §6); a write whose generation it does not
+   * present yet waits (item 25).
    */
   async function adoptPending(): Promise<void> {
     if (wstore === undefined) return;
     const waiting = wstore.pending().filter((w) => !adopted.has(w['writeId'] as string));
     if (waiting.length === 0) return;
     const known = new Set(core.attempts());
-    for (const w of waiting) {
+    // item 50 (d): an Attempt's stored pending writes resume in one unit, in the order sent, so its first delivery is judged once against all
+    const byAttempt = new Map<string, J[]>();
+    const order = waiting.map((w, i) => ({ w, i })).sort((x, y) => String(x.w['submittedAt']).localeCompare(String(y.w['submittedAt'])) || x.i - y.i);
+    for (const { w } of order) {
       const t = w['target'] as { phaseId: string; bib: string; run: number };
       const aid = `${t.phaseId}:${t.bib}`;
       const run = known.has(aid) ? runOf(aid) : undefined;
-      if (run === undefined) continue;
-      const id = w['writeId'] as string;
-      if (run > t.run) {
-        adopted.add(id);
-        const done: J = { ...w, status: 'superseded' };
-        delete done['retainedCell'];
-        await wstore.put([done]);
-        await emit([{ type: 'write.updated', write: done }]);
-      } else if (run === t.run) {
-        adopted.add(id);
+      if (run === undefined || run < t.run) continue;
+      byAttempt.set(aid, [...(byAttempt.get(aid) ?? []), w]);
+    }
+    for (const [aid, ws] of byAttempt) {
+      for (const w of ws) adopted.add(w['writeId'] as string);
+      await processUnit(ws.map((w) => {
+        const t = w['target'] as { run: number };
         const v = w['requestedValue'] as { gate: number; value: number };
-        await processUnit([{
+        return {
           ingestSeq: 0, attemptId: aid, field: 'gates', source: 'operator-write', kind: 'operator', observedAt: w['submittedAt'] as string,
-          value: [{ number: v.gate, penalty: v.value }], confidence: 'authoritative', run: t.run, writeId: id, retainedCell: w['retainedCell'] ?? null,
-        }]);
-      }
+          value: [{ number: v.gate, penalty: v.value }], confidence: 'authoritative', run: t.run, writeId: w['writeId'] as string, retainedCell: w['retainedCell'] ?? null,
+        };
+      }));
     }
   }
   const unit = (elements: IngestElement[]): void => { background(() => processUnit(elements)); };
@@ -614,7 +633,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     const source = tcp;
     if (tcpState !== 'connected' || system === undefined || source === undefined || !('write' in source) || (source as WritableSource).isWritable !== true) return refusedConnection;
     const run = runOf(aid);
-    if (run === undefined) return invalid([{ field: 'run', issue: 'the Attempt has no run yet' }]);
+    if (run === undefined) throw new Error(`internal: Attempt ${aid} presents no run`); // never a refusal (§7.3): the core presents one for every Attempt
     try {
       await (source as WritableSource).write(penaltyCorrectionCommand({ system, raceId: r.phaseId, bib: r.bib, gate, value }));
     } catch (e) {
@@ -687,7 +706,13 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     // The key and the flag live in two files: the key is bound first, to an id chosen ahead, and the flag is created under that id.
     // A kill between the two leaves a bound key with no flag; its retry creates the flag under the bound id, so there is never a second one.
     const flagId = bound ?? opts.newId?.() ?? `flag-${randomUUID()}`;
-    if (bound === undefined) await wstore.bindFlag(key as string, flagId);
+    if (bound === undefined) {
+      // §2.10: a flag whose key binding failed is not acknowledged and leaves its key unbound; the failure goes to the admin log (as item 18's)
+      try { await wstore.bindFlag(key as string, flagId); } catch (e) {
+        adminLog({ kind: 'store-write-failed', store: 'writes', file: `${base}writes-${encodeURIComponent(event?.eventId ?? '')}.json`, reason: e instanceof Error ? e.message : String(e) });
+        throw e;
+      }
+    }
     const flag = await doCreateFlag({ attemptId: aid, run: currentOf(aid), gate: b.gate, comment: b.comment, ...(b.suggestedValue !== undefined ? { suggestedValue: b.suggestedValue } : {}), ...(b.createdBy !== undefined ? { createdBy: b.createdBy } : {}) }, flagId);
     return { status: 201, body: flag };
   });
