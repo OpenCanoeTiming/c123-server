@@ -154,11 +154,11 @@ function onCourse(u: Unit, ctx: IngestContext, oc: Node): void {
       u.obs('inference', 'outcome', key, o, 'inferred',
         { judgingComplete: complete, ...closed, ...(finishAt !== undefined ? { eventTime: finishAt } : {}) });
     }
-  } else if (time !== undefined && (dtStart !== '' || fmt.heats)) {
-    // §4.3: a listing that shows `at-start` states no `running`, whatever its Time
+  } else if (time !== undefined) {
     const pen = fmt.cross ? 0 : numAttr(u, attemptId, t, 'Pen', int); // Pen is ignored in Cross (§4.6(d))
-    // an empty Pen is absent, never zero (§0.1): no complete running outcome to state
-    if (pen !== undefined) {
+    // an empty Pen is absent, never zero (§0.1): no complete running outcome to state;
+    // §4.3: a listing that shows `at-start` states no `running`, whatever its Time
+    if (pen !== undefined && (dtStart !== '' || fmt.heats)) {
       const o: Outcome = { kind: 'running', elapsedSeconds: time, penaltySeconds: pen };
       u.obs('inference', 'outcome', key, o, 'authoritative', { ...(fmt.cross ? {} : { judgingComplete: complete }), ...closed });
     }

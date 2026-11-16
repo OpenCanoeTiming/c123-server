@@ -71,6 +71,7 @@ function tablePresentsResult(a: AttemptState): boolean {
 function withdrawFinish(s: CoreState, a: AttemptState): void {
   if (a.gen.finish === undefined && streamStatus(a) !== 'finished') return;
   delete a.gen.finish;
+  a.gen.completed = false; // §4.4: the closure goes with the finish its listing carried
   delete fieldSlots(a.slots, 'outcome').inference;
   s.dirtyAttempts.add(a);
 }
@@ -168,7 +169,7 @@ export function leave(s: CoreState, a: AttemptState, el: Element): void {
   if (fmtFor(s, a.phaseId).cross) return;
   const cur = streamStatus(a);
   if (cur === 'finished' || a.gen.finish !== undefined) {
-    dropRunning(a);
+    dropRunning(a); // backstop: unreachable while a finish listing drops `running` (applyListing)
     return;
   }
   // §3.2, INV-1: a finish or a mark presented from a results table has no way back to `left-without-finish`
