@@ -2039,7 +2039,16 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    every snapshot; upstream numbers no tie in that domain shared. When the snapshot's category rank of a placed entry
    arrives and differs from the assembled one, a `category-rank-disagreement` anomaly is
    recorded and the assembled rank stays presented; since the numbering is upstream's, such a
-   difference is a defect of the assembly, never a difference the contract accepts. The check
+   difference is a defect of the assembly, never a difference the contract accepts. **The
+   comparison is made only while the whole-class standing presents the snapshot's class
+   order** (a default, `DERIVATIONS.md` §10 item 53 (e)): its placed entries are exactly the
+   race's placed rows of the latest snapshot, each with the `rank` and `order` that row states.
+   While a newer TCP push has moved the class order and the snapshot has not caught up, the
+   snapshot's category ranks describe another order, so nothing is compared and an anomaly
+   recorded earlier is withdrawn; the next snapshot that restates the presented order is
+   compared. The snapshot's `CatRnk` is read with no content-age guard: it is an `xml`-only
+   check input, never presented, and the order condition is what keeps a stale file from
+   raising anything. The check
    reads placed entries only: an unplaced row's `CatRnk` is a list position, not a rank (bib 64
    above carries `CatRnk` 9). It reads only rows whose `CatId` is set: on a second-run row with
    an empty `CatId`, `TotalCatRnk` repeats the class rank and is not a category rank (observed in
