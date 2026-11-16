@@ -95,11 +95,12 @@ describe('§2.1 Phase identity and structure', () => {
     expect(ph(els, 'heats', id)?.value).toBe(heats);
     const pairV = ph(els, 'pair', id)?.value;
     if (pair === null) expect(pairV ?? null).toBeNull();
-    else expect(pairV).toMatchObject({ ...pair, siblingPhaseId: `K1M_${sib[tok as string]}_19` });
+    // item 49 (a): a first run's sibling is the core's derivation, so the parser states null for it; a second run names its first run
+    else expect(pairV).toMatchObject({ ...pair, siblingPhaseId: (pair as { role: string }).role === 'first' ? null : `K1M_${sib[tok as string]}_19` });
   });
-  it('§2.1 pair.siblingPhaseId is the same class\'s first-run token Phase (XML: K1M_BR2_19 -> K1M_BR1_19, combination best)', () => {
+  it('§2.1 a second run\'s pair.siblingPhaseId is the same class\'s first-run token Phase (XML: K1M_BR2_19 -> K1M_BR1_19, combination best); the first run states null (item 49 a)', () => {
     expect(ph(slalom(), 'pair', 'K1M_BR2_19')?.value).toEqual({ role: 'second', siblingPhaseId: 'K1M_BR1_19', combination: 'best' });
-    expect(ph(slalom(), 'pair', 'K1M_BR1_19')?.value).toMatchObject({ role: 'first', siblingPhaseId: 'K1M_BR2_19' });
+    expect(ph(slalom(), 'pair', 'K1M_BR1_19')?.value).toEqual({ role: 'first', siblingPhaseId: null, combination: 'best' }); // item 49 (a): the parser states null for a first run
   });
   it('§2.1 several first runs exist: the sibling is the one with the same schedule date (K1M_BR2_19 pairs with K1M_BR1_19, not K1M_BR1_20)', () => {
     const day = (id: string): string => (id.endsWith('_20') ? '2026-09-20' : '2026-09-19');

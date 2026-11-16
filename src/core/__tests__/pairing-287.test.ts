@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { at } from './kit.js';
+import { createMergeCore } from '../index.js';
 import { coreWith, type Unit } from './streams.js';
+import type { MergePort } from '../../__tests__/conformance/port.js';
 import type { GivenElement } from '../../__tests__/conformance/port.js';
 
 /**
@@ -237,5 +239,33 @@ describe('#287 a first run\'s sibling is derived in the core: the inverse of the
     expect(sibling(c, 'K1M_BR2_19'), 'precondition: the BR2 names the other first run').toBe('K1M_BR1_20');
     expect(sibling(c, 'K1M_BR1_20')).toBe('K1M_BR2_19');
     expect(sibling(c, 'K1M_BR1_19')).toBeNull();
+  });
+});
+
+describe('#287 item 49 (b) as amended: a second run stops naming a first run only when both classIds are stated and differ', () => {
+  const base = { source: 'tcp', kind: 'result-row', confidence: 'authoritative', observedAt: at(1) };
+  const state = (id: string, field: string, value: unknown): GivenElement => ({ ingestSeq: 0, ...base, phaseId: id, field, value }) as GivenElement;
+  const pairValue = (c: ReturnType<typeof coreWith>, id: string): { siblingPhaseId?: unknown } | null => c.phase(id)['pair'] as { siblingPhaseId?: unknown } | null;
+
+  it('a second run names a first run the core holds with no stated classId: the first run presents that second run as its sibling', () => {
+    const c = coreWith([
+      [state('K1M_BR1_19', 'format', 'BR1'), state('K1M_BR1_19', 'pair', { role: 'first', siblingPhaseId: null, combination: 'best' })],
+      describe_(2, { id: 'K1M_BR2_19', cls: 'K1M', format: 'BR2', role: 'second', sibling: 'K1M_BR1_19' }),
+    ], { classIdsFromIds: false });
+    expect(c.phase('K1M_BR1_19')['classId'], 'precondition: the first run has no stated class').not.toBe('K1M');
+    expect(pairValue(c, 'K1M_BR2_19')?.siblingPhaseId, 'precondition: the second run states the first run').toBe('K1M_BR1_19');
+    expect(pairValue(c, 'K1M_BR1_19')?.siblingPhaseId).toBe('K1M_BR2_19');
+  });
+
+  it('the first run is nothing-stated (no Phase in the core), only its Attempt is viewed (vector two-run-br1-unavailable-no-live-no-xml): run 2 observed, the first run\'s outcome is unavailable{not-configured}', () => {
+    const c = createMergeCore({ attemptId: 'K1M_BR2_6:9', xmlConfigured: false }) as MergePort;
+    c.applyUnit([
+      state('K1M_BR2_6', 'classId', 'K1M'), state('K1M_BR2_6', 'format', 'BR2'),
+      state('K1M_BR2_6', 'pair', { role: 'second', siblingPhaseId: 'K1M_BR1_6', combination: 'best' }),
+    ]);
+    c.applyUnit([{ ingestSeq: 1, attemptId: 'K1M_BR2_6:9', field: 'outcome', source: 'tcp', kind: 'result-row', observedAt: '2026-09-15T10:14:02.400Z', value: duration(82.36), confidence: 'authoritative', judgingComplete: true } as GivenElement]);
+    expect(c.attempts(), 'precondition: run 2 is observed and run 1 has no Phase').toContain('K1M_BR2_6:9');
+    expect(c.presented('K1M_BR2_6:9')['outcome'], 'precondition: run 2 presents its outcome').toMatchObject({ state: 'known' });
+    expect(c.presented('K1M_BR1_6:9')['outcome']).toMatchObject({ state: 'unavailable', reason: 'not-configured' });
   });
 });
