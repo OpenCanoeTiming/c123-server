@@ -177,6 +177,32 @@ describe('#377 DERIVATIONS §10 item 49 (d): a Phase held with neither format no
   });
 });
 
+describe('#377 DERIVATIONS §10 item 49 (b) with (d), §2.1 "The class check needs both classes stated": a second run of another class does not name a held Phase', () => {
+  const second = { role: 'second', siblingPhaseId: 'A_19', combination: 'sum' };
+  const pairMoves = (c: MergePort, from: number, id: string) =>
+    (c.notifications().slice(from) as Array<Record<string, any>>)
+      .filter((m) => m['type'] === 'phase.updated' && m['phaseId'] === id && (m['fields'] ?? {})['pair'] != null);
+  it('item 49 (b) with (d): A_19 (class K1M, nothing else) named by B_19 (class C1W, format BR2, pair second -> A_19): A_19 presents no pair and no phase.updated carries one', () => {
+    const c = coreWith([stateUnit(1, { id: 'A_19', cls: 'K1M' })], NO_ID_CLASS);
+    expect(rec(c, 'A_19')['classId'], 'precondition: A_19 states class K1M').toBe('K1M');
+    expect(rec(c, 'A_19')['format'] ?? null, 'precondition: A_19 states no format').toBeNull();
+    expect(rec(c, 'A_19')['pair'] ?? null, 'precondition: A_19 presents no pair before the second run').toBeNull();
+    const from = c.notifications().length;
+    c.applyUnit(stateUnit(2, { id: 'B_19', cls: 'C1W', format: 'BR2', pair: second }));
+    expect(rec(c, 'B_19')['classId'], 'precondition: B_19 states class C1W, differing from A_19').toBe('C1W');
+    expect(rec(c, 'B_19')['format'], 'precondition: B_19 states format BR2').toBe('BR2');
+    expect(rec(c, 'A_19')['pair'] ?? null, 'item 49 (b): a second run of another stated class does not name A_19; no pair').toBeNull();
+    expect(pairMoves(c, from, 'A_19'), 'no phase.updated for A_19 carries a pair').toEqual([]);
+  });
+  it('control, item 49 (d): the same with B_19 of class K1M gives A_19 pair {first, siblingPhaseId B_19 (item 48 inverse sibling, as the (d) test above), sum}', () => {
+    const c = coreWith([stateUnit(1, { id: 'A_19', cls: 'K1M' })], NO_ID_CLASS);
+    expect(rec(c, 'A_19')['pair'] ?? null, 'precondition: no pair before').toBeNull();
+    c.applyUnit(stateUnit(2, { id: 'B_19', cls: 'K1M', format: 'BR2', pair: second }));
+    expect(rec(c, 'B_19')['classId'], 'precondition: B_19 states class K1M').toBe('K1M');
+    expect(rec(c, 'A_19')['pair']).toEqual({ role: 'first', siblingPhaseId: 'B_19', combination: 'sum' });
+  });
+});
+
 describe('#377 row 6, DERIVATIONS §2.1 / CONFORMANCE-VECTORS §1: src/core reads no id token', () => {
   const coreDir = fileURLToPath(new URL('../', import.meta.url));
   const files = (dir: string): string[] =>
