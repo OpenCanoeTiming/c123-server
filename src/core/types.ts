@@ -146,6 +146,8 @@ export interface ResourceState {
   xmlTable?: 'rows' | 'emptied';
   /** Phase only, a first run: its sibling, the second run that names it back (DERIVATIONS §10 item 48); `null` where none does. */
   derivedSibling?: string | null;
+  /** Phase only: the source whose element stated `format` (DERIVATIONS §10 item 37: a snapshot's `DisId` holds against a later TCP statement). */
+  formatSource?: Source;
 }
 
 /**
