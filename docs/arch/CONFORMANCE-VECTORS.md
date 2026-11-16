@@ -455,8 +455,9 @@ test's:
   `null`, is a structural field no `expect` reads as an envelope; a core test pins it).
 - `phase-removal-refused-by-guard`: a save older than TCP's push of the race removes nothing;
   the next one removes the Phase.
-- `phase-removed-then-returns`: a removed Phase scheduled again with a row is a new Phase, its
-  Attempt created `run` 1 from the row.
+- `phase-removed-then-returns`: a removed Phase whose Attempt was in generation 2 is scheduled
+  again with a row: a new Phase, its Attempt created `run` 1 from the row (a retraction never
+  lowers `run`, so only the removal gives `1`).
 
 A fourth, `phase-kept-when-schedule-table-empty` (a save whose schedule names no race removes
 nothing), passes on today's core, which removes no Phase, and was never on the ledger.

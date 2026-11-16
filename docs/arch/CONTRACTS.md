@@ -736,7 +736,8 @@ no longer names its race: deleted upstream, or rebuilt under another `RaceId` af
 race removes nothing, and the content-age guard covers the whole Phase. The removal takes the
 Phase's Attempts, its classification rows and every Standing whose scope names it, and is sent as
 one `phase.deleted` (§7.2) and to live as `DELETE` (§8.3). A first run whose sibling was removed
-names another second run or `null`; a race that returns is a new Phase, created whole. The Class
+names another second run or `null`, and a second run whose first run was removed names `null`
+until a first run is named; a race that returns is a new Phase, created whole. The Class
 and its Entries stay. `cancelled` (§3.1) is a race that stays scheduled, not a removal.
 
 **`date` is assigned once and never changes**, even if a correction to the Phase's results is pushed a
@@ -1835,7 +1836,8 @@ implementation must satisfy, not an algorithm.
     category) are gone from every read. On site that is one `phase.deleted` (§7.2), with no
     `attempt.deleted` or `standing.updated` for what it takes; to live, `DELETE` of the Phase
     (§8.3). Checks and flags stay in the store (§2.10). A first run whose sibling it was has its
-    `pair` derived again in the unit (§2.4). A race that returns creates a new Phase by the
+    `pair` derived again in the unit, and a second run whose sibling it was presents
+    `siblingPhaseId: null` (§2.4). A race that returns creates a new Phase by the
     ordinary rule, whole, its Attempts `run` 1, the checks and flags of each returning
     `attemptId` served again. **A schedule that names no race removes nothing:** where it would
     have removed a Phase the guard admits, the core raises `xml-schedule-emptied`, ingest-only
@@ -1843,7 +1845,8 @@ implementation must satisfy, not an algorithm.
     *Example:* `K1M_BR1_6` and `K1M_BR2_6` are scheduled and the operator deletes the second
     run. The next save, content age 09:10:00, later than every TCP delivery naming `K1M_BR2_6`,
     schedules `K1M_BR1_6` alone: one `phase.deleted` for `K1M_BR2_6`, then a `phase.updated`
-    for `K1M_BR1_6` whose `pair.siblingPhaseId` is `null`.
+    for `K1M_BR1_6` whose `pair.siblingPhaseId` is `null`. Had the first run been deleted
+    instead, the `phase.updated` would be `K1M_BR2_6`'s, its sibling `null`.
   - **Never retracted:** an on-course inference, `entry`, `bib`, `startOrder`, `heat`, `startLane`,
     `run`, or a field whose Attempt was never present in a results-table observation.
   - **XML retractions are guarded by content age (INV-2c),** a present row's and an absent row's
@@ -2222,8 +2225,10 @@ Every message carries `seq` (§1.6).
   the only message for the Phase, its Attempts and those Standings in its unit: the unit's
   `write.updated` of each pending write of its Attempts (resolved `mismatched`) precedes it, and
   no `attempt.deleted`, `standing.updated` or `check.updated` is sent for what it removes; a
-  client drops the Attempts' checks and flags with them, and the store keeps them (§2.10). A
-  `phase.updated` of a first run whose sibling it was follows it. In a re-baseline's unit it
+  client drops the Attempts' checks and flags with them, and the store keeps them (§2.10). The
+  `phase.updated` of each Phase whose `pair.siblingPhaseId` named it follows it in the same unit:
+  a first run's derived again, a second run's `null`; no message in between names the removed
+  Phase. In a re-baseline's unit it
   precedes `scope.replaced`, which then carries nothing of the removed Phase. A later
   `phase.updated` for the same `phaseId` creates a new Phase, whole. The shape follows
   `attempt.deleted`'s.

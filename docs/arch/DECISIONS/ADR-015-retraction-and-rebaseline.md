@@ -409,7 +409,8 @@ are defaults taken inside it, by analogy with Revisions 6 and 7:
    Phase no schedule row of an admitted snapshot names is removed. The race's results table is
    not the trigger: a race the schedule names with no result row is an emptied table (Revision
    5 rule 5), not a removal.
-2. **Only a Phase an XML snapshot's schedule has named is removed.** A Phase only TCP has named
+2. **Only a Phase an XML snapshot's schedule has named is removed,** by any schedule statement,
+   admitted or not (a first read's included). A Phase only TCP has named
    (its `Results`, `Schedule` or an on-course listing; no XML configured, or a file that lags) is
    TCP's, as an Attempt only the stream named is (Revision 6 rule 1). TCP's own `Schedule` never
    removes, as TCP's absent row never removes (Revision 6 rule 3).
@@ -438,8 +439,10 @@ are defaults taken inside it, by analogy with Revisions 6 and 7:
    bridge sends `DELETE /ingest/v2/phases/{phaseId}`, and no `DELETE` per Attempt.
 6. **What follows from it in the same unit.** A first run whose sibling was the removed Phase
    has its `pair` derived again (`DERIVATIONS.md` §10 item 49 (a)), `null` or another second run,
-   sent as `phase.updated` after the `phase.deleted`. A second run whose first run was removed
-   gets the sibling the snapshot's schedule gives it, as the parser states it from that schedule;
+   sent as `phase.updated` after the `phase.deleted`. A second run whose presented sibling was
+   the removed Phase presents `siblingPhaseId: null` from the removal, until a later statement
+   names a first run (review of PR #381, CQ1), its `phase.updated` likewise after the
+   `phase.deleted` in the same unit, so no message at a unit boundary names a removed Phase;
    its `pair` standing, whose scope named the removed Phase, went with the `phase.deleted` and is
    published again from its first entry once a first run is named.
 7. **A Phase that returns** is created again, whole, by the ordinary rule: the first message for
@@ -470,7 +473,8 @@ Phase TCP is not naming, as it would every Attempt (Revision 6); TCP's next ment
 live race, and the operator's remedy is the right file. A rename shows the old Phase removed and
 the rebuilt one created, which is what upstream did. The guard can hold a removal back while TCP
 keeps naming the race; TCP's `Schedule` names every race of the event in each message in every
-recording, so a race deleted upstream drops out of it at once (E1, the P3c sweep part 4).
+recording (the P3c sweep part 4), so a race deleted upstream is expected to drop out of it at once,
+which is not recorded (E4; `DERIVATIONS.md` §10 item 54 reopens on it).
 
 **Evidence.** E4: no recording holds a race leaving the schedule (the P3c sweep part 4 (a), a scan: one
 fixed race set per recording in all 2,032 distinct snapshots and in every TCP `Schedule`

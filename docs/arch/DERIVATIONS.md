@@ -689,9 +689,10 @@ withheld stale mark leaves the time presented (§4.12).
   - at a listing with a `dtFinish`: the `duration` inference below replaces it, and where that
     listing yields none — its `Time` is empty, or a slalom listing has no `Gates` (§4.6(a)) —
     nothing does, so `outcome` is `not-yet` until a row states one;
-  - at a slalom leave, on every path of §4.1's rule.
+  - at a slalom or Kayak Cross time-trial leave, on every path of §4.1's rule (the time trial
+    since the maintainer's decision of 2026-11-16).
 
-  A Kayak Cross leave ends nothing (§10 item 35). So no presented state pairs a `running`
+  A Kayak Cross heat's leave ends nothing (§10 item 35). So no presented state pairs a `running`
   outcome with a `status` other than `on-course`.
 
 **`duration`, the inference.**
@@ -1407,7 +1408,8 @@ previously known from a results-table observation:
   pending writes of its Attempts resolve `mismatched` without `confirmedValue`; then the Phase,
   its Attempts, its classification rows and kept `decidedIn`, the diagnostics of it and its
   Attempts and every Standing whose scope names it go, as one `phase.deleted`; a first run whose
-  sibling it was is derived again (§2.1) and its `phase.updated` follows. **An empty schedule
+  sibling it was is derived again (§2.1), a second run naming it presents `siblingPhaseId: null`,
+  and their `phase.updated` follow. **An empty schedule
   statement removes nothing;** where at least one Phase would have been removed, the guard
   applied, the core raises `xml-schedule-emptied` with the number of such Phases (ingest-only,
   §0.5), once, re-armed by a schedule statement that names a race. Defaults: §10 item 54. No
@@ -2019,8 +2021,8 @@ review of #318's code (PR #379).
     accepted.** The venue documentation tells the operator to run the laptop on a charged
     battery. Covering power loss would need a write-through store the check would have to
     verify.
-35. **A Kayak Cross leave and the stream's `running` outcome** (#318). A Cross Attempt that
-    leaves the list keeps `status: on-course` (§4.2; `CONTRACTS.md` §7.1), and it keeps the
+35. **A Kayak Cross heat's leave and the stream's `running` outcome** (#318; scoped to the heats
+    2026-11-16). A Cross heat Attempt that leaves the list keeps `status: on-course` (§4.2; `CONTRACTS.md` §7.1), and it keeps the
     stream's `running` outcome with it: `running` is the outcome of an Attempt on course
     (`CONTRACTS.md` §2.6), and withdrawing it would present `on-course` beside `not-yet`, a pair
     no state has. The clock no longer ticks; a client freezes it and shows it stale after
@@ -2392,7 +2394,7 @@ review of #318's code (PR #379).
     holds a rename, a moved race or a deleted one). *Closed 2026-11-16: by the maintainer's
     decision of that day such a Phase is removed (`DECISIONS/ADR-015` Revision 9; item 54), which
     closes the gap stated below; the rest of (c) is the record of the default it replaced.*
-    Nothing in the contract removes a Phase.
+    Nothing in the contract removed a Phase until then.
     It stays as last stated, with its own `pair`; a standing of it that was published stays
     published. Upstream rebuilds an id only while its race is at the initial status (§1), so
     the Phase of a rebuilt id normally holds no result, and a `pair` standing that never had
@@ -2570,7 +2572,8 @@ review of #318's code (PR #379).
     (b) *Outside the domain.* Kayak Cross heat Phases and classifications publish no category
     standing (ordinal and classification scopes, §5 step 1). Their rows still carry `CatId`:
     in cp3-cross's `XS`, `XF` and `XER` tables `CatRnk` is absent on 129 distinct placed rows
-    and differs on 38 (one early snapshot each), and one classification (WX1J_XER_26_JUN)
+    and differs on 38 (50 instances: 26 in MX1_XER_26, one early snapshot each, and 12 in
+    WX1J_XER_26_JUN), and one classification (WX1J_XER_26_JUN)
     shares a category rank on a tie (DS rank 1: 1 and 1; DS rank 2: 2 and 2) while another tie
     there is numbered against `RnkOrder`. None of it reaches a standing, so it rules nothing.
     So CQ3 closes: upstream numbers class ties consecutively wherever the rule applies, and
@@ -2607,7 +2610,9 @@ review of #318's code (PR #379).
     (a) *The trigger is the schedule statement* (§0.3), the races the snapshot's `Schedule`
     table names, never its results tables: a race scheduled with no row is item 41's emptied
     table. Upstream rewrites the schedule whole at every save, as it does the tables.
-    (b) *Only a Phase an XML schedule statement has named is removed* (item 38 (b)'s scope). A
+    (b) *Only a Phase an XML schedule statement has named is removed* (item 38 (b)'s scope):
+    any statement, admitted or not, a first read's included; admission is asked only of the
+    statement that would remove it (c). A
     Phase only TCP has named, before the first snapshot or with no XML configured, stays TCP's;
     TCP's own `Schedule` never removes (item 38 (d)).
     (c) *The guard covers the whole Phase:* every `tcp` observation of the Phase or of any of its
@@ -2631,8 +2636,13 @@ review of #318's code (PR #379).
     surviving second run's `pair` standing is published again from its first entry once a first
     run is named.
     (h) *Pairing after a removal.* A first run that named the removed Phase is derived again in
-    the unit (item 49 (a)) and sent as `phase.updated` after the `phase.deleted`. A second run
-    whose first run was removed takes the sibling the parser states from the same schedule.
+    the unit (item 49 (a)). A second run whose presented `siblingPhaseId` is the removed Phase
+    presents `null` from the removal (review of PR #381, CQ1), until a later statement names a
+    first run; the parser's statement from the same read gives the same, so the rule fixes the
+    order and covers a read that does not restate it. It is narrow on purpose: a second run
+    naming a Phase nothing has stated stays as item 49 (b) has it. Each such Phase, first or
+    second run, is sent as `phase.updated` after the `phase.deleted`, in one unit, so no
+    client sees a pointer to a removed Phase at a unit boundary.
     (i) *Classification rows and their kept `decidedIn`* go with the Phase (item 52).
     (j) *A returning Phase* is a new Phase: created whole by the ordinary rule, its `date` the
     snapshot's (INV-5's once-only date is per Phase), its Attempts `run` 1 with none of the
@@ -2648,4 +2658,7 @@ review of #318's code (PR #379).
     message names the same set), and no snapshot has an empty schedule. So nothing recorded
     moves; the rule rests on upstream's whole-file rewrite. Client duties move (CLIENT-OBLIGATIONS:
     remove a Phase with what it holds, on site and on live; live-mini-server's Phase `DELETE`).
-    Reopens on a recording of a race leaving the schedule that these defaults present wrongly.
+    Reopens on a recording of a race leaving the schedule that these defaults present wrongly,
+    or of TCP's `Schedule` going on naming a race the file has dropped: the guard counts those
+    deliveries (c), so such a race would never be removed while TCP is connected. That TCP drops
+    a deleted race at once is inferred from every recorded `Schedule` naming the full set (E4).
