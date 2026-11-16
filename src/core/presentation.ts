@@ -146,11 +146,12 @@ export function viewAttempt(s: CoreState, a: AttemptState): Record<string, unkno
   const statusSlot = presentStatus(a.slots.get('status'));
   const closed = a.gen.completed || a.left || isNoResultMark(statusSlot?.value);
   const gates = presentGates(a);
-  // §1.2: not `known` because no course is bound. A parser stamps a row only against a course (null without one), so an unstamped result is this case
+  // §1.2, §4.4: not `known` because no course is bound or configured (provisional until the run closes). A parser stamps a row only against
+  // a course (null without one), so an unstamped result is this case
   const judging = fmt.cross ? present(a.slots.get('faults')) : gates;
   const judged: Judging = {
     gates, closed,
-    unjudgeable: boundSlots(s, a.phaseId) === undefined && judging?.state !== 'known' && judging?.state !== 'unavailable',
+    unjudgeable: boundSlots(s, a.phaseId) === undefined && judging?.state !== 'known',
     noRun: statusSlot === undefined || statusSlot.value === 'not-started',
     heatPlaced: fmt.heats && present(a.slots.get('placement'))?.state === 'known',
   };

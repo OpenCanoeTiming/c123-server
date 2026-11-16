@@ -163,7 +163,7 @@ function dropRunning(a: AttemptState): void {
 /**
  * The Attempt left upstream's list: `left-without-finish`, or back to `not-started` if it never started. Slalom and the Cross
  * time trial (§4.1); a Cross heat's leave changes nothing (§4.2, §10 item 35). Behind a table `finished` or mark the leave's
- * inference is recorded all the same and not presented (§4.12: a retraction falls back to it).
+ * `left-without-finish` is recorded all the same and not presented (§4.12: a retraction falls back to it).
  */
 export function leave(s: CoreState, a: AttemptState, el: Element): void {
   a.listed = false;
@@ -182,9 +182,10 @@ export function leave(s: CoreState, a: AttemptState, el: Element): void {
   const drawn = cur === 'at-start' ? 'not-started' : cur === 'on-course' || a.gen.start !== undefined ? 'left-without-finish' : undefined;
   if (drawn === undefined) return;
   if (drawn === 'left-without-finish') delete fieldSlots(a.slots, 'outcome').inference;
-  // §3.2, INV-1: a finish or a mark presented from a results table has no way back to `left-without-finish`; the leave is recorded behind it
-  if (tablePresentsResult(a)) a.gen.leftBehind = slotOf(s, el, 'tcp', 'inference', drawn, seq);
-  else setStream(s, a, el, drawn, seq);
+  // §3.2, INV-1: a finish or a mark presented from a results table has no way back to `left-without-finish`; that leave is
+  // recorded behind it. A leave drawing `not-started` retains nothing: a retraction presents `not-started` on its own envelope
+  if (!tablePresentsResult(a)) setStream(s, a, el, drawn, seq);
+  else if (drawn === 'left-without-finish') a.gen.leftBehind = slotOf(s, el, 'tcp', 'inference', drawn, seq);
 }
 
 /** The rule's one evaluation, after a TCP unit is merged, so the unit's own listings count. Returns the leaves it derived, as `oncourse-left` elements. */

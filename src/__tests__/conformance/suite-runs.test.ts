@@ -47,16 +47,16 @@ describe('the real vectors.test.ts in a child vitest (issue #200 rows 1, 2, 5; r
     expect(exit).toBe(0);
   }, 120_000);
 
-  it('VECTORS_STRICT=1: exactly the 115 titles again, the ledger is ignored: the three listed ids read failed, every other passed, exit 1', () => {
-    // Strict mode shows the true state. Listed: M2 P3c's three Phase-removal vectors (maintainer, 2026-11-16); the core implements none of
-    // them yet (#305 took the three Cross time-trial leave vectors, #271 the two category standing vectors).
+  it('VECTORS_STRICT=1: exactly the 115 titles again, the ledger is ignored and empty: every vector reads passed, exit 0', () => {
+    // Strict mode shows the true state. The ledger is empty since M2 P3c: #305 took the three Cross time-trial leave vectors,
+    // #382 the three Phase-removal ones, #271 the two category standing vectors.
     const listed = new Set(loadExpectedRed().map((id) => `vector ${id}`));
-    expect(listed.size).toBe(3);
+    expect(listed.size).toBe(0);
     const { exit, results } = suite(true);
     expect(results.map((r) => r.title).sort()).toEqual([...ids].sort());
     expect(results.filter((r) => r.status !== 'passed').map((r) => r.title).sort()).toEqual([...listed].sort());
     expect(results.filter((r) => listed.has(r.title) && !/VectorMismatch/.test(r.message)).map((r) => r.title)).toEqual([]);
-    expect(exit).toBe(1);
+    expect(exit).toBe(0);
   }, 120_000);
 });
 

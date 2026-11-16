@@ -24,9 +24,11 @@ export function marksHeld(a: AttemptState): ResultMark[] {
  * DERIVATIONS §4.11 "Recorded": a row with a time or a mark, attributed after the recorded start, that states something the table
  * did not already hold on either source. A mark standing at the start records nothing however it arrives afterwards; `*` is no mark.
  */
-export function recordsGeneration(a: AttemptState, mark: ResultMark | undefined, time: number | undefined): boolean {
+export function recordsGeneration(a: AttemptState, mark: ResultMark | undefined, time: number | undefined, xmlRefused = false): boolean {
   if (a.gen.start === undefined) return false;
-  if (mark !== undefined && !a.gen.markAtStart.includes(mark) && !marksHeld(a).includes(mark)) return true;
+  // a mark the guard refused was never admitted: the table does not hold it, so its admitted restatement records (§4.11)
+  const held = xmlRefused ? [a.slots.get('status')?.tcp?.value].filter(isMark) : marksHeld(a);
+  if (mark !== undefined && !a.gen.markAtStart.includes(mark) && !held.includes(mark)) return true;
   if (time === undefined) return false;
   const outcome = a.slots.get('outcome');
   return ![outcome?.tcp, outcome?.xml].some((slot) => (slot?.value as { runSeconds?: number } | undefined)?.runSeconds === time);

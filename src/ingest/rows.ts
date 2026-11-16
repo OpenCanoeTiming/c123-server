@@ -98,8 +98,9 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
   const cells = fixedCells(r.gates, usable(slots) ? slots.length : 0, bad, fmt.cross);
   for (const b of bad) u.diagnostic({ kind: 'unparseable-cell', attemptId, source, slot: b.slot, text: b.text });
   const hasTime = r.time !== undefined;
-  // §4.6(b): blank is thirty missing cells where the row states a result, by a time or a mark; a row stating neither states nothing, `Gates` included
-  const statesCells = r.gates.trim() !== '' || hasTime || m !== undefined;
+  // §4.6(b): blank is thirty missing cells where the row states a result, by a time or a mark that sets `status` (`*` is none); a row
+  // stating neither states nothing, `Gates` included
+  const statesCells = r.gates.trim() !== '' || hasTime || status !== undefined;
   if (statesCells && slots === undefined) row['cells'] = cells;
   else if (statesCells && !usable(slots)) row[fmt.cross ? 'faults' : 'gates'] = NOT_CONFIGURED; // a bound course with an empty layout: the snapshot's determination
   else if (statesCells && slots !== undefined && fmt.cross) {

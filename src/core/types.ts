@@ -155,6 +155,8 @@ export interface ResourceState {
   xmlTable?: 'rows' | 'emptied';
   /** Phase only, a first run: its sibling, the second run that names it back (DERIVATIONS §10 item 48); `null` where none does. */
   derivedSibling?: string | null;
+  /** Phase only: the latest delivery of a `tcp` observation of the Phase itself (a TCP `Schedule`, a `Results` message): with its Attempts', the guard of its removal (§4.12). */
+  tcpAt?: number;
 }
 
 /**
@@ -164,6 +166,7 @@ export interface ResourceState {
  */
 export type IngestDiagnostic =
   | { kind: 'xml-table-emptied'; phaseId: string; count: number }
+  | { kind: 'xml-schedule-emptied'; count: number }
   | { kind: string; [key: string]: unknown };
 
 export interface ClassificationState {
@@ -245,6 +248,14 @@ export interface CoreState {
   resumed?: Map<AttemptState, Set<string>>;
   /** Attempts the unit removed (an absent XML row, §4.12): each one `attempt.deleted` at the flush. */
   removed: AttemptState[];
+  /** Phases the unit removed (the schedule statement, §4.12): each one `phase.deleted` at the flush. */
+  removedPhases: ResourceState[];
+  /** Phases removed and not created again: a stated sibling naming one presents `null` (§10 item 54 (h)). */
+  removedIds: Set<string>;
+  /** The Phases an XML schedule statement has named, admitted or not: only these are removed (§10 item 54 (b)). */
+  scheduled: Set<string>;
+  /** `xml-schedule-emptied` is armed: raised once per emptying, re-armed by a statement naming a race (§10 item 54 (k)). */
+  scheduleArmed: boolean;
   /** Phases whose Standings a unit may have changed (#205). */
   dirtyScopes: Set<string>;
   /** Ingest time of the unit in hand, for the `asOf` of the Standings it changes. */
