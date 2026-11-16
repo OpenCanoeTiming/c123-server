@@ -22,6 +22,10 @@ export function phaseResource(s: CoreState, phaseId: string, observedAt: string)
     p.attempts = new Set();
     const inferred = zonedDate(observedAt, s.options.zone);
     if (inferred !== undefined) p.plain.set('date', inferred);
+    // §10 item 54 (h): a removed Phase created again: the second runs stating it as their sibling present it again
+    if (s.removedIds.delete(phaseId)) {
+      for (const other of s.phases.values()) if (statedPair(other)?.siblingPhaseId === phaseId) s.dirtyPhases.add(other);
+    }
     s.dirtyPhases.add(p);
   }
   return p;
@@ -67,7 +71,10 @@ const statedPair = (r: ResourceState | undefined): StatedPair => r?.plain.get('p
 export function siblingPhaseId(s: CoreState, phaseId: string): string | undefined {
   const role = fmtFor(s, phaseId).pair?.role;
   const r = s.phases.get(phaseId);
-  if (role === 'second') return statedPair(r)?.siblingPhaseId ?? undefined;
+  if (role === 'second') {
+    const stated = statedPair(r)?.siblingPhaseId ?? undefined;
+    return stated !== undefined && s.removedIds.has(stated) ? undefined : stated; // §10 item 54 (h)
+  }
   if (role !== 'first') return undefined;
   if (r?.derivedSibling !== undefined) return r.derivedSibling ?? undefined;
   return namedBack(s, phaseId, namingSecondRuns(s, true)) ?? undefined;
@@ -81,7 +88,7 @@ export function namingSecondRuns(s: CoreState, sameClass: boolean): Map<string, 
   const naming = new Map<string, string[]>();
   for (const [id, r] of s.phases) {
     const p = statedPair(r);
-    if (p?.role !== 'second' || typeof p.siblingPhaseId !== 'string') continue;
+    if (p?.role !== 'second' || typeof p.siblingPhaseId !== 'string' || s.removedIds.has(p.siblingPhaseId)) continue;
     if (sameClass) {
       const cls = r.plain.get('classId');
       const firstCls = s.phases.get(p.siblingPhaseId)?.plain.get('classId');

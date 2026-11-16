@@ -6,7 +6,7 @@
 import { choose, newerContent, present, presentStatus, isMark, isNoResultMark } from './precedence.js';
 import { finishOf } from './presentation.js';
 import { fieldSlots, laterAge, retain, slotOf } from './retention.js';
-import { fmtFor, isInstant, isXmlOnly, siblingAttempt } from './registry.js';
+import { fmtFor, isInstant, isXmlOnly, namingSecondRuns, siblingAttempt } from './registry.js';
 import { refuse } from './counters.js';
 import { timeOf, markOf } from './generations.js';
 import { displaceOperator } from './writes.js';
@@ -51,9 +51,10 @@ function retractStatus(s: CoreState, a: AttemptState, source: Source, el: Elemen
     delete fs.tcp;
   }
   fs[source] = m;
-  // "what the on-course stream currently shows, else not-started": after a leave, the leave's own inference (§4.12); a Cross
-  // heat's leave changes nothing, so its stream still shows `on-course` (§4.2)
-  const leaveDrew = fs.inference?.value === 'left-without-finish' || fs.inference?.value === 'not-started';
+  // "what the on-course stream currently shows, else not-started": after a leave, its `left-without-finish` with the leave's
+  // envelope (§4.12); a leave's `not-started` is not retained, so the marker presents on the retraction's own instant and source;
+  // a Cross heat's leave changes nothing, so its stream still shows `on-course` (§4.2)
+  const leaveDrew = fs.inference?.value === 'left-without-finish';
   if (!a.listed && !leaveDrew && !fmtFor(s, a.phaseId).heats) {
     delete fs.inference;
     delete a.gen.finish;
@@ -64,7 +65,7 @@ function retractStatus(s: CoreState, a: AttemptState, source: Source, el: Elemen
   }
   // INV-2 rule 2, INV-2c: the fallback stands where the retraction stood, so the XML displaces it only with content later than
   // the retracting delivery; the leave's envelope is kept (as a re-delivery advances the age, not `observedAt`)
-  if (!a.listed && fs.inference !== undefined && (fs.inference.value === 'left-without-finish' || fs.inference.value === 'not-started')) {
+  if (!a.listed && fs.inference !== undefined && fs.inference.value === 'left-without-finish') {
     fs.inference = { ...fs.inference, age: laterAge(fs.inference.age, m.age) };
   }
   return true;
@@ -149,6 +150,96 @@ function remove(s: CoreState, a: AttemptState, el: Element): void {
     s.diagnosticsDirty = true;
   }
   s.removed.push(a);
+}
+
+/**
+ * The schedule statement (§0.3, §4.12, §10 item 54): a Phase some XML statement has named and an admitted one no longer names is removed.
+ * An empty statement removes nothing; where it would have removed a Phase the guard admits, it raises the ingest-only
+ * `xml-schedule-emptied`, once per emptying, re-armed by a statement that names a race (item 54 (k)). TCP states no schedule.
+ */
+export function applySchedule(s: CoreState, el: Element): void {
+  const st = el['schedule'] as { source?: unknown; phaseIds: string[] };
+  if (st.source !== 'xml') return;
+  const named = new Set(st.phaseIds);
+  const omitted = [...s.phases.values()].filter((p) => s.scheduled.has(p.id) && !named.has(p.id));
+  for (const id of named) s.scheduled.add(id);
+  if (named.size === 0) {
+    if (!s.scheduleArmed) return;
+    const count = omitted.filter((p) => phaseAdmitted(s, p)).length;
+    if (count === 0) return;
+    s.scheduleArmed = false;
+    s.ingestLog.push({ kind: 'xml-schedule-emptied', count });
+    return;
+  }
+  s.scheduleArmed = true;
+  for (const p of omitted) {
+    if (phaseAdmitted(s, p)) removePhase(s, p, el);
+    else refuse(s, 'removal-guard');
+  }
+}
+
+/**
+ * The guard over the whole Phase (item 54 (c)): `changedAfter` is later than every `tcp` observation of the Phase or of any Attempt of it
+ * (`null` never qualifies), and no Attempt of it is in the on-course set.
+ */
+function phaseAdmitted(s: CoreState, p: ResourceState): boolean {
+  const age = s.rewrite?.changedAfter ?? null;
+  if (age === null || age <= (p.tcpAt ?? -Infinity)) return false;
+  return [...(p.attempts ?? [])].every((a) => !a.listed && age > (a.tcpAt ?? -Infinity));
+}
+
+/**
+ * The removal of a Phase, in the unit (item 54 (d)-(i)): pending writes of its Attempts resolve `mismatched` without `confirmedValue`; the
+ * Phase, its Attempts, its classification rows, the diagnostics of it and its Attempts and every Standing whose scope names it leave every
+ * read; the flush sends its one `phase.deleted`. A second run that named it presents `siblingPhaseId: null`, a first run that it named is
+ * derived again (the caller), each sent as `phase.updated` after it. Checks and flags stay in the store; a returning race is a new Phase.
+ */
+function removePhase(s: CoreState, p: ResourceState, el: Element): void {
+  for (const a of p.attempts ?? []) {
+    for (const w of s.writes) {
+      if (w.attempt !== a || w.status !== 'pending') continue;
+      w.status = 'mismatched';
+      w.confirmedAt = el.observedAt;
+      s.dirtyWrites.add(w);
+    }
+    if (a.diagnostics.length > 0) s.diagnosticsDirty = true;
+    s.attempts.delete(a.id);
+    s.dirtyAttempts.delete(a);
+  }
+  for (const [k, d] of s.parserDiagnostics) {
+    const of = 'attemptId' in d ? d.attemptId.slice(0, d.attemptId.lastIndexOf(':')) : (d as { phaseId?: unknown }).phaseId;
+    if (of !== p.id) continue;
+    s.parserDiagnostics.delete(k);
+    s.diagnosticsDirty = true;
+  }
+  if (s.phaseDiagnostics.delete(p.id)) s.diagnosticsDirty = true;
+  const dropStandings = (owner: string, prefix?: string): void => {
+    const keys = s.standingKeys.get(owner);
+    if (keys === undefined) return;
+    for (const key of [...keys]) {
+      if (prefix !== undefined && !key.startsWith(prefix)) continue;
+      keys.delete(key);
+      s.standingsSent.delete(key);
+      s.standingsHeld.delete(key);
+    }
+    if (keys.size === 0) s.standingKeys.delete(owner);
+  };
+  dropStandings(p.id);
+  // a `pair` naming it as the first run, and the second run's pointer to it (item 54 (g), (h))
+  // its stated value is retained and presents null while the Phase is removed
+  for (const second of namingSecondRuns(s, false).get(p.id) ?? []) {
+    dropStandings(second, `pair:${second}/`);
+    const r = s.phases.get(second);
+    if (r !== undefined) s.dirtyPhases.add(r);
+  }
+  for (const phases of s.entryPhases.values()) phases.delete(p.id);
+  s.phases.delete(p.id);
+  s.classifications.delete(p.id);
+  s.scheduled.delete(p.id);
+  s.removedIds.add(p.id);
+  s.dirtyPhases.delete(p);
+  s.dirtyScopes.delete(p.id);
+  s.removedPhases.push(p);
 }
 
 /** Whether an absent XML row would retract anything of the Attempt now: a `tcp` result only past the guard (§4.12). */

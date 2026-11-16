@@ -455,6 +455,17 @@ cited section and moved no obligation above:
   a leave from `at-start` after a deleted start gives `not-started`; a client renders the status
   as served (CONTRACTS §2.6, §3.2; DERIVATIONS §4.1).
 
+#382's code (PR #390, 2026-11-16; `DECISIONS/LOG.md`) took one default on pairing after a removal.
+It changed a cited section and moved no obligation above:
+- a second run whose stated sibling is a removed Phase keeps presenting `siblingPhaseId: null`
+  until that Phase is created again; a client reads `Phase.pair` as before (DERIVATIONS §10).
+
+The review of #382's code (PR #390, 2026-11-16; `DECISIONS/LOG.md`) took two defaults on the Phase
+removal. They changed a cited section and moved no obligation above:
+- a read that still carries rows of a race its schedule omits does not remove the Phase, and a
+  removed first run counts as back only once its `phase.updated` reaches a client; clients apply
+  `phase.deleted` and `phase.updated` as before (DERIVATIONS §10).
+
 #377's code (PR #389, 2026-11-16; `DECISIONS/LOG.md`) took one default on pairing. It changed a
 cited section and moved no obligation above:
 - a Phase with neither `format` nor `pair` stated that a second run names is that pair's first

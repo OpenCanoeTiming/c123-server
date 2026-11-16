@@ -138,6 +138,8 @@ export function parseXmlSnapshot(xml: string, ctx: IngestContext): IngestElement
   const bibHandling = tx(eventsNode, 'BibHandling').trim();
   emitEventFacts(u, eventsNode);
   const schedule = asArray(root['Schedule']).filter((s) => tx(s, 'RaceId') !== UNASSIGNED && tx(s, 'RaceId') !== '' && !isNaRace(tx(s, 'RaceId'), tx(s, 'ClassId')));
+  // §0.3 the schedule statement: the races the read's `Schedule` table names, before its race tables; an empty table states the empty set
+  u.add({ schedule: { source: 'xml', phaseIds: [...new Set(schedule.map((s) => tx(s, 'RaceId')))] } });
   const layouts = new Map<string, string>();
   for (const c of asArray(root['CourseData'])) layouts.set(tx(c, 'CourseNr').trim(), tx(c, 'CourseConfig'));
 

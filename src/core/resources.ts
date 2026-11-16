@@ -91,8 +91,10 @@ export function viewResource(r: ResourceState, kind: 'phase' | 'entry' | 'class'
   const out: Record<string, unknown> = { [key]: r.id };
   for (const [k, v] of r.plain) out[k] = v;
   // a first run presents its derived sibling; its stated role and combination stand (DERIVATIONS §10 item 48)
-  const pair = r.plain.get('pair') as { role?: string } | null | undefined;
+  const pair = r.plain.get('pair') as { role?: string; siblingPhaseId?: string | null } | null | undefined;
   if (kind === 'phase' && pair?.role === 'first') out['pair'] = { ...pair, siblingPhaseId: r.derivedSibling ?? null };
+  // a stated sibling naming a Phase removed and not created again is retained and presents null (DERIVATIONS §10 item 54 (h))
+  else if (kind === 'phase' && pair?.role === 'second' && typeof pair.siblingPhaseId === 'string' && s?.removedIds.has(pair.siblingPhaseId) === true) out['pair'] = { ...pair, siblingPhaseId: null };
   // DERIVATIONS §10 item 49 (d): neither `format` nor `pair` stated, named by a second run: that pair's first run; nothing else follows until a format is stated
   if (kind === 'phase' && s !== undefined && !r.plain.has('pair') && !r.plain.has('format')) {
     const named = fmtFor(s, r.id).pair;
