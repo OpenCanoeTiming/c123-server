@@ -332,7 +332,9 @@ An athlete is obstructed, and the jury grants a re-run.
 
 ### G — Left the course without a finish
 
-A slalom athlete is removed from the course mid-run.
+A slalom athlete, or a Kayak Cross time-trial athlete, is removed from the course mid-run (the
+time trial follows slalom here, maintainer, 2026-11-16; a Cross heat leaves the list together
+and keeps `on-course`, §D).
 - **What TCP shows.** The athlete disappears from the on-course list at once. Upstream sends no push
   with the reason: a removal before the finish is one of its silent paths.
 - **The domain layer** sets `status: left-without-finish` immediately. This is an observed fact with

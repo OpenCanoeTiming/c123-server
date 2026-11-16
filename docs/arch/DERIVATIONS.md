@@ -585,7 +585,7 @@ row (§4.12; `CONTRACTS.md` §2.6).
   `not-started → at-start`), and `provisional` is recomputed. Cycle completion over `Position`/`Total`
   was rejected: `Total` changes mid-cycle.
 
-**`left-without-finish`, slalom only.**
+**`left-without-finish`, slalom and the Kayak Cross time trial.**
 - **The rule.** An Attempt that leaves the list with a start observed — a `dtStart`, or the stream
   having stated `on-course` or `finished`, which this section derives from one — and `dtFinish` never
   observed becomes `left-without-finish`, `confidence: 'authoritative'`. What is asserted is that
@@ -600,8 +600,12 @@ row (§4.12; `CONTRACTS.md` §2.6).
   - 8 only by rotation, up to about 600 s.
 - **Where the mark comes from.** The XML snapshot at about 35 s (INV-2, rule 2's exception), or TCP's
   next push of the race.
-- Kayak Cross never uses it, the time trial included: a Cross leave changes no `status`
-  (`CONTRACTS.md` §7.1; §10 items 35 and 43 (d)).
+- **The Kayak Cross time trial follows slalom** (maintainer, 2026-11-16; `DECISIONS/LOG.md`): the
+  rule above applies to an `XT`, `XT1` or `XT2` Attempt as written, `left-without-finish` with a
+  start observed and `not-started` from `at-start`, and INV-2 rule 2's exception brings the mark
+  from the next save. This replaces §10 item 43 (c), (d) for the time trial. **A Kayak Cross
+  heat never uses it:** a heat's leave changes no `status` (§4.2; `CONTRACTS.md` §7.1; §10 item
+  35).
 
 **Result marks, closed-set mapping.** A row with a mark presents `outcome: no-result`, whatever time
 it carries: a DNF row can keep a time, even another athlete's finish (`CONTRACTS.md` §2.6). That is
@@ -652,6 +656,9 @@ withheld stale mark leaves the time presented (§4.12).
 - `source` is the channel it arrived on, with `confidence: 'authoritative'`, no `eventTime` and
   `provisional: false`. It is pushed with no debounce.
 - Until then the Attempt stays `on-course`, even after the heat has left the on-course list together.
+  This is a heat's rule only. The time trial, whose stream lists start and finish per competitor
+  (§4.4), takes §4.1's leave rule as slalom does, `left-without-finish` included (maintainer,
+  2026-11-16).
 
 ### 4.3 `outcome` while on course, and between finish and the first result push
 
@@ -1154,8 +1161,12 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   have held back; on the reversal TCP led, by 21 s (MX1_XER_26, 10:28:42, XML 10:29:03) and 44 s
   (WX1J_XER_26_JUN, 10:29:24, XML 10:30:08). The guard admits both and still refuses a
   save-cycle-stale file. `decidedIn` is kept per `entryId` from the last **admitted** XML row where
-  the TCP row states `null` (above); a refused snapshot moves nothing, `decidedIn` included (INV-2c
-  "retained and not presented"; E4, the recording holds no refusal). The core dates the
+  the TCP row states `null` (above): from the latest admitted XML snapshot of the Phase that
+  carries rows, whose rows replace the kept values whole, so an entry that snapshot omits keeps
+  none and reads `null` on a later TCP row until a save states it again (a default, §10 item 52);
+  a refused snapshot moves nothing, `decidedIn` included (INV-2c
+  "retained and not presented"; E4, the recording holds no refusal). An operator re-baseline
+  keeps the rows and the kept values; its read replaces them as any snapshot does (§10 item 52). The core dates the
   Standing's `asOf` by the `observedAt` of the latest snapshot that changed it (`CONTRACTS.md` §5;
   TCP re-sends the same rows on rotation, 10:27:12, 10:35:14, 10:43:16, which move nothing), and
   publishes the Standing first at its first row: an empty table before any row publishes nothing;
@@ -1987,8 +1998,9 @@ review of #318's code (PR #379).
     `runningStaleAfterSeconds` (§2.6), until the row brings the placement. Property 4's
     withdrawal of `running` at a leave is slalom's, with `left-without-finish`. The core and
     the gate-2 checker agree (E2, the M1 run: 0 reports on the seven whole recordings at
-    86ed855). The time trial follows the same rule, an athlete removed before a finish
-    included (item 43 (c), (d)).
+    86ed855). This item is the heats' (`heats: true`). *Amended 2026-11-16:* the time trial no
+    longer follows it: by the maintainer's decision of that day a time-trial leave is slalom's
+    (§4.1), so item 43 (c), (d) no longer hold for it.
     Reopens if the scoreboard work (M3) finds a frozen heat clock misleading.
 36. **A re-run finished over a standing mark without the wizard** (#301). Upstream does not
     clear the old mark (§4.11, §4.12). Whether it then ranks the marked row — a `Rank` and a
@@ -2068,7 +2080,10 @@ review of #318's code (PR #379).
     §2.10). That is the decision: the paper protocol is per bib as raced. Whether upstream allows
     the one-step swap is not established (E4).
     No recording holds a removal (E2: a scan of every pair of consecutive snapshots in the
-    recordings found no row dropped). Reopens on a recording of a removal that these defaults present
+    recordings found no row dropped; the start-list trigger checked on its own by the P3c sweep,
+    2026-11-16, E2 over the 2,032 distinct snapshots: no (race, bib) left a non-empty race table,
+    0 of them holding a result and 0 start-list rows only, and no race table vanished; #349 N1).
+    Reopens on a recording of a removal that these defaults present
     wrongly, or if the TCP push is to remove as well.
 39. **A TCP outage while no course is bound** (#295 re-review, PR #353; M2 P2 ruling,
     2026-11-14). Gate cells are retained while no course is bound (§4.6). TCP delivers C and
@@ -2199,8 +2214,16 @@ review of #318's code (PR #379).
     (`CONTRACTS.md` §7.1: "leaving the set never changes `status`") nor the stream's outcome
     (item 35). A `running` then stands only beside `on-course`, and a time-trial Attempt that
     leaves while staged stays `at-start` until a listing or a row (recorded: 3 such leaves in
-    MX1_XT_26 and WX1_XT_26).
-    (d) *A Cross time-trial athlete removed before a finish.* By (c) the Attempt stays
+    MX1_XT_26 and WX1_XT_26). *Superseded for the time trial, 2026-11-16* (maintainer; LOG): a
+    time-trial leave is slalom's (§4.1), `left-without-finish` with a start observed and
+    `not-started` from `at-start`, and no `running` survives it. The heats keep this paragraph
+    and item 35. The three staged leaves measured by the P3c sweep (E2, cp3-cross at 77cdef8)
+    stood `at-start` 0 s, 8.1 s and 17.3 s after the leave, each ended by a `dns` from a row;
+    under the new rule each reads `not-started` for that span.
+    (d) *A Cross time-trial athlete removed before a finish.* *Superseded 2026-11-16 by the
+    maintainer's decision recorded in LOG (the alternative named below was taken):* the Attempt
+    is `left-without-finish` at the leave and INV-2 rule 2's exception brings the mark from the
+    next save. The paragraph is kept as the record of the default it replaces. By (c) the Attempt stays
     `on-course` with the clock frozen and stale, until a TCP push of the race states the mark.
     That push is not prompt. A removal before a finish is one of rule 2's silent paths, so the
     mark reaches TCP with another athlete's push of the race or with the rotation: for slalom's
@@ -2216,7 +2239,11 @@ review of #318's code (PR #379).
     Gate 2 has no clause for the pairing, and none is added. The P3c recording sweep counts,
     over the whole replays, presented `running` outcomes beside another `status`, and reports
     how long each of (c)'s three staged time-trial leaves stood `at-start` (counted here, not
-    traced). Reopens on a non-zero count, on a recording of (d), or with item 35.
+    traced). *Measured (P3c sweep, 2026-11-16, E2, replays at 77cdef8):* **0** presented
+    `running` beside a `status` other than `on-course` over every step of the seven replays
+    (736,130 steps, nkz-20ne full only to 13:58:26Z, plus 35,112 steps of its tail from a cold
+    start);
+    the three staged leaves, (c) above. Reopens on a non-zero count, or with item 35.
 44. **Four readings in the write path** (#300 N3 to N5; #346; M2 P3b, 2026-11-15). Each is
     read from the text (E3); no recording holds a write (E4). No client duty moves.
     (a) *A same-key retry after the keys were lost.* `CONTRACTS.md` §1.5 promises that a
@@ -2283,7 +2310,8 @@ review of #318's code (PR #379).
     category numbering changed (2026-11-12). The P3c recording sweep measures the current rule once:
     every placed row with a `CatId` in the recordings' snapshots, the assembled category rank
     against `CatRnk`, rows tied on class rank counted on their own. A mismatch is a defect of
-    the assembly (§5 step 4) and is reported, not accepted.
+    the assembly (§5 step 4) and is reported, not accepted. *Measured and closed, 2026-11-16:*
+    item 53.
 47. **`source-unreachable` in the closed set** (#346; item 30; M2 P3b, 2026-11-15). No tier
     produces the reason; for the on-site process that is item 30's default. Default: it stays in
     `unavailable.reason`'s closed set. Removing it changes `schemas/observed.schema.json` and
@@ -2444,4 +2472,98 @@ review of #318's code (PR #379).
     `Completed="N"` on all 234 listings of its finish). No client duty moves. Not ruled here:
     a finish the stream contradicts after a row presented it (INV-2d). Seven are recorded, so
     whether a `Y` preceded any of them is read on the replays first, in the P3c sweep.
+    *The contradicted case, 2026-11-16* (P3c sweep, E2: replays at 77cdef8 and the raw
+    on-course stream). Seven withdrawn finishes are recorded: the one above and six
+    `contradicted-finish` diagnostics (jarni-ne-do K1M_BR1_19:133; nkz-19so K1M_BR1_19:55,
+    C1W_BR1_19:39, C1W_BR1_19:33, C1W_BR1_19:3, K1M_BR2_19:67). **None had a `Y` before the
+    contradiction:** 14 to 44 listings carried each contradicted finish, all `Completed="N"`;
+    the stream listed the Attempt running again 6 to 30 s after the finish, and in three cases
+    the real finish reached `Y` afterwards. Default, the same as above: a closure a `Completed`
+    gave belongs to the finish its listing carried, and a contradiction (INV-2d) takes it away
+    with that finish; the next finish's `duration` is inferred and recomputed like a first one,
+    and the run closes again at its own `Y`, the leave or a mark. The ground is the one above,
+    and INV-2d's own: the contradicted finish is no longer the run's result. Whether a row had
+    presented the finish before each of the six was not read (the stream side only). No client
+    duty moves.
     Reopens on a recording of a `Completed` finish withdrawn or contradicted.
+52. **The kept `decidedIn` of an omitted entry, and the re-baseline** (#358, CQ-A and CQ-B;
+    #271 CQ6; M2 P3c, 2026-11-16). §4.10 keeps a classification row's `decidedIn` per `entryId`
+    from the last admitted XML row, for the TCP rows that carry none. Two defaults inside it.
+    No client duty moves: a client shows `decidedIn` verbatim and absent while `null`, as
+    before.
+    (a) *An entry the latest admitted XML omits reads `null`.* The kept values are the latest
+    admitted XML snapshot's that carries rows, replaced whole by the next such snapshot, as the
+    rows themselves are; they are not merged across snapshots. A snapshot is a complete statement
+    of the table, and its absence retracts (`DECISIONS/ADR-011`, `ADR-015`): an earlier build's
+    round for an entry the later build left out is not upstream's statement any more, and the
+    entry, when a later TCP build carries it again, may have been decided in another round.
+    The entry's `decidedIn` is `null` from that TCP row until the next save states it, one
+    save cycle. An emptied XML table, or a refused one, replaces nothing (§4.10). *Example:*
+    the admitted XML carries A (`F`) and B (`SF`); the next admitted XML carries only B (`SF`);
+    TCP then pushes A and B: A reads `null`, B `SF`. Read the other way, A would read `F` from a
+    build upstream has since replaced. Not recorded (E4: #271 N1 found 0 such cases on
+    cp3-cross, the one recording with classification tables). Reopens on a recording where an
+    entry leaves a classification build and returns.
+    (b) *A re-baseline keeps the classification rows and the kept `decidedIn`.* `CONTRACTS.md` §4
+    step 1 discards the retained observations of an Attempt's result fields; classification rows
+    are no Attempt's fields, and the re-baseline does not discard them. Its read replaces them
+    as any snapshot does, under INV-2c's guard alone (§4.10). The ground: what the re-baseline
+    exists for, a value no message will ever clear, cannot arise for these rows, since every
+    admitted snapshot replaces them whole and TCP re-sends upstream's current build on its
+    rotation. Discarding them would empty a class's overall result whenever the re-read file's
+    table is empty, and a read older than TCP's last delivery of the rows (#271 CQ6) is rightly
+    refused: those rows are upstream's newer build. `scope.replaced` carries the classification
+    Standing as it then stands (`CONTRACTS.md` §7.2). E3, from the text; E4, no recording holds
+    a re-baseline. Reopens if an operator needs a re-baseline to clear a classification.
+    *Code (M2 P3c):* (a) moves the merged core (PR #357), which merges the per-`entryId` map
+    across admitted snapshots: an admitted XML snapshot carrying rows replaces the map whole. A
+    core test pins the example above (XML snapshots and TCP rows of a classification Phase).
+    (b) moves no code; a core test pins it (a re-baseline over XML and TCP classification rows
+    keeps the rows and `decidedIn`).
+53. **Category numbering on a class tie, re-measured; what the category check reads** (#349 CQ3;
+    item 46 (c); M2 P3c sweep part 1, 2026-11-16). `CONTRACTS.md` §5 step 4 numbers a
+    category's placed entries by position in class order (the maintainer, 2026-11-12), which
+    numbers entries tied on class rank consecutively, and checks the assembled rank against
+    upstream's own when the snapshot carries it.
+    (a) *The measurement* (E2, the sweep's scan and mine, over the 2,032 distinct XML snapshots
+    of the seven recordings; per race, the placed rows with a `CatId`, in `RnkOrder` order;
+    the expected rank is the 1-based position within the category). The rule's domain is a
+    `phase` standing of a first-run or single-run duration Phase (§5 step 1: an age-category
+    standing exists only for a duration-scored scope): 43 races, 39 `BR1` and 4 Cross `XT`,
+    **493,763 row-instances, 19,070 distinct, 0 mismatches against `CatRnk`.** The one class tie
+    inside a category (jarni-ne-odp C1M_BR1_19, category ZM, bibs 53 and 54 sharing class rank
+    39 to 43 across the snapshots) is numbered consecutively, in class order, in every snapshot
+    (4 and 5, later 5 and 6): upstream's own numbering is the rule. No tie in the domain is
+    numbered shared.
+    (b) *Outside the domain.* Kayak Cross heat Phases and classifications publish no category
+    standing (ordinal and classification scopes, §5 step 1). Their rows still carry `CatId`:
+    in cp3-cross's `XS`, `XF` and `XER` tables `CatRnk` is absent on 129 distinct placed rows
+    and differs on 38 (one early snapshot each), and one classification (WX1J_XER_26_JUN)
+    shares a category rank on a tie (DS rank 1: 1 and 1; DS rank 2: 2 and 2) while another tie
+    there is numbered against `RnkOrder`. None of it reaches a standing, so it rules nothing.
+    So CQ3 closes: upstream numbers class ties consecutively wherever the rule applies, and
+    nothing goes back to the maintainer. It reopens if age-category standings are ever
+    published for a Cross heat or a classification.
+    (c) *A second-run Phase is not checked.* Its standings carry the combined placement (§5
+    steps 2 and 6), so their category ranks are a combined category numbering. The row's own
+    `CatRnk` ranks run 2 alone (it matches the rule on the row's run-2 `Rnk`: 366,733
+    row-instances, 0 mismatches, 37 races), so it is no check of a combined numbering.
+    `TotalCatRnk` is the combined category rank, but upstream fills it late: by `TotalRnkOrder`
+    within the category it disagrees with the position on 459 distinct row facts (7,201
+    instances, 455,213 compared), of which 414 hold the class rank `TotalRnk`, 2 the class order
+    `TotalRnkOrder`, and 43 a partial numbering in one snapshot of nkz-19so C1M_BR2_19; in the
+    last snapshot of each recording it matches on all 1,882 rows. Read as a check, it would
+    record a `category-rank-disagreement` for every row upstream has not yet renumbered and
+    clear it later, an anomaly that reports upstream's lag, not a defect of ours. Default: the
+    check reads `CatRnk` of first-run and single-run rows only; a second-run row's `CatRnk`,
+    `TotalCatRnk` and `PrevCatRnk` are not read (run 1's own row is the first run's check). The
+    combined numbering is the same rule over the combined placement, and the final snapshots
+    agree with it. No client duty moves: anomalies are admin-only and the presented ranks are
+    unchanged.
+    (d) *An unplaced row's `CatRnk`* (bib 64 of §5 step 4's example; K1M_BR2_19 bib 1, `CatRnk`
+    6): 2 distinct rows in 309 instances, both jarni-ne-odp. The check already reads placed rows
+    only (§5 step 4); nothing moves.
+    *Code:* the check has no path on a real stream yet (#271 N3: the parser emits no `CatRnk`);
+    when it is wired, the parser carries `CatRnk` from the rows of first-run and single-run
+    races with a `CatId` and nothing from second-run rows. No vector changes; the standing
+    vectors keep `upstreamCategoryRanks` as stated.

@@ -67,7 +67,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Tick the running time locally, if at all, only through the injected `Clock`, snapping to every new `running` value and stopping the instant `status` leaves `on-course` (CONTRACTS §2.6; TEST-ARCHITECTURE §5).
 - [ ] Stop the tick `runningStaleAfterSeconds`, a named constant of 3 s, past the client's own receipt of the last `running` value, measured on its own injected clock; freeze the display at that value and show it as stale, with its age from receipt; never subtract `observedAt` from the client clock (CONTRACTS §2.6).
 - [ ] Tie the whole on-course display to connection liveness: on site expect `sources.updated` at least every 10 s, on live a `heartbeat` message at least every 15 s; after two missed intervals mark everything shown as stale — never clear it — and repeat the §1.6 handshake, so that an `at-start` or `finished` ghost on a half-open connection or a stalled upstream cannot stand indefinitely (CONTRACTS §1.6, §7.2, §8.4; ADR-017).
-- [ ] Render `left-without-finish` as an observed removal with no reason; show a mark only once `status` carries one; never infer DNF (CONTRACTS §2.6, §3.2, §7.1; ARCHITECTURE §6.G).
+- [ ] Render `left-without-finish` as an observed removal with no reason, in a slalom Phase and in a Kayak Cross time trial alike (`stage: 'time-trial'`; never in a Cross heat); show a mark only once `status` carries one; never infer DNF (CONTRACTS §2.6, §3.2, §7.1; ARCHITECTURE §6.G).
 - [ ] Render `outcome.kind: 'no-result'` as its mark, whatever time the row carried; never let a time suppress a mark (CONTRACTS §2.6).
 - [ ] Show `non-ranked` as raced and timed but unranked, and `ral` where its `placement` puts it (CONTRACTS §2.6).
 - [ ] Show a placed row whose `outcome` is `unavailable{not-applicable}` with its placement and no time, its `status` being `finished` and its `StandingEntry.result` `null`; never detect placeholder values such as `100.00` on the client (CONTRACTS §2.6, §2.7, §3.2, §5; DERIVATIONS §4.2, §4.4).
@@ -147,7 +147,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Use `format` and `phaseId` as Canoe123-native tokens, verbatim (CONTRACTS §7; ADR-007).
 - [ ] Show an unknown `format` token verbatim, with what the structural fields say; never invent a name and never fail to render (CONTRACTS §2.4; DERIVATIONS §9).
 - [ ] Keep the on-course set from `/api/oncourse` and `oncourse.updated`, in `courseOrder` with those lacking one last by `startOrder`; several at once and an empty set are both valid. The set is upstream's list: a finisher stays in it as `finished` or a mark until upstream closes the run, typically about 20 s but a venue setting no client may assume; leaving the set is upstream's removal, never the finish; take the set's age from `asOf` on `/api/oncourse` and on `oncourse.updated`, the instant the set last changed, which the two agree on (CONTRACTS §7.1, §7.2; ADR-009).
-- [ ] Keep a Kayak Cross heat that has left the on-course list at `on-course` until its order arrives; never treat leaving the list as a finish (CONTRACTS §7.1, §7.2; ARCHITECTURE §6.D).
+- [ ] Keep a Kayak Cross heat that has left the on-course list at `on-course` until its order arrives; never treat leaving the list as a finish; a Cross time-trial athlete who leaves is not a heat and arrives as `left-without-finish` or `not-started`, as in slalom (CONTRACTS §2.6, §7.1, §7.2; ARCHITECTURE §6.D).
 - [ ] Ignore `Standing.anomalies`, which on-site serves for the admin UI only (CONTRACTS §2.7, §5).
 - [ ] Treat `/api/sources`, `/api/diagnostics`, `diagnostics.updated` and `POST /api/rebaseline` as admin-audience only; ignore diagnostics and never expose the re-baseline (CONTRACTS §2.8, §4, §7.1, §7.2).
 - [ ] Expect an optimistic write in the targeted field as `source: 'operator-write'`, `provisional: true`, in the same push cycle as its `WriteRequest`; where the field already presents that value from an earlier pending write, `write.updated` arrives alone, so never wait for a `gates` push per write (CONTRACTS §2.9, §4; ARCHITECTURE §6.B).
@@ -168,7 +168,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Decide how long a finished Cross heat stays prominent as display policy, and test it at tier 3 over the gap between the order push and the next heat (ARCHITECTURE §6.D; TEST-ARCHITECTURE §3.3).
 - [ ] Show result and rank as soon as they are pushed, with the provisional mark while judging is in flight (ARCHITECTURE §2, §6.A).
 - [ ] Show `underReview` on the board (CONTRACTS §2.6; ARCHITECTURE §6.H).
-- [ ] Show "off course" at once for `left-without-finish`, and the mark when it is known (ARCHITECTURE §6.G).
+- [ ] Show "off course" at once for `left-without-finish`, in slalom and in a Kayak Cross time trial, and the mark when it is known; a removed time-trial athlete's clock is not shown frozen as on course (CONTRACTS §2.6; ARCHITECTURE §6.G).
 - [ ] Put the finisher grace period under the `Clock` and a tier-3 test; today it recomputes only when an action is dispatched. Delete stale-competitor eviction with the on-course reducer: membership of the on-course set is the server's, the set arrives whole, and a client has nothing per Attempt to time out (CONTRACTS §7.1; ARCHITECTURE §2; TEST-ARCHITECTURE §3.3; ADR-017).
 - [ ] Decide how long a finisher stays in the on-course display as display policy (`FINISHED_GRACE_PERIOD` today), from `status: finished` and the injected `Clock`; never from the Attempt leaving the set, which is upstream's closure, typically about 20 s later and a venue setting (CONTRACTS §7.1; ARCHITECTURE §2; TEST-ARCHITECTURE §3.3).
 - [ ] Route today's timing sites (`context/constants.ts`, `useDeparting.ts`, `useAutoScroll.ts`, `useHighlight.ts`) through the `Clock` (TEST-ARCHITECTURE §5).
@@ -387,7 +387,8 @@ above:
   §7.3's, unchanged (CONTRACTS §7.3);
 - a Kayak Cross time-trial athlete removed before a finish stays `on-course` with the last
   `running` value until the mark arrives, which can take minutes (another athlete's push, or
-  the rotation); a client freezes that clock as stale by its existing duty (CONTRACTS §2.6);
+  the rotation); a client freezes that clock as stale by its existing duty (CONTRACTS §2.6)
+  (replaced by M2 P3c, 2026-11-16: the time trial now follows slalom, below);
 - a first run's `pair.siblingPhaseId` names only a second run that names it back, and is `null`
   otherwise; a client takes structure from `Phase.pair` as before (CONTRACTS §2.4);
 - `xml-table-emptied` is raised under the content-age guard; it stays in the admin log and
@@ -416,3 +417,18 @@ on-course stream. It changed cited sections and moved no obligation above:
 - a stream finish withdrawn after upstream's `Completed` no longer keeps the run closed, so the
   next finish's time and penalties are inferred afresh; a client shows `outcome` and
   `provisional` as served (DERIVATIONS §4.1).
+
+M2 P3c (2026-11-16; `DECISIONS/LOG.md`) wrote the maintainer's answer of that day on the Kayak
+Cross time trial ("yes, as recommended"). It moved the duties above:
+- a Cross time-trial athlete who leaves upstream's on-course list without a finish is
+  `left-without-finish` (`not-started` if never started), as in slalom, and the mark follows at
+  the next save; a rendering client renders that status in a time-trial Phase too, and the
+  scoreboard shows "off course" at once instead of a frozen clock. A Cross heat is unchanged:
+  it stays `on-course` until its order arrives (CONTRACTS §2.6, §3.2, §7.1; DERIVATIONS §4.1).
+
+The same text took defaults that changed cited sections and moved no obligation above:
+- a classification entry that the latest admitted save leaves out reads `decidedIn: null` on a
+  later TCP build until a save states it; a re-baseline keeps classification rows; a client
+  shows `decidedIn` as served (CONTRACTS §4; DERIVATIONS §4.10);
+- the category-rank check reads first-run and single-run rows only, and the measured rule
+  stands with 0 mismatches; category ranks are served as before (CONTRACTS §5).

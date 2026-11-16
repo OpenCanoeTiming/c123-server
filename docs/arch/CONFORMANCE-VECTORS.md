@@ -52,8 +52,8 @@ as recorded), the INV-2d lift, placement only when ranked, no standing re-send o
 fields provisional while run 2 runs, `status` never provisional, an Attempt unstaged before its start,
 and a first-run row wiped in place (the recorded jury re-run).
 
-**114 vectors:** 100 merge vectors, 9 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
-needed, not a target. **c123-server runs 108 of them, live-mini-server 24** (§1, "Which vectors each
+**117 vectors:** 103 merge vectors, 9 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
+needed, not a target. **c123-server runs 111 of them, live-mini-server 24** (§1, "Which vectors each
 component runs"); 18 run in both suites.
 
 **Since then** the file has changed with the contract rounds from 14 on and with #314;
@@ -245,7 +245,7 @@ Each vector has:
 **Which vectors each component runs.** Each component feeds its own merge function through a thin
 adapter (`TEST-ARCHITECTURE.md` §3.1); the sets overlap, and each suite asserts its own count.
 
-**c123-server runs 108: every vector not tagged `live-ingest`.** The tag is the rule; apart from it,
+**c123-server runs 111: every vector not tagged `live-ingest`.** The tag is the rule; apart from it,
 every merge vector is on-site material (`tcp`, `xml` and `operator-write` observations, the
 source-less `unavailable` observation, connection and operator events, scope snapshots and
 on-course listings), and all 9 `standing-assembly` and all 5 `workflow-state` vectors are the
@@ -362,15 +362,15 @@ check, readable under its own `run`) is not asserted.
 | INV-2 rule 1 (result row over inference) | `inv2-rule1-result-row-supersedes-inference`, `inv2-rule1-inference-never-supersedes-result-row` | 2 |
 | INV-2 rule 2 (TCP continuity) | `inv2-rule2-connected-tcp-beats-later-xml`, `-xml-takes-over-after-disconnect`, `-reconnect-does-not-restore-stale-tcp`, `-fresh-tcp-after-reconnect-wins`, `-xml-alone-at-cold-start`, `-reconnect-redelivery-regains-precedence` | 6 |
 | INV-2 rule 1, `gates` cell-wise | `gates-blank-result-cell-keeps-judged-oncourse-cell`, `gates-result-vector-authoritative-after-leaving` | 2 |
-| INV-2 rule 2 exception (marks on silent paths) | `left-without-finish-then-mark-from-xml`, `xml-mark-does-not-override-tcp-finish`, `inv2-rule2-refused-xml-mark-shows-no-outcome` | 3 |
-| `left-without-finish` | `left-without-finish-observed-not-dnf` | 1 |
+| INV-2 rule 2 exception (marks on silent paths) | `left-without-finish-then-mark-from-xml`, `xml-mark-does-not-override-tcp-finish`, `inv2-rule2-refused-xml-mark-shows-no-outcome`, `cross-time-trial-left-without-finish-then-mark-from-xml` | 4 |
+| `left-without-finish` (slalom and the Kayak Cross time trial) | `left-without-finish-observed-not-dnf`, `cross-time-trial-left-without-finish` | 2 |
 | INV-7 (retraction) | `retraction-vanished-row-first-run`, `-dns-cleared-then-races`, `-start-list-mode-clears-all`, `-does-not-touch-inference`, `-second-run-time-empty-keeps-placement`, `-from-xml-row-cleared`, `-first-run-row-present-empty`; an absent XML row and a wholly empty XML table: `retraction-xml-absent-row`, `-xml-empty-table-retracts-nothing`, `-xml-absent-row-then-returns`; the removal: `attempt-removed-xml-absent-start-list-row`, `attempt-removed-not-while-on-course`, and none while a row carries the bib: `attempt-kept-when-bib-stays-under-another-entry`; the guard: `retraction-xml-guard-rewrite-before-push`, `retraction-xml-absent-row-guard`, `inv7-guard-against-redelivered-tcp-row`; a TCP absent-row retraction leaves no `tcp` marker on an XML-only field: `retraction-tcp-absent-row-leaves-no-tcp-marker-on-counting-run` | 17 |
 | INV-1 against retraction (omission is not absence) | `retraction-not-from-fragment`, `retraction-not-in-other-race-snapshot` | 2 |
 | INV-2d (contradiction by the on-course stream; the lift) | `contradiction-oncourse-running-again`, `contradiction-lift-keeps-stale-rows-unpresented`, `contradiction-leaves-no-tcp-marker-on-xml-only-field` | 3 |
 | Marks over time; half-corrections | `status-overrides-time`, `half-correction-snapshot-duplicate-finish` | 2 |
 | Re-baseline | `rebaseline-discards-stale-tcp-and-rebuilds-from-xml`, `rebaseline-keeps-writes-and-generation` | 2 |
 | Live tier: explicit reset, bare values wrapped, deletion, on-course set and running state, classification rows | `live-explicit-not-yet-resets-field`, `live-bare-value-wrapped-as-bridge`, `live-attempt-deleted`, `live-oncourse-set-replaced-whole`, `live-running-then-finished-latest-wins`, `live-classification-rows-replaced-whole` | 6 |
-| The on-course set and `oncourse.updated` | `oncourse-set-order-and-push`, `oncourse-finisher-stays-listed-until-closure`, `oncourse-unstaged-before-start-returns-to-not-started` | 3 |
+| The on-course set and `oncourse.updated` | `oncourse-set-order-and-push`, `oncourse-finisher-stays-listed-until-closure`, `oncourse-unstaged-before-start-returns-to-not-started`, `cross-time-trial-unstaged-leave-returns-to-not-started` | 4 |
 | Placement known only when upstream ranks the row | `placement-not-yet-while-rank-empty` | 1 |
 | `status` from the first row (§3.2) | `status-not-started-from-start-list-row` | 1 |
 | Classification rows on site (`DERIVATIONS.md` §4.10): an emptied table keeps the last built Standing | `classification-emptied-keeps-last-standing` | 1 |
@@ -424,6 +424,15 @@ Two more vectors of these rules were never on the ledger:
 nothing is sent (the `xml-table-emptied` diagnostic goes to the admin log, which no vector
 reads); and `attempt-removed-not-while-on-course` (round C part 4), an Attempt in the on-course
 set that a later snapshot lacks: it stays, and no `attempt.deleted` is sent.
+
+Three vectors of the maintainer's Kayak Cross time-trial decision (2026-11-16: a time-trial leave
+is slalom's) are on the ledger until the core change of M2 P3c (`src/core/oncourse.ts`):
+- `cross-time-trial-left-without-finish`: a started time-trial athlete leaves with no finish and
+  is `left-without-finish`, `outcome` `not-yet` (today's core keeps `on-course`).
+- `cross-time-trial-left-without-finish-then-mark-from-xml`: the next save's `dnf` displaces it
+  while TCP is connected (INV-2 rule 2's exception).
+- `cross-time-trial-unstaged-leave-returns-to-not-started`: a staged time-trial athlete who leaves
+  before a start is `not-started` (today's core keeps `at-start`).
 
 The reshape of `two-run-br1-unavailable-no-live-no-xml` (§1, `context.xml`: `'not-configured'`)
 is done (#337).

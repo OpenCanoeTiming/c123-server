@@ -217,7 +217,10 @@ competitor's result stood in every XML-fed value until an operator re-baseline.
    observation. The Attempt itself is not removed (replaced by Revision 6: an absent row removes
    it).
 4. **A row that returns** is a new observation of upstream's table and is presented by the
-   ordinary rules, as Revision 4 says of a TCP row after an XML retraction.
+   ordinary rules, as Revision 4 says of a TCP row after an XML retraction. (Since Revision 6
+   this holds on the path where the snapshot was not admitted and the row was retracted; after a
+   removal the returning row creates a new Attempt, Revision 6 rule 5. Annotated 2026-11-16,
+   #349 N3.)
 5. **A wholly empty table retracts nothing.** That is an XML snapshot naming a race in its
    schedule with no result row for it at all. A table whose rows are all blank is not this case:
    each blank row retracts as a present row. One read of the lagging source does not clear a whole

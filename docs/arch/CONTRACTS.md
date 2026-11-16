@@ -971,9 +971,10 @@ and the run is raced again. Meanwhile, it looks as if the athlete never did that
   variant. A client never has to cross-reference `status` to know whether a value is still
   accruing.
 
-**Left without a finish.** In slalom, an athlete can leave upstream's on-course list without a finish
-ever being recorded. `status` is then `left-without-finish`. This is an observed fact: upstream
-removed the athlete, and no finish exists.
+**Left without a finish.** In slalom and in a Kayak Cross time trial (`XT`, `XT1`, `XT2`), an
+athlete can leave upstream's on-course list without a finish ever being recorded. `status` is then
+`left-without-finish`. This is an observed fact: upstream removed the athlete, and no finish
+exists.
 - **The reason is not yet known**, and `outcome` stays pending — `not-yet`, the stream's `running`
   inference withdrawn with the listing (`DERIVATIONS.md` §4.3; `{ kind: 'pending' }` is a
   Standing's `result`, §2.7). It is **never** inferred as `dnf`.
@@ -985,14 +986,17 @@ removed the athlete, and no finish exists.
   INV-2, rule 2's exception; one save cycle, 35 s at the recorded venue), or from TCP's next push of
   the race, whichever comes first. A late DNS is acceptable (maintainer answer, round 2): the athlete
   never reached the course.
-- Kayak Cross never uses this status: a whole heat leaves the list together, by design. The
-  time trial, where athletes start one by one, does not use it either: leaving the set changes no
-  `status` in a Cross Phase (§7.1). A time-trial athlete removed before a finish therefore stays
-  `on-course`, the clock frozen and shown stale, until a TCP push of the race states the mark.
-  That is not prompt: the removal is a silent path (§4 INV-2 rule 2), so the mark comes with
-  another athlete's push of the race or with the rotation, as late as the figures above for
-  slalom, and after the last finisher of a time trial only the rotation is left (a default;
-  `DERIVATIONS.md` §10 item 43 (d)).
+- **The Kayak Cross time trial follows slalom** (maintainer, 2026-11-16; `DECISIONS/LOG.md`):
+  athletes start one by one, as in slalom, and upstream removing one before a finish means the
+  athlete is no longer on course. So the leave rule (`DERIVATIONS.md` §4.1) gives a time-trial
+  Attempt `left-without-finish` where a start was observed and `not-started` from `at-start`, the
+  stream's `running` withdrawn with the listing, and the mark arrives as in slalom: from the next
+  save by rule 2's exception, or TCP's next push of the race. This replaces the earlier default,
+  under which the athlete stayed `on-course` with a frozen clock until TCP's next push, up to
+  about 600 s by the rotation (`DERIVATIONS.md` §10 item 43 (c), (d)).
+- **A Kayak Cross heat never uses this status:** the whole heat leaves the list together, by
+  design, before the operator asserts the order, and leaving the set changes no `status` in a heat
+  Phase (`heats: true`, §2.4; §7.1; `DERIVATIONS.md` §10 item 35).
 
 **Retraction** (`DECISIONS/ADR-015`; §4 INV-7). Results move. A DNS is cleared when the athlete turns
 up, a result is deleted, a finish is moved to the right bib. Upstream states such a removal only as
@@ -1491,7 +1495,7 @@ reliable signal that a Phase's results changed is ordinary field-level change: a
 - **No-results:**
   - `not-started | at-start → dns`;
   - `on-course → dnf | dsq | dsq-r | dqb | cap | ral | other`.
-- **Left without a finish** (slalom only, §2.6):
+- **Left without a finish** (slalom and the Kayak Cross time trial, §2.6; never a Cross heat):
   - `at-start | on-course → left-without-finish`, observed when the Attempt leaves upstream's
     on-course list with no finish recorded;
   - `left-without-finish → dns | dnf | dsq | dsq-r | dqb | cap | ral | other`, when the mark arrives;
@@ -1512,8 +1516,8 @@ reliable signal that a Phase's results changed is ordinary field-level change: a
   - `finished | non-ranked` or any no-result status `→ not-started | at-start | on-course |
     left-without-finish`, on a retraction (§4 INV-7): the row vanished, or a DNS was cleared; the
     target is what the on-course stream currently shows — its latest inference for the
-    generation, so `left-without-finish` where the leave drew it (slalom: a start observed and
-    no finish ever listed), whichever of the leave and the retracted row came first — else
+    generation, so `left-without-finish` where the leave drew it (slalom and the Cross time
+    trial: a start observed and no finish ever listed), whichever of the leave and the retracted row came first — else
     `not-started`, as after a finisher's ordinary closure.
 - **Re-run** (`DECISIONS/ADR-013`): `finished` or any no-result status `→ at-start | on-course`,
   **only together with a `run` increment.** This is the one transition that retracts known facts. It
@@ -1866,7 +1870,10 @@ re-baseline, per Phase or per Event:
    every diagnostic for the scope's result fields: `status` marks, `outcome`, `gates`, `splits`,
    `faults`, `placement`, `pairTotal`, `countingRun`, `underReview`, `qualified`. Identities,
    `entry`, `bib`, `startOrder`, `heat`, `startLane`, `run`, every gate check and flag (§2.10) and
-   every `WriteRequest` survive; a pending write stays pending, and a check's `status` is recomputed;
+   every `WriteRequest` survive; a pending write stays pending, and a check's `status` is recomputed.
+   A classification Phase's rows (§2.4) are no Attempt's fields and survive too, with the
+   `decidedIn` kept for them: step 2's read replaces them as any snapshot does, under INV-2c's
+   guard (`DERIVATIONS.md` §4.10, §10 item 52 (b));
 2. reads the current XML snapshot, validated, and ingests it as a scope snapshot with a fresh ingest
    sequence — a unit like the reader's, its `changedAfter` by the same definition
    (`DERIVATIONS.md` §0.3): the time of the last **successful** stat — the reader's polls and reads,
@@ -1978,17 +1985,22 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    own `CatRnk`. Bib 64, `DNF`, has no class rank: it follows the placed entries with `rank: null`.
    The rule follows what Canoe123 prints (`README.md`, ground rules), and it makes category
    standings available at class-rank latency: upstream's own category ranks reach only the
-   snapshot, a median of ~20 s after the finish. The earlier rule, one plus the number of
-   entries with a strictly smaller class rank, reproduced 1,855 measured rows with 0 mismatches;
-   the two rules differ only on a class tie, and the current rule's own measurement is owed
-   (`DERIVATIONS.md` §10 item 46 (c)). When the snapshot's category rank of a placed entry
+   snapshot, a median of ~20 s after the finish. Measured on the seven recordings (2,032
+   distinct snapshots; `DERIVATIONS.md` §10 item 53): the rule reproduces upstream's `CatRnk` on
+   every placed row with a `CatId` of a first-run or single-run Phase, 493,763 row-instances in
+   43 races (39 `BR1`, 4 Cross `XT`), 0 mismatches, the recorded class tie above included in
+   every snapshot; upstream numbers no tie in that domain shared. When the snapshot's category rank of a placed entry
    arrives and differs from the assembled one, a `category-rank-disagreement` anomaly is
    recorded and the assembled rank stays presented; since the numbering is upstream's, such a
    difference is a defect of the assembly, never a difference the contract accepts. The check
    reads placed entries only: an unplaced row's `CatRnk` is a list position, not a rank (bib 64
    above carries `CatRnk` 9). It reads only rows whose `CatId` is set: on a second-run row with
    an empty `CatId`, `TotalCatRnk` repeats the class rank and is not a category rank (observed in
-   up to 196,621 row-instances per recording).
+   up to 196,621 row-instances per recording). **It reads first-run and single-run rows only**
+   (a default, `DERIVATIONS.md` §10 item 53 (c)): a second-run Phase's standings carry the
+   combined placement, its row's `CatRnk` ranks run 2 alone, and upstream fills its combined
+   `TotalCatRnk` late (459 distinct row facts behind the rule mid-race, 0 of 1,882 in each
+   recording's last snapshot), so a second-run Phase's category ranks are not checked.
 5. **`provisional` and `underReview`** are copied from the entry's own Attempt. They are `true` if any
    of `outcome`, `placement` or `pairTotal` is provisional.
 6. **`behindSeconds`** is the entry's ranked value minus the first-ordered entry's, for duration
@@ -2121,11 +2133,12 @@ list.
   a finisher stays *displayed* is the client's policy (`ARCHITECTURE.md` §2), never read from the
   set. The earlier text dropped a finisher at `finished`, which made §7.3's retry trigger fire 20 s
   early (`DECISIONS/ADR-009` addendum 2).
-- **In slalom**, an Attempt that leaves the set with no finish recorded becomes
-  `left-without-finish` (§2.6). It is never inferred as DNF.
-- **In Kayak Cross**, leaving the set never changes `status`. A heat leaves together, before the
-  operator has asserted the order, and so stays `on-course` until that assertion arrives through its
-  result row (`DERIVATIONS.md` §4.1).
+- **In slalom and in a Kayak Cross time trial**, an Attempt that leaves the set with no finish
+  recorded becomes `left-without-finish` (§2.6; the time trial by the maintainer's decision of
+  2026-11-16). It is never inferred as DNF.
+- **In a Kayak Cross heat**, leaving the set never changes `status`. A heat leaves together, before
+  the operator has asserted the order, and so stays `on-course` until that assertion arrives through
+  its result row (`DERIVATIONS.md` §4.1, §4.2).
 
 ### 7.2 Live updates (WebSocket `/ws`, delta)
 
@@ -2172,8 +2185,8 @@ Every message carries `seq` (§1.6).
   `attempt.updated`, and the Attempt leaves the set at upstream's closure, typically about 20 s later
   (a venue setting, §7.1), which is
   the `oncourse.updated` §7.3's retry waits for. The Attempts themselves arrive by `attempt.updated`;
-  this message is what keeps the set current, including in Kayak Cross, where leaving the set changes
-  no `status`.
+  this message is what keeps the set current, including in a Kayak Cross heat, where leaving the set
+  changes no `status`.
 - **`diagnostics.updated`** carries the whole current `Diagnostic[]` under `diagnostics` whenever it
   changes. Admin audience only; a scoreboard ignores it.
 - **`event.changed`** carries the whole `Event`. It is sent when the current event changes: on the

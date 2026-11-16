@@ -118,8 +118,8 @@ cover:
 - run generations;
 - §5's standing assembly.
 
-The count is 114 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
-a thin adapter that feeds the vectors `CONFORMANCE-VECTORS.md` §1 assigns to it (108 and 24; 18 are in
+The count is 117 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
+a thin adapter that feeds the vectors `CONFORMANCE-VECTORS.md` §1 assigns to it (111 and 24; 18 are in
 both) into its own merge function and asserts the result — proving
 both satisfy the same data-defined contract without either depending on the other's code.
 
@@ -342,8 +342,8 @@ the step index, the Attempt, the field and the property number.
    the Attempt's race (property 5); a listing of the Attempt that increments `run` in the same delta
    (property 10) or contradicts a finish (property 7); a `rebaseline` of its scope (property 13);
    and, for the stream's own `running` outcome alone, an `oncourse-left` or `oncourse-empty`
-   covering the Attempt (slalom only: a Kayak Cross leave withdraws nothing, `DERIVATIONS.md`
-   §10 item 35), a listing of it with `dtStart` empty, or a listing of it with a `dtFinish` that
+   covering the Attempt (slalom and the Kayak Cross time trial: a Kayak Cross heat's leave
+   withdraws nothing, `DERIVATIONS.md` §10 item 35; the time trial since 2026-11-16, §4.1), a listing of it with `dtStart` empty, or a listing of it with a `dtFinish` that
    yields no `duration` (an empty `Time`, or a slalom listing with no `Gates`) — the stream withdrawing what it alone stated (`DERIVATIONS.md` §4.3, §4.1,
    §10 item 43; `ADR-015` Revision 4), `status` as §4.1 gives it at that element (the leave's
    `left-without-finish` or `not-started`, a table `finished` or mark standing; the listing's
