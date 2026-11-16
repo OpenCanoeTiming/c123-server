@@ -79,7 +79,14 @@ function withClassIds(core: MergePort): MergePort {
         extra.push({ ingestSeq: 0, observedAt: el['observedAt'], field: 'classId', phaseId: id, source: 'tcp', kind: 'result-row', value: splitRaceId(id).classKey, confidence: 'authoritative' });
       }
     }
-    return apply([...extra, ...unit] as typeof unit);
+    const before = (core as any).notifications?.().length ?? 0;
+    const out = apply([...extra, ...unit] as typeof unit);
+    // CONFORMANCE-VECTORS §1: a Phase that returns after its removal is a new Phase and the unit naming it again is its first unit, so the adapter states
+    // its format (and class) again there, as the parsers do on every read (tcp.ts `Results`, phase.ts snapshot).
+    for (const n of ((core as any).notifications?.() ?? []).slice(before)) {
+      if (n?.type === 'phase.deleted' && typeof n.phaseId === 'string') { stated.delete(n.phaseId); statedFormat.delete(n.phaseId); }
+    }
+    return out;
   };
   return core;
 }
