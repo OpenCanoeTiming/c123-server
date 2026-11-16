@@ -154,8 +154,10 @@ export function resolveEcho(s: CoreState, a: AttemptState, fs: FieldSlots, field
     // a re-delivery of the cell is no echo (§6, ADR-010's lost echo); a prior that is not `known` retains no cell, and a TCP source with
     // none in this lifetime compares with the value the write recorded as retained, none retained making any delivery a change
     const before = prior?.state === 'known' ? cellOf(prior.value, gate) : slot.source === 'tcp' && head.retainedCell != null ? head.retainedCell.penalty : undefined;
+    // a value a resolution moved in is the earlier write's echo arriving again, from either source (item 50 (g))
+    const again = head.retainedMoved === true && head.retainedCell !== null && cell === head.retainedCell.penalty;
     let left: WriteState[];
-    if (!tooOld(head, slot) && (states(head) || cell !== before)) {
+    if (!tooOld(head, slot) && (states(head) || (cell !== before && !again))) {
       resolve(s, head, states(head) ? 'confirmed' : 'mismatched', slot);
       let i = 1;
       while (i < queue.length && states(queue[i]!)) resolve(s, queue[i++]!, 'confirmed', slot);
@@ -167,8 +169,12 @@ export function resolveEcho(s: CoreState, a: AttemptState, fs: FieldSlots, field
       for (const w of queue.slice(0, last + 1)) resolve(s, w, states(w) ? 'confirmed' : 'mismatched', slot);
       left = queue.slice(last + 1);
     }
-    // the delivery that answered the earlier writes is what the source retains now (stored with the records too)
-    if (slot.source === 'tcp') for (const w of left) w.retainedCell = { penalty: cell };
+    // the delivery that answered the earlier writes is upstream's table as the later commands were sent over (stored with the records too),
+    // whichever source delivered it (item 50 (g))
+    for (const w of left) {
+      w.retainedCell = { penalty: cell };
+      w.retainedMoved = true;
+    }
   }
   refreshOperator(s, a, fs, field, slot);
 }
@@ -183,4 +189,4 @@ export function displaceOperator(s: CoreState, a: AttemptState, fs: FieldSlots, 
   }
 }
 
-export const wireWrite = ({ attempt: _attempt, fieldName: _field, retainedCell: _retained, ...wire }: CoreState['writes'][number]): unknown => wire;
+export const wireWrite = ({ attempt: _attempt, fieldName: _field, retainedCell: _retained, retainedMoved: _moved, ...wire }: CoreState['writes'][number]): unknown => wire;
