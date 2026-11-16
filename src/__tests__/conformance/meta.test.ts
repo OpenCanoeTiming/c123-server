@@ -125,7 +125,7 @@ describe('expected-red ledger and modes (issue #200 rows 3, 4, 5)', () => {
     for (const id of LIVE_INGEST) expect(listed).not.toContain(id);
   });
 
-  it('expected-red after #365 (M2 P3a part 2): two vectors wait for the category standing (CONTRACTS §5 step 4); the five absent-XML-row-removal vectors left with #365\'s core change', () => {
+  it('expected-red after #271 (M2 P3c): the two category standing vectors left with #271\'s core change (CONTRACTS §5 step 4); three Phase-removal vectors remain', () => {
     // The ratchet: ids leave as core issues land. #203 took the merge vectors, #205 the standing-assembly ones, #211 the five `check-*` workflow vectors.
     // Round C part 2 changed one vector's expected outcome by the maintainer's decision of 2026-11-11 and added three that assert the same rule;
     // the core follows in the M2 server batch (the fourth new vector, the empty table, passes today).
@@ -135,9 +135,8 @@ describe('expected-red ledger and modes (issue #200 rows 3, 4, 5)', () => {
     expect(nonMerge.filter((id) => id.startsWith('check-')).length).toBe(5);
     // M2 P3c (maintainer, 2026-11-16): a Kayak Cross time-trial leave is slalom's (three vectors), and a Phase that leaves the schedule is removed
     // (three vectors; the fourth, an empty schedule, passes on a core that removes nothing). #305 lands the time-trial leave: its three leave the ledger.
+    // #271 lands the category numbering (§5 step 4): the two standing-age-category vectors leave the ledger.
     expect(loadExpectedRed()).toEqual([
-      'standing-age-category-assembled',
-      'standing-age-category-unplaced-listed-after',
       'phase-removed-when-schedule-omits-it',
       'phase-removal-refused-by-guard',
       'phase-removed-then-returns',
