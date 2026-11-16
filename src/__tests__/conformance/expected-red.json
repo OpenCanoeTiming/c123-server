@@ -1,9 +1,6 @@
 [
   "standing-age-category-assembled",
   "standing-age-category-unplaced-listed-after",
-  "cross-time-trial-left-without-finish",
-  "cross-time-trial-left-without-finish-then-mark-from-xml",
-  "cross-time-trial-unstaged-leave-returns-to-not-started",
   "phase-removed-when-schedule-omits-it",
   "phase-removal-refused-by-guard",
   "phase-removed-then-returns"
