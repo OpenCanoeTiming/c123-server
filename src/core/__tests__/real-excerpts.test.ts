@@ -593,7 +593,7 @@ describe('#205 row 8: cp3-cross XER hour, MX1_XER_26 and WX1J_XER_26_JUN: the pu
     it(`real cp3-cross ${race}: a classification Standing is pushed exactly at ${PUBLISHED[race]!.join(', ')}; every other tcp rotation and xml save of the hour moves nothing; asOf is the observedAt of the snapshot that changed it`, () => {
       const key = `classification:${race}/all`;
       const core = coreWith([connected(CLS[0]!.observedAt)]);
-      const decided = new Map<string, string | null>(); // last admitted xml decidedIn per entryId, from the raw xml
+      const decided = new Map<string, string | null>(); // the latest admitted xml snapshot's decidedIn per entryId, replaced whole by the next xml carrying rows (item 52 (a)), from the raw xml
       const pushed: string[] = [];
       for (const r of CLS) {
         if (r.kind === 'tcp' && raceOfTcp(r) !== race) continue;
@@ -601,6 +601,7 @@ describe('#205 row 8: cp3-cross XER hour, MX1_XER_26 and WX1J_XER_26_JUN: the pu
         core.applyUnit(unitOf(r));
         const mine = standingsOf(core, before).filter((s) => s.standingKey === key);
         const rows = r.kind === 'xml' ? rawXmlRows(r.data, race) : rawTcpRows(r.data);
+        if (r.kind === 'xml' && rows.length > 0) decided.clear(); // DERIVATIONS item 52 (a): not merged across snapshots
         if (r.kind === 'xml') for (const x of rows as Array<{ entryId: string; decidedIn: string | null }>) decided.set(x.entryId, x.decidedIn);
         if (rows.length === 0) {
           expect(mine, `${r.kind} ${hhmmss(r)} states no rows`).toHaveLength(0);
