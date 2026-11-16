@@ -34,6 +34,8 @@ export interface RowIn {
     totalRank: string;
     totalRankOrder: string;
     betterRun: string;
+    /** `CatRnk` of a row with a `CatId`, empty otherwise (CONTRACTS §5 step 4's check). */
+    categoryRank: string;
     memberGates: string[];
     splits: string[];
   } | undefined;
@@ -145,6 +147,9 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
   }
   if (second && !hasTime && m === undefined) row['timeEmpty'] = true;
   if (second && r.pairTotal !== undefined) row['pairTotal'] = r.pairTotal;
+  // DERIVATIONS §10 item 53 (c): a first-run or single-run row's category rank is carried for the check; a second-run row's is not read
+  const categoryRank = second ? undefined : int(x?.categoryRank ?? '');
+  if (categoryRank !== undefined) row['categoryRank'] = categoryRank;
   if (second && fmt.pair?.combination === 'best' && x !== undefined) {
     const c = int(x.betterRun);
     row['countingRun'] = c === 1 || c === 2 ? c : null; // BetterRunNr 0: no pair yet, `not-yet` (§4.4)

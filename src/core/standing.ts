@@ -68,7 +68,7 @@ export function assembleStanding(given: StandingInput, scope: StandingScopeInput
   const unplaced = given.entries.filter((e) => e.placement === null).sort((a, b) => statusIndex(a.status) - statusIndex(b.status) || byBib(a.bib, b.bib));
 
   const ranked = (e: EntryInput): number | null => {
-    if (pair || given.combined === true) return typeof e.pairTotal === 'number' ? e.pairTotal : null;
+    if (pair || given.combined === true) return typeof e.pairTotal === 'number' && e.result !== null ? e.pairTotal : null; // an untimed row: null (step 2)
     return e.result?.kind === 'duration' ? e.result.totalSeconds : null;
   };
   const shape = (list: EntryInput[], rankOf: (e: EntryInput, i: number) => [number | null, number | null]): StandingEntry[] => {
@@ -79,7 +79,8 @@ export function assembleStanding(given: StandingInput, scope: StandingScopeInput
       return {
         entryId: e.entryId, bib: e.bib, rank, order, result: e.result ?? null,
         ...(pair ? { pairTotalSeconds: e.pairTotal ?? null } : {}),
-        behindSeconds: lead !== null && value !== null && e.placement !== null ? r3(value - lead) : null,
+        // step 6: never negative; an entry whose value is smaller than the first-ordered entry's has none
+        behindSeconds: lead !== null && value !== null && e.placement !== null && value >= lead ? r3(value - lead) : null,
         provisional: e.provisional ?? false, underReview: e.underReview ?? false,
         ...(classification ? { decidedIn: e.decidedIn ?? null } : {}),
       };
@@ -87,14 +88,16 @@ export function assembleStanding(given: StandingInput, scope: StandingScopeInput
   };
 
   if (given.ageCategoryId !== undefined) {
-    const category = placed.filter((e) => e.ageCategoryId === given.ageCategoryId);
-    const rankIn = (e: EntryInput): number => 1 + category.filter((o) => (o.placement?.rank ?? Infinity) < (e.placement?.rank ?? Infinity)).length;
-    const standing = shape(category, (e, i) => [rankIn(e), i + 1]);
+    // step 4: a placed entry's rank and order are its position among the category's placed entries in class order; the unplaced follow
+    const inCategory = (e: EntryInput): boolean => e.ageCategoryId === given.ageCategoryId;
+    const category = placed.filter(inCategory);
+    const standing = shape([...category, ...unplaced.filter(inCategory)], (e, i) => (e.placement === null ? [null, null] : [i + 1, i + 1]));
     const anomalies: Anomaly[] = [];
-    for (const e of standing) {
+    category.forEach((e, i) => {
+      // the check reads placed entries only: an unplaced row's category rank is a list position
       const upstream = given.upstreamCategoryRanks?.[e.entryId];
-      if (upstream !== undefined && upstream !== e.rank) anomalies.push({ kind: 'category-rank-disagreement', entryId: e.entryId, assembled: e.rank as number, upstream });
-    }
+      if (upstream !== undefined && upstream !== i + 1) anomalies.push({ kind: 'category-rank-disagreement', entryId: standing[i]!.entryId, assembled: i + 1, upstream });
+    });
     return { standing, anomalies, ageCategoryId: given.ageCategoryId };
   }
 

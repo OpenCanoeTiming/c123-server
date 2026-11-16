@@ -86,22 +86,23 @@ export function applyClassification(s: CoreState, phaseId: string, source: Sourc
   if (rows.length === 0) return;
   const cur = s.classifications.get(phaseId);
   const at = Date.parse(el.observedAt);
-  if (cur !== undefined && source === 'xml' && cur.builtBy === 'tcp') {
+  // the guard compares with the latest tcp delivery of the rows: a tcp build, or a tcp re-delivery of equal rows an xml snapshot built
+  if (cur?.tcpAt !== undefined && source === 'xml') {
     const age = s.rewrite?.changedAfter ?? null;
-    if (age === null || age <= cur.at) {
+    if (age === null || age <= cur.tcpAt) {
       refuse(s, 'classification-guard');
       return;
     }
   }
-  const decided = new Map(cur?.xmlDecided ?? []);
-  if (source === 'xml') for (const r of rows) decided.set(r.entryId, r.decidedIn);
+  // item 52 (a): an admitted xml snapshot carrying rows replaces the kept `decidedIn` whole; it is not merged across snapshots
+  const decided = source === 'xml' ? new Map(rows.map((r) => [r.entryId, r.decidedIn] as const)) : new Map(cur?.xmlDecided ?? []);
   const next = rows.map((r) => (source === 'tcp' && r.decidedIn === null ? { ...r, decidedIn: decided.get(r.entryId) ?? null } : r));
   // TCP re-sends the same rows on rotation: those move nothing, `asOf` included; the delivery still dates what the guard compares
   if (cur !== undefined && JSON.stringify(inRelayedOrder(cur.rows)) === JSON.stringify(inRelayedOrder(next))) {
-    if (source === 'tcp' && cur.builtBy === 'tcp') cur.at = at;
+    if (source === 'tcp') cur.tcpAt = at;
     cur.xmlDecided = decided;
     return;
   }
-  s.classifications.set(phaseId, { rows: next, asOf: el.observedAt, builtBy: source, at, xmlDecided: decided });
+  s.classifications.set(phaseId, { rows: next, asOf: el.observedAt, builtBy: source, ...(source === 'tcp' ? { tcpAt: at } : {}), xmlDecided: decided });
   s.dirtyScopes.add(phaseId);
 }

@@ -2610,6 +2610,35 @@ review of #318's code (PR #379).
     when it is wired, the parser carries `CatRnk` from the rows of first-run and single-run
     races with a `CatId` and nothing from second-run rows. No vector changes; the standing
     vectors keep `upstreamCategoryRanks` as stated.
+    (e) *When the check compares* (#271's code, PR #388, the verifier's differences;
+    2026-11-16). Wired, the check recorded transient anomalies on all four reference
+    recordings (93, 43, 95 and 234 `standing.updated` deltas; none left at the end of any
+    standing). (a) measured 0 mismatches between a snapshot's `CatRnk` and that same
+    snapshot's class order, so these are the snapshot's ranks against a standing assembled from
+    a newer TCP class order: upstream's save lagging its push, the reason (c) leaves
+    `TotalCatRnk` unread, not a defect of the assembly. Default: the comparison is made only
+    while the whole-class standing presents the snapshot's class order, its placed entries
+    exactly the race's placed rows of the latest snapshot, each with the row's `rank` and
+    `order` (whichever source presents them); otherwise nothing is compared and an anomaly
+    recorded earlier is withdrawn. So the check still tests what is ours, the category
+    filter, the numbering and the unplaced tail, on the order upstream numbered from. Not
+    taken: comparing `CatRnk` with a numbering of the snapshot's own rows, which would test
+    upstream against itself and miss a category membership read wrongly from `Participants`;
+    and no check at all. *The content-age guard* (the implementer's question): not asked.
+    `CatRnk` is an `xml`-only field (INV-2 rule 3), so INV-2c's "from the other source" has
+    nothing to compare; it is a check input, never presented, and a refused or stale file
+    either restates the presented order, when its ranks are comparable, or does not, when
+    nothing is compared. E2 for the lag (the verifier's replays), E3 for the rule. No client
+    duty moves: anomalies are admin-only and the presented ranks are unchanged.
+    *Code (PR #388):* in `src/core` where the anomalies are assembled (`publish.ts` setting
+    `upstreamCategoryRanks` for `assembleStanding`), pass the snapshot's category ranks only
+    when the whole-class standing's placed entries and their `(rank, order)` equal the latest
+    snapshot's placed rows of the race; else pass none, so a standing that carried the anomaly
+    drops it. The standing vectors are unchanged (`assembleStanding` takes the ranks as given).
+    Tests: a core test with an XML class order A 1, B 2 (`CatRnk` 1, 2 in one category), then a
+    TCP push B 1, A 2: no anomaly, and one recorded before is withdrawn; a snapshot restating
+    B 1, A 2 with `CatRnk` 1, 2: none; the same with a wrong `CatRnk`: one. Replays: 0
+    `category-rank-disagreement` in any `standing.updated` on the four reference recordings.
 54. **A Phase that leaves the schedule: the defaults inside the removal** (maintainer,
     2026-11-16, Q-PH; `DECISIONS/ADR-015` Revision 9; M2 P3c). The decision: a Phase is removed
     when an admitted XML snapshot no longer carries it, under the content-age guard; an empty
