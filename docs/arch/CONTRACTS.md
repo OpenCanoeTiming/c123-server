@@ -1645,6 +1645,12 @@ implementation must satisfy, not an algorithm.
        §2.6; the vectors' one-cell `gates` are one-gate courses). Where no vector is `known` at
        submission, the base is the course's gates with every cell `null` (a default: a write is
        refused without a course, §7.3, so the count is always known).
+       **Several writes can be pending on one Attempt.** Then the target cell of every pending
+       write is replaced, and the base is the rules 1–3 vector as it stands at each step: a row
+       that moves another cell shows at once, and a write that resolves hands its cell back to
+       the rows while the others keep theirs. Two pending writes on one cell present the later
+       one's value and are answered in the order sent (`DERIVATIONS.md` §6; a default, §10
+       item 50).
      - **`provisional: false`** is an assertion with no echo expected. Examples are a direct
        correction against the cloud store after the on-site session ended (§8.5). A later assertion of the same kind supersedes it. So does a
        results-table observation that **changes** its own source's retained value after the

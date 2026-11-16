@@ -398,3 +398,9 @@ pairing. It changed cited sections and moved no obligation above:
 - the server derives a first run's `pair.siblingPhaseId` from the second runs of the first
   run's class, and a Phase whose race has left the schedule stays as last stated; a client
   reads `Phase.pair` as before, and the sibling may be `null` (DERIVATIONS §2.1).
+
+#345's code (2026-11-16; `DECISIONS/LOG.md`) took one default on the write path. It changed a
+cited section and moved no obligation above:
+- several writes may be pending on one Attempt; `gates` then presents every pending write's
+  requested cell at once, and each write resolves on its own `WriteRequest`; a client renders
+  `gates` as served and tracks each write as before (CONTRACTS §4).

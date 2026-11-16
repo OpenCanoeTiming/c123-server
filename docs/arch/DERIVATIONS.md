@@ -1514,13 +1514,26 @@ review R16, E2: the spike applied the stale-mark check only to rows it had attri
   becomes not configured and TCP re-sends the row, retained as `unavailable{not-configured}`; the
   course binds again and TCP re-sends `2`. That is a re-delivery of the retained `2`, and the
   write stays `pending` (§10 item 44 (d)).
+- **Several pending writes on one Attempt** (a default, §10 item 50). Writes on different cells
+  are judged independently, each on its own cell. Writes on one cell are answered in the order
+  sent: a delivery is judged against the oldest pending write of the cell, by this section's
+  rule, and a later write is not judged while an earlier one on its cell is pending. When the
+  delivery resolves the earlier write, the next one is `confirmed` in the same step if the
+  delivery states its requested value. Otherwise it stays `pending` and its retained value
+  becomes the delivered one, in its durable record too, so that a re-delivery of that value
+  is no echo in any lifetime. *Example:* gate 3 holds `0`; a judge writes `2`, then `50`,
+  before any echo. A row with `2` confirms the first write and leaves the second `pending`,
+  `50` still presented; a row with `50` then confirms the second. Had upstream sent one row
+  with `50`, the first write is `mismatched` and the second `confirmed`, in one step. A
+  rotation re-sending `0` before either resolves neither.
 - The echo arrives as an event-driven result push, because a correction recalculates the race.
 - **After a restart** a stored `pending` write resumes at load (`CONTRACTS.md` §1.5), keyed by its
   target and generation, and its echo is the next results-table observation of the target cell for
   that generation, under this section's rule unchanged, so that no outcome depends on the server's
   uptime. What makes that possible: **the durable record of a write carries, from its submission,
   the source's retained value of the target cell — or that none was retained** (a field of the
-  stored record, not of the wire's `WriteRequest`). A `pending` write's retained value cannot have
+  stored record, not of the wire's `WriteRequest`). Behind an earlier write on its cell the record follows that write's
+  resolution (above). Otherwise a `pending` write's retained value cannot have
   changed since its submission, a change having resolved it, so the persisted value is exactly the
   one the core held at the restart; on resume it is the retained value again, and: a delivery equal
   to it is a re-delivery, the write stays `pending` (`DECISIONS/ADR-010`'s lost echo); a change
@@ -1694,7 +1707,8 @@ decision. Items 40 to 42, and item 38 (k) to (m), are defaults of 2026-11-15 fro
 of M2 P3a, under the same rule. Items 43 to 48, and item 41 (c), are defaults of 2026-11-15
 from M2 P3b: the questions round C left open (#346), the rules that package's code needed
 (#300, #318), and one from the review of its text (item 48). Item 49 is a default of 2026-11-16
-from the review of #287's code (PR #376), under the same rule.
+from the review of #287's code (PR #376), under the same rule, and item 50 one of the same day
+from #345's code (several writes pending at once).
 
 1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
    hardware judge terminals on their own port and raises a flag on the scoring service for about
@@ -2311,3 +2325,34 @@ from the review of #287's code (PR #376), under the same rule.
     `null`. Reopens on a recording where a race was deleted or moved, or an id rebuilt. The
     remedy would be to remove a Phase that left the schedule, as an Attempt is removed (item
     38); that changes the wire and is the maintainer's to decide.
+50. **Several writes pending on one Attempt** (#345; M2 P3b, 2026-11-16). `CONTRACTS.md` §4 rule
+    4 gives a write "the vector presented from rules 1–3 with the target cell replaced", a
+    sentence written for one write. Two defaults. No recording holds a write (E4). No client
+    duty moves: no refusal is added, and a tablet renders `gates` as served and each write
+    from its own `WriteRequest`.
+    (a) *What is presented.* The rules 1–3 vector as it stands at each step, with the target
+    cell of every pending write replaced by its requested value; on a cell two pending writes
+    target, the later one's. A pending write is "presented the instant it is submitted" and
+    stays presented until its echo (rule 4; `CONTRACTS.md` §2.9), so a second write does not
+    take the first one's cell away, and a write that resolves does not take the others'. Read
+    per write, the second write's vector dropped the first one's cell until its echo: the
+    tablet would show a gate revert and flip back while its write stayed `pending`. The base
+    is live for the same reason: a row that moves another cell while a write is pending is
+    upstream's table and shows at once, also under a write whose echo never comes. The
+    envelope is `operator-write`, `provisional: true`, while any write is pending. Its
+    `observedAt` is the element's that last changed the presented vector, a submission or an
+    observation that changed a presented cell, so a step that changes no presented cell sends
+    no `gates` (INV-5; `CONTRACTS.md` §1.6). *Example:* writes are pending on gates 3 and 5.
+    The row that confirms gate 3 states the value already presented there: `write.updated`
+    goes out, `gates` does not, and gate 5 keeps its requested value.
+    (b) *How echoes resolve them* (§6). On different cells, independently. On one cell, in the
+    order sent, the oldest pending write first. Judged independently, the second write would
+    take the first command's echo for its own, find it unequal and resolve `mismatched`,
+    although upstream applies it a moment later. A retraction resolves every pending write of
+    the field, and a new generation supersedes each (rule 4; §6).
+    Not taken: one write per Attempt, or per gate, at a time. Either needs a refusal, which is
+    a client duty. A residual, stated: with one cell written twice, a change from elsewhere
+    that lands between the two commands' pushes resolves the first write `mismatched`, and
+    the first command's late echo can then resolve the second the same way. That is the
+    single-write rule's own limit: the next observation of the cell settles the write.
+    Reopens if penalty-check (M4) wants one correction per gate at a time.
