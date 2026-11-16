@@ -5,7 +5,7 @@
  */
 import { choose, newerContent, present, presentStatus, isMark, isNoResultMark } from './precedence.js';
 import { finishOf } from './presentation.js';
-import { fieldSlots, retain, slotOf } from './retention.js';
+import { fieldSlots, laterAge, retain, slotOf } from './retention.js';
 import { fmtFor, isInstant, isXmlOnly, siblingAttempt } from './registry.js';
 import { refuse } from './counters.js';
 import { timeOf, markOf } from './generations.js';
@@ -61,6 +61,11 @@ function retractStatus(s: CoreState, a: AttemptState, source: Source, el: Elemen
   if (!a.listed && a.gen.leftBehind !== undefined) {
     fs.inference = a.gen.leftBehind;
     delete a.gen.leftBehind;
+  }
+  // INV-2 rule 2, INV-2c: the fallback stands where the retraction stood, so the XML displaces it only with content later than
+  // the retracting delivery; the leave's envelope is kept (as a re-delivery advances the age, not `observedAt`)
+  if (!a.listed && fs.inference !== undefined && (fs.inference.value === 'left-without-finish' || fs.inference.value === 'not-started')) {
+    fs.inference = { ...fs.inference, age: laterAge(fs.inference.age, m.age) };
   }
   return true;
 }

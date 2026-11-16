@@ -178,7 +178,8 @@ export function leave(s: CoreState, a: AttemptState, el: Element): void {
     return;
   }
   const seq = tick(s);
-  const drawn = cur === 'on-course' || a.gen.start !== undefined ? 'left-without-finish' : cur === 'at-start' ? 'not-started' : undefined;
+  // §4.1: "observed" is read on the stream's state at the leave; a start or a finish it has since withdrawn counts as not observed
+  const drawn = cur === 'at-start' ? 'not-started' : cur === 'on-course' || a.gen.start !== undefined ? 'left-without-finish' : undefined;
   if (drawn === undefined) return;
   if (drawn === 'left-without-finish') delete fieldSlots(a.slots, 'outcome').inference;
   // §3.2, INV-1: a finish or a mark presented from a results table has no way back to `left-without-finish`; the leave is recorded behind it
