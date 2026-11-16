@@ -104,7 +104,7 @@ describe('N1 Cross time trial: a finish listing with no Time ends `running` (DER
     expect(pair(c, xid), 'a Cross leave changes nothing (§10 item 35)').toEqual({ status: 'finished', outcome: { state: 'not-yet' } });
   });
 
-  it('vector-rule #318 row 2 / DA (ii), real cp3-cross WX1_XT_26:25: the 0.00 s running listing, then the finish impulse with no Time (recorded 07:16:59Z): finished, not-yet; the leave changes nothing', () => {
+  it('vector-rule #318 row 2 / DA (ii), real cp3-cross WX1_XT_26:25: the 0.00 s running listing, the deleted start (xt2), then the finish impulse with no Time (recorded 07:16:59Z): finished, not-yet; the leave changes nothing', () => {
     const id = 'WX1_XT_26:25';
     const ids = [id, 'WX1_XT_26:26'];
     const other = (ms: number): Unit => tcpUnit(msg(plus(R19.xt3.observedAt, ms), listingText({ race: 'WX1_XT_26', bib: 26, total: 2, pos: 1, dtStart: '9:16:30.000', time: '27.00' })), DAYS, { courses: {} });
@@ -113,6 +113,8 @@ describe('N1 Cross time trial: a finish listing with no Time ends `running` (DER
     expect(f(c, id, 'status').value, 'precondition: on-course').toBe('on-course');
     expect(f(c, id, 'outcome'), 'precondition: running').toMatchObject({ state: 'known', value: { kind: 'running' } });
     expect(R19.xt3.data, 'precondition: the recorded finish listing has a dtFinish and an empty Time').toMatch(/dtFinish="9:16:57\.734"[\s\S]*Type="T"[^>]*Time=""/);
+    step(c, tcpUnit(R19.xt2, DAYS), ids);
+    expect(pair(c, id), 'the deleted start ends running (recorded 07:15:34Z)').toEqual({ status: 'at-start', outcome: { state: 'not-yet' } });
     step(c, tcpUnit(R19.xt3, DAYS), ids);
     expect(pair(c, id)).toEqual({ status: 'finished', outcome: { state: 'not-yet' } });
     step(c, other(2000), ids);
@@ -129,6 +131,7 @@ describe('N3: a listing that shows at-start states no `running`, whatever its Ti
     const at = listing(SLALOM, X, 0, { dtStart: '', time: '17.00' });
     expect(listingText({ race: SLALOM, bib: X, dtStart: '', time: '17.00' }), 'precondition: dtStart is empty').toMatch(/dtStart=""/);
     step(c, listing(SLALOM, Y, 0, { dtStart: '11:59:10.000', time: '45.00' }), ids);
+    expect(at.find((e: any) => e.field === 'onCourse'), 'precondition: the unit the core receives lists no start').toMatchObject({ value: { dtStart: null } });
     step(c, at, ids);
     expect(pair(c, xid), 'at-start states no running').toEqual({ status: 'at-start', outcome: { state: 'not-yet' } });
     leaveAfter(c, SLALOM, 0, ids);
@@ -182,5 +185,59 @@ describe('item 35: a Cross heat listing is on-course and keeps its `running` thr
     step(c, other(4000), ids);
     expect(inSet(c, id), 'precondition: the leave rule fired').toBe(false);
     expect(pair(c, id)).toEqual(before);
+  });
+});
+
+/** A slalom listing on the default ingest course (K1M_BR1_19, 23 gates): `judged` cells judged, the first `pen2` of them with 2 s. */
+const cells = (judged: number, penalties: number): string => Array.from({ length: 23 }, (_, i) => (i >= judged ? '' : i < penalties ? '2' : '0')).join(',');
+const sl = (ms: number, over: Record<string, unknown>): Unit => tcpUnit(msg(plus(T0, ms), listingText({ race: SLALOM, bib: X, total: 1, pos: 1, ...over })), DAYS);
+const dur = (c: Core, id: string): any => f(c, id, 'outcome').value;
+
+describe('N2 (PR #379 review): a `duration` inference stays; only `running` ends at a finish listing or a leave (DERIVATIONS §4.3 "the `duration` inference replaces it"; §10 item 43 (c))', () => {
+  it('vector-rule #318 N2: a finish listing with a Time and judged gates presents the duration; a leave of the finished Attempt keeps it, status finished', () => {
+    const xid = `${SLALOM}:${X}`;
+    const ids = [xid, `${SLALOM}:${Y}`];
+    const yl = (ms: number): Unit => listing(SLALOM, Y, ms, { dtStart: '11:59:10.000', time: '45.00' });
+    const c = coreWith([connected(T0)]);
+    step(c, yl(0), ids);
+    step(c, sl(0, { dtStart: START, time: '17.00', gates: cells(3, 1) }), ids);
+    step(c, sl(1000, { dtStart: START, dtFinish: FINISH, time: '21.00', gates: cells(23, 1) }), ids);
+    expect(dur(c, xid), 'precondition: the duration of the finish listing').toEqual({ kind: 'duration', runSeconds: 21, penaltySeconds: 2, totalSeconds: 23 });
+    step(c, yl(3000), ids);
+    step(c, yl(5000), ids);
+    expect(inSet(c, xid), 'precondition: the leave rule fired').toBe(false);
+    expect(dur(c, xid), 'the duration stays through the leave').toEqual({ kind: 'duration', runSeconds: 21, penaltySeconds: 2, totalSeconds: 23 });
+    expect(f(c, xid, 'status').value).toBe('finished');
+  });
+});
+
+describe('item 51 (DERIVATIONS §10 item 51, §4.1 withdrawal bullet, §4.4 "Run closed"; DA ruling item 22): a withdrawn stream finish takes its Completed closure with it', () => {
+  it('vector-rule #318 item 51: Y finish (D1, not recomputed), finish withdrawn, a new finish (D2, no Y) is inferred, recomputed, and settles at its own Y', () => {
+    const xid = `${SLALOM}:${X}`;
+    const ids = [xid];
+    const base = { dtStart: START, dtFinish: FINISH };
+    const c = coreWith([connected(T0)]);
+    step(c, sl(0, { dtStart: START, time: '17.00', gates: cells(3, 0) }), ids);
+    // 1. a finish with Completed Y: D1 = 80 + 2; a later finish listing with one more judged penalty is NOT recomputed (stop (b))
+    step(c, sl(1000, { ...base, time: '80.00', completed: true, gates: cells(10, 1) }), ids);
+    expect(dur(c, xid), 'D1').toEqual({ kind: 'duration', runSeconds: 80, penaltySeconds: 2, totalSeconds: 82 });
+    step(c, sl(2000, { ...base, time: '80.00', completed: true, gates: cells(11, 2) }), ids);
+    expect(dur(c, xid), 'stop (b): the closed run is not recomputed').toEqual({ kind: 'duration', runSeconds: 80, penaltySeconds: 2, totalSeconds: 82 });
+    // 2. a listing without dtFinish: the finish is withdrawn
+    step(c, sl(3000, { dtStart: START, time: '30.00', gates: cells(11, 2) }), ids);
+    expect(f(c, xid, 'status').value, 'precondition: withdrawn, on-course').toBe('on-course');
+    expect(dur(c, xid)?.kind, 'no duration after the withdrawal').not.toBe('duration');
+    // 3. a finish listing again, no Y: D2 is presented
+    step(c, sl(4000, { ...base, time: '85.00', gates: cells(12, 0) }), ids);
+    expect(dur(c, xid), 'D2').toEqual({ kind: 'duration', runSeconds: 85, penaltySeconds: 0, totalSeconds: 85 });
+    // 4. a later finish listing with one more judged cell: recomputed, the old Y no longer binds
+    step(c, sl(5000, { ...base, time: '85.00', gates: cells(13, 1) }), ids);
+    expect(dur(c, xid), 'recomputed like a first finish').toEqual({ kind: 'duration', runSeconds: 85, penaltySeconds: 2, totalSeconds: 87 });
+    // 5. a TCP row with a blank cell: provisional; a finish listing with Y settles it
+    const row = { ingestSeq: 0, observedAt: plus(T0, 5500), snapshot: { source: 'tcp', phaseId: SLALOM, mode: 'results', rows: [{ bib: String(X), outcome: { kind: 'duration', runSeconds: 85, penaltySeconds: 2, totalSeconds: 87 }, gates: [{ number: 3, penalty: null }, { number: 4, penalty: 2 }], placement: { rank: 4, order: 4 }, judgingComplete: false }] } };
+    step(c, [row as never], ids);
+    expect(f(c, xid, 'gates'), 'the blank cell is provisional while the run is open').toMatchObject({ provisional: true });
+    step(c, sl(6000, { ...base, time: '85.00', completed: true, gates: cells(13, 1) }), ids);
+    expect(f(c, xid, 'gates'), 'the new finish\'s own Y closes the run').toMatchObject({ provisional: false });
   });
 });

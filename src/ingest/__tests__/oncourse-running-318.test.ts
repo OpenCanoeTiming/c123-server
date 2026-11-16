@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseTcp } from '../index.js';
-import { ctx, allObs } from './helpers.js';
+import { ctx, allObs, diagnostics } from './helpers.js';
 import { listingText } from '../../core/__tests__/text.js';
 
 // #318 N3 (DERIVATIONS §4.3 `running` bullet 1: "at a listing that shows `at-start` ... whatever `Time` that listing carries"; §10 item 43 (b);
@@ -27,5 +27,15 @@ describe('the parser states no running outcome from a listing that shows at-star
   it('vector-rule #318 row 4, Cross time trial: WX1_XT_26 dtStart="" and Time="17.00" states no running (§4.1: at-start outside a heat)', () => {
     const text = listingText({ race: 'WX1_XT_26', bib: 2, dtStart: '', time: '17.00' });
     expect(outcomes(text, 'WX1_XT_26').filter((o) => o.value?.kind === 'running')).toEqual([]);
+  });
+});
+
+describe('N4 (PR #379 review): an at-start listing with a Time still logs an unparseable Pen (DERIVATIONS §0.5, §4.3: an empty Pen is absent, a bad one is a diagnostic)', () => {
+  it('vector-rule #318 N4: slalom dtStart="" Time="17.00" Pen="x": exactly one unparseable-field diagnostic naming Pen, and no running', () => {
+    const text = listingText({ race: 'K1M_BR1_19', bib: 51, dtStart: '', time: '17.00' }).replace('Pen="0"', 'Pen="x"');
+    expect(text, 'precondition: at-start listing with a bad Pen').toMatch(/Pen="x"/);
+    const els = parseTcp(text, ctx());
+    expect(diagnostics(els).filter((d: any) => d.kind === 'unparseable-field' && d.name === 'Pen')).toHaveLength(1);
+    expect(allObs(els, 'outcome').filter((o: any) => o.value?.kind === 'running')).toEqual([]);
   });
 });

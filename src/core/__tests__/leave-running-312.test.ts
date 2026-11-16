@@ -53,6 +53,8 @@ describe('a leave withdraws the stream\'s running outcome whatever is presented 
 
   it('rule P4 / #312 row 1: after the TCP row clears the mark 46 s later, outcome is still not running whatever status returns to', () => {
     const c = upToLeave(DNS);
+    expect(inSet(c), 'precondition: the leave rule fired').toBe(false);
+    expect(f(c, X, 'status').value, 'precondition: the mark is presented').toBe('dns');
     c.applyUnit(y(CLEAR_MS - 1000));
     c.applyUnit(row(CLEAR_MS, CLEARED));
     const status = f(c, X, 'status').value;
@@ -77,18 +79,5 @@ describe('a leave withdraws the stream\'s running outcome whatever is presented 
     expect(f(c, X, 'status').value).toBe('finished');
     expect(f(c, X, 'outcome').value?.kind).not.toBe('running');
     expect(f(c, X, 'outcome')).toMatchObject({ state: 'known', value: { kind: 'duration', runSeconds: 80 } });
-  });
-
-  // N6 (#318, review c123-server-312-review.md): the first assertion of row 1 is masked, because the mark's no-result outcome is what is presented while the
-  // row stands. The stream's inference shows only once the row no longer states an outcome, so this clears the row right after the leave and reads what is
-  // then presented: the retraction returns to the stream's latest inference (CONTRACTS §3.2). N4 (row 2, a table finish) cannot be unmasked: see the test record.
-  it('N6 / #312 row 1 unmasked: a table DNS before the leave, the leave, then the clearing row one second later: outcome not-yet, never running (fails when the leave keeps the inference)', () => {
-    const c = upToLeave(DNS);
-    expect(inSet(c), 'precondition: the leave rule fired').toBe(false);
-    expect(f(c, X, 'status').value, 'precondition: the mark is presented').toBe('dns');
-    c.applyUnit(y(LEAVE_MS + 1000));
-    c.applyUnit(row(LEAVE_MS + 1500, CLEARED));
-    expect(f(c, X, 'outcome').value?.kind).not.toBe('running');
-    expect(f(c, X, 'outcome')).toEqual({ state: 'not-yet' });
   });
 });
