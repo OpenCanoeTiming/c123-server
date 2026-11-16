@@ -225,17 +225,17 @@ function removePhase(s: CoreState, p: ResourceState, el: Element): void {
   };
   dropStandings(p.id);
   // a `pair` naming it as the first run, and the second run's pointer to it (item 54 (g), (h))
+  // its stated value is retained and presents null while the Phase is removed
   for (const second of namingSecondRuns(s, false).get(p.id) ?? []) {
     dropStandings(second, `pair:${second}/`);
     const r = s.phases.get(second);
-    if (r === undefined) continue;
-    r.plain.set('pair', { ...(r.plain.get('pair') as object), siblingPhaseId: null });
-    s.dirtyPhases.add(r);
+    if (r !== undefined) s.dirtyPhases.add(r);
   }
   for (const phases of s.entryPhases.values()) phases.delete(p.id);
   s.phases.delete(p.id);
   s.classifications.delete(p.id);
   s.scheduled.delete(p.id);
+  s.removedIds.add(p.id);
   s.dirtyPhases.delete(p);
   s.dirtyScopes.delete(p.id);
   s.removedPhases.push(p);

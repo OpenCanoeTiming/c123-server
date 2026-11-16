@@ -241,6 +241,8 @@ export interface CoreState {
   removed: AttemptState[];
   /** Phases the unit removed (the schedule statement, §4.12): each one `phase.deleted` at the flush. */
   removedPhases: ResourceState[];
+  /** Phases removed and not created again: a stated sibling naming one presents `null` (§10 item 54 (h)). */
+  removedIds: Set<string>;
   /** The Phases an XML schedule statement has named, admitted or not: only these are removed (§10 item 54 (b)). */
   scheduled: Set<string>;
   /** `xml-schedule-emptied` is armed: raised once per emptying, re-armed by a statement naming a race (§10 item 54 (k)). */

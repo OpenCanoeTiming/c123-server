@@ -320,7 +320,7 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
     attempts: new Map(), phases: new Map(), entries: new Map(), classes: new Map(), courses: new Map(), classifications: new Map(),
     listed: new Map(), oncourseAsOf: null, oncourseSent: '[[],null]', featured: null, writes: [], splitsArmed: undefined,
     parserDiagnostics: new Map(), phaseDiagnostics: new Map(), diagnosticsSent: '[]', diagnosticsDirty: false, log: [], ingestLog: [],
-    dirtyAttempts: new Set(), dirtyPhases: new Set(), dirtyResources: new Set(), dirtyWrites: new Set(), removed: [], removedPhases: [], scheduled: new Set(), scheduleArmed: true, pendingRebaseline: undefined,
+    dirtyAttempts: new Set(), dirtyPhases: new Set(), dirtyResources: new Set(), dirtyWrites: new Set(), removed: [], removedPhases: [], removedIds: new Set(), scheduled: new Set(), scheduleArmed: true, pendingRebaseline: undefined,
     dirtyScopes: new Set(), unitAt: '', standingsSent: new Map(), standingKeys: new Map(), standingsHeld: new Map(), entryPhases: new Map(),
     counters: { generations: 0, retractions: 0, contradictions: 0, leaves: 0, refusals: {} },
   };
@@ -352,7 +352,7 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
     },
     phase: (phaseId) => {
       const r = s.phases.get(phaseId);
-      return r === undefined ? { phaseId } : viewResource(r, 'phase');
+      return r === undefined ? { phaseId } : viewResource(r, 'phase', s.removedIds);
     },
     attempts: () => [...s.attempts.keys()],
     phaseIds: () => [...s.phases.keys()],
