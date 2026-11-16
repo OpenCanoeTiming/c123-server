@@ -56,17 +56,11 @@ function lookup(id: string, c: Candidate, candidates: Candidates): string | unde
 }
 
 /**
- * CONTRACTS §2.4 "Pairing", DERIVATIONS §2.1 and §10 item 48. A second run names the one run its lookup finds. A first run names the second
- * run that names it back (the one on its day where several do), else null. Where either Phase's class is unknown the sibling is null.
- * No part of a `RaceId` is read here.
+ * CONTRACTS §2.4 "Pairing", DERIVATIONS §2.1 and §10 item 49 (a). A second run names the one run its lookup finds. A first run states
+ * null, always: its sibling is the core's derivation. Where the class is unknown the sibling is null. No part of a `RaceId` is read here.
  */
 function siblingOf(phaseId: string, c: Candidate, candidates: Candidates): string | undefined {
-  const pair = fmtOf(c.token).pair;
-  if (pair === null) return undefined;
-  if (pair.role === 'second') return lookup(phaseId, c, candidates);
-  let named = [...candidates].filter(([id, o]) => fmtOf(o.token).pair?.role === 'second' && lookup(id, o, candidates) === phaseId).map(([id]) => id);
-  if (named.length > 1) named = named.filter((id) => c.date !== undefined && candidates.get(id)?.date === c.date);
-  return named.length === 1 ? named[0] : undefined;
+  return fmtOf(c.token).pair?.role === 'second' ? lookup(phaseId, c, candidates) : undefined;
 }
 
 /** The `pair` a Phase states: its role and combination from the format, its sibling from {@link siblingOf}; null for a single run. */

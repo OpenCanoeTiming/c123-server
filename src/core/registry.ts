@@ -44,23 +44,34 @@ type StatedPair = { role?: string; siblingPhaseId?: string | null } | null | und
 const statedPair = (r: ResourceState | undefined): StatedPair => r?.plain.get('pair') as StatedPair;
 
 /**
- * The other run of a pair (CONTRACTS §2.4); the id is never built or parsed for it. A second run's is the sibling its `pair` states; a
- * first run's is derived, the second run that names it back (`deriveFirstRunSiblings`); a Phase not yet described has the same derivation.
+ * The other run of a pair (CONTRACTS §2.4); the id is never built or parsed for it. One rule, by the Phase's run role (`fmtFor`):
+ *   - a second run: the sibling its `pair` states;
+ *   - a first run: derived, the second run of the same `classId` that names it back (DERIVATIONS §10 items 48, 49); held by
+ *     `deriveFirstRunSiblings` for a described Phase, derived here for one the core has not created (no class, so none);
+ *   - a single run: none.
  */
 export function siblingPhaseId(s: CoreState, phaseId: string): string | undefined {
+  const role = fmtFor(s, phaseId).pair?.role;
   const r = s.phases.get(phaseId);
-  if (r === undefined) return namedBack(s, phaseId, namingSecondRuns(s), undefined) ?? undefined;
-  const stated = statedPair(r);
-  if (stated?.role === 'first') return r.derivedSibling ?? undefined;
-  return stated?.siblingPhaseId ?? undefined;
+  if (role === 'second') return statedPair(r)?.siblingPhaseId ?? undefined;
+  if (role !== 'first') return undefined;
+  if (r?.derivedSibling !== undefined) return r.derivedSibling ?? undefined;
+  return namedBack(s, phaseId, namingSecondRuns(s, true)) ?? undefined;
 }
 
-/** Each Phase named by a second run's stated pair, with the second runs naming it. */
-function namingSecondRuns(s: CoreState): Map<string, string[]> {
+/**
+ * Each Phase named by a second run's stated pair, with the second runs naming it. `sameClass`: only while both Phases' current stated
+ * `classId` are equal (item 49 b; either unknown is not equal). Without it, every second run whose pair names the Phase (§7.2 scopes).
+ */
+export function namingSecondRuns(s: CoreState, sameClass: boolean): Map<string, string[]> {
   const naming = new Map<string, string[]>();
   for (const [id, r] of s.phases) {
     const p = statedPair(r);
     if (p?.role !== 'second' || typeof p.siblingPhaseId !== 'string') continue;
+    if (sameClass) {
+      const cls = r.plain.get('classId');
+      if (typeof cls !== 'string' || s.phases.get(p.siblingPhaseId)?.plain.get('classId') !== cls) continue;
+    }
     const list = naming.get(p.siblingPhaseId);
     if (list === undefined) naming.set(p.siblingPhaseId, [id]);
     else list.push(id);
@@ -69,19 +80,20 @@ function namingSecondRuns(s: CoreState): Map<string, string[]> {
 }
 
 /** DERIVATIONS §10 item 48: the one second run naming the first run; where several do, the one on its day; else `null`. Candidates sorted. */
-function namedBack(s: CoreState, firstId: string, naming: ReadonlyMap<string, string[]>, day: unknown): string | null {
+function namedBack(s: CoreState, firstId: string, naming: ReadonlyMap<string, string[]>): string | null {
   const candidates = [...(naming.get(firstId) ?? [])].sort();
   if (candidates.length === 1) return candidates[0]!;
+  const day = s.phases.get(firstId)?.plain.get('date');
   const sameDay = candidates.filter((c) => day !== undefined && s.phases.get(c)?.plain.get('date') === day);
   return sameDay.length === 1 ? sameDay[0]! : null;
 }
 
 /** A first run's sibling, derived again for every first run; one whose sibling changed is marked, its Phase and its Attempts. */
 export function deriveFirstRunSiblings(s: CoreState): void {
-  const naming = namingSecondRuns(s);
+  const naming = namingSecondRuns(s, true);
   for (const [id, r] of s.phases) {
-    if (statedPair(r)?.role !== 'first') continue;
-    const pick = namedBack(s, id, naming, r.plain.get('date'));
+    if (fmtFor(s, id).pair?.role !== 'first') continue;
+    const pick = namedBack(s, id, naming);
     if (r.derivedSibling === pick) continue;
     r.derivedSibling = pick;
     s.dirtyPhases.add(r);

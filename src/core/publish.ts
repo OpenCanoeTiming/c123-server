@@ -7,7 +7,7 @@
 import type { Standing } from '@opencanoetiming/c123-contract';
 import { assembleStanding, type EntryInput } from './standing.js';
 import { isMark, present } from './precedence.js';
-import { fmtFor, siblingPhaseId } from './registry.js';
+import { fmtFor, namingSecondRuns, siblingPhaseId } from './registry.js';
 import type { AttemptState, CoreState, StandingFacts } from './types.js';
 
 type Enveloped = { state?: string; value?: unknown; provisional?: boolean } | undefined;
@@ -146,9 +146,11 @@ export function changedStandings(s: CoreState): Standing[] {
 /** `scope.replaced`: every Standing whose scope names a Phase of the re-baseline's scope, sent whole and recorded as sent. */
 export function replacedStandings(s: CoreState, scope: { kind?: string; phaseId?: string }): Standing[] {
   const phases = scope.kind === 'event' ? new Set([...s.phases.keys(), ...s.classifications.keys()]) : new Set(scope.phaseId === undefined ? [] : [scope.phaseId]);
+  // §7.2: every Standing whose scope names one of the scope's Phases, `pair` on either side: the pair standings of every second run naming it
+  const naming = namingSecondRuns(s, false);
   for (const id of [...phases]) {
-    const sibling = fmtFor(s, id).pair?.role === 'first' ? siblingPhaseId(s, id) : undefined;
-    if (sibling !== undefined && s.phases.has(sibling)) phases.add(sibling);
+    if (fmtFor(s, id).pair?.role !== 'first') continue;
+    for (const second of [...(naming.get(id) ?? [])].sort()) phases.add(second);
   }
   const out: Standing[] = [];
   for (const phaseId of phases) {
