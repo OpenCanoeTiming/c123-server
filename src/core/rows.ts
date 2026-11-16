@@ -4,7 +4,7 @@
  */
 import { judgingComplete, gatesFromCells, faultsFromCells, type Cells } from '../ingest/common.js';
 import { isStaleMark, attribute, keepAsHistory, markOf, pendingFor, recordsGeneration, timeOf } from './generations.js';
-import { isMark, markRefusedByGuard, present, presentStatus, refusedByGuard } from './precedence.js';
+import { choose, isMark, markRefusedByGuard, present, presentStatus, refusedByGuard } from './precedence.js';
 import { boundSlots, fmtFor } from './registry.js';
 import { refuse } from './counters.js';
 import { carriesContradicted } from './retraction.js';
@@ -67,8 +67,13 @@ export function putCells(s: CoreState, a: AttemptState, channel: 'tcp' | 'xml' |
     // when it restates the presented merged cells, whatever its source's previous row said (round 29): the slot stays, its cells taken
     const held = a.cells[channel];
     const same = held !== undefined && held.slot.source === slot.source && held.slot.confidence === slot.confidence;
-    // the observation moves on: `seq`, `epoch` and the later content `age` are the re-delivery's, `at` stays (INV-5)
-    const kept = (): Slot => ({ ...held!.slot, seq: slot.seq, epoch: slot.epoch, age: laterAge(held!.slot.age, slot.age) });
+    // the observation moves on: `seq`, `epoch` and the later content `age` are the re-delivery's, `at` stays (INV-5). Displaced
+    // by the other source as on a bound course (rule 2, INV-2c; never by comparing cells), it is one in its own right, `at` included
+    const rival = channel === 'tcp' ? a.cells.xml : channel === 'xml' ? a.cells.tcp : undefined;
+    const displaced = (): boolean =>
+      rival !== undefined && (channel === 'tcp' ? choose(held!.slot, rival.slot) : choose(rival.slot, held!.slot)) === rival.slot;
+    const kept = (): Slot =>
+      displaced() ? { ...slot, age: laterAge(held!.slot.age, slot.age) } : { ...held!.slot, seq: slot.seq, epoch: slot.epoch, age: laterAge(held!.slot.age, slot.age) };
     if (!same || JSON.stringify(held.cells) !== JSON.stringify(cells)) {
       a.cells[channel] = same && channel !== 'inference' && restatesMerged(a, held, cells, slot) ? { cells, slot: kept() } : { cells, slot };
     } else {
