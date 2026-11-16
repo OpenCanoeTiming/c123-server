@@ -5,21 +5,21 @@
  * The outbound side is the fake TCP sink `env.tcp.written`; the upstream side of the echo is a TCP Results row fed back (datasets `ODP.echo`).
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
 import {
-  boot, disposeAll, feedTcp, get, hydrate, modelFrom, openWs, post, setInstance, view, virtualClock, type Env, type J,
+  boot, derived, disposeAll, feedTcp, feedXml, get, hydrate, modelFrom, openWs, post, setInstance, view, virtualClock, type Env, type J,
 } from './onsite-harness.js';
 import { CROSS, JNE, ODP, feed } from './datasets.js';
+import { startListOnly } from './write-fixtures-300.js';
+import { R19 } from '../../core/__tests__/fixtures/round19-excerpts.js';
 
 afterEach(disposeAll);
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-// Round 28 adds the reason `upstream-disconnected` to error.schema.json; until PR #296 merges the schema is read from its branch's worktree when present.
-const ROUND28 = '/workspace/timing/.worktrees/c123-server-round28/docs/arch/schemas';
-const SCHEMAS = existsSync(resolve(ROUND28, 'error.schema.json')) && readFileSync(resolve(ROUND28, 'error.schema.json'), 'utf8').includes('upstream-disconnected') ? ROUND28 : resolve(HERE, '../../../docs/arch/schemas');
+const SCHEMAS = resolve(HERE, '../../../docs/arch/schemas');
 const errorSchema = (): ((x: unknown) => boolean) & { errors?: unknown } => {
   const Ctor = ((Ajv2020 as any).default ?? Ajv2020) as new (o: object) => any;
   const ajv = new Ctor({ strict: true, allErrors: true });
@@ -836,5 +836,30 @@ describe('review B1 / DERIVATIONS §6 "After a restart" + round 28-3d: the TCP r
       expect(w.status).toBe('pending');
       expect(w.confirmedValue ?? null).toBeNull();
     });
+  });
+});
+
+describe('row 13 (#300 N4, DA ruling item 13): no "no run yet" refusal; an Attempt presents `run` from the observation that creates it (CONTRACTS §7.3, §2.6; property 10)', () => {
+  const expectAdmitted = async (env: Env): Promise<void> => {
+    const a = (await get(env, `/api/phases/${ODP.phaseId}/attempts`)).body.attempts.find((x: J) => x.attemptId === ODP.attemptId);
+    expect(a, 'precondition: the Attempt exists').toBeDefined();
+    expect(a.gates.state, 'precondition: no gates vector is known: the Attempt is known from a start-list row alone').toBe('not-yet');
+    expect(env.tcp.written, 'precondition: nothing was sent yet').toEqual([]);
+    const r = await write(env, GOOD, 'k-start-list');
+    expect(r.status, 'a write on it is admitted: 202, never 400 validation-failed on `run`').toBe(202);
+    expect(r.body.target.run, 'the creating observation presented generation 1').toBe(1);
+    expect(env.tcp.written, 'the command went upstream').toHaveLength(1);
+  };
+
+  it('ruling 13 (xml start-list row): an Attempt known only from the snapshot\'s start-list row, never listed, takes a penalty write: 202, target.run 1', async () => {
+    await expectAdmitted(await startListOnly());
+  });
+
+  it('ruling 13 (tcp start-list row): an Attempt known only from a TCP start-list row after the snapshot bound the course, never listed: 202, target.run 1', async () => {
+    const env = await boot({ startAt: ODP.startAt, eventDate: ODP.day });
+    await feedXml(env, derived(R19.rcXml, { edit: (d) => d.replace(/<Results>[\s\S]*?<\/Results>/, '') }));
+    await feed(env, ODP.wipe(env.clock.now() + 1000));
+    await setInstance(env, 'Main');
+    await expectAdmitted(env);
   });
 });
