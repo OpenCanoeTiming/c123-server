@@ -45,6 +45,13 @@ export function createStepLog(write: (line: string) => void, getCore: () => Merg
       switch (d['type']) {
         case 'attempt.updated': setPart(`a|${String(d['attemptId'])}`, core.presented(String(d['attemptId']))); break;
         case 'attempt.deleted': setPart(`a|${String(d['attemptId'])}`, undefined); break;
+        case 'phase.deleted': {
+          // the Phase's Attempts and every Standing naming it go with it (§7.2)
+          const live = new Set(core.attempts());
+          const held = new Set(core.standings().map((st) => st.standingKey));
+          for (const k of [...parts.keys()]) if ((k.startsWith('a|') && !live.has(k.slice(2))) || (k.startsWith('s|') && !held.has(k.slice(2)))) setPart(k, undefined);
+          break;
+        }
         case 'entry.updated': setPart(`e|${String(d['entryId'])}`, core.entry(String(d['entryId']))); break;
         case 'standing.updated': setPart(`s|${String((d['standing'] as { standingKey: string }).standingKey)}`, d['standing']); break;
         case 'scope.replaced': {

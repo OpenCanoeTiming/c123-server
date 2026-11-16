@@ -9,7 +9,7 @@ import { applyListing, applyLeaveRule, leave, list, observeStreamOutcome, observ
 import { isMark } from './precedence.js';
 import { currentDiagnostics, flush } from './notify.js';
 import { phaseResource, attemptFor, deriveFirstRunSiblings, fmtFor, resource } from './registry.js';
-import { FIRST_RUN_FIELDS, PAIR_FIELDS, SECOND_RUN_EMPTY_FIELDS, absentRow, emptied, hasResult, retract } from './retraction.js';
+import { FIRST_RUN_FIELDS, PAIR_FIELDS, SECOND_RUN_EMPTY_FIELDS, absentRow, applySchedule, emptied, hasResult, retract } from './retraction.js';
 import { retain, fieldSlots, slotOf, tick } from './retention.js';
 import { applyRow, floorStatus, putCells, putIdentity, putStanding, rebindCells } from './rows.js';
 import { applyClassification, dirtyHandle, observeResource, refreshCourses, viewResource } from './resources.js';
@@ -154,6 +154,7 @@ function applySnapshot(s: CoreState, el: Element, inUnit: ReadonlySet<string>): 
   const { source, phaseId, mode, rows } = el['snapshot'] as { source: Source; phaseId: string; mode: 'results' | 'start-list'; rows: Row[] };
   const fmt = fmtFor(s, phaseId);
   const phase = phaseResource(s, phaseId, el.observedAt);
+  if (source === 'tcp') phase.tcpAt = Math.max(phase.tcpAt ?? -Infinity, Date.parse(el.observedAt));
   if (fmt.kind === 'classification') {
     applyClassification(s, phaseId, source, el, rows as unknown as ClassificationRow[]);
     return;
@@ -272,6 +273,7 @@ function observe(s: CoreState, el: Element): void {
     if (observeResource(s, r, el, field, source, tick(s))) s.dirtyResources.add(dirtyHandle('course', r));
   } else if (phaseId !== undefined) {
     const r = phaseResource(s, phaseId, el.observedAt);
+    if (el['source'] === 'tcp') r.tcpAt = Math.max(r.tcpAt ?? -Infinity, Date.parse(el.observedAt)); // §4.12: the removal's guard
     if (observeResource(s, r, el, field, source, tick(s))) s.dirtyPhases.add(r);
   } else observeAttempt(s, attemptFor(s, keylessAttempt(s), el.observedAt, source), el, field);
 }
@@ -305,6 +307,7 @@ function clearRestated(s: CoreState, source: Source, named: ReadonlySet<AttemptS
 function dispatch(s: CoreState, el: Element, inUnit: Set<string>): void {
   if ('event' in el) applyEvent(s, el);
   else if ('snapshot' in el) applySnapshot(s, el, inUnit);
+  else if ('schedule' in el) applySchedule(s, el);
   else if ('diagnostic' in el) applyDiagnostic(s, el, inUnit);
   else if ('courseRefresh' in el) refreshCourses(s, el, tick(s));
   else if ('field' in el) observe(s, el);
@@ -317,7 +320,7 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
     attempts: new Map(), phases: new Map(), entries: new Map(), classes: new Map(), courses: new Map(), classifications: new Map(),
     listed: new Map(), oncourseAsOf: null, oncourseSent: '[[],null]', featured: null, writes: [], splitsArmed: undefined,
     parserDiagnostics: new Map(), phaseDiagnostics: new Map(), diagnosticsSent: '[]', diagnosticsDirty: false, log: [], ingestLog: [],
-    dirtyAttempts: new Set(), dirtyPhases: new Set(), dirtyResources: new Set(), dirtyWrites: new Set(), removed: [], pendingRebaseline: undefined,
+    dirtyAttempts: new Set(), dirtyPhases: new Set(), dirtyResources: new Set(), dirtyWrites: new Set(), removed: [], removedPhases: [], scheduled: new Set(), scheduleArmed: true, pendingRebaseline: undefined,
     dirtyScopes: new Set(), unitAt: '', standingsSent: new Map(), standingKeys: new Map(), standingsHeld: new Map(), entryPhases: new Map(),
     counters: { generations: 0, retractions: 0, contradictions: 0, leaves: 0, refusals: {} },
   };
@@ -334,7 +337,7 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
         s.xmlRead = true;
         for (const a of s.attempts.values()) s.dirtyAttempts.add(a);
       }
-      if (s.dirtyPhases.size > 0) deriveFirstRunSiblings(s);
+      if (s.dirtyPhases.size > 0 || s.removedPhases.length > 0) deriveFirstRunSiblings(s);
       settleWrites(s, s.unitAt);
       flush(s, xml);
       return derived;
