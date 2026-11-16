@@ -1236,7 +1236,8 @@ type WriteRequest = {
 
 **A tablet renders only what the server pushes.** The optimistic value is the server's: the domain
 layer applies it in the same step as it creates the `WriteRequest` and pushes both (§7.2), so a
-client never shows a value of its own before that push. It shows the write as `pending`, distinctly,
+client never shows a value of its own before that push. Where the field already presents that
+value from an earlier pending write, the `WriteRequest` is pushed alone (§4 rule 4). It shows the write as `pending`, distinctly,
 from the `WriteRequest`. **A lost echo counts as a failed write** (maintainer answer A6): a write that
 stays `pending` is never shown as settled, is never cleared by the client on its own, and is resolved
 with the user: re-submitted, or checked against Canoe123 by hand. The contract sets no duration after
@@ -1650,7 +1651,10 @@ implementation must satisfy, not an algorithm.
        that moves another cell shows at once, and a write that resolves hands its cell back to
        the rows while the others keep theirs. Two pending writes on one cell present the later
        one's value and are answered in the order sent (`DERIVATIONS.md` §6; a default, §10
-       item 50).
+       item 50). A write that changes no presented cell, such as a second write of a value
+       already pending on its gate, pushes its `WriteRequest` alone. While no course is bound,
+       which a pending write meets only after a restart, it presents nothing: `gates` keeps
+       the course's count (§2.6).
      - **`provisional: false`** is an assertion with no echo expected. Examples are a direct
        correction against the cloud store after the on-site session ended (§8.5). A later assertion of the same kind supersedes it. So does a
        results-table observation that **changes** its own source's retained value after the

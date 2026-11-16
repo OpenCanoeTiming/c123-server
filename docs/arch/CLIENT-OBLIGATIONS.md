@@ -150,7 +150,7 @@ moved since this derivation); the duties themselves are the lines below.
 - [ ] Keep a Kayak Cross heat that has left the on-course list at `on-course` until its order arrives; never treat leaving the list as a finish (CONTRACTS §7.1, §7.2; ARCHITECTURE §6.D).
 - [ ] Ignore `Standing.anomalies`, which on-site serves for the admin UI only (CONTRACTS §2.7, §5).
 - [ ] Treat `/api/sources`, `/api/diagnostics`, `diagnostics.updated` and `POST /api/rebaseline` as admin-audience only; ignore diagnostics and never expose the re-baseline (CONTRACTS §2.8, §4, §7.1, §7.2).
-- [ ] Expect an optimistic write in the targeted field as `source: 'operator-write'`, `provisional: true`, in the same push cycle as its `WriteRequest` (CONTRACTS §2.9, §4; ARCHITECTURE §6.B).
+- [ ] Expect an optimistic write in the targeted field as `source: 'operator-write'`, `provisional: true`, in the same push cycle as its `WriteRequest`; where the field already presents that value from an earlier pending write, `write.updated` arrives alone, so never wait for a `gates` push per write (CONTRACTS §2.9, §4; ARCHITECTURE §6.B).
 - [ ] Keep the client's own screenshot suite for visual regression as its own discipline, outside the four tiers, which neither adopt nor retire it; tier-3 tests assert behaviour on the DOM or view-model, not appearance (TEST-ARCHITECTURE §3.3, §8).
 
 ---
@@ -404,3 +404,9 @@ cited section and moved no obligation above:
 - several writes may be pending on one Attempt; `gates` then presents every pending write's
   requested cell at once, and each write resolves on its own `WriteRequest`; a client renders
   `gates` as served and tracks each write as before (CONTRACTS §4).
+
+The review of that code (PR #378, 2026-11-16) reworded one line above, with no duty moved in
+substance: the optimistic-write line now says that a write whose value the field already
+presents arrives as `write.updated` alone. A client that renders `gates` as served and tracks
+writes by `WriteRequest` already behaves so; one that waited for a `gates` push per write would
+not. The PR is therefore not labelled `obligations-unchanged`.
