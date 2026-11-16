@@ -142,7 +142,8 @@ function writeRow(s: CoreState, a: AttemptState, source: Source, el: Element, ro
   const time = timeOf(row);
   const extra: Partial<Slot> = 'judgingComplete' in row ? { judgingComplete: row['judgingComplete'] as boolean | null } : {};
   const placed = row['placement'] !== null && row['placement'] !== undefined;
-  if (recordsGeneration(a, mark, time)) a.gen.recorded = true;
+  // §4.11: judged against the table before this row, recorded only once the guard admits it (a refused mark records nothing)
+  const records = recordsGeneration(a, mark, time);
 
   // §4.4 the untimed flag: read from the snapshot row, inherited by the Attempt's TCP rows
   if (row['untimed'] === true) {
@@ -163,6 +164,7 @@ function writeRow(s: CoreState, a: AttemptState, source: Source, el: Element, ro
     keepAsHistory(a, source, row);
     return;
   }
+  if (records) a.gen.recorded = true;
   if (outcome !== undefined) put(s, a, source, el, 'outcome', outcome, seq, { ...extra, ...(row['finishTime'] !== undefined ? { eventTime: row['finishTime'] as string } : {}) });
   if ('cells' in row) putCells(s, a, source, row['cells'] as Cells, slotOf(s, el, source, 'row', [], seq, extra));
   for (const f of ['gates', 'faults', 'splits']) if (row[f] !== undefined) put(s, a, source, el, f, row[f], seq, extra);
