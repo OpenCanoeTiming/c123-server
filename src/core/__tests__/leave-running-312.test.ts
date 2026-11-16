@@ -53,6 +53,8 @@ describe('a leave withdraws the stream\'s running outcome whatever is presented 
 
   it('rule P4 / #312 row 1: after the TCP row clears the mark 46 s later, outcome is still not running whatever status returns to', () => {
     const c = upToLeave(DNS);
+    expect(inSet(c), 'precondition: the leave rule fired').toBe(false);
+    expect(f(c, X, 'status').value, 'precondition: the mark is presented').toBe('dns');
     c.applyUnit(y(CLEAR_MS - 1000));
     c.applyUnit(row(CLEAR_MS, CLEARED));
     const status = f(c, X, 'status').value;

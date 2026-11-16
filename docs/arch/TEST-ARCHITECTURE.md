@@ -347,7 +347,11 @@ the step index, the Attempt, the field and the property number.
    yields no `duration` (an empty `Time`, or a slalom listing with no `Gates`) — the stream withdrawing what it alone stated (`DERIVATIONS.md` §4.3, §4.1,
    §10 item 43; `ADR-015` Revision 4), `status` as §4.1 gives it at that element (the leave's
    `left-without-finish` or `not-started`, a table `finished` or mark standing; the listing's
-   `at-start` or `finished`), every other field unchanged.
+   `at-start` or `finished`), every other field unchanged. The property reads the presented
+   state. Where a table `finished` or mark masks the withdrawn inference, nothing presented
+   changes at that step, and the withdrawal is judged at the step that would present the
+   inference again, a retraction of the table value (property 5(b)). No test or checker reads
+   a retained, unpresented observation.
    `unavailable` appears only with a closed reason, and only at a step that carries the field for the
    Attempt (property 3) or at a scope snapshot of its race, never at a connection event, a `fragment`
    or by itself (INV-3): a `not-configured` decided from `SourceStatus` or the snapshot
