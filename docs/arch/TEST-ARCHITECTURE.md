@@ -266,8 +266,9 @@ the step index, the Attempt, the field and the property number.
        and the row absent from a table that carries other rows. An `xml` table with no rows
        retracts nothing and produces nothing. What a retraction presents is the retained stream
        inference with its own element's envelope where one is retained — the listing's, or for
-       the leave's `left-without-finish` the `oncourse-left`'s, `tcp` on the instant of the TCP
-       message at which the leave was evaluated — else `not-started` on the retraction's own
+       the leave's `left-without-finish` the leave's element, `oncourse-left` or `oncourse-empty`
+       (`DERIVATIONS.md` §4.1, §4.8), `tcp` on the instant of the TCP message at which the leave
+       was evaluated — else `not-started` on the retraction's own
        instant and `source` (property 5).
      - *`oncourse-left` and `oncourse-empty`* are the core's evaluation at a TCP message
        (`DERIVATIONS.md` §4.1, §4.8), so what they produce — `status`, the stream's withdrawn
@@ -295,8 +296,8 @@ the step index, the Attempt, the field and the property number.
      12:41:44.250 presented at the listing of 12:41:44.358; `outcome` the row's, `status` the
      listing's.
    - **A retraction's fallback** to the retained stream inference keeps the envelope of the
-     element that drew it (property 5): a listing's, or the `oncourse-left`'s for a
-     `left-without-finish` (`CONTRACTS.md` §3.2). *Recorded:* jarni-so-odp K1W_BR2_18:16, the
+     element that drew it (property 5): a listing's, or the leave's (`oncourse-left` or
+     `oncourse-empty`) for a `left-without-finish` (`CONTRACTS.md` §3.2). *Recorded:* jarni-so-odp K1W_BR2_18:16, the
      `at-start` of 14:11:39.886 presented at the clearing of 14:12:08; no recording holds the
      `left-without-finish` case.
    - **A mark the guard refused at its first read** and a later snapshot re-delivers is the
@@ -378,8 +379,8 @@ the step index, the Attempt, the field and the property number.
      field whose presented value is an on-course inference (`kind: inference`, or
      `outcome.kind: 'running'`).
    - **(b) `status` afterwards** is what the on-course listing shows for the Attempt (`at-start`,
-     `on-course`, or an inferred `finished` that still stands; after an `oncourse-left` of the
-     generation with a start and no finish standing at the leave (one the stream withdrew is not
+     `on-course`, or an inferred `finished` that still stands; after an `oncourse-left` or
+     `oncourse-empty` covering the Attempt in the generation, with a start and no finish standing at the leave (one the stream withdrew is not
      standing, `DERIVATIONS.md` §4.1) and no re-listing since, the
      leave's `left-without-finish`, `DERIVATIONS.md` §4.12), else `not-started`; a
      `finished → on-course` at this step is this property's, not property 7's.

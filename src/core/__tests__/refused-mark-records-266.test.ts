@@ -20,9 +20,13 @@ function setup() {
 
 describe('#266 Q7: the refusal of a mark and the recording of a generation (DERIVATIONS §4.11)', () => {
   // mutant: recordsGeneration runs before the guard's refusal -> the refused DNS records, the new start is a re-run: run 2, red.
+  // mutant (counter assert): a core whose guard admits the stale mark, or refuses it through another path, no longer counts `xml-mark` once -> red there.
   it('rule DERIVATIONS §4.11 refused-mark: a row whose mark the guard refused records no generation, the later start is a correction (run 1)', () => {
     const { k, c } = setup();
+    const refusals = (): Record<string, number> => ({ ...(c as unknown as { counters(): { refusals: Record<string, number> } }).counters().refusals });
+    expect(refusals(), 'precondition: nothing refused yet').toEqual({});
     c.applyUnit(k.xml(at(30), at(5), { status: 'dns' })); // content age 5 s is not later than the delivery at 10 s: refused
+    expect(refusals(), 'precondition (refusal counter, review #385 N1): the guard counted this mark as refused, once (an XML mark over a presented tcp status, INV-2 rule 2 / INV-2c)').toEqual({ 'xml-mark': 1 });
     expect(field(c, A, 'status'), 'precondition (refusal): the mark is not presented').toMatchObject({ value: 'at-start', source: 'tcp' });
     expect(diagnosticKinds(c), 'precondition (refusal): no stale-mark diagnostic is a rule here, only the refusal itself').not.toContain('source-disagreement');
     c.applyUnit(k.listing(at(40), at(35))); // a different start, no finish
