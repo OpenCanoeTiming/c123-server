@@ -156,6 +156,27 @@ describe('#377 row 5, review N6 of PR #376: the pair override and the first-run 
   });
 });
 
+describe('#377 DERIVATIONS §10 item 49 (d): a Phase held with neither format nor pair, named by a second run, is that pair\'s first run', () => {
+  const derived = ['format', 'stage', 'kind', 'scoringKind', 'heats'] as const;
+  it('item 49 (d): before: no pair; named by the second run: pair first/combination/sibling = the second run, and no format, stage, kind, scoringKind, heats; a later stated format makes them appear', () => {
+    // ids chosen so that a token read would say otherwise: the held Phase's id says BR2, the naming run's id says XF
+    const c = coreWith([stateUnit(1, { id: 'K1M_BR2_19' })], NO_ID_CLASS);
+    expect(rec(c, 'K1M_BR2_19')['classId'], 'precondition: the core holds the Phase (its class is stated)').toBe('K1M');
+    expect(rec(c, 'K1M_BR2_19')['pair'] ?? null, 'precondition: before a second run names it, no pair is presented').toBeNull();
+    c.applyUnit(stateUnit(2, { id: 'K1M_XF_19', format: 'BR2', pair: { role: 'second', siblingPhaseId: 'K1M_BR2_19', combination: 'sum' } }));
+    const p = rec(c, 'K1M_BR2_19');
+    expect(p['pair'], 'item 49 (d), item 48 inverse sibling, the naming pair\'s combination').toEqual({ role: 'first', combination: 'sum', siblingPhaseId: 'K1M_XF_19' });
+    for (const f of derived) expect(p[f] ?? null, `${f} is not presented while no format is stated (a mutant presenting the unknown-token row shows stage run, kind race, scoringKind duration, heats false)`).toBeNull();
+    c.applyUnit(stateUnit(3, { id: 'K1M_BR2_19', format: 'XF' }));
+    const q = rec(c, 'K1M_BR2_19');
+    expect(q['format']).toBe('XF');
+    expect(q['stage']).toBe('final');
+    expect(q['kind']).toBe('race');
+    expect(q['scoringKind']).toBe('ordinal');
+    expect(q['heats']).toBe(true);
+  });
+});
+
 describe('#377 row 6, DERIVATIONS §2.1 / CONFORMANCE-VECTORS §1: src/core reads no id token', () => {
   const coreDir = fileURLToPath(new URL('../', import.meta.url));
   const files = (dir: string): string[] =>
