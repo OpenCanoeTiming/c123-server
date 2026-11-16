@@ -33,6 +33,7 @@ export function noteFacts(s: CoreState, a: AttemptState, view: Record<string, un
     provisional: ['outcome', 'placement', 'pairTotal'].some((f) => known(f)?.provisional === true),
     underReview: known('underReview')?.value === true,
     heat: typeof heat === 'number' ? heat : null,
+    ...(a.upstreamCategoryRank !== undefined ? { upstreamCategoryRank: a.upstreamCategoryRank } : {}),
   };
   const text = JSON.stringify(facts);
   if (text === a.factsText) return;
@@ -154,13 +155,19 @@ export function replacedStandings(s: CoreState, scope: { kind?: string; phaseId?
   }
   const out: Standing[] = [];
   for (const phaseId of phases) {
+    const before = new Map<string, Standing>();
     for (const key of s.standingKeys.get(phaseId) ?? []) {
+      const held = s.standingsHeld.get(key);
+      if (held !== undefined) before.set(key, held);
       s.standingsSent.delete(key);
       s.standingsHeld.delete(key);
     }
     s.standingKeys.delete(phaseId);
-    for (const st of ofPhase(s, phaseId, s.unitAt)) {
-      if (st.entries.length === 0) continue;
+    for (const assembled of ofPhase(s, phaseId, s.unitAt)) {
+      if (assembled.entries.length === 0) continue;
+      // §5 step 1: `asOf` moves only with a change; a Standing the re-baseline leaves as it was keeps the last change's
+      const prior = before.get(assembled.standingKey);
+      const st = prior !== undefined && textOf(prior) === textOf(assembled) ? { ...assembled, asOf: prior.asOf } : assembled;
       remember(s, phaseId, st);
       out.push(st);
     }

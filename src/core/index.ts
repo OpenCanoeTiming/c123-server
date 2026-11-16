@@ -150,6 +150,15 @@ const isBlank = (row: Row): boolean =>
   !('outcome' in row) && markOf(row) === undefined && row['status'] !== 'finished' && (row['placement'] === null || row['placement'] === undefined) &&
   !('underReview' in row) && !('finishTime' in row) && row['untimed'] !== true;
 
+/** CONTRACTS §5 step 4's check: the latest XML snapshot's category rank of the Attempt's row, absent where the snapshot states none. */
+function upstreamCategoryRank(s: CoreState, a: AttemptState, value: unknown): void {
+  const next = typeof value === 'number' ? value : undefined;
+  if (next === a.upstreamCategoryRank) return;
+  if (next === undefined) delete a.upstreamCategoryRank;
+  else a.upstreamCategoryRank = next;
+  s.dirtyAttempts.add(a);
+}
+
 function applySnapshot(s: CoreState, el: Element, inUnit: ReadonlySet<string>): void {
   const { source, phaseId, mode, rows } = el['snapshot'] as { source: Source; phaseId: string; mode: 'results' | 'start-list'; rows: Row[] };
   const fmt = fmtFor(s, phaseId);
@@ -166,6 +175,7 @@ function applySnapshot(s: CoreState, el: Element, inUnit: ReadonlySet<string>): 
     named.add(a);
     a.rowNamed = true;
     if (source === 'tcp') delivered(a, el);
+    if (source === 'xml') upstreamCategoryRank(s, a, row['categoryRank']);
     rebindCells(s, a);
     a.splitsUnarmed = s.splitsArmed === false;
     if (second && (row['timeEmpty'] === true || isBlank(row))) {
@@ -188,6 +198,7 @@ function applySnapshot(s: CoreState, el: Element, inUnit: ReadonlySet<string>): 
       return;
     }
     phase.xmlTable = 'rows';
+    for (const a of phase.attempts ?? []) if (!named.has(a)) upstreamCategoryRank(s, a, undefined);
   }
   for (const a of phase.attempts ?? []) if (!named.has(a)) absentRow(s, a, source, el, fields, seq);
 }

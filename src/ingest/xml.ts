@@ -83,6 +83,7 @@ function rowIn(u: Unit, phaseId: string, r: Node): RowIn | undefined {
     gates: tx(r, 'Gates'), rank: tx(r, 'Rnk'), rankOrder: tx(r, 'RnkOrder'), heat: tx(r, 'HeatNr'), q: tx(r, 'Qualified'),
     xml: {
       dtStart: tx(r, 'dtStart'), dtFinish: tx(r, 'dtFinish'), totalRank: tx(r, 'TotalRnk'), totalRankOrder: tx(r, 'TotalRnkOrder'), betterRun: tx(r, 'BetterRunNr'),
+      categoryRank: tx(r, 'CatId').trim() === '' ? '' : tx(r, 'CatRnk'),
       memberGates: ['Gates1', 'Gates2', 'Gates3'].filter((k) => has(r, k)).map((k) => tx(r, k)),
       splits: ['dtSplit1', 'dtSplit2', 'dtSplit3'].map((k) => tx(r, k)).filter((s) => s.trim() !== ''),
     },

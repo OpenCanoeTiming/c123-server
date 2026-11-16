@@ -117,6 +117,8 @@ export interface AttemptState {
   /** What the Standing assembly reads of the presented Attempt, and its serialised form (#205): a change marks the Phase's scopes. */
   facts?: StandingFacts;
   factsText?: string;
+  /** The latest XML snapshot's category rank of its row (`CatRnk`, first-run and single-run rows with a `CatId`): step 4's check only. */
+  upstreamCategoryRank?: number;
 }
 
 /** The presented Attempt as a Standing entry sees it (CONTRACTS §5 steps 2, 3, 5). A running time is not in it, so a tick changes nothing. */
@@ -130,6 +132,8 @@ export interface StandingFacts {
   provisional: boolean;
   underReview: boolean;
   heat: number | null;
+  /** The snapshot's category rank, where its row carries one (CONTRACTS §5 step 4's check). */
+  upstreamCategoryRank?: number;
 }
 
 export interface ResourceState {
@@ -161,8 +165,8 @@ export interface ClassificationState {
   rows: ClassificationRow[];
   asOf: string;
   builtBy: Source;
-  /** Content age of the rows as last delivered by TCP, a re-send of equal rows included (INV-2c's guard); `asOf` dates the change. */
-  at: number;
+  /** Content age of the latest TCP delivery of these rows, a re-send of equal rows after an XML build included (INV-2c's guard); `asOf` dates the change. */
+  tcpAt?: number;
   /** §4.10: `decidedIn` per `entryId` from the last admitted XML row; read where a TCP row states null. */
   xmlDecided?: Map<string, string | null>;
 }
