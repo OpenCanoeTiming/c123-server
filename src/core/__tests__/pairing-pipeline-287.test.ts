@@ -176,6 +176,45 @@ describe('#287 item 49 (b): a second run names a first run only while the two Ph
 });
 });
 
+describe('#382 item 54 (h), amended (a07d2bc): the core presents no siblingPhaseId naming a Phase it removed and has not created again', () => {
+  const pairKey = 'pair:K1M_BR2_19/all';
+  const standingKeys = (p: P): string[] => (p.core as unknown as { standings(): Array<{ standingKey: string }> }).standings().map((s) => s.standingKey);
+  const br2 = (): string => TCP.resultsBr2;
+
+  it('item 54 (h): after K1M_BR1_19 is removed, a later XML statement and a TCP Results of K1M_BR2_19 naming it present sibling null and build no pair Standing; scheduled again, it is named and the pair Standing returns', () => {
+    const p = pipeline();
+    const both = [R('K1M_BR1_19', 'K1M', 'BR1', '2026-09-19'), R('K1M_BR2_19', 'K1M', 'BR2', '2026-09-19')];
+    p.xml(both);
+    p.tcp(br2());
+    expect(p.sibling('K1M_BR2_19'), 'precondition: the second run names the first').toBe('K1M_BR1_19');
+    expect(standingKeys(p), 'precondition: the pair Standing is built').toContain(pairKey);
+
+    const from = p.xml([both[1]!]); // an admitted save without the first run
+    const unit = p.core.notifications().slice(from) as Array<Record<string, any>>;
+    expect(unit.filter((m) => m['type'] === 'phase.deleted').map((m) => m['phaseId']), 'precondition: the first run is removed').toEqual(['K1M_BR1_19']);
+    expect(p.core.phaseIds()).not.toContain('K1M_BR1_19');
+    expect(p.sibling('K1M_BR2_19'), 'at the removal').toBeNull();
+    expect(standingKeys(p)).not.toContain(pairKey);
+
+    // a later XML statement of the second run: the parser (it keeps what it learned) names the removed first run again
+    p.xml([both[1]!]);
+    expect(p.sibling('K1M_BR2_19'), 'a later XML statement does not bring the pointer back').toBeNull();
+    // and a TCP Results of the second run states the pair naming it again
+    p.tcp(br2());
+    expect(p.sibling('K1M_BR2_19'), 'nor does a TCP statement').toBeNull();
+    expect(standingKeys(p), 'no pair Standing naming a removed Phase').not.toContain(pairKey);
+    expect(p.core.phaseIds(), 'the removed Phase was not recreated by being named').not.toContain('K1M_BR1_19');
+
+    // the first run is scheduled again: created, named as stated, the pair Standing returns
+    const from2 = p.xml(both);
+    expect(p.core.phaseIds()).toContain('K1M_BR1_19');
+    expect(p.sibling('K1M_BR2_19'), 'presented as stated once the id exists again').toBe('K1M_BR1_19');
+    expect(p.sibling('K1M_BR1_19')).toBe('K1M_BR2_19');
+    expect(standingKeys(p), 'the pair Standing is back').toContain(pairKey);
+    expect((p.core.notifications().slice(from2) as Array<Record<string, any>>).some((m) => m['type'] === 'phase.updated' && m['phaseId'] === 'K1M_BR2_19' && m['fields']?.['pair'] !== undefined), 'announced').toBe(true);
+  });
+});
+
 describe('#287 N4 (CONTRACTS §1.6, DERIVATIONS §2.1): the first phase.updated of a Phase first seen on TCP carries its pair', () => {
   it('a Results for a BR2 first seen on TCP, the first run\'s class known from an earlier snapshot: the first phase.updated of the BR2 carries classId, format and pair naming the BR1', () => {
     const p = pipeline();
