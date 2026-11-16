@@ -161,14 +161,18 @@ describe('#287 item 49 (b): a second run names a first run only while the two Ph
     expect(sib('K1M_BR1_19')).toBe('K1M-X_BR2_19');
   });
 
-  it('item 49 (c), the stated known gap: a second run deleted from the schedule but of the first run\'s class stays as last stated, and the first run goes on naming it', () => {
+  it('item 49 (c) closed by item 54 (h) (#382, Q-PH): a second run deleted from the schedule is removed, and the first run presents a null sibling in the same unit (the former known gap)', () => {
     const p = pipeline();
     p.xml([R('K1M_BR1_19', 'K1M', 'BR1', '2026-09-19'), R('K1M_BR2_19', 'K1M', 'BR2', '2026-09-19')]);
-    expect(p.sibling('K1M_BR1_19')).toBe('K1M_BR2_19');
-    p.xml([R('K1M_BR1_19', 'K1M', 'BR1', '2026-09-19')]); // the second run's schedule row has gone
-    expect(p.core.phase('K1M_BR2_19')['classId'], 'the deleted Phase is still in the core as last stated').toBe('K1M');
-    expect(p.sibling('K1M_BR1_19')).toBe('K1M_BR2_19'); // KNOWN GAP (DERIVATIONS §10 item 49 (c)): the pointer names a Phase that is no longer scheduled
-  });
+    expect(p.sibling('K1M_BR1_19'), 'precondition: the first run names the second').toBe('K1M_BR2_19');
+    const from = p.xml([R('K1M_BR1_19', 'K1M', 'BR1', '2026-09-19')]); // the second run's schedule row has gone
+    const unit = (p.core.notifications().slice(from) as Array<Record<string, any>>);
+    const iDel = unit.findIndex((m) => m['type'] === 'phase.deleted' && m['phaseId'] === 'K1M_BR2_19');
+    expect(iDel, 'the removed Phase is announced').toBeGreaterThanOrEqual(0);
+    expect(p.sibling('K1M_BR1_19'), 'no pointer to a Phase that is no longer scheduled').toBeNull();
+    const iUpd = unit.findIndex((m) => m['type'] === 'phase.updated' && m['phaseId'] === 'K1M_BR1_19' && m['fields']?.['pair'] !== undefined);
+    expect(iUpd, 'the first run\'s phase.updated follows the phase.deleted').toBeGreaterThan(iDel);
+});
 });
 
 describe('#287 N4 (CONTRACTS §1.6, DERIVATIONS §2.1): the first phase.updated of a Phase first seen on TCP carries its pair', () => {
