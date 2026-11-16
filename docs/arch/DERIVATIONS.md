@@ -144,8 +144,15 @@ the file is re-read once per poll until its stat changes or it validates; that r
 poll and not a burst, so it counts in neither `tornReads` nor `abandonedReads` (#255: the burst that
 found the file invalid counted once). A well-formed file whose
 root closes but that names no race is **valid and empty**: a rewrite of nothing, the unit is the
-event alone (`TEST-ARCHITECTURE.md` §3.2 property 3: an `xml-rewrite-detected` on its own changes
-nothing). No recording holds one: every first snapshot of the seven carried Participants, Classes,
+event and an empty schedule statement (below), which removes no Phase (`TEST-ARCHITECTURE.md`
+§3.2 property 3: an `xml-rewrite-detected` on its own changes nothing).
+
+**The schedule statement** (`CONTRACTS.md` §4 INV-7; `DECISIONS/ADR-015` Revision 9). Each whole
+read also states which races the snapshot's `Schedule` table names: the parser emits one
+schedule statement per read, the `RaceId`s of its schedule rows (the `<unassigned>` placeholder
+and class `NA` excluded, §0.4), before the read's race tables. The core removes a Phase that a
+schedule statement no longer names, under the guard of §4.12; an empty statement removes
+nothing. TCP's `Schedule` message states no such thing: it never removes. No recording holds one: every first snapshot of the seven carried Participants, Classes,
 Schedule, Results, CourseData and Events.
 
 ### 0.4 Ingest filters
@@ -179,6 +186,8 @@ refreshes is the core's to find (§2.3). The core owns everything that needs sta
 - the on-course set, the leave rule and `featuredByUpstream` (§4.1, §4.8);
 - a first run's `pair.siblingPhaseId`: the inverse of the second runs' stated pairs, which moves
   when another Phase is stated, so no message about the first run can state it (§2.1; §10 item 49);
+- the removal of a Phase its schedule no longer names, and of an Attempt whose bib its race no
+  longer carries (§4.12);
 - the splits-armed state (§2.3, §4.8), the cell merge (§4.6(e)), retraction and contradiction (§4.12),
   echo matching (§6), `provisional`, and the diagnostics that compare observations
   (`source-disagreement`, `contradicted-finish`, `duplicate-finish`, `stale-mark`);
@@ -199,9 +208,10 @@ time that does not parse) and `gates-absent` (a finished slalom on-course listin
 §4.6(a): no duration inference is possible). A parser diagnostic reports, never guesses: a value it
 cannot read is absent, not invented.
 
-The core raises one further ingest-only kind, `xml-table-emptied` (§4.12): an XML table with no
-rows over a race that holds results. It needs the held state, so it cannot be the parser's. Like
-the parser's four it reaches the admin log and never `GET /api/diagnostics`.
+The core raises two further ingest-only kinds, `xml-table-emptied` (§4.12): an XML table with no
+rows over a race that holds results, and `xml-schedule-emptied` (§4.12): an XML schedule naming
+no race while Phases it would have removed stand. Each needs the held state, so neither can be
+the parser's. Like the parser's four they reach the admin log and never `GET /api/diagnostics`.
 
 ---
 
@@ -315,8 +325,10 @@ the parser's four it reaches the admin log and never `GET /api/diagnostics`.
     then `K1M_BR1_19` and `K1M-X_BR2_19`, both of class `K1M-X`. No later snapshot holds
     `K1M_BR2_19`, so that Phase keeps what was last stated of it: class `K1M` and a `pair`
     naming `K1M_BR1_19`. It no longer names the first run, whose class is now `K1M-X`, so the
-    first run's sibling is `K1M-X_BR2_19` and not a tie between the two. A Phase the schedule
-    no longer holds is not treated specially beyond that (a default, §10 item 49).
+    first run's sibling is `K1M-X_BR2_19` and not a tie between the two. Once a save that
+    schedules `K1M-X_BR2_19` and not `K1M_BR2_19` is admitted for the old Phase, `K1M_BR2_19` is
+    removed (maintainer, 2026-11-16; §4.12; §10 item 54), and the class rule above only covers
+    the saves before that.
   - **The class check needs both classes stated.** It looks for a statement gone stale, and
     only a difference between two stated classes shows one. Whoever states a second run's
     sibling has already applied the class rule: a parser names a first run only when it knows
@@ -1384,6 +1396,23 @@ previously known from a results-table observation:
   never had rows raises nothing (all 521 recorded empty XML race tables are of this kind, §0.3).
   If the race was really emptied, TCP's start-list push retracts it, or the operator
   re-baselines.
+- **The race is absent from the schedule:** no row of the snapshot's `Schedule` table names it
+  (the schedule statement, §0.3). **The Phase is removed** (maintainer, 2026-11-16;
+  `DECISIONS/ADR-015` Revision 9), when the snapshot is admitted for it: its `changedAfter` is
+  later than the latest delivery of every `tcp` observation of the Phase or of any Attempt of it
+  (a TCP `Schedule` naming it, a `Results` message of it, an on-course listing of one of its
+  Attempts; `null` never qualifies), and no Attempt of it is in the on-course set. Only a Phase
+  an XML schedule statement has named is removed; one only TCP has named is never removed by
+  this. Not admitted: nothing of the Phase moves, and a later snapshot settles it. In the unit:
+  pending writes of its Attempts resolve `mismatched` without `confirmedValue`; then the Phase,
+  its Attempts, its classification rows and kept `decidedIn`, the diagnostics of it and its
+  Attempts and every Standing whose scope names it go, as one `phase.deleted`; a first run whose
+  sibling it was is derived again (§2.1) and its `phase.updated` follows. **An empty schedule
+  statement removes nothing;** where at least one Phase would have been removed, the guard
+  applied, the core raises `xml-schedule-emptied` with the number of such Phases (ingest-only,
+  §0.5), once, re-armed by a schedule statement that names a race. Defaults: §10 item 54. No
+  recording holds a race leaving the schedule or an empty schedule (E1, the P3c sweep, 2,032
+  distinct snapshots).
 - **A row that returns** after an absent-row retraction is a new `xml` observation and is
   presented by the ordinary rules: at once where no `tcp` observation stands, else under rule 2.
   After a removal it creates a new Attempt, `run` 1, carrying none of the removed one's result
@@ -2360,7 +2389,10 @@ review of #318's code (PR #379).
     `two-run-br1-unavailable-no-live-no-xml`, whose first run no element describes; the
     vector is unchanged and the adapter describes no further Phase.
     (c) *A Phase the schedule no longer holds is not otherwise special-cased* (E4: no recording
-    holds a rename, a moved race or a deleted one). Nothing in the contract removes a Phase.
+    holds a rename, a moved race or a deleted one). *Closed 2026-11-16: by the maintainer's
+    decision of that day such a Phase is removed (`DECISIONS/ADR-015` Revision 9; item 54), which
+    closes the gap stated below; the rest of (c) is the record of the default it replaced.*
+    Nothing in the contract removes a Phase.
     It stays as last stated, with its own `pair`; a standing of it that was published stays
     published. Upstream rebuilds an id only while its race is at the initial status (§1), so
     the Phase of a rebuilt id normally holds no result, and a `pair` standing that never had
@@ -2567,3 +2599,53 @@ review of #318's code (PR #379).
     when it is wired, the parser carries `CatRnk` from the rows of first-run and single-run
     races with a `CatId` and nothing from second-run rows. No vector changes; the standing
     vectors keep `upstreamCategoryRanks` as stated.
+54. **A Phase that leaves the schedule: the defaults inside the removal** (maintainer,
+    2026-11-16, Q-PH; `DECISIONS/ADR-015` Revision 9; M2 P3c). The decision: a Phase is removed
+    when an admitted XML snapshot no longer carries it, under the content-age guard; an empty
+    schedule table removes nothing (admin log); clients get a `phase.deleted`, live a `DELETE`.
+    It closes item 49 (c)'s gap. Defaults taken inside it, each by analogy with item 38:
+    (a) *The trigger is the schedule statement* (§0.3), the races the snapshot's `Schedule`
+    table names, never its results tables: a race scheduled with no row is item 41's emptied
+    table. Upstream rewrites the schedule whole at every save, as it does the tables.
+    (b) *Only a Phase an XML schedule statement has named is removed* (item 38 (b)'s scope). A
+    Phase only TCP has named, before the first snapshot or with no XML configured, stays TCP's;
+    TCP's own `Schedule` never removes (item 38 (d)).
+    (c) *The guard covers the whole Phase:* every `tcp` observation of the Phase or of any of its
+    Attempts, the TCP `Schedule` naming it included, must predate the snapshot's `changedAfter`,
+    and a Phase with an Attempt in the on-course set is never removed. Not admitted, nothing
+    moves; there is no per-field fallback, since a Phase's own fields are not retracted.
+    (d) *One message.* `phase.deleted { phaseId }` implies the Phase's Attempts and every
+    Standing whose scope names it; no `attempt.deleted` or `standing.updated` is sent for them.
+    The alternative, an `attempt.deleted` per Attempt then the Phase's message, sends a Phase's
+    whole start list one Attempt at a time, each with its emptied Standings, before the Standings
+    are removed anyway; one message is atomic, and the removal is the Phase's. On live the same
+    holds: one `DELETE` of the Phase.
+    (e) *Pending writes* of its Attempts resolve `mismatched` without `confirmedValue`, before the
+    `phase.deleted`, as for a removed Attempt (item 38 (f)).
+    (f) *Checks and flags* stay in the store, unserved while their Attempt does not exist, served
+    again when the same `attemptId` returns (item 38 (g), (m)). A Phase's reads of checks answer
+    `404 phase-not-found` while it does not exist.
+    (g) *The Standings removed* are those whose scope names the Phase: `phase`, `heat` and
+    `classification` of it, a `pair` keyed by it and a `pair` naming it as the first run, whole
+    class and every category, the same set `scope.replaced` covers (`CONTRACTS.md` §7.2). A
+    surviving second run's `pair` standing is published again from its first entry once a first
+    run is named.
+    (h) *Pairing after a removal.* A first run that named the removed Phase is derived again in
+    the unit (item 49 (a)) and sent as `phase.updated` after the `phase.deleted`. A second run
+    whose first run was removed takes the sibling the parser states from the same schedule.
+    (i) *Classification rows and their kept `decidedIn`* go with the Phase (item 52).
+    (j) *A returning Phase* is a new Phase: created whole by the ordinary rule, its `date` the
+    snapshot's (INV-5's once-only date is per Phase), its Attempts `run` 1 with none of the
+    removed ones' result state, their checks and flags served again.
+    (k) *`xml-schedule-emptied`* is raised as `xml-table-emptied` is (items 26, 41): once per
+    emptying, under the guard, re-armed by a schedule statement that names a race.
+    (l) *The re-baseline* removes under the same guard and counts every `tcp` delivery that named
+    the Phase (item 38 (l)). An event re-baseline sends each `phase.deleted` before its
+    `scope.replaced`; a Phase re-baseline whose read removes its own Phase sends the
+    `phase.deleted` and no `scope.replaced` and answers `200` with `attempts: 0`.
+    Evidence: E1, the P3c sweep part 4 (a): no race left the schedule in any of the seven
+    recordings (one fixed set per recording over 2,032 distinct snapshots; every TCP `Schedule`
+    message names the same set), and no snapshot has an empty schedule. So nothing recorded
+    moves; the rule rests on upstream's whole-file rewrite. Client duties move (CLIENT-OBLIGATIONS:
+    remove a Phase with what it holds, on site and on live; live-mini-server's Phase `DELETE`).
+    Reopens on a recording of a race leaving the schedule that these defaults present wrongly.

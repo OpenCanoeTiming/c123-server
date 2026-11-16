@@ -383,3 +383,103 @@ surface. That question is settled as the admin log (2026-11-12), and nothing her
 official or a spectator sees, so it is recorded as a default (`DERIVATIONS.md` §10 item 41 (c)).
 It reopens if an operator misses an emptied table because every read of it was older than TCP's
 last delivery of the race.
+
+## Revision 9 — a Phase that leaves the schedule is removed (decided 2026-11-16, written the same day)
+
+**Decision (maintainer, 2026-11-16, relayed by the planner session: "Both yes, as recommended").**
+The recommendation answered: "Yes: remove it. It follows directly from your decision on
+competitors (what is removed in Canoe123 is removed here too) and from 'Canoe123 is right'. The
+safeguard is the same: only from an admitted XML snapshot, with the content-age check. An empty
+table does not count as a removal." The question was a race that disappears from Canoe123's
+schedule (deleted, or its `RaceId` rebuilt after a `ClassId` rename): until now the server kept
+it as last stated, and a deleted second run of a class went on pairing with the first run
+(`DERIVATIONS.md` §10 item 49 (c), the known gap). The decision names `phase.deleted` for clients
+and `DELETE` to live through the bridge.
+
+**Why.** It is Revision 6's reasoning one level up. Upstream rewrites the file whole from its
+current tables at every save, so a race its schedule no longer names no longer exists upstream.
+Kept, its Phase is a ghost: a race on every selector, a first run naming a second run that is not
+scheduled, a `pair` standing of nothing.
+
+**The rule** (`CONTRACTS.md` §2.4, §4 INV-7, §7.1, §7.2, §8.3, §8.4; `DERIVATIONS.md` §2.1,
+§4.12, §10 item 54). The decision fixes the trigger, the guard and the empty-table case; the rest
+are defaults taken inside it, by analogy with Revisions 6 and 7:
+1. **The trigger is the snapshot's schedule:** the races its `Schedule` table names, the
+   staged-without-race placeholder and the pseudo-class `NA` excluded (`DERIVATIONS.md` §0.4). A
+   Phase no schedule row of an admitted snapshot names is removed. The race's results table is
+   not the trigger: a race the schedule names with no result row is an emptied table (Revision
+   5 rule 5), not a removal.
+2. **Only a Phase an XML snapshot's schedule has named is removed.** A Phase only TCP has named
+   (its `Results`, `Schedule` or an on-course listing; no XML configured, or a file that lags) is
+   TCP's, as an Attempt only the stream named is (Revision 6 rule 1). TCP's own `Schedule` never
+   removes, as TCP's absent row never removes (Revision 6 rule 3).
+3. **The guard is decision 4's, over the whole Phase.** The snapshot is admitted for the Phase
+   when its `changedAfter` is later than the latest delivery of every `tcp` observation of the
+   Phase or of any Attempt of it: a TCP `Schedule` naming it, a `Results` message of it, an
+   on-course listing of one of its Attempts. `null` never qualifies, and a Phase one of whose
+   Attempts is in the on-course set is never removed. Where the snapshot is not admitted, nothing
+   of the Phase moves: a race the file does not name is a snapshot of another race for its
+   Attempts and states nothing of them (INV-1); a later snapshot settles the removal.
+4. **An empty schedule removes nothing.** A snapshot whose schedule names no race, a file that
+   names no race included (`DERIVATIONS.md` §0.3, "valid and empty"), removes no Phase. Where the
+   guard would have admitted the removal of at least one Phase, the core raises
+   `xml-schedule-emptied`, ingest-only like `xml-table-emptied`: the admin log, never
+   `GET /api/diagnostics`, once per emptying. If the event really was emptied, the operator
+   starts a new event.
+5. **What the removal does, in one unit.** A pending `WriteRequest` of any of its Attempts
+   resolves `mismatched` without `confirmedValue`, before the removal (Revision 6 rule 4). Then
+   the Phase is gone from every read, with every Attempt of it, its classification rows and the
+   `decidedIn` kept for them, every diagnostic of it or of its Attempts, and every Standing whose
+   scope names it: `phase`, `heat`, `classification`, a `pair` on either side, the whole class
+   and every age category. On site that is **one `phase.deleted { phaseId }`**, the only message
+   for the Phase, its Attempts and those Standings in the unit: no `attempt.deleted`, no
+   `standing.updated`, no `check.updated` for them. Checks and flags stay in the store, keyed by
+   `attemptId` (Revision 7 rule 4). The Class, its Entries and the Courses stay. To live the
+   bridge sends `DELETE /ingest/v2/phases/{phaseId}`, and no `DELETE` per Attempt.
+6. **What follows from it in the same unit.** A first run whose sibling was the removed Phase
+   has its `pair` derived again (`DERIVATIONS.md` §10 item 49 (a)), `null` or another second run,
+   sent as `phase.updated` after the `phase.deleted`. A second run whose first run was removed
+   gets the sibling the snapshot's schedule gives it, as the parser states it from that schedule;
+   its `pair` standing, whose scope named the removed Phase, went with the `phase.deleted` and is
+   published again from its first entry once a first run is named.
+7. **A Phase that returns** is created again, whole, by the ordinary rule: the first message for
+   its id carries the whole resource, its `date` is the snapshot's (a new Phase, so INV-5's
+   once-only date starts again), its Attempts are created by their rows, `run` 1, carrying none
+   of the removed ones' result state, and the checks and flags of each returning `attemptId` are
+   served again and pushed (`DERIVATIONS.md` §10 item 38 (g), (m)).
+8. **The re-baseline.** Its read is a snapshot like any other, so its schedule removes under the
+   same guard, which still counts every `tcp` delivery that named the Phase (step 1 discards
+   result values, not identities; `DERIVATIONS.md` §10 item 38 (l)). An event re-baseline sends
+   each `phase.deleted` before its `scope.replaced`, which carries none of the removed Phases'
+   Attempts or Standings. A Phase re-baseline whose read removes its Phase sends the
+   `phase.deleted` and no `scope.replaced`, and answers `200` with `attempts: 0`; a later
+   re-baseline of that `phaseId` is `404 phase-not-found`.
+9. **Unchanged:** `Phase.status` `cancelled` is upstream's status of a race that stays in the
+   schedule, and nothing infers a removal from it or it from a removal; an Attempt's removal
+   (Revisions 6 and 7) is unchanged for a Phase that stays.
+
+**Example.** `K1M_BR1_6` and `K1M_BR2_6` are scheduled; the first run names the second as its
+sibling. The operator deletes the second run. The next save, content age 09:10:00, later than
+every TCP delivery naming `K1M_BR2_6`, schedules `K1M_BR1_6` alone. In that unit `K1M_BR2_6` is
+removed (one `phase.deleted`, its Attempts and its `phase` and `pair` standings with it), and
+`K1M_BR1_6` follows with a `phase.updated` whose `pair.siblingPhaseId` is `null`.
+
+**What it costs.** One wire message on each tier and one live endpoint; client duties to remove a
+Phase with what it holds. A file pointed at the wrong event, read while TCP is quiet, removes every
+Phase TCP is not naming, as it would every Attempt (Revision 6); TCP's next mention recreates a
+live race, and the operator's remedy is the right file. A rename shows the old Phase removed and
+the rebuilt one created, which is what upstream did. The guard can hold a removal back while TCP
+keeps naming the race; TCP's `Schedule` names every race of the event in each message in every
+recording, so a race deleted upstream drops out of it at once (E1, the P3c sweep part 4).
+
+**Evidence.** No recording holds a race leaving the schedule (E1, the P3c sweep part 4 (a): one
+fixed race set per recording in all 2,032 distinct snapshots and in every TCP `Schedule`
+message; no snapshot with an empty schedule). The rule rests on upstream's whole-file rewrite
+(observed upstream behaviour, Revision 5).
+
+**Vectors.** Four are added: `phase-removed-when-schedule-omits-it`,
+`phase-kept-when-schedule-table-empty`, `phase-removal-refused-by-guard` and
+`phase-removed-then-returns`. They use the vector format's new `schedule` element
+(`CONFORMANCE-VECTORS.md` §1), which the harness adapter learns with the core change (M2 P3c).
+All but the second are on the expected-red ledger until then; the second passes on today's core,
+which removes no Phase.

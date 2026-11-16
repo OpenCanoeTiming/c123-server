@@ -52,8 +52,8 @@ as recorded), the INV-2d lift, placement only when ranked, no standing re-send o
 fields provisional while run 2 runs, `status` never provisional, an Attempt unstaged before its start,
 and a first-run row wiped in place (the recorded jury re-run).
 
-**117 vectors:** 103 merge vectors, 9 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
-needed, not a target. **c123-server runs 111 of them, live-mini-server 24** (§1, "Which vectors each
+**121 vectors:** 107 merge vectors, 9 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
+needed, not a target. **c123-server runs 115 of them, live-mini-server 24** (§1, "Which vectors each
 component runs"); 18 run in both suites.
 
 **Since then** the file has changed with the contract rounds from 14 on and with #314;
@@ -143,6 +143,14 @@ Each vector has:
   (`DERIVATIONS.md` §4.10, which also keeps `decidedIn` across a TCP row's `null`); on site it is
   the only element that carries classification rows, the `push: 'classification'` element being
   the live tier's.
+- **Schedule statements** (INV-7, a Phase's removal; `DECISIONS/ADR-015` Revision 9).
+  `{ ingestSeq, schedule: { source: 'xml', phaseIds: string[] }, observedAt }` states the races an
+  XML snapshot's `Schedule` table names (`DERIVATIONS.md` §0.3). It is a unit of its own, like a
+  scope snapshot, and its content age is a scope snapshot's: the latest preceding
+  `xml-rewrite-detected`'s `changedAfter`. In a vector it precedes the race snapshots of the same
+  read. A Phase that some schedule statement has named and a later admitted one does not is
+  removed; `phaseIds: []` is a schedule with no race and removes nothing. A schedule statement
+  names its Phases for the adapter's convention below, as a scope snapshot does.
 - **On-course listing.** An observation with `field: 'onCourse'` and
   `value: { dtStart, dtFinish }` states what the on-course stream lists for the Attempt (INV-2d,
   `DERIVATIONS.md` §4.11: a changed `dtStart` is the generation trigger or a start correction by
@@ -180,7 +188,8 @@ Each vector has:
   and parses no identifier (`CONTRACTS.md` §1.1). The same convention describes a Phase no element
   has described, and it is the harness adapter's alone, never a merge's. For each of `classId`,
   `format` and `pair`, a Phase whose first unit carries no element of that field has it stated by
-  the adapter in that unit, as an element like any other:
+  the adapter in that unit, as an element like any other; a Phase that returns after its removal
+  is a new Phase, and the unit that names it again is its first unit:
   - `classId` is the part of the id before the format token;
   - `format` is the id's token;
   - `pair` is the token's role and combination (`CONTRACTS.md` §2.4). For a second run,
@@ -245,7 +254,7 @@ Each vector has:
 **Which vectors each component runs.** Each component feeds its own merge function through a thin
 adapter (`TEST-ARCHITECTURE.md` §3.1); the sets overlap, and each suite asserts its own count.
 
-**c123-server runs 111: every vector not tagged `live-ingest`.** The tag is the rule; apart from it,
+**c123-server runs 115: every vector not tagged `live-ingest`.** The tag is the rule; apart from it,
 every merge vector is on-site material (`tcp`, `xml` and `operator-write` observations, the
 source-less `unavailable` observation, connection and operator events, scope snapshots and
 on-course listings), and all 9 `standing-assembly` and all 5 `workflow-state` vectors are the
@@ -364,7 +373,7 @@ check, readable under its own `run`) is not asserted.
 | INV-2 rule 1, `gates` cell-wise | `gates-blank-result-cell-keeps-judged-oncourse-cell`, `gates-result-vector-authoritative-after-leaving` | 2 |
 | INV-2 rule 2 exception (marks on silent paths) | `left-without-finish-then-mark-from-xml`, `xml-mark-does-not-override-tcp-finish`, `inv2-rule2-refused-xml-mark-shows-no-outcome`, `cross-time-trial-left-without-finish-then-mark-from-xml` | 4 |
 | `left-without-finish` (slalom and the Kayak Cross time trial) | `left-without-finish-observed-not-dnf`, `cross-time-trial-left-without-finish` | 2 |
-| INV-7 (retraction) | `retraction-vanished-row-first-run`, `-dns-cleared-then-races`, `-start-list-mode-clears-all`, `-does-not-touch-inference`, `-second-run-time-empty-keeps-placement`, `-from-xml-row-cleared`, `-first-run-row-present-empty`; an absent XML row and a wholly empty XML table: `retraction-xml-absent-row`, `-xml-empty-table-retracts-nothing`, `-xml-absent-row-then-returns`; the removal: `attempt-removed-xml-absent-start-list-row`, `attempt-removed-not-while-on-course`, and none while a row carries the bib: `attempt-kept-when-bib-stays-under-another-entry`; the guard: `retraction-xml-guard-rewrite-before-push`, `retraction-xml-absent-row-guard`, `inv7-guard-against-redelivered-tcp-row`; a TCP absent-row retraction leaves no `tcp` marker on an XML-only field: `retraction-tcp-absent-row-leaves-no-tcp-marker-on-counting-run` | 17 |
+| INV-7 (retraction) | `retraction-vanished-row-first-run`, `-dns-cleared-then-races`, `-start-list-mode-clears-all`, `-does-not-touch-inference`, `-second-run-time-empty-keeps-placement`, `-from-xml-row-cleared`, `-first-run-row-present-empty`; an absent XML row and a wholly empty XML table: `retraction-xml-absent-row`, `-xml-empty-table-retracts-nothing`, `-xml-absent-row-then-returns`; the removal: `attempt-removed-xml-absent-start-list-row`, `attempt-removed-not-while-on-course`, and none while a row carries the bib: `attempt-kept-when-bib-stays-under-another-entry`; the guard: `retraction-xml-guard-rewrite-before-push`, `retraction-xml-absent-row-guard`, `inv7-guard-against-redelivered-tcp-row`; a TCP absent-row retraction leaves no `tcp` marker on an XML-only field: `retraction-tcp-absent-row-leaves-no-tcp-marker-on-counting-run`; a Phase whose race leaves the schedule: `phase-removed-when-schedule-omits-it`, `phase-kept-when-schedule-table-empty`, `phase-removal-refused-by-guard`, `phase-removed-then-returns` | 21 |
 | INV-1 against retraction (omission is not absence) | `retraction-not-from-fragment`, `retraction-not-in-other-race-snapshot` | 2 |
 | INV-2d (contradiction by the on-course stream; the lift) | `contradiction-oncourse-running-again`, `contradiction-lift-keeps-stale-rows-unpresented`, `contradiction-leaves-no-tcp-marker-on-xml-only-field` | 3 |
 | Marks over time; half-corrections | `status-overrides-time`, `half-correction-snapshot-duplicate-finish` | 2 |
@@ -433,6 +442,24 @@ is slalom's) are on the ledger until the core change of M2 P3c (`src/core/oncour
   while TCP is connected (INV-2 rule 2's exception).
 - `cross-time-trial-unstaged-leave-returns-to-not-started`: a staged time-trial athlete who leaves
   before a start is `not-started` (today's core keeps `at-start`).
+
+Three vectors of the maintainer's Phase-removal decision (2026-11-16, `DECISIONS/ADR-015`
+Revision 9) are on the ledger until the core change of M2 P3c, which also teaches the harness
+adapter the `schedule` element (§1: it names its Phases for the adapter's convention, and a
+returning Phase's unit is its first). A removal is asserted through `phase.deleted` and
+`attempts`; no key lists the Phases a store holds, and the reads of a removed Phase are a core
+test's:
+- `phase-removed-when-schedule-omits-it`: a second run the next admitted save no longer
+  schedules is removed with its Attempt, one `phase.deleted` and no `attempt.deleted`, and one
+  `phase.updated` carries the first run's `pair`, derived again (its value, `siblingPhaseId`
+  `null`, is a structural field no `expect` reads as an envelope; a core test pins it).
+- `phase-removal-refused-by-guard`: a save older than TCP's push of the race removes nothing;
+  the next one removes the Phase.
+- `phase-removed-then-returns`: a removed Phase scheduled again with a row is a new Phase, its
+  Attempt created `run` 1 from the row.
+
+A fourth, `phase-kept-when-schedule-table-empty` (a save whose schedule names no race removes
+nothing), passes on today's core, which removes no Phase, and was never on the ledger.
 
 The reshape of `two-run-br1-unavailable-no-live-no-xml` (§1, `context.xml`: `'not-configured'`)
 is done (#337).
