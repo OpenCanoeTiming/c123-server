@@ -132,14 +132,15 @@ describe('#287 item 49 (a), row 10: the TCP path through the tracker and the cor
 });
 
 describe('#287 item 49 (b): a second run names a first run only while the two Phases\' classId are equal', () => {
-  it('O1, two snapshots (CONTRACTS §2.4 rename example): K1M_BR2_19 stays class K1M and keeps naming K1M_BR1_19, the first run is renamed K1M-X: it presents K1M-X_BR2_19', () => {
+  it('O1, two snapshots (CONTRACTS §2.4 rename example, DERIVATIONS §2.1, §10 item 54): the second save schedules K1M-X_BR2_19 and not K1M_BR2_19: the old second run is removed in that unit, the first run is renamed K1M-X and presents K1M-X_BR2_19', () => {
     const p = pipeline();
     p.xml([R('K1M_BR1_19', 'K1M', 'BR1', '2026-09-19'), R('K1M_BR2_19', 'K1M', 'BR2', '2026-09-19')]);
     expect(p.sibling('K1M_BR1_19'), 'precondition: before the rename the first run names K1M_BR2_19').toBe('K1M_BR2_19');
     const from = p.xml([R('K1M_BR1_19', 'K1M-X', 'BR1', '2026-09-19'), R('K1M-X_BR2_19', 'K1M-X', 'BR2', '2026-09-19')]);
-    expect(p.core.phase('K1M_BR1_19')['classId'], 'precondition: the first run is now K1M-X').toBe('K1M-X');
-    expect(p.core.phase('K1M_BR2_19')['classId'], 'precondition: the stale second run is still in the core, class K1M').toBe('K1M');
-    expect(p.sibling('K1M_BR2_19'), 'precondition: and still names the first run').toBe('K1M_BR1_19');
+    const unit = p.core.notifications().slice(from) as Array<Record<string, any>>;
+    expect(p.core.phase('K1M_BR1_19')['classId'], 'the first run is now K1M-X').toBe('K1M-X');
+    expect(unit.filter((m) => m['type'] === 'phase.deleted').map((m) => m['phaseId']), 'the admitted save no longer schedules K1M_BR2_19: removed').toEqual(['K1M_BR2_19']);
+    expect(p.core.phaseIds(), 'gone from the core').not.toContain('K1M_BR2_19');
     expect(p.sibling('K1M-X_BR2_19')).toBe('K1M_BR1_19');
     expect(p.sibling('K1M_BR1_19')).toBe('K1M-X_BR2_19');
     expect(JSON.stringify(phaseUpdates(p, from, 'K1M_BR1_19').at(-1)?.['fields']?.['pair']), 'the change is notified in that snapshot\'s unit').toContain('K1M-X_BR2_19');

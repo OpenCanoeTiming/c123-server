@@ -381,7 +381,8 @@ describe('#382 row 11: a removed classification Phase takes its rows and kept de
     expect(ofType(msgsOf(c, m), 'phase.deleted').map((x) => x['phaseId'])).toEqual([X]);
     expect(keys(c), 'the classification Standing went with it').not.toContain(`classification:${X}/all`);
 
-    c.applyUnit(w.read(400, 390, [A, X], w.snap('xml', X, 400, [], 'start-list')));
+    // a returning Phase is new: the read states its class as an upstream XML does (CONTRACTS §2.7 holds a Standing until the Phase has one)
+    c.applyUnit(w.read(400, 390, [A, X], [w.obs('xml', 400, { phaseId: X }, 'classId', 'MX1')], w.snap('xml', X, 400, [], 'start-list')));
     const m2 = c.notifications().length;
     c.applyUnit([w.snap('tcp', X, 500, [crow(null)], 'results')]);
     const rows = sentFor(m2);
