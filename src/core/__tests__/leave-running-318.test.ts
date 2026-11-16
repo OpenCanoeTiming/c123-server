@@ -43,8 +43,8 @@ const listing = (race: string, bib: number, ms: number, over: Record<string, unk
   return tcpUnit(msg(plus(T0, ms), edit ? edit(text) : text), DAYS, { courses: {} });
 };
 const noGates = (t: string): string => t.replace(/ Gates="[^"]*"/, '');
-const row = (race: string, ms: number, result: string): Unit =>
-  tcpUnit(msg(plus(T0, ms), `<Canoe123 System="Main"><Results RaceId="${race}" ClassId="K1M" Current="Y" MainTitle="K1M" SubTitle="1st Run"><Row Number="1"><Participant Bib="  ${X}" Id="5151.K1M" Name="TESTER Hand" Club="TJ Test" Nat="" GivenName="Hand" FamilyName="TESTER" StartOrder="${X}" StartTime="11:59:00" /><Result Type="T" HeatNr="0" Q="" ${result} Behind="" PP="" /></Row></Results></Canoe123>`), DAYS, { courses: {} });
+const row = (race: string, ms: number, result: string, over: Record<string, unknown> = { courses: {} }): Unit =>
+  tcpUnit(msg(plus(T0, ms), `<Canoe123 System="Main"><Results RaceId="${race}" ClassId="K1M" Current="Y" MainTitle="K1M" SubTitle="1st Run"><Row Number="1"><Participant Bib="  ${X}" Id="5151.K1M" Name="TESTER Hand" Club="TJ Test" Nat="" GivenName="Hand" FamilyName="TESTER" StartOrder="${X}" StartTime="11:59:00" /><Result Type="T" HeatNr="0" Q="" ${result} Behind="" PP="" /></Row></Results></Canoe123>`), DAYS, over);
 const FINISHED_ROW = 'IRM="" Pen="0" Gates="" Time="21.00" Total="21.00" Rank="1" RankOrder="1"';
 
 /** Y listed beside X, X listed `running` at 17 s (a start, no finish). Returns the core and the ids. */
@@ -234,9 +234,11 @@ describe('item 51 (DERIVATIONS §10 item 51, §4.1 withdrawal bullet, §4.4 "Run
     step(c, sl(5000, { ...base, time: '85.00', gates: cells(13, 1) }), ids);
     expect(dur(c, xid), 'recomputed like a first finish').toEqual({ kind: 'duration', runSeconds: 85, penaltySeconds: 2, totalSeconds: 87 });
     // 5. a TCP row with a blank cell: provisional; a finish listing with Y settles it
-    const row = { ingestSeq: 0, observedAt: plus(T0, 5500), snapshot: { source: 'tcp', phaseId: SLALOM, mode: 'results', rows: [{ bib: String(X), outcome: { kind: 'duration', runSeconds: 85, penaltySeconds: 2, totalSeconds: 87 }, gates: [{ number: 1, penalty: 2 }, { number: 20, penalty: null }], placement: { rank: 4, order: 4 }, judgingComplete: false }] } };
+    // the TCP Results row, parsed with the bound 23-gate course: gate 1 two seconds, gates 2-13 clean, gates 14-23 (20 included) blank
+    const gatesAttr = ['  2', ...Array(12).fill('  0'), ...Array(10).fill('   ')].join('');
+    const rowUnit = row(SLALOM, 5500, `IRM="" Pen="2" Gates="${gatesAttr}" Time="85.00" Total="87.00" Rank="4" RankOrder="4"`, {});
     expect(cells(13, 1).split(',')[19], 'precondition: the row\'s blank (gate 20) is not judged by the stream').toBe('');
-    step(c, [row as never], ids);
+    step(c, rowUnit, ids);
     expect(f(c, xid, 'gates'), 'the blank cell is provisional while the run is open').toMatchObject({ provisional: true });
     step(c, sl(6000, { ...base, time: '85.00', completed: true, gates: cells(13, 1) }), ids);
     expect(f(c, xid, 'gates'), 'the new finish\'s own Y closes the run').toMatchObject({ provisional: false });
