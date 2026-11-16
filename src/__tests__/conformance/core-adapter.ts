@@ -50,28 +50,63 @@ export function createMergePort(context: VectorContext): MergePort {
 }
 
 /**
- * CONFORMANCE-VECTORS §1 (round 27d-2), the harness's alone: a Phase first observed with no `classId` element gets the id's class part
- * (the part before the format token) as its `classId`, stated in that unit. The core and the parsers never derive a class from an id.
+ * CONFORMANCE-VECTORS §1 (round 27d-2; #287), the harness's alone: a Phase whose first unit carries no element of `classId`, `format` or `pair` has it
+ * stated by the adapter in that unit, as a `tcp` result-row element like any other. The core and the parsers never derive any of the three from an id.
+ *   - `classId` is the part of the id before the format token;
+ *   - `format` is the id's token (or, for `pair`, the format the unit states);
+ *   - `pair` is the token's role and combination (`CONTRACTS.md` §2.4). A second run names the id that carries its first run's token in the token's place,
+ *     whether or not the vector holds that Phase. A first run states `siblingPhaseId: null`: its sibling is the core's own derivation, the inverse of the second runs'
+ *     stated pairs (DERIVATIONS §10 item 48; review N12 of PR #375), so a vector exercises that derivation and the adapter builds no first-run pointer.
+ *     A single run states `pair: null`.
+ * The one place anything builds an id, which a vector's regular ids allow.
  */
+const PAIR_TOKENS: Record<string, { role: 'first' | 'second'; other: string; combination: 'best' | 'sum' }> = {
+  BR1: { role: 'first', other: 'BR2', combination: 'best' }, BR2: { role: 'second', other: 'BR1', combination: 'best' },
+  HT1: { role: 'first', other: 'HT2', combination: 'best' }, HT2: { role: 'second', other: 'HT1', combination: 'best' },
+  EL1: { role: 'first', other: 'EL2', combination: 'best' }, EL2: { role: 'second', other: 'EL1', combination: 'best' },
+  TR1: { role: 'first', other: 'TR2', combination: 'best' }, TR2: { role: 'second', other: 'TR1', combination: 'best' },
+  SR1: { role: 'first', other: 'SR2', combination: 'sum' }, SR2: { role: 'second', other: 'SR1', combination: 'sum' },
+  TS1: { role: 'first', other: 'TS2', combination: 'sum' }, TS2: { role: 'second', other: 'TS1', combination: 'sum' },
+  SUF: { role: 'second', other: 'BR2', combination: 'sum' },
+};
 function withConventionalClass(port: MergePort): MergePort {
   const seen = new Set<string>();
   const applyUnit = port.applyUnit.bind(port);
   port.applyUnit = (elements) => {
     const named = new Set<string>();
-    const stated = new Set<string>();
+    const stated = new Map<string, Set<string>>();
+    const statedFormat = new Map<string, string>();
     for (const e of elements) {
       const snapshot = e['snapshot'] as { phaseId?: unknown } | undefined;
       const ids = [e['phaseId'], snapshot?.phaseId, typeof e['attemptId'] === 'string' ? e['attemptId'].slice(0, e['attemptId'].lastIndexOf(':')) : undefined];
       for (const id of ids) if (typeof id === 'string' && id !== '') named.add(id);
-      if (e['field'] === 'classId' && typeof e['phaseId'] === 'string') stated.add(e['phaseId']);
+      if (typeof e['field'] === 'string' && typeof e['phaseId'] === 'string') {
+        stated.set(e['phaseId'], (stated.get(e['phaseId']) ?? new Set()).add(e['field']));
+        if (e['field'] === 'format' && typeof e['value'] === 'string') statedFormat.set(e['phaseId'], e['value']);
+      }
     }
     const first = elements[0];
     const added: GivenElement[] = [];
+    const state = (phaseId: string, field: string, value: unknown): void => {
+      added.push({ ingestSeq: 0, phaseId, field, source: 'tcp', kind: 'result-row', observedAt: first!['observedAt'], value, confidence: 'authoritative' } as GivenElement);
+    };
     for (const phaseId of named) {
       if (seen.has(phaseId)) continue;
       seen.add(phaseId);
-      if (stated.has(phaseId) || first === undefined) continue;
-      added.push({ ingestSeq: 0, phaseId, field: 'classId', source: 'tcp', kind: 'result-row', observedAt: first['observedAt'], value: splitRaceId(phaseId).classKey } as GivenElement);
+      if (first === undefined) continue;
+      const has = stated.get(phaseId) ?? new Set<string>();
+      const { classKey, token, rest } = splitRaceId(phaseId);
+      if (!has.has('classId')) state(phaseId, 'classId', classKey);
+      if (!has.has('format')) state(phaseId, 'format', token);
+      if (!has.has('pair')) {
+        const row = PAIR_TOKENS[statedFormat.get(phaseId) ?? token];
+        if (row === undefined) state(phaseId, 'pair', null);
+        else {
+          const otherId = `${classKey}_${row.other}_${rest}`;
+          const sibling = row.role === 'second' ? otherId : null;
+          state(phaseId, 'pair', { role: row.role, siblingPhaseId: sibling, combination: row.combination });
+        }
+      }
     }
     applyUnit([...added, ...elements]);
   };

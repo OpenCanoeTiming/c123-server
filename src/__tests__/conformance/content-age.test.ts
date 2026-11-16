@@ -148,7 +148,7 @@ describe('harness content age (CONFORMANCE-VECTORS §1 "Content age", round 18)'
   });
 });
 
-describe('vector inv2c-first-read-unknown-age-refused (CONFORMANCE-VECTORS round-18 note; #253 row 19)', () => {
+describe('vector inv2c-first-read-unknown-age-refused (DECISIONS/LOG.md, the round-18 note on the unknown-age first read; #253 row 19)', () => {
   const v = loadVectors().find((x) => x.id === 'inv2c-first-read-unknown-age-refused');
   it('exists, is a server vector, and is in the ledger', () => {
     expect(v).toBeDefined();

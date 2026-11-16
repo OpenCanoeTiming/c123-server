@@ -392,3 +392,9 @@ above:
   otherwise; a client takes structure from `Phase.pair` as before (CONTRACTS §2.4);
 - `xml-table-emptied` is raised under the content-age guard; it stays in the admin log and
   reaches no client (CONTRACTS §4; ADR-015).
+
+The review of #287's code (PR #376, 2026-11-16; `DECISIONS/LOG.md`) took one more default on
+pairing. It changed cited sections and moved no obligation above:
+- the server derives a first run's `pair.siblingPhaseId` from the second runs of the first
+  run's class, and a Phase whose race has left the schedule stays as last stated; a client
+  reads `Phase.pair` as before, and the sibling may be `null` (DERIVATIONS §2.1).

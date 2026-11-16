@@ -138,12 +138,12 @@ export interface ResourceState {
   sent: Map<string, string>;
   /** Phase only: the snapshot has assigned `date` (INV-5). */
   dateFixed?: boolean;
-  /** Phase only: a source stated `pair`; until then it is the token's lookup, which names no sibling (§2.1). */
-  pairStated?: boolean;
   /** Phase only: the attempts of this race. */
   attempts?: Set<AttemptState>;
   /** Phase only: the race's XML table has carried a row since it was last reported emptied, or it was emptied and reported (§4.12). */
   xmlTable?: 'rows' | 'emptied';
+  /** Phase only, a first run: its sibling, the second run that names it back (DERIVATIONS §10 item 48); `null` where none does. */
+  derivedSibling?: string | null;
 }
 
 /**

@@ -29,7 +29,6 @@ export function phaseResource(s: CoreState, phaseId: string, observedAt: string)
     p.plain.set('kind', fmt.kind);
     p.plain.set('scoringKind', fmt.scoringKind);
     p.plain.set('heats', fmt.heats);
-    p.plain.set('pair', fmt.pair === null ? null : { role: fmt.pair.role, siblingPhaseId: null, combination: fmt.pair.combination });
     s.dirtyPhases.add(p);
   }
   return p;
@@ -41,13 +40,72 @@ export function fmtFor(s: CoreState, phaseId: string): Fmt {
   return fmtOf(typeof stated === 'string' ? stated : splitRaceId(phaseId).token);
 }
 
-/** The other run of a pair: the schedule's word where it was read, else the sibling format token on the same class and round (§4.5). */
+type StatedPair = { role?: string; siblingPhaseId?: string | null } | null | undefined;
+const statedPair = (r: ResourceState | undefined): StatedPair => r?.plain.get('pair') as StatedPair;
+
+/**
+ * The other run of a pair (CONTRACTS §2.4); the id is never built or parsed for it. One rule, by the Phase's run role (`fmtFor`):
+ *   - a second run: the sibling its `pair` states;
+ *   - a first run: derived, the second run that names it back, unless both classIds are stated and differ (DERIVATIONS §10 items 48, 49); held by
+ *     `deriveFirstRunSiblings` for a described Phase, derived here for one the core has not created;
+ *   - a single run: none.
+ */
 export function siblingPhaseId(s: CoreState, phaseId: string): string | undefined {
-  const fmt = fmtFor(s, phaseId);
-  if (fmt.pair === null) return undefined;
-  const stated = s.phases.get(phaseId)?.plain.get('pair') as { siblingPhaseId?: string | null } | undefined;
-  const { classKey, rest } = splitRaceId(phaseId);
-  return stated?.siblingPhaseId ?? `${classKey}_${fmt.pair.siblings[0] ?? ''}_${rest}`;
+  const role = fmtFor(s, phaseId).pair?.role;
+  const r = s.phases.get(phaseId);
+  if (role === 'second') return statedPair(r)?.siblingPhaseId ?? undefined;
+  if (role !== 'first') return undefined;
+  if (r?.derivedSibling !== undefined) return r.derivedSibling ?? undefined;
+  return namedBack(s, phaseId, namingSecondRuns(s, true)) ?? undefined;
+}
+
+/**
+ * Each Phase named by a second run's stated pair, with the second runs naming it. `sameClass`: a second run stops naming a first run
+ * only when both Phases' current `classId` are stated and differ (item 49 b). Without it, every second run whose pair names the Phase (§7.2 scopes).
+ */
+export function namingSecondRuns(s: CoreState, sameClass: boolean): Map<string, string[]> {
+  const naming = new Map<string, string[]>();
+  for (const [id, r] of s.phases) {
+    const p = statedPair(r);
+    if (p?.role !== 'second' || typeof p.siblingPhaseId !== 'string') continue;
+    if (sameClass) {
+      const cls = r.plain.get('classId');
+      const firstCls = s.phases.get(p.siblingPhaseId)?.plain.get('classId');
+      if (typeof cls === 'string' && typeof firstCls === 'string' && cls !== firstCls) continue;
+    }
+    const list = naming.get(p.siblingPhaseId);
+    if (list === undefined) naming.set(p.siblingPhaseId, [id]);
+    else list.push(id);
+  }
+  return naming;
+}
+
+/** DERIVATIONS §10 item 48: the one second run naming the first run; where several do, the one on its day; else `null`. Candidates sorted. */
+function namedBack(s: CoreState, firstId: string, naming: ReadonlyMap<string, string[]>): string | null {
+  const candidates = [...(naming.get(firstId) ?? [])].sort();
+  if (candidates.length === 1) return candidates[0]!;
+  const day = s.phases.get(firstId)?.plain.get('date');
+  const sameDay = candidates.filter((c) => day !== undefined && s.phases.get(c)?.plain.get('date') === day);
+  return sameDay.length === 1 ? sameDay[0]! : null;
+}
+
+/** A first run's sibling, derived again for every first run; one whose sibling changed is marked, its Phase and its Attempts. */
+export function deriveFirstRunSiblings(s: CoreState): void {
+  const naming = namingSecondRuns(s, true);
+  for (const [id, r] of s.phases) {
+    if (fmtFor(s, id).pair?.role !== 'first') continue;
+    const pick = namedBack(s, id, naming);
+    if (r.derivedSibling === pick) continue;
+    r.derivedSibling = pick;
+    s.dirtyPhases.add(r);
+    for (const a of r.attempts ?? []) s.dirtyAttempts.add(a);
+  }
+}
+
+/** The sibling Phase's Attempt of the same bib, where a sibling is stated and the Attempt exists. */
+export function siblingAttempt(s: CoreState, phaseId: string, bib: string): AttemptState | undefined {
+  const sibling = siblingPhaseId(s, phaseId);
+  return sibling === undefined ? undefined : s.attempts.get(`${sibling}:${bib}`);
 }
 
 /** The course bound to a Phase, known only once a snapshot binds it (§4.6). */

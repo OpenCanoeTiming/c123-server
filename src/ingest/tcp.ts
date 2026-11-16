@@ -3,7 +3,7 @@ import {
   type CellProblem, type Node, UNASSIGNED, Unit, asArray, at, classificationRow, commaCells, isNaRace, faultsFromCells, fmtOf, gatesFromCells, int, judgingComplete, num, r3, readDoc,
   splitRaceId, sumJudged, unparseableUnit, usable, zonedInstant,
 } from './common.js';
-import { type Candidates, emitPhase } from './phase.js';
+import { type Candidates, emitPhase, learnedCandidates, pairOf } from './phase.js';
 import { type RowIn, buildRow, rowIsResult, splitsOf } from './rows.js';
 import type { IngestContext, IngestElement } from './types.js';
 
@@ -36,6 +36,12 @@ function results(u: Unit, ctx: IngestContext, res: Node): void {
   if (classId !== '' && classId !== 'NA') u.obs('result-row', 'discipline', { classId }, fmt.cross ? 'cross' : 'slalom', 'inferred');
   const rows = asArray(res['Row']);
   if (classId !== '' && classId !== 'NA') u.obs('result-row', 'classId', { phaseId }, classId);
+  // CONTRACTS §2.4: the class is the message's own where it states one, else what the context learned; the format token the learned one, else the id's
+  const learned = learnedCandidates(ctx);
+  const known = learned.get(phaseId);
+  const self = { classId: classId !== '' && classId !== 'NA' ? classId : known?.classId, token: known?.token ?? tokenOf(phaseId), date: ctx.phaseDates?.[phaseId] };
+  learned.set(phaseId, self);
+  u.obs('result-row', 'pair', { phaseId }, pairOf(phaseId, self, learned));
   for (const row of rows) {
     const p = row['Participant'] as Node | undefined;
     const entryId = at(p, 'Id');
@@ -178,8 +184,11 @@ function onCourse(u: Unit, ctx: IngestContext, oc: Node): void {
 
 function schedule(u: Unit, ctx: IngestContext, sc: Node): void {
   const races = asArray(sc['Race']).filter((r) => at(r, 'RaceId') !== UNASSIGNED && at(r, 'RaceId') !== '' && !isNaRace(at(r, 'RaceId')));
-  const candidates: Candidates = new Map(Object.entries(ctx.phaseDates ?? {}));
-  for (const r of races) candidates.set(at(r, 'RaceId'), ctx.phaseDates?.[at(r, 'RaceId')]);
+  const candidates: Candidates = learnedCandidates(ctx);
+  for (const r of races) {
+    const id = at(r, 'RaceId');
+    if (!candidates.has(id)) candidates.set(id, { classId: undefined, token: tokenOf(id), date: ctx.phaseDates?.[id] });
+  }
   for (const r of races) {
     const phaseId = at(r, 'RaceId');
     // TCP Schedule has no DisId, and its StartTime is always empty: neither is a source (§2.1)

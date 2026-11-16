@@ -7,7 +7,7 @@
 import type { Standing } from '@opencanoetiming/c123-contract';
 import { assembleStanding, type EntryInput } from './standing.js';
 import { isMark, present } from './precedence.js';
-import { fmtFor, siblingPhaseId } from './registry.js';
+import { fmtFor, namingSecondRuns, siblingPhaseId } from './registry.js';
 import type { AttemptState, CoreState, StandingFacts } from './types.js';
 
 type Enveloped = { state?: string; value?: unknown; provisional?: boolean } | undefined;
@@ -98,11 +98,8 @@ function ofPhase(s: CoreState, phaseId: string, asOf: string): Standing[] {
   };
   scoped('phase', { kind: 'phase', phaseId });
   if (fmt.pair?.role === 'second') {
-    // §5 step 1: the pair exists once `pair.siblingPhaseId` is known. A parser's `null` says the schedule has not named it; with no `pair`
-    // observed at all (a stream of snapshots alone, vector standing-not-resent-on-running-tick) the format token names the first run.
-    const phase = s.phases.get(phaseId);
-    const stated = phase?.plain.get('pair') as { siblingPhaseId?: string | null } | null | undefined;
-    const first = phase?.pairStated === true ? (stated?.siblingPhaseId ?? undefined) : siblingPhaseId(s, phaseId);
+    // §5 step 1: the pair exists once the stated `pair.siblingPhaseId` is non-null
+    const first = siblingPhaseId(s, phaseId);
     if (first !== undefined) scoped('pair', { kind: 'pair', firstPhaseId: first, secondPhaseId: phaseId });
   }
   if (fmt.heats) {
@@ -149,9 +146,11 @@ export function changedStandings(s: CoreState): Standing[] {
 /** `scope.replaced`: every Standing whose scope names a Phase of the re-baseline's scope, sent whole and recorded as sent. */
 export function replacedStandings(s: CoreState, scope: { kind?: string; phaseId?: string }): Standing[] {
   const phases = scope.kind === 'event' ? new Set([...s.phases.keys(), ...s.classifications.keys()]) : new Set(scope.phaseId === undefined ? [] : [scope.phaseId]);
+  // §7.2: every Standing whose scope names one of the scope's Phases, `pair` on either side: the pair standings of every second run naming it
+  const naming = namingSecondRuns(s, false);
   for (const id of [...phases]) {
-    const sibling = fmtFor(s, id).pair?.role === 'first' ? siblingPhaseId(s, id) : undefined;
-    if (sibling !== undefined && s.phases.has(sibling)) phases.add(sibling);
+    if (fmtFor(s, id).pair?.role !== 'first') continue;
+    for (const second of [...(naming.get(id) ?? [])].sort()) phases.add(second);
   }
   const out: Standing[] = [];
   for (const phaseId of phases) {

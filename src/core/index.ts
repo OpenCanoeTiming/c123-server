@@ -8,7 +8,7 @@
 import { applyListing, applyLeaveRule, leave, list, observeStreamOutcome, observeStreamStatus, oncourseView } from './oncourse.js';
 import { isMark } from './precedence.js';
 import { currentDiagnostics, flush } from './notify.js';
-import { phaseResource, attemptFor, fmtFor, resource } from './registry.js';
+import { phaseResource, attemptFor, deriveFirstRunSiblings, fmtFor, resource } from './registry.js';
 import { FIRST_RUN_FIELDS, PAIR_FIELDS, SECOND_RUN_EMPTY_FIELDS, absentRow, emptied, hasResult, retract } from './retraction.js';
 import { retain, fieldSlots, slotOf, tick } from './retention.js';
 import { applyRow, floorStatus, putCells, putIdentity, putStanding, rebindCells } from './rows.js';
@@ -334,6 +334,7 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
         s.xmlRead = true;
         for (const a of s.attempts.values()) s.dirtyAttempts.add(a);
       }
+      if (s.dirtyPhases.size > 0) deriveFirstRunSiblings(s);
       flush(s, xml);
       return derived;
     },

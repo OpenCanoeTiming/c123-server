@@ -159,7 +159,7 @@ describe('expected-red ledger and modes (issue #200 rows 3, 4, 5)', () => {
 });
 
 describe('harness can fail (issue #200 row 15)', () => {
-  it('a wrong port fails every vector: each of the 98 raises a wrong-answer mismatch, none passes vacuously', () => {
+  it('a wrong port fails every vector: each server vector raises a wrong-answer mismatch, none passes vacuously', () => {
     const port = wrongPort();
     const passed: string[] = [];
     const crashed: string[] = [];

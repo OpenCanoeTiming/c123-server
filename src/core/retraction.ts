@@ -6,7 +6,7 @@
 import { choose, newerContent, present, presentStatus, isMark, isNoResultMark } from './precedence.js';
 import { finishOf } from './presentation.js';
 import { fieldSlots, retain, slotOf } from './retention.js';
-import { fmtFor, isInstant, isXmlOnly, siblingPhaseId } from './registry.js';
+import { fmtFor, isInstant, isXmlOnly, siblingAttempt } from './registry.js';
 import { refuse } from './counters.js';
 import { timeOf, markOf } from './generations.js';
 import { displaceOperator } from './writes.js';
@@ -130,7 +130,7 @@ function remove(s: CoreState, a: AttemptState, el: Element): void {
   s.dirtyAttempts.delete(a);
   s.dirtyScopes.add(a.phaseId);
   // §4.5: a first run's `outcome` reads its second run's result
-  const first = fmtFor(s, a.phaseId).pair?.role === 'second' ? s.attempts.get(`${siblingPhaseId(s, a.phaseId)}:${a.bib}`) : undefined;
+  const first = fmtFor(s, a.phaseId).pair?.role === 'second' ? siblingAttempt(s, a.phaseId, a.bib) : undefined;
   if (first !== undefined) s.dirtyAttempts.add(first);
   for (const [k, d] of s.parserDiagnostics) {
     if (!('attemptId' in d) || d.attemptId !== a.id) continue;

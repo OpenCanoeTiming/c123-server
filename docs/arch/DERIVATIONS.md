@@ -177,6 +177,8 @@ refreshes is the core's to find (§2.3). The core owns everything that needs sta
   determination (§4.6);
 - the untimed flag's inheritance by a TCP row (§4.4);
 - the on-course set, the leave rule and `featuredByUpstream` (§4.1, §4.8);
+- a first run's `pair.siblingPhaseId`: the inverse of the second runs' stated pairs, which moves
+  when another Phase is stated, so no message about the first run can state it (§2.1; §10 item 49);
 - the splits-armed state (§2.3, §4.8), the cell merge (§4.6(e)), retraction and contradiction (§4.12),
   echo matching (§6), `provisional`, and the diagnostics that compare observations
   (`source-disagreement`, `contradicted-finish`, `duplicate-finish`, `stale-mark`);
@@ -279,7 +281,8 @@ the parser's four it reaches the admin log and never `GET /api/diagnostics`.
     `TR2`→`TR1`, `SR2`→`SR1`, `TS2`→`TS1`, `SUF`→`BR2`, `FI` and `FIB`→`SF`, `TFI`→`TSF`. For a
     first-run token (`BR1`, `HT1`, `EL1`, `TR1`, `SR1`, `TS1`) it is the second run that names
     this Phase, the inverse of that lookup and not a lookup of its own (a default, §10 item
-    48); `BR2`, `SF` and `TSF` are only named, and keep their own `pair`.
+    48; the core derives it, below); `BR2`, `SF` and `TSF` are only named, and keep their own
+    `pair`.
     This mirrors upstream's own lookup: by the schedule row's `ClassId` and a fixed token table,
     never by the `RaceId` string.
   - **The tiebreak is the day.** For a second run, one match is the sibling. With several,
@@ -292,6 +295,39 @@ the parser's four it reaches the admin log and never `GET /api/diagnostics`.
     instead, it finds two first runs and neither on its day: `null`, and so are both first
     runs. With a single `BR1` on the 19th and the `BR2` on the 20th, one matches: they pair
     across the days, each naming the other.
+  - **A first run's sibling is the core's to derive, not a parser's to state** (a default, §10
+    item 49). It is the inverse of what the second runs state, so it moves when another Phase
+    is stated, and no message about the first run can keep it current: on TCP a first run's
+    `Results` comes before its second run is known, and nothing states the first run again
+    (§0.5). So:
+    - a parser states a second run's sibling by the lookup above, over the Phase table in `ctx`;
+    - a parser states a first-run token's `pair` with its `role`, its `combination` and
+      `siblingPhaseId: null`, always, and the core reads no sibling stated for a first run;
+    - in every unit that changed a Phase, the core takes for each first run the second runs
+      whose stated `pair` names it, leaves out any whose stated `classId` differs from the
+      first run's (next bullet), applies the tiebreak above, and presents the result in the
+      first run's `pair` in that unit (`CONTRACTS.md` §1.6). The live tier takes the presented
+      `pair` in the Phase push (`CONTRACTS.md` §8.3) and derives nothing.
+  - **A second run whose class differs from the first run's does not name it.** `CONTRACTS.md`
+    §2.4's "the Phase with the same `classId`" is read on the two Phases' `classId` as they
+    stand at that step, not as they stood when the second run's `pair` was stated. *Example,*
+    §2.4's rename over two snapshots: first `K1M_BR1_19` and `K1M_BR2_19`, both of class `K1M`;
+    then `K1M_BR1_19` and `K1M-X_BR2_19`, both of class `K1M-X`. No later snapshot holds
+    `K1M_BR2_19`, so that Phase keeps what was last stated of it: class `K1M` and a `pair`
+    naming `K1M_BR1_19`. It no longer names the first run, whose class is now `K1M-X`, so the
+    first run's sibling is `K1M-X_BR2_19` and not a tie between the two. A Phase the schedule
+    no longer holds is not treated specially beyond that (a default, §10 item 49).
+  - **The class check needs both classes stated.** It looks for a statement gone stale, and
+    only a difference between two stated classes shows one. Whoever states a second run's
+    sibling has already applied the class rule: a parser names a first run only when it knows
+    the two classes are equal. So where the first run's class has not been stated, the second
+    run's `pair` is all there is, and it stands. That includes a Phase nothing has stated at
+    all. Being named makes it that second run's first run; no id is read to say so. It has no
+    `date`, so several second runs naming it leave `null`. There is no Phase to present it
+    on; it serves what reads across the pair (§4.5). This arises in the vectors, whose adapter
+    names a first run the vector may not hold (`two-run-br1-unavailable-no-live-no-xml`:
+    only `K1M_BR2_6` is described, and run 1's `outcome` is `unavailable{not-configured}`
+    through it). On site a parser names no first run whose class nothing has stated.
   - **No id is parsed or built.** The earlier reading, "the same class part of the id with the
     other token", fails after a class rename or a race moved to another class: the started first
     run keeps its old `RaceId` prefix, the second run's `ClassId` follows the change, and the two
@@ -1657,7 +1693,8 @@ the live side to item 25's closure, and added item 38, the defaults inside the r
 decision. Items 40 to 42, and item 38 (k) to (m), are defaults of 2026-11-15 from the reviews
 of M2 P3a, under the same rule. Items 43 to 48, and item 41 (c), are defaults of 2026-11-15
 from M2 P3b: the questions round C left open (#346), the rules that package's code needed
-(#300, #318), and one from the review of its text (item 48).
+(#300, #318), and one from the review of its text (item 48). Item 49 is a default of 2026-11-16
+from the review of #287's code (PR #376), under the same rule.
 
 1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
    hardware judge terminals on their own port and raises a flag on the scoring service for about
@@ -2234,3 +2271,43 @@ from M2 P3b: the questions round C left open (#346), the rules that package's co
     day pairs them and each names the other; cp3-cross has no pair. No client duty moves:
     `siblingPhaseId` is `null` wherever no pair is stated. Reopens on a recording where a
     class's first and second runs are not one of each per day.
+49. **Who derives a first run's sibling, and which second runs count** (review of PR #376, CQ1
+    and CQ2; M2 P3b, 2026-11-16). Item 48 says what a first run's `siblingPhaseId` is. It did
+    not say who computes it, or what a Phase that is no longer stated counts for.
+    (a) *The owner is the core* (§0.5, §2.1). The value is the inverse of other Phases' stated
+    pairs: it changes when a second run is stated, and on TCP a first run's `Results` precedes
+    its second run and is not sent again, so a parser, which sees one message, cannot keep it.
+    A parser states a first run's `pair` with `siblingPhaseId: null`, always, as the vectors'
+    adapter does (`CONFORMANCE-VECTORS.md` §1). The core derives the presented value in every
+    unit that changed a Phase and reads no sibling stated for a first run. That leaves one
+    implementation of item 48, not two that can disagree. `CONTRACTS.md` §5 step 1's "known
+    means stated on the Phase" is about the second Phase's sibling, which stays the parser's
+    statement.
+    (b) *A second run stops naming a first run when the two Phases' stated `classId` differ.*
+    This is `CONTRACTS.md` §2.4's class rule, read on the fields as they stand (E3, from the
+    text). It decides §2.4's own rename example once the rename is seen over two snapshots:
+    the Phase of the rebuilt id keeps its last stated class and `pair`, and without the rule
+    it would still name the first run and tie with the rebuilt second run (§2.1's example).
+    The check needs both classes stated. Where the first run's class has not been stated,
+    which includes a first run nothing has stated at all, the second run's `pair` stands: the
+    stater applied the class rule when it named the first run, and nothing stated since
+    contradicts it. Read as "an unknown class is not equal", the rule broke the vector
+    `two-run-br1-unavailable-no-live-no-xml`, whose first run no element describes; the
+    vector is unchanged and the adapter describes no further Phase.
+    (c) *A Phase the schedule no longer holds is not otherwise special-cased* (E4: no recording
+    holds a rename, a moved race or a deleted one). Nothing in the contract removes a Phase.
+    It stays as last stated, with its own `pair`; a standing of it that was published stays
+    published. Upstream rebuilds an id only while its race is at the initial status (§1), so
+    the Phase of a rebuilt id normally holds no result, and a `pair` standing that never had
+    an entry was never published.
+    What this default leaves wrong, stated: an old Phase that still has the first run's class
+    goes on naming it. That is a deleted second run, one moved to another class while the
+    first run stays, or one whose id was rebuilt for another reason (another day, if the id
+    follows the day, which is not established). The first run then names a Phase that is no
+    longer scheduled, or `null` where the old and a new second run both name it and the day
+    does not decide. The second run's own side is unaffected: a new Phase names its first run
+    by the lookup and has its `pair` standing.
+    No client duty moves: a client reads `Phase.pair` as before, and `siblingPhaseId` may be
+    `null`. Reopens on a recording where a race was deleted or moved, or an id rebuilt. The
+    remedy would be to remove a Phase that left the schedule, as an Attempt is removed (item
+    38); that changes the wire and is the maintainer's to decide.
