@@ -410,3 +410,9 @@ substance: the optimistic-write line now says that a write whose value the field
 presents arrives as `write.updated` alone. A client that renders `gates` as served and tracks
 writes by `WriteRequest` already behaves so; one that waited for a `gates` push per write would
 not. The PR is therefore not labelled `obligations-unchanged`.
+
+The review of #318's code (PR #379, 2026-11-16; `DECISIONS/LOG.md`) took one default on the
+on-course stream. It changed cited sections and moved no obligation above:
+- a stream finish withdrawn after upstream's `Completed` no longer keeps the run closed, so the
+  next finish's time and penalties are inferred afresh; a client shows `outcome` and
+  `provisional` as served (DERIVATIONS §4.1).

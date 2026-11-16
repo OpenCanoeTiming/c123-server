@@ -516,7 +516,9 @@ row (§4.12; `CONTRACTS.md` §2.6).
   recorded, §4.11; a rule, 0 in seven recordings), the next listing of the Attempt
   without a `dtFinish` withdraws it: `status` is what that listing shows (`at-start` with no `dtStart`, else
   `on-course`), the generation's finish and the `duration` inference are forgotten, no diagnostic
-  is raised (INV-2d is for a finish presented from the table). It applies wherever the stream lists
+  is raised (INV-2d is for a finish presented from the table). The closure a `Completed` on that
+  finish gave goes with it (§4.4; a default, §10 item 51): with no finish there is no result to
+  complete, so §4.3's stop (b) binds the next finish only from that finish's own `Y`. It applies wherever the stream lists
   finishes per competitor: slalom and the Cross time trial (`XT`, §4.4) alike; a Cross heat lists
   none (§4.2). Recorded: cp3-cross WX1_XT_26:25 — start 9:12:14.973 listed 07:12:16Z; the start
   deleted at 07:15:34 (`at-start`); a finish impulse with no start and no `Time` at 07:16:59
@@ -797,7 +799,8 @@ combined values.
   or a no-result mark presented — `Outcome`'s `no-result` set, so a refused
   mark closes nothing and `non-ranked`, a finished run, closes nothing: its blank cell is judged
   like any finisher's. Leaving the list is the set's closure (`CONTRACTS.md` §7.1); `Completed`
-  closes the run while it is still listed (`DECISIONS/ADR-017` Revision 5). A closure that flips `provisional` is a change of presented state
+  closes the run while it is still listed (`DECISIONS/ADR-017` Revision 5). A stream finish withdrawn
+  afterwards (§4.1) undoes the closure its `Y` gave, as a re-listing undoes a leave's (§10 item 51). A closure that flips `provisional` is a change of presented state
   and is pushed (`CONTRACTS.md` §7.2). An Attempt never listed is not closed by that alone: a row with
   a blank cell for it stays provisional until one of the three
   (`provisional-incomplete-judging-then-settles`; a past race's row that upstream left unjudged says
@@ -1727,7 +1730,8 @@ of M2 P3a, under the same rule. Items 43 to 48, and item 41 (c), are defaults of
 from M2 P3b: the questions round C left open (#346), the rules that package's code needed
 (#300, #318), and one from the review of its text (item 48). Item 49 is a default of 2026-11-16
 from the review of #287's code (PR #376), under the same rule, and item 50 one of the same day
-from #345's code (several writes pending at once).
+from #345's code (several writes pending at once). Item 51 is a default of 2026-11-16 from the
+review of #318's code (PR #379).
 
 1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
    hardware judge terminals on their own port and raises a flag on the scoring service for about
@@ -2423,3 +2427,21 @@ from #345's code (several writes pending at once).
 
     Whether upstream pushes once or twice for two commands on one cell is not established
     (E4). Reopens if penalty-check (M4) wants one correction per gate at a time.
+51. **A `Completed` stop and a stream finish withdrawn afterwards** (review of PR #379, CQ1;
+    M2 P3b, 2026-11-16). §4.3 stops the `duration` recomputation at a `Completed="Y"` on a
+    listing carrying the finish, and §4.4 closes the run there. §4.1 lets the stream withdraw
+    a finish it alone stated: "the generation's finish and the `duration` inference are
+    forgotten". Neither says what becomes of the stop when both happen in one generation.
+    Default: the closure belongs to the finish that listing carried and is forgotten with it.
+    The next finish listing's `duration` is inferred and recomputed like a first one, and
+    the run closes again at that finish's own `Y`, at the leave or at a mark; `provisional`
+    follows (§4.4). The ground is §4.4's own: "a `Y` on a listing with no finish closes
+    nothing, there being no result to complete", and once the finish is withdrawn there is
+    none. The parallel is the leave: a re-listing undoes that closure too. Kept otherwise,
+    the stop would freeze the new finish's inference at its first listing, cells judged
+    afterwards would not reach it, and a row with a blank cell would be presented settled.
+    Not recorded (E2: the one recorded withdrawal, cp3-cross WX1_XT_26:25, carries
+    `Completed="N"` on all 234 listings of its finish). No client duty moves. Not ruled here:
+    a finish the stream contradicts after a row presented it (INV-2d). Seven are recorded, so
+    whether a `Y` preceded any of them is read on the replays first, in the P3c sweep.
+    Reopens on a recording of a `Completed` finish withdrawn or contradicted.
