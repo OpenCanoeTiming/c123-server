@@ -84,7 +84,9 @@ describe('N1 slalom: a finish listing with no duration to infer ends `running` (
     expect(fin.map((e: any) => e.diagnostic?.kind), 'precondition: the parser states gates-absent').toContain('gates-absent');
     step(c, fin, ids);
     expect(pair(c, xid)).toEqual({ status: 'finished', outcome: { state: 'not-yet' } });
-    expect((c.diagnostics() as Array<{ kind: string }>).map((d) => d.kind)).toContain('gates-absent');
+    // DERIVATIONS §0.5 (#367): `gates-absent` is ingest-only, it goes to the admin log (the drain), never to `diagnostics()`
+    const log = (c as unknown as { drainIngestDiagnostics(): Array<{ kind: string; attemptId?: string }> }).drainIngestDiagnostics();
+    expect(log.filter((d) => d.kind === 'gates-absent' && d.attemptId === xid)).toHaveLength(1);
     leaveAfter(c, SLALOM, 1000, ids);
     expect(inSet(c, xid), 'precondition: the leave rule fired').toBe(false);
     expect(pair(c, xid)).toEqual({ status: 'finished', outcome: { state: 'not-yet' } });
