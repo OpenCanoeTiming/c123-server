@@ -2418,6 +2418,23 @@ review of #318's code (PR #379).
     `null`. Reopens on a recording where a race was deleted or moved, or an id rebuilt. The
     remedy would be to remove a Phase that left the schedule, as an Attempt is removed (item
     38); that changes the wire and is the maintainer's to decide.
+    (d) *A Phase named by a second run, with no `format` and no `pair` of its own* (#377, PR #389,
+    2026-11-16). Once the core reads no id token (§2.1), such a Phase has no role from its own
+    statements. Read from the text (E3, §2.1 "the class check needs both classes stated"): being
+    named by a second run's stated `pair` makes it that pair's first run, of the naming pair's
+    `combination`; no id is read to say so. That sentence covers a Phase nothing has stated at
+    all, which the core does not hold and which serves only what reads across the pair (§4.5;
+    `two-run-br1-unavailable-no-live-no-xml`). Default, the same reading for a Phase the core
+    holds (its class stated, say) with neither `format` nor `pair` stated: it is that first run,
+    its `pair` presented as `{ role: 'first', combination, siblingPhaseId }` with the sibling
+    item 48's inverse; its `format`, `stage`, `kind`, `scoringKind` and `heats` are not presented
+    until a `format` is stated, and the core reads them meanwhile as `CONTRACTS.md` §2.4's
+    unknown-token row (a `run`, `race`, `duration`, no heats). The first `format` stated decides
+    them and its role, as for any Phase. No client meets this shape: on site every first
+    statement of a Phase carries its `format` (the snapshot's `DisId`, or the TCP parser's token
+    on every message that first names a `RaceId`, §2.1), and the vectors' adapter states one for
+    every Phase (`CONFORMANCE-VECTORS.md` §1); it exists for core tests that state neither. No
+    client duty moves. Reopens if a deployable creates a Phase without a stated `format`.
 50. **Several writes pending on one Attempt** (#345; M2 P3b, 2026-11-16). `CONTRACTS.md` §4 rule
     4 gives a write "the vector presented from rules 1–3 with the target cell replaced", a
     sentence written for one write. Two defaults. No recording holds a write (E4). No client

@@ -31,15 +31,18 @@ function results(u: Unit, ctx: IngestContext, res: Node): void {
     u.obs('result-row', 'code', { classId }, classId);
     if (at(res, 'MainTitle').trim() !== '') u.obs('result-row', 'name', { classId }, at(res, 'MainTitle'));
   }
-  const fmt = fmtOf(tokenOf(phaseId));
+  // DERIVATIONS §2.1: the snapshot's `DisId` where learned, else the `RaceId` token, the one read of an id by any parser; §10 item 37
+  const token = ctx.phaseFormats?.[phaseId] ?? tokenOf(phaseId);
+  const fmt = fmtOf(token);
   // DERIVATIONS §1: from the formats of its Phases, here the one this message names (the XML snapshot evaluates them all)
   if (classId !== '' && classId !== 'NA') u.obs('result-row', 'discipline', { classId }, fmt.cross ? 'cross' : 'slalom', 'inferred');
   const rows = asArray(res['Row']);
   if (classId !== '' && classId !== 'NA') u.obs('result-row', 'classId', { phaseId }, classId);
+  u.obs('result-row', 'format', { phaseId }, token);
   // CONTRACTS §2.4: the class is the message's own where it states one, else what the context learned; the format token the learned one, else the id's
   const learned = learnedCandidates(ctx);
   const known = learned.get(phaseId);
-  const self = { classId: classId !== '' && classId !== 'NA' ? classId : known?.classId, token: known?.token ?? tokenOf(phaseId), date: ctx.phaseDates?.[phaseId] };
+  const self = { classId: classId !== '' && classId !== 'NA' ? classId : known?.classId, token, date: ctx.phaseDates?.[phaseId] };
   learned.set(phaseId, self);
   u.obs('result-row', 'pair', { phaseId }, pairOf(phaseId, self, learned));
   for (const row of rows) {
@@ -192,8 +195,8 @@ function schedule(u: Unit, ctx: IngestContext, sc: Node): void {
   }
   for (const r of races) {
     const phaseId = at(r, 'RaceId');
-    // TCP Schedule has no DisId, and its StartTime is always empty: neither is a source (§2.1)
-    emitPhase(u, 'fragment', { phaseId, token: tokenOf(phaseId), order: numAttr(u, phaseId, r, 'Order', int), statusRaw: at(r, 'RaceStatus') }, candidates);
+    // TCP Schedule has no DisId, and its StartTime is always empty: neither is a source (§2.1); the learned DisId stands (§10 item 37)
+    emitPhase(u, 'fragment', { phaseId, token: ctx.phaseFormats?.[phaseId] ?? tokenOf(phaseId), order: numAttr(u, phaseId, r, 'Order', int), statusRaw: at(r, 'RaceStatus') }, candidates);
   }
 }
 

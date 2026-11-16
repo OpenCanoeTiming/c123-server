@@ -93,7 +93,8 @@ describe('C2 (round 24 ruling 5; CONTRACTS §1.6 "the first message for a new id
 
   it('a slalom second run first seen on TCP (no XML read yet) presents format BR2, kind race, scoringKind duration, heats false, pair second/best with no sibling, and a stage (CONTRACTS §2.4 table; #287: the pair is the one the parser states, the core reads no id for it)', () => {
     // A bare listing states no class and no pair; the parser states `pair` with the first message that states the class (DERIVATIONS §2.1), so it is stated here.
-    const stated = [{ ingestSeq: 0, phaseId: 'K1M_BR2_19', field: 'pair', source: 'tcp', kind: 'result-row', observedAt: '2026-04-19T08:00:01.000Z', value: { role: 'second', siblingPhaseId: null, combination: 'best' }, confidence: 'authoritative' }] as unknown as Unit;
+    // #377: the core reads no id for `format` either; the parser states it with the class (DERIVATIONS §2.1), so it is stated here too.
+    const stated = [{ ingestSeq: 0, phaseId: 'K1M_BR2_19', field: 'format', source: 'tcp', kind: 'result-row', observedAt: '2026-04-19T08:00:01.000Z', value: 'BR2', confidence: 'authoritative' }, { ingestSeq: 0, phaseId: 'K1M_BR2_19', field: 'pair', source: 'tcp', kind: 'result-row', observedAt: '2026-04-19T08:00:01.000Z', value: { role: 'second', siblingPhaseId: null, combination: 'best' }, confidence: 'authoritative' }] as unknown as Unit;
     const c = coreWith([connected('2026-04-19T08:00:00.000Z'), stated, tcpUnit(msg('2026-04-19T08:00:01.000Z', listingText({ race: 'K1M_BR2_19', bib: 51, dtStart: '10:00:00.000' })), JA_DAY)]);
     const p = c.phase('K1M_BR2_19') as Record<string, any>;
     expect(p['format']).toBe('BR2');

@@ -471,3 +471,8 @@ changed a cited section and moved no obligation above:
 - the category-rank check compares only while the class standing presents the snapshot's class
   order, so no transient anomaly follows a save that lags a TCP push; anomalies are admin-only and
   ranks are served as before (CONTRACTS §5).
+
+#377's code (PR #389, 2026-11-16; `DECISIONS/LOG.md`) took one default on pairing. It changed a
+cited section and moved no obligation above:
+- a Phase with neither `format` nor `pair` stated that a second run names is that pair's first
+  run; no client meets it, since every Phase reaches a client with its `format` (DERIVATIONS §10).

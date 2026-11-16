@@ -1,5 +1,5 @@
 /** Where an element's resource lives: Attempts, Phases and the format a Phase reads its rows by. */
-import { fmtOf, splitRaceId, usable, zonedDate, zonedInstant, type Fmt } from '../ingest/common.js';
+import { fmtOf, usable, zonedDate, zonedInstant, type Fmt } from '../ingest/common.js';
 import type { CourseSlot } from '../ingest/index.js';
 import type { AttemptState, CoreState, ResourceState, Source } from './types.js';
 
@@ -22,29 +22,43 @@ export function phaseResource(s: CoreState, phaseId: string, observedAt: string)
     p.attempts = new Set();
     const inferred = zonedDate(observedAt, s.options.zone);
     if (inferred !== undefined) p.plain.set('date', inferred);
-    // §2.1, a lookup with no uncertainty: the first message for the id carries them (§1.6); a snapshot's `DisId` replaces `format` where it differs
     // §10 item 54 (h): a removed Phase created again: the second runs stating it as their sibling present it again
     if (s.removedIds.delete(phaseId)) {
       for (const other of s.phases.values()) if (statedPair(other)?.siblingPhaseId === phaseId) s.dirtyPhases.add(other);
     }
-    const fmt = fmtOf(splitRaceId(phaseId).token);
-    p.plain.set('format', fmt.token);
-    p.plain.set('stage', fmt.stage);
-    p.plain.set('kind', fmt.kind);
-    p.plain.set('scoringKind', fmt.scoringKind);
-    p.plain.set('heats', fmt.heats);
     s.dirtyPhases.add(p);
   }
   return p;
 }
 
-/** The structural format: the snapshot's `DisId` where read, else the `RaceId` token (DERIVATIONS §2.1). */
+/**
+ * The structural format: the stated `format` only, the snapshot's `DisId` or the TCP parser's fallback (DERIVATIONS §2.1); the core reads no id.
+ * The run role is the stated `pair`'s where one is stated (one source for every reader, CONTRACTS §2.4), else the stated format's.
+ */
 export function fmtFor(s: CoreState, phaseId: string): Fmt {
-  const stated = s.phases.get(phaseId)?.plain.get('format');
-  return fmtOf(typeof stated === 'string' ? stated : splitRaceId(phaseId).token);
+  const r = s.phases.get(phaseId);
+  const stated = r?.plain.get('format');
+  const fmt = fmtOf(typeof stated === 'string' ? stated : '');
+  if (typeof stated !== 'string' && r?.plain.has('pair') !== true) return namedFirstRun(s, phaseId) ?? fmt;
+  if (r === undefined || !r.plain.has('pair')) return fmt;
+  const p = statedPair(r);
+  if (p === null || p === undefined || (p.role !== 'first' && p.role !== 'second')) return { ...fmt, pair: null };
+  const combination = p.combination === 'sum' || p.combination === 'best' ? p.combination : (fmt.pair?.combination ?? 'best');
+  return { ...fmt, pair: { role: p.role, combination, siblings: fmt.pair?.siblings ?? [] } };
 }
 
-type StatedPair = { role?: string; siblingPhaseId?: string | null } | null | undefined;
+/**
+ * A Phase nothing states a format or pair for, named by a second run's stated pair under item 49 (b) (the set `namingSecondRuns(s, true)` keeps,
+ * the one the derivation reads): a first run of that pair's combination (DERIVATIONS §10 item 49 (d); CONTRACTS §2.4).
+ */
+function namedFirstRun(s: CoreState, phaseId: string): Fmt | undefined {
+  const naming = [...(namingSecondRuns(s, true).get(phaseId) ?? [])].sort();
+  if (naming.length === 0) return undefined;
+  const combination = statedPair(s.phases.get(naming[0]!))?.combination === 'sum' ? 'sum' : 'best';
+  return { ...fmtOf(''), pair: { role: 'first', combination, siblings: [] } };
+}
+
+type StatedPair ={ role?: string; siblingPhaseId?: string | null; combination?: string } | null | undefined;
 const statedPair = (r: ResourceState | undefined): StatedPair => r?.plain.get('pair') as StatedPair;
 
 /**

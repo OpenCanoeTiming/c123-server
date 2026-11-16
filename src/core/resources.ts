@@ -2,7 +2,9 @@
  * Phases, Entries, Classes and Courses (CONTRACTS §2.3-§2.5, §2.12) and the classification rows (DERIVATIONS §4.10). They have no
  * run generation: same source, later-ingested (INV-6); across sources rule 2. Classification rows create no Attempt.
  */
+import { fmtOf } from '../ingest/common.js';
 import { present } from './precedence.js';
+import { fmtFor } from './registry.js';
 import { envelope } from './presentation.js';
 import { fieldSlots, retain, slotOf } from './retention.js';
 import { refuse } from './counters.js';
@@ -17,8 +19,27 @@ const ENTRY_FIELDS = ['displayName', 'members', 'club', 'nation', 'ageCategoryId
 const CLASS_FIELDS = ['name', 'ageCategories'];
 const COURSE_FIELDS = ['layout', 'gates', 'slots', 'sectorEndsAfterGate', 'splitsAfterGate', 'captions'];
 
+/** What follows from a Phase's format (DERIVATIONS §2.1): taken from the stated `format` element, never from the id. */
+const FROM_FORMAT = ['stage', 'kind', 'scoringKind', 'heats'] as const;
+
+/** §2.1, §10 item 37: a stated `format` and the fields it decides; once the snapshot's `DisId` is stated, a TCP statement moves none of them. */
+function observeFormat(r: ResourceState, value: unknown, source: Source): boolean {
+  if (typeof value !== 'string' || (r.formatSource === 'xml' && source !== 'xml')) return false;
+  r.formatSource = source;
+  const fmt = fmtOf(value);
+  let changed = false;
+  for (const [k, v] of [['format', value], ...FROM_FORMAT.map((f) => [f, fmt[f]] as const)] as const) {
+    if (r.plain.get(k) === v) continue;
+    r.plain.set(k, v);
+    changed = true;
+  }
+  return changed;
+}
+
 /** One field of a Phase, Entry, Class or Course. Returns whether anything presented may have changed. */
 export function observeResource(s: CoreState, r: ResourceState, el: Element, field: string, source: Source, seq: number): boolean {
+  if (field === 'format') return observeFormat(r, el['value'], source);
+  if ((FROM_FORMAT as readonly string[]).includes(field) && r.formatSource !== undefined) return false; // decided by the stated format
   if (PLAIN.has(field)) {
     if (field === 'date') {
       if (r.dateFixed === true) return false;
@@ -64,7 +85,7 @@ export function dirtyHandle(type: 'entry' | 'class' | 'course', r: ResourceState
   return h;
 }
 
-export function viewResource(r: ResourceState, kind: 'phase' | 'entry' | 'class' | 'course', removed?: ReadonlySet<string>): Record<string, unknown> {
+export function viewResource(r: ResourceState, kind: 'phase' | 'entry' | 'class' | 'course', s?: CoreState): Record<string, unknown> {
   const names = kind === 'phase' ? PHASE_FIELDS : kind === 'entry' ? ENTRY_FIELDS : kind === 'class' ? CLASS_FIELDS : COURSE_FIELDS;
   const key = kind === 'phase' ? 'phaseId' : kind === 'entry' ? 'entryId' : kind === 'class' ? 'classId' : 'courseId';
   const out: Record<string, unknown> = { [key]: r.id };
@@ -73,7 +94,12 @@ export function viewResource(r: ResourceState, kind: 'phase' | 'entry' | 'class'
   const pair = r.plain.get('pair') as { role?: string; siblingPhaseId?: string | null } | null | undefined;
   if (kind === 'phase' && pair?.role === 'first') out['pair'] = { ...pair, siblingPhaseId: r.derivedSibling ?? null };
   // a stated sibling naming a Phase removed and not created again is retained and presents null (DERIVATIONS §10 item 54 (h))
-  else if (kind === 'phase' && pair?.role === 'second' && typeof pair.siblingPhaseId === 'string' && removed?.has(pair.siblingPhaseId) === true) out['pair'] = { ...pair, siblingPhaseId: null };
+  else if (kind === 'phase' && pair?.role === 'second' && typeof pair.siblingPhaseId === 'string' && s?.removedIds.has(pair.siblingPhaseId) === true) out['pair'] = { ...pair, siblingPhaseId: null };
+  // DERIVATIONS §10 item 49 (d): neither `format` nor `pair` stated, named by a second run: that pair's first run; nothing else follows until a format is stated
+  if (kind === 'phase' && s !== undefined && !r.plain.has('pair') && !r.plain.has('format')) {
+    const named = fmtFor(s, r.id).pair;
+    if (named?.role === 'first') out['pair'] = { role: 'first', siblingPhaseId: r.derivedSibling ?? null, combination: named.combination };
+  }
   for (const f of new Set([...names, ...r.fields.keys()])) out[f] = envelope(present(r.fields.get(f)), false);
   return out;
 }
