@@ -56,6 +56,8 @@ export const left = (attemptId: string, observedAt: string): Unit => deepFreeze(
  */
 function withClassIds(core: MergePort): MergePort {
   const stated = new Set<string>();
+  // #377 (DERIVATIONS §2.1, CONFORMANCE-VECTORS §1): the core reads no id for `format`; the parser (or the adapter, for an undescribed Phase) states it.
+  const statedFormat = new Set<string>();
   const phasesOf = (el: Record<string, any>): string[] => [
     el['snapshot']?.phaseId, el['phaseId'], typeof el['attemptId'] === 'string' ? (el['attemptId'] as string).slice(0, (el['attemptId'] as string).lastIndexOf(':')) : undefined,
   ].filter((x): x is string => typeof x === 'string' && x !== '');
@@ -64,15 +66,27 @@ function withClassIds(core: MergePort): MergePort {
     const extra: Record<string, unknown>[] = [];
     for (const el of unit as Record<string, any>[]) {
       if (el['field'] === 'classId' && typeof el['phaseId'] === 'string') stated.add(el['phaseId']);
+      if (el['field'] === 'format' && typeof el['phaseId'] === 'string') statedFormat.add(el['phaseId']);
     }
     for (const el of unit as Record<string, any>[]) {
       for (const id of phasesOf(el)) {
+        if (!statedFormat.has(id)) {
+          statedFormat.add(id);
+          extra.push({ ingestSeq: 0, observedAt: el['observedAt'], field: 'format', phaseId: id, source: 'tcp', kind: 'result-row', value: splitRaceId(id).token, confidence: 'authoritative' });
+        }
         if (stated.has(id)) continue;
         stated.add(id);
         extra.push({ ingestSeq: 0, observedAt: el['observedAt'], field: 'classId', phaseId: id, source: 'tcp', kind: 'result-row', value: splitRaceId(id).classKey, confidence: 'authoritative' });
       }
     }
-    return apply([...extra, ...unit] as typeof unit);
+    const before = (core as any).notifications?.().length ?? 0;
+    const out = apply([...extra, ...unit] as typeof unit);
+    // CONFORMANCE-VECTORS §1: a Phase that returns after its removal is a new Phase and the unit naming it again is its first unit, so the adapter states
+    // its format (and class) again there, as the parsers do on every read (tcp.ts `Results`, phase.ts snapshot).
+    for (const n of ((core as any).notifications?.() ?? []).slice(before)) {
+      if (n?.type === 'phase.deleted' && typeof n.phaseId === 'string') { stated.delete(n.phaseId); statedFormat.delete(n.phaseId); }
+    }
+    return out;
   };
   return core;
 }

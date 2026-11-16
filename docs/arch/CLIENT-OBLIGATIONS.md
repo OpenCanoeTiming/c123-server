@@ -472,6 +472,11 @@ changed a cited section and moved no obligation above:
   order, so no transient anomaly follows a save that lags a TCP push; anomalies are admin-only and
   ranks are served as before (CONTRACTS §5).
 
+#377's code (PR #389, 2026-11-16; `DECISIONS/LOG.md`) took one default on pairing. It changed a
+cited section and moved no obligation above:
+- a Phase with neither `format` nor `pair` stated that a second run names is that pair's first
+  run; no client meets it, since every Phase reaches a client with its `format` (DERIVATIONS §10).
+
 The P3c fold-in (2026-11-16) aligned wording and moved no obligation above: the retraction's
 fallback to `left-without-finish` is drawn at either leave element, `oncourse-left` or
 `oncourse-empty`, as the core already does, and the Phase removal's full conditions are

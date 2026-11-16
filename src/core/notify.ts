@@ -143,7 +143,7 @@ export function flush(s: CoreState, xmlInUnit: boolean): void {
     s.dirtyScopes.add(p.id);
     // §2.4 (round 27): a Phase is created at the first observation that states its class; until then no message, no hydration
     if (!p.plain.has('classId')) continue;
-    const fields = withoutId(diff(viewResource(p, 'phase', s.removedIds), p.sent, p.created), 'phaseId');
+    const fields = withoutId(diff(viewResource(p, 'phase', s), p.sent, p.created), 'phaseId');
     p.created = true;
     if (Object.keys(fields).length > 0) emit(s, { type: 'phase.updated', phaseId: p.id, fields });
   }

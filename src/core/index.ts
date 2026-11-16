@@ -368,7 +368,7 @@ export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
     },
     phase: (phaseId) => {
       const r = s.phases.get(phaseId);
-      return r === undefined ? { phaseId } : viewResource(r, 'phase', s.removedIds);
+      return r === undefined ? { phaseId } : viewResource(r, 'phase', s);
     },
     attempts: () => [...s.attempts.keys()],
     phaseIds: () => [...s.phases.keys()],
