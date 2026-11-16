@@ -165,6 +165,28 @@ describe('retained cells re-delivered after a reconnect (#295, CONTRACTS INV-5 a
     expect(penalties(g)).toEqual(CELLS_C);
   });
 
+  // #354 N3, re-review 8a8df6b: the displaced branch of the retained-cells re-delivery. D's content age (+2000) is later than C's, so on a bound course it would displace
+  // TCP; the re-delivery after the reconnect is then a slot in its own right and carries the re-delivery's connection epoch. Observed through a step only connection continuity
+  // decides: the binding restates D at age 9000 (later than the re-delivery's 8500), and TCP keeps the Attempt because it stayed connected since (INV-2 rule 2: the later epoch).
+  it('obligation INV-2 rule 2 (#354 N3, row 5b, displaced branch): the re-delivery that D displaced carries the re-delivery\'s epoch, so a later XML restatement does not take TCP back', () => {
+    const final = (reconnect: boolean) => {
+      const core = coreWith([connected(T(base, -1000))]);
+      core.applyUnit(tcp(0));
+      core.applyUnit(disconnected(T(base, 500)));
+      core.applyUnit(xmlCells(7000, false)); // D, content age 2000: later than C's, displaces TCP
+      if (reconnect) {
+        core.applyUnit(connected(T(base, 8000)));
+        core.applyUnit(tcp(8500)); // C re-delivered, identical to what is held
+      }
+      core.applyUnit(xmlCells(10000, true, T(base, 9000))); // binds, restates D at age 9000
+      return gatesOf(core);
+    };
+    expect(final(false).source).toBe('xml'); // precondition: with no reconnect D holds
+    const g = final(true);
+    expect(g.source).toBe('tcp');
+    expect(penalties(g)).toEqual(CELLS_C);
+  });
+
   it('INV-5: identical cells re-delivered on one connection: no notification, envelope unchanged at the binding', () => {
     const core = coreWith([connected(T(base, -1000))]);
     core.applyUnit(tcp(0));
