@@ -472,7 +472,7 @@ the rebuilt one created, which is what upstream did. The guard can hold a remova
 keeps naming the race; TCP's `Schedule` names every race of the event in each message in every
 recording, so a race deleted upstream drops out of it at once (E1, the P3c sweep part 4).
 
-**Evidence.** No recording holds a race leaving the schedule (E1, the P3c sweep part 4 (a): one
+**Evidence.** E4: no recording holds a race leaving the schedule (the P3c sweep part 4 (a), a scan: one
 fixed race set per recording in all 2,032 distinct snapshots and in every TCP `Schedule`
 message; no snapshot with an empty schedule). The rule rests on upstream's whole-file rewrite
 (observed upstream behaviour, Revision 5).

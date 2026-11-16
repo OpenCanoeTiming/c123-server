@@ -1411,7 +1411,7 @@ previously known from a results-table observation:
   statement removes nothing;** where at least one Phase would have been removed, the guard
   applied, the core raises `xml-schedule-emptied` with the number of such Phases (ingest-only,
   §0.5), once, re-armed by a schedule statement that names a race. Defaults: §10 item 54. No
-  recording holds a race leaving the schedule or an empty schedule (E1, the P3c sweep, 2,032
+  recording holds a race leaving the schedule or an empty schedule (E4; the P3c sweep's scan, 2,032
   distinct snapshots).
 - **A row that returns** after an absent-row retraction is a new `xml` observation and is
   presented by the ordinary rules: at once where no `tcp` observation stands, else under rule 2.
@@ -2643,7 +2643,7 @@ review of #318's code (PR #379).
     the Phase (item 38 (l)). An event re-baseline sends each `phase.deleted` before its
     `scope.replaced`; a Phase re-baseline whose read removes its own Phase sends the
     `phase.deleted` and no `scope.replaced` and answers `200` with `attempts: 0`.
-    Evidence: E1, the P3c sweep part 4 (a): no race left the schedule in any of the seven
+    Evidence: E4, by the P3c sweep's scan (part 4 (a)): no race left the schedule in any of the seven
     recordings (one fixed set per recording over 2,032 distinct snapshots; every TCP `Schedule`
     message names the same set), and no snapshot has an empty schedule. So nothing recorded
     moves; the rule rests on upstream's whole-file rewrite. Client duties move (CLIENT-OBLIGATIONS:
