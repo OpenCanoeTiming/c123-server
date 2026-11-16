@@ -86,6 +86,19 @@ describe('CQ1: the leave recorded behind a table value (DERIVATIONS §4.12; CONT
     expectLeftWithoutFinish(c, SLALOM.id, 'the mark gone: left-without-finish, the leave\'s envelope');
   });
 
+  it('§3.2: a leave behind a TCP table DNF mark, the mark retracted (row 3b)', () => {
+    const k = kit(SLALOM.id, SLALOM.phase);
+    const c = k.core();
+    apply(c, started(k), SLALOM.id, 'start');
+    apply(c, [k.snap('tcp', at(20), { status: 'dnf' })], SLALOM.id, 'tcp dnf row');
+    expect(status(c, SLALOM.id), 'precondition (TCP results row): dnf presented from tcp before the leave').toMatchObject({ state: 'known', value: 'dnf', source: 'tcp' });
+    apply(c, [k.event('oncourse-left', LEFT_AT)], SLALOM.id, 'leave');
+    expect(inSet(c, SLALOM.id), 'precondition (on-course stream): the leave rule fired').toBe(false);
+    expect(status(c, SLALOM.id).value, 'precondition: status still the mark').toBe('dnf');
+    apply(c, [k.snap('tcp', at(40), {})], SLALOM.id, 'mark retracted');
+    expectLeftWithoutFinish(c, SLALOM.id, 'the mark retracted: left-without-finish, the leave\'s envelope, not the retraction\'s');
+  });
+
   it('§3.2: a stream finish then the leave; a retraction returns to finished/not-started as before (guard)', () => {
     const k = kit(SLALOM.id, SLALOM.phase);
     const c = k.core();
