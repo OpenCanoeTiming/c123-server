@@ -272,7 +272,7 @@ describe('#205 row 3: scopes (CONTRACTS 5 step 1 standingKey; property 15 first 
     expect(sent(c).every((s) => /^phase:K1M_BR1_6\/(all|[A-Za-z0-9]+)$/.test(s.standingKey))).toBe(true);
   });
 
-  it('property 15: the category standing\'s first publication is when an Entry\'s ageCategoryId becomes known; ranks are 1 + the same-category entries with a strictly smaller class rank, order the position in the filtered list', () => {
+  it('property 15: the category standing\'s first publication is when an Entry\'s ageCategoryId becomes known; a placed entry\'s rank and order are its position among the category\'s placed entries in class order (CONTRACTS §5 step 4, item 53)', () => {
     const t = table(P1);
     const c = coreWith([]);
     const rows = (): unknown[] => [erow('1', 1, 1, 80), erow('2', 2, 2, 85), erow('3', 3, 3, 90)];
