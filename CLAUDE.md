@@ -4,7 +4,7 @@
 
 C123 Server — smart middleware layer between Canoe123 and web clients for canoe slalom races. Provides WebSocket bridge, REST API, and Admin UI on a single port.
 
-**GitHub:** OpenCanoeTiming/c123-server | **License:** MIT | **Status:** Rebuild 2026/27 on `main` (0.x, M1 first); venues run `legacy-2026`
+**GitHub:** OpenCanoeTiming/c123-server | **License:** MIT | **Status:** Rebuild 2026/27 on `main` (0.x); venues run `legacy-2026`
 
 ---
 
@@ -13,11 +13,11 @@ C123 Server — smart middleware layer between Canoe123 and web clients for cano
 - **Design (normative):** c123-server `main`, `docs/arch/` — start at `README.md` (reading order, implementation sequence); then `CONTRACTS.md`, `DECISIONS/ADR-*`, `TEST-ARCHITECTURE.md`. Point to it, never restate it. A default for a case nobody recorded gets no rule; a maintainer ruling is one row in `docs/arch/RULINGS.md`.
 - **Legacy line:** venues run tag `legacy-2026`; branch `legacy/2026` takes `fix:` commits only. `main` is the rebuild, in place: replaced code is deleted, never kept beside the new.
 - **Releases:** rebuild releases are 0.x and reach no venue; `Release-As: 1.0.0` only when M6 Release 1.0 closes.
-- **Order:** server → scoreboard → penalty-check → live-mini is the implementation order only. Everything, the new live included, is ready for the Jarní slalom (M6), its first real use: no shadow run, the legacy line is the fallback.
-- **Work items:** one issue each in project "Rebuild 2026/27" (https://github.com/orgs/OpenCanoeTiming/projects/3), milestones M0 Spike, freeze, merge · M1 Server core · M2 Tooling · M3 Scoreboard · M4 Penalty-check · M5 Live · M6 Release 1.0 (Jarní slalom). Implementation is on hold until the maintainer releases M1.
-- **Test-first:** failing tests from the vectors or obligations land before the code that passes them. Tiers and the `Clock` rule: `TEST-ARCHITECTURE.md` §3, §5.
+- **Target:** the Jarní slalom, early April 2027, slalom only. Everything runs on the new line, the new live included: no shadow run, the legacy line is the fallback. Order of work: server shell → scoreboard → penalty-check → live-mini.
+- **Work items:** one issue each in project "Rebuild 2026/27" (https://github.com/orgs/OpenCanoeTiming/projects/3), milestones M2 Server shell · M3 Scoreboard · M4 Penalty-check · M5 Live · M6 Release 1.0 (Jarní slalom). The milestone `Hardening (after Jarní slalom)` is a parking place: nobody works on it before the race.
+- **How a change is made:** `CONTRIBUTING.md`. The failing test is its own commit before the code that passes it; a review blocks only for a defect; no rule or test for a situation nobody recorded. Tiers and the `Clock` rule: `TEST-ARCHITECTURE.md` §3, §5.
 - **Upstream provenance** stays in the private c123-protocol-docs repo; public repos state behaviour only, never how it was established.
-- **Gates:** `npm run gates` must pass, and its output is posted on the PR as the verification record, on every PR touching `src/core`, `src/ingest`, `scripts/replay-direct.ts` or the gate-2 checker (maintainer-approved, #313).
+- **Gates:** the maintainers' gate runner runs `npm run gates` on every new `main` commit and writes the commit status `gates/recordings`. A PR touching `src/core`, `src/ingest`, `scripts/replay-direct.ts` or the checker pin runs two recordings before it merges (`npm run gates -- --only cp3-cross,jarni-ne-odp`). The pin and how to bump it: `scripts/gates/README.md`.
 - **Git:** conventional commits; Release Please owns versions and CHANGELOG; squash merges; `git add <file>`, never commit `.claude/` or `.superpowers/`. Czech with the maintainer, English in code, commits and docs.
 
 ---
