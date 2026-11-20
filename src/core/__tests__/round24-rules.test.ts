@@ -102,7 +102,7 @@ describe('C2 (round 24 ruling 5; CONTRACTS §1.6 "the first message for a new id
     expect(p['scoringKind']).toBe('duration');
     expect(p['heats']).toBe(false);
     expect(p['pair']).toEqual({ role: 'second', siblingPhaseId: null, combination: 'best' });
-    expect(p['stage']).toBeDefined(); // the table does not list Stage's value here; presence is the rule (guess: the value is not pinned)
+    expect(p['stage']).toBe('run'); // CONTRACTS §2.4 Stage: BR1/BR2 -> run
   });
 
   it('round 27 (CONTRACTS §1.6, §2.4, DERIVATIONS §2.1): nothing is sent for the Phase at the bare on-course listing; its creating phase.updated, at the first message that states its classId, carries format, kind, scoringKind, pair, heats and stage', () => {

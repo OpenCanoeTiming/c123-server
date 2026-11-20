@@ -365,12 +365,14 @@ describe('#204 row 6: the four real unstages of 3.04, 3.68, 3.86 and 4.29 s (DER
 
 describe('#204 row 8 (per-unit assert against the raw stream, stated as such; the gate-2 checker #249 is not in): no result value is provisional:false in the windows of rows 4 to 6 unless the raw stream closed its run (CONTRACTS §1.2, P11)', () => {
   const closed = (r: { data: string }): boolean => /Completed="Y"/.test(r.data) && /dtFinish="[^"]+"/.test(r.data);
-  const windows: Array<[string, readonly LeaveRec[]]> = [['stall10', LEAVE.stall10], ['stall21', LEAVE.stall21], ['gap304', LEAVE.gap304], ['gap368', LEAVE.gap368], ['gap386', LEAVE.gap386], ['gap429', LEAVE.gap429]];
+  // rows 4 and 5 (stall10, stall21) are not here: no stream-derived result value is known in them (a Cross heat on course; an empty course), so they checked nothing
+  const windows: Array<[string, readonly LeaveRec[]]> = [['gap304', LEAVE.gap304], ['gap368', LEAVE.gap368], ['gap386', LEAVE.gap386], ['gap429', LEAVE.gap429]];
   for (const [name, recs] of windows) {
     it(`${name}: after every record every stream-derived outcome/gates/faults/placement is provisional while the raw stream has not closed its run`, () => {
       const core = coreWith([connected(recs[0]!.observedAt)]);
       const dates = raceDates(recs);
       const closedBibs = new Set<string>(); // closed by the raw stream, or holding a results-table row (judged by its own cells: a complete row is final, P11)
+      let checked = 0;
       for (const r of recs) {
         core.applyUnit(tcpUnit(r, dates));
         if (closed(r)) closedBibs.add(/Bib="\s*(\d+)"/.exec(r.data)![1]!);
@@ -379,10 +381,11 @@ describe('#204 row 8 (per-unit assert against the raw stream, stated as such; th
           if (closedBibs.has(id.split(':')[1]!)) continue;
           for (const f of ['outcome', 'gates', 'faults', 'placement']) {
             const v = core.presented(id)[f] as { state?: string; provisional?: boolean; source?: string } | undefined;
-            if (v?.state === 'known' && v.source !== undefined) expect(v.provisional, `${r.observedAt} ${id}.${f}`).toBe(true);
+            if (v?.state === 'known' && v.source !== undefined) { expect(v.provisional, `${r.observedAt} ${id}.${f}`).toBe(true); checked++; }
           }
         }
       }
+      expect(checked, 'stream-derived values were checked in the window').toBeGreaterThan(0);
     });
   }
 });
