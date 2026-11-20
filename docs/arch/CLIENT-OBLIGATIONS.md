@@ -12,8 +12,8 @@ contract. Nothing here adds an obligation. Disagreements between documents, and 
 not stated, are listed unresolved under "Gaps and conflicts". Derived at 0c199af, plus the working
 tree's visual-regression bullet in TEST-ARCHITECTURE's "What is deliberately not tested", and kept
 in step with every contract round since. Which round moved which duty, and which moved none, is
-recorded in `DECISIONS/LOG.md` (each round's row, and the round C part 1 row that lists the duties
-moved since this derivation); the duties themselves are the lines below.
+in the former decision log, in git under the tag `contract-archive-2026-11`; the duties themselves
+are the lines below.
 
 ---
 
@@ -337,12 +337,12 @@ the client's own receipt (rendering clients), the live-tier vector subset is lis
 (live-mini-server), and classification rows have an ingest shape (live-mini-server,
 live-mini-client).
 
-Open since 2026-11-05 (`DECISIONS/LOG.md`, round 13), returned to the maintainer: no §8.3 push carries `Event.name`,
+Open since 2026-11-05 (round 13), returned to the maintainer: no §8.3 push carries `Event.name`,
 `Event.details` or a Course's `layout`, `slots` and `captions`, yet §8.4 serves `Event` and `Course`
 whole. Until settled, live-mini-server has no stated source for those fields (CONTRACTS §8.3, §8.4).
 
 Open since 2026-11-05 (round 14) and answered by the maintainer on 2026-11-12 (round C part 4;
-`DECISIONS/LOG.md`): when the on-site bridge sends `DELETE /ingest/v2/attempts/{phaseId}/{bib}`.
+RULINGS R-6, R-7): when the on-site bridge sends `DELETE /ingest/v2/attempts/{phaseId}/{bib}`.
 An Attempt is removed when its bib leaves the race upstream (a competitor deleted, moved, or
 given a bib the race does not otherwise hold), at the first admitted XML snapshot in which no row
 carries the bib (round C part 5: the bib is the key of a run's data); on site that is `attempt.deleted`, and the bridge sends
@@ -350,7 +350,7 @@ carries the bib (round C part 5: the bib is the key of a run's data); on site th
 removes an Attempt on `attempt.deleted`, on site as on live, and penalty-check drops the Attempt's
 checks and flags from view. live-mini-server's `DELETE` duty is unchanged; it now has a trigger.
 
-Round C part 3 (2026-11-12; `DECISIONS/LOG.md`) ruled or ratified the questions the M1 reviews had
+Round C part 3 (2026-11-12) ruled or ratified the questions the M1 reviews had
 left open. It changed cited sections and moved no obligation above:
 - a `StandingEntry.behindSeconds` is never negative; where it would be, it is `null`, a value a
   client already renders (CONTRACTS §5);
@@ -366,14 +366,14 @@ duties above: an age-category Standing lists its unplaced entries after the plac
 entries tied on class rank carry consecutive category ranks, as Canoe123 numbers them
 (CONTRACTS §5).
 
-Round C part 4 (2026-11-12; `DECISIONS/LOG.md`) wrote the maintainer's answers of that day. Those
+Round C part 4 (2026-11-12; RULINGS R-5, R-19) wrote the maintainer's answers of that day. Those
 that changed a cited section and moved no obligation above:
 - `NHT1` and `NHT2` are single runs, `pair: null`; a client takes structure from `Phase.pair` as
   before (CONTRACTS §2.4).
 - a store file set aside at load is reported in the admin log only, and `xml-table-emptied` stays
   ingest-only: nothing reaches a client (CONTRACTS §2.10, §4).
 
-Round C part 5 (2026-11-12; `DECISIONS/LOG.md`) wrote the maintainer's #349 answer, "The data
+Round C part 5 (2026-11-12; RULINGS R-7) wrote the maintainer's #349 answer, "The data
 belongs to the bib". It changed cited sections and moved no obligation above:
 - an Attempt is removed only when its bib leaves the race; a re-bib or swap that leaves the bib in
   the race keeps the Attempt and re-points its `entry`, which arrives as `attempt.updated` and is
@@ -382,7 +382,7 @@ belongs to the bib". It changed cited sections and moved no obligation above:
   them again whoever the competitor is, which penalty-check's existing duties already cover
   (CONTRACTS §2.10).
 
-M2 P3b (2026-11-15; `DECISIONS/LOG.md`) took defaults on the questions round C had left open and
+M2 P3b (2026-11-15) took defaults on the questions round C had left open and
 on the write and leave rules its code needed. It changed cited sections and moved no obligation
 above:
 - a same-key retry that arrives after the server lost its keys across a restart (a failed or
@@ -399,14 +399,14 @@ above:
 - `xml-table-emptied` is raised under the content-age guard; it stays in the admin log and
   reaches no client (CONTRACTS §4; ADR-015).
 
-The review of #287's code (PR #376, 2026-11-16; `DECISIONS/LOG.md`) took one more default on
+The review of #287's code (PR #376, 2026-11-16) took one more default on
 pairing. It changed cited sections and moved no obligation above:
 - the server derives a first run's `pair.siblingPhaseId` from the second runs of the first
   run's class, and a Phase whose race has left the schedule stays as last stated (that half
   replaced by M2 P3c, 2026-11-16: such a Phase is removed, below); a client
   reads `Phase.pair` as before, and the sibling may be `null` (DERIVATIONS §2.1).
 
-#345's code (2026-11-16; `DECISIONS/LOG.md`) took one default on the write path. It changed a
+#345's code (2026-11-16) took one default on the write path. It changed a
 cited section and moved no obligation above:
 - several writes may be pending on one Attempt; `gates` then presents every pending write's
   requested cell at once, and each write resolves on its own `WriteRequest`; a client renders
@@ -418,13 +418,13 @@ presents arrives as `write.updated` alone. A client that renders `gates` as serv
 writes by `WriteRequest` already behaves so; one that waited for a `gates` push per write would
 not. The PR is therefore not labelled `obligations-unchanged`.
 
-The review of #318's code (PR #379, 2026-11-16; `DECISIONS/LOG.md`) took one default on the
+The review of #318's code (PR #379, 2026-11-16) took one default on the
 on-course stream. It changed cited sections and moved no obligation above:
 - a stream finish withdrawn after upstream's `Completed` no longer keeps the run closed, so the
   next finish's time and penalties are inferred afresh; a client shows `outcome` and
   `provisional` as served (DERIVATIONS §4.1).
 
-M2 P3c (2026-11-16; `DECISIONS/LOG.md`) wrote the maintainer's answer of that day on the Kayak
+M2 P3c (2026-11-16; RULINGS R-23) wrote the maintainer's answer of that day on the Kayak
 Cross time trial ("yes, as recommended"). It moved the duties above:
 - a Cross time-trial athlete who leaves upstream's on-course list without a finish is
   `left-without-finish` (`not-started` if never started), as in slalom, and the mark follows at
@@ -440,7 +440,7 @@ The same text took defaults that changed cited sections and moved no obligation 
   stands with 0 mismatches; category ranks are served as before (CONTRACTS §5).
 
 M2 P3c also wrote the maintainer's answer of 2026-11-16 on a race that leaves upstream's schedule
-("yes, as recommended"; `DECISIONS/ADR-015` Revision 9). It moved the duties above: a Phase whose
+("yes, as recommended"; `DECISIONS/ADR-015` Revision 9; RULINGS R-8). It moved the duties above: a Phase whose
 race an admitted save no longer schedules is removed with its Attempts and Standings, sent as
 `phase.deleted` on site and on the public stream, and the bridge sends
 `DELETE /ingest/v2/phases/{phaseId}` to live; every rendering client removes the Phase with what
@@ -449,30 +449,30 @@ implements the Phase `DELETE` and emits `phase.deleted` (CONTRACTS §2.4, §4, �
 It also closes the gap the review of #287's code left above: a deleted second run no longer goes
 on naming the first run.
 
-#305's code (PR #383, 2026-11-16; `DECISIONS/LOG.md`) took one default on the leave rule. It changed a
+#305's code (PR #383, 2026-11-16) took one default on the leave rule. It changed a
 cited section and moved no obligation above:
 - a start or finish the stream has withdrawn before the Attempt leaves counts as not observed, so
   a leave from `at-start` after a deleted start gives `not-started`; a client renders the status
   as served (CONTRACTS §2.6, §3.2; DERIVATIONS §4.1).
 
-#382's code (PR #390, 2026-11-16; `DECISIONS/LOG.md`) took one default on pairing after a removal.
+#382's code (PR #390, 2026-11-16) took one default on pairing after a removal.
 It changed a cited section and moved no obligation above:
 - a second run whose stated sibling is a removed Phase keeps presenting `siblingPhaseId: null`
   until that Phase is created again; a client reads `Phase.pair` as before (DERIVATIONS §10).
 
-The review of #382's code (PR #390, 2026-11-16; `DECISIONS/LOG.md`) took two defaults on the Phase
+The review of #382's code (PR #390, 2026-11-16) took two defaults on the Phase
 removal. They changed a cited section and moved no obligation above:
 - a read that still carries rows of a race its schedule omits does not remove the Phase, and a
   removed first run counts as back only once its `phase.updated` reaches a client; clients apply
   `phase.deleted` and `phase.updated` as before (DERIVATIONS §10).
 
-#271's code (PR #388, 2026-11-16; `DECISIONS/LOG.md`) took one default on the category check. It
+#271's code (PR #388, 2026-11-16) took one default on the category check. It
 changed a cited section and moved no obligation above:
 - the category-rank check compares only while the class standing presents the snapshot's class
   order, so no transient anomaly follows a save that lags a TCP push; anomalies are admin-only and
   ranks are served as before (CONTRACTS §5).
 
-#377's code (PR #389, 2026-11-16; `DECISIONS/LOG.md`) took one default on pairing. It changed a
+#377's code (PR #389, 2026-11-16) took one default on pairing. It changed a
 cited section and moved no obligation above:
 - a Phase with neither `format` nor `pair` stated that a second run names is that pair's first
   run; no client meets it, since every Phase reaches a client with its `format` (DERIVATIONS §10).

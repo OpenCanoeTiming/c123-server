@@ -1,5 +1,11 @@
 # ADR-015: Retraction is first-class — scope snapshots, contradiction by the on-course stream, and the operator re-baseline
 
+The decision and the revisions below state the rules as they now stand; each revision keeps
+its number because other documents and the code cite it. The narrative of each revision (the
+question, the reasoning of its round, the vectors it moved) is in git under the tag
+`contract-archive-2026-11`. The maintainer's rulings applied here are `RULINGS.md` R-4, R-6, R-7
+and R-8.
+
 ## Context
 
 The maintainer's statement after the consolidated revision: in-race noise and corrections are
@@ -79,11 +85,15 @@ C, precisely (`CONTRACTS.md` §4 INV-1, INV-2d, INV-7; §2.6; §3.2; §7.1–§7
    on-course inference, because a race's push can precede the row being written.
 3. **INV-1 is narrowed to omission.** Monotonic knowledge still protects against omission in a
    non-snapshot message, a missing source, and a snapshot of another race.
-4. **An XML retraction is guarded by write time.** The XML lags TCP by up to a save cycle, so a
-   snapshot written before a result push must not retract it. An XML retraction, and the mark
-   exception of INV-2 rule 2, apply only when the rewrite was detected more than one poll interval
-   after the TCP observation they would displace. Otherwise the snapshot is ignored for that field,
-   and the next snapshot settles it.
+4. **An XML retraction is guarded by content age (INV-2c).** The XML lags TCP by up to a save
+   cycle, so a snapshot written before a result push must not retract it. An XML retraction, and
+   the mark exception of INV-2 rule 2, apply to a `tcp` observation only when the snapshot's
+   `changedAfter` is later than that observation's latest delivery; `null`, a first read, never
+   qualifies. Otherwise the snapshot is ignored for that field, and the next snapshot settles it.
+   The re-baseline's own read (decision 8, step 2) carries the same stamp. INV-2c states this guard
+   as the general rule for any cross-source supersession (`ADR-003` Revision 5), so a snapshot
+   rewritten in the seconds before a TCP disconnect does not take over during the outage
+   (`DERIVATIONS.md` §10 item 8).
 5. **Contradiction by the on-course stream.** A finish presented from a results-table row is
    contradicted the moment the on-course stream lists the Attempt with the same start and no finish.
    The Attempt returns to `on-course` with a `running` outcome and no placement. Rows carrying the
@@ -130,40 +140,19 @@ Any tier that stores upstream results with upsert-only semantics. Any client tha
 - Which operator action produced each recorded retraction cannot be read from the stream (E4).
 - Whether the live-mini XML ingest today overwrites results cleared on TCP is unverified (E4).
 
-## Revision — the write-time guard is INV-2c (2026-10-14)
+## Revision 2 — contradiction matched by finish or run time; the lift keeps contradicted rows unpresented
 
-The guard this ADR introduced for XML retractions and for rule 2's mark exception — the snapshot's
-`lastRewriteDetectedAt` minus the poll interval must be later than the `tcp` observation's
-`observedAt` — turned out to be the general rule for any cross-source supersession, and INV-2c now
-states it as such (`ADR-003` Revision 5). Nothing changes for retraction except the name. One
-residual this ADR left open is closed by it: a snapshot rewrite that happened in the seconds before a
-TCP disconnect no longer takes over during the outage (`DERIVATIONS.md` §10 item 8).
+A TCP row has no finish time (`ADR-017` D1). The INV-2d record is
+`{ finishTime: Timestamp | null; runSeconds }`; a retained row carries the contradicted finish when
+its `dtFinish` equals `finishTime` (XML) or, having none, its `Time` equals `runSeconds` (TCP). The
+lift is a different finish by the same comparison, a mark, a retraction, or the on-course stream
+listing a finish. After a lift by the on-course stream the contradicted rows stay unpresented; only
+rows carrying the new finish present (S1-20). In a second run, a time-empty row retracts the mark
+in `status` too (recorded: a cleared second-run DNS, then the athlete raced), and an XML second-run
+row with no time is the time-empty case, not a first-run retraction, since before run 2 every such
+row already carries the combined placement with no time (S1-6, S1-7).
 
-## Revision 2 — contradiction matched by finish or run time; the lift keeps contradicted rows unpresented (2026-10-14)
-
-INV-2d held back "rows whose finish time equals the contradicted one". A TCP row has no finish time
-(`ADR-017` D1), and in both contradictions the spike replayed no on-course finish preceded the false
-row either, so the contradicted finish itself had no time. The record is now
-`{ finishTime: Timestamp | null; runSeconds }`; a retained row carries the contradicted finish when its
-`dtFinish` equals `finishTime` (XML) or, having none, its `Time` equals `runSeconds` (TCP); the lift
-is a different finish by the same comparison, a mark, a retraction, or the on-course stream listing a
-finish. After a lift by the on-course stream the contradicted rows stay unpresented; only rows carrying
-the new finish present (S1-20). The second-run retraction cases are completed: a time-empty row
-retracts the mark in `status` too (recorded: a cleared second-run DNS, then the athlete raced), and an
-XML second-run row with no time is the time-empty case, not a first-run retraction, since before run 2
-every such row already carries the combined placement with no time (S1-6, S1-7).
-
-## Revision 3 — the guard reads `changedAfter` (2026-11-05, second pass 2026-11-06)
-
-Decision 4 and the first revision state the guard as "detected more than one poll interval after"
-and "`lastRewriteDetectedAt` minus the poll interval". Since round 18 the content age is the
-reader's `changedAfter` (`ADR-003` Revision 6; `CONTRACTS.md` §4 INV-2c), `null` on a first read,
-which never qualifies. The re-baseline's own read (decision 8, step 2) carries the same stamp.
-An absent XML row and an XML table with no rows are not retractions (INV-7, XML bullet); TCP's
-absent row and start-list table remain so. (That sentence was the round-18 default; Revision 5
-replaces it.)
-
-## Revision 4 — the stream withdraws a finish it alone stated; a retraction supersedes the `tcp` slot (2026-11-06)
+## Revision 4 — the stream withdraws a finish it alone stated; a retraction supersedes the `tcp` slot
 
 INV-2d is for a finish presented from a results-table observation. A finish the on-course stream
 alone has stated — `dtFinish` set, no row having recorded the generation (`ADR-013` Revision 4) —
@@ -173,23 +162,19 @@ diagnostic; in slalom and the Cross time trial alike, a Cross heat listing no fi
 cp3-cross WX1_XT_26:25, a time trial, a finish impulse with no start and no time, withdrawn four
 minutes later, the athlete then `DNS`; `DERIVATIONS.md` §4.1; `CONTRACTS.md` §3.2). A listing with
 `dtStart` and `dtFinish` empty is `at-start`, outside a Cross heat, whatever preceded it in the
-generation — a start impulse deleted included, recorded twice; with `dtFinish` set and no start it
-is `finished`, the case above, recorded once — and displaces no table-presented `finished` or mark
-(`DERIVATIONS.md` §4.1; `CONTRACTS.md` §3.2, second and third pass). An XML
-retraction that passes the guard supersedes the `tcp` observation it retracts, which is no longer a
-candidate of its source; a TCP row restating the value afterwards is a new observation and is
-presented (`DERIVATIONS.md` §4.12). Steps 1 and 2 of the re-baseline reach the core as one ingest
-unit after the read has succeeded (`CONTRACTS.md` §4).
+generation — a start impulse deleted included; with `dtFinish` set and no start it is `finished`,
+the case above — and displaces no table-presented `finished` or mark (`DERIVATIONS.md` §4.1;
+`CONTRACTS.md` §3.2). An XML retraction that passes the guard supersedes the `tcp` observation it
+retracts, which is no longer a candidate of its source; a TCP row restating the value afterwards is
+a new observation and is presented (`DERIVATIONS.md` §4.12). Steps 1 and 2 of the re-baseline reach
+the core as one ingest unit after the read has succeeded (`CONTRACTS.md` §4).
 
-## Revision 5 — an absent XML row retracts again; a wholly empty XML table does not (decided 2026-11-11, written 2026-11-12)
+## Revision 5 — an absent XML row retracts; a wholly empty XML table does not
 
-**Decision (maintainer, 2026-11-11; replaces the last sentence of Revision 3):** "an absent XML row
-retracts again, under the existing content-age guard; a wholly empty XML table retracts nothing and
-raises a diagnostic."
+The maintainer's ruling (`RULINGS.md` R-4): an absent XML row retracts, under the content-age
+guard; a wholly empty XML table retracts nothing and raises a diagnostic.
 
-**Why.** Revision 3's sentence rested on "rows are never deleted from the file; a cleared result
-shows as fields going empty". That is true of half the corrections. Upstream rewrites the file
-whole from its current tables at every save (observed upstream behaviour):
+**Upstream behaviour.** Upstream rewrites the file whole from its current tables at every save:
 
 | Operator action | In the next file |
 |---|---|
@@ -197,8 +182,7 @@ whole from its current tables at every save (observed upstream behaviour):
 | A competitor deleted; a competitor moved to another race or class; a bib changed | The row is gone from that race. A moved or re-bibbed competitor appears under the new race or bib |
 | A start list generated again or redrawn | The race's rows are rebuilt, so there can be fewer or other rows (the same whole rewrite; this action itself was not traced, E4) |
 
-No recording holds a removal, so nothing recorded shows either way. Under Revision 3 a removed
-competitor's result stood in every XML-fed value until an operator re-baseline.
+No recording holds a removal.
 
 **The rule** (`CONTRACTS.md` §4 INV-7; `DERIVATIONS.md` §0.3, §4.12):
 
@@ -207,96 +191,75 @@ competitor's result stood in every XML-fed value until an operator re-baseline.
    not this Attempt's retracts `outcome`, `gates` (in Kayak Cross `faults`), `placement`,
    `underReview`, `qualified` and any mark in `status`; in a paired second run also `pairTotal`
    and `countingRun`.
-2. **The guard is decision 4's, unchanged** (INV-2c). Against a `tcp` observation the retraction
-   applies only when the snapshot's `changedAfter` is later than that observation's latest
-   delivery; `null`, a first read, never qualifies. Otherwise the snapshot is ignored for that
-   field and the next one settles it. The snapshot's own earlier `xml` observation is always
-   superseded: the same source, later ingested.
-3. **What is never retracted stays so:** an on-course inference, `entry`, `bib`, `startOrder`,
-   `heat`, `startLane`, `run`, and any field of an Attempt never present in a results-table
-   observation. The Attempt itself is not removed (replaced by Revision 6: an absent row removes
-   it).
-4. **A row that returns** is a new observation of upstream's table and is presented by the
-   ordinary rules, as Revision 4 says of a TCP row after an XML retraction. (Since Revision 6
-   this holds on the path where the snapshot was not admitted and the row was retracted; after a
-   removal the returning row creates a new Attempt, Revision 6 rule 5. Annotated 2026-11-16,
-   #349 N3.)
+2. **The guard is decision 4's** (INV-2c). Against a `tcp` observation the retraction applies only
+   when the snapshot's `changedAfter` is later than that observation's latest delivery; `null`, a
+   first read, never qualifies. Otherwise the snapshot is ignored for that field and the next one
+   settles it. The snapshot's own earlier `xml` observation is always superseded: the same source,
+   later ingested.
+3. **What is never retracted:** an on-course inference, `entry`, `bib`, `startOrder`, `heat`,
+   `startLane`, `run`, and any field of an Attempt never present in a results-table observation.
+   Whether the Attempt itself is removed is Revisions 6 and 7.
+4. **A row that returns** after a retraction (the snapshot not admitted for a removal) is a new
+   observation of upstream's table and is presented by the ordinary rules, as Revision 4 says of a
+   TCP row after an XML retraction. After a removal the returning row creates a new Attempt
+   (Revision 6 rule 5).
 5. **A wholly empty table retracts nothing.** That is an XML snapshot naming a race in its
    schedule with no result row for it at all. A table whose rows are all blank is not this case:
    each blank row retracts as a present row. One read of the lagging source does not clear a whole
    race. A deliberate "delete all results" keeps the rows, blanked, and TCP pushes it at once in
    start-list mode, which retracts (decision 1). Where the race holds at least one result an
-   absent row would have retracted, the core raises `xml-table-emptied`, an ingest-only
-   diagnostic: it reaches the admin log, never `GET /api/diagnostics`, so no wire shape moves. It
-   is raised once per emptying. If the race was really emptied, the re-baseline (decision 8) is
-   the remedy.
+   absent row would have retracted (Revision 8), the core raises `xml-table-emptied`, an
+   ingest-only diagnostic: it reaches the admin log, never `GET /api/diagnostics`, so no wire
+   shape moves (`RULINGS.md` R-5). It is raised once per emptying. If the race was really emptied,
+   the re-baseline (decision 8) is the remedy.
 6. **Unchanged:** the three TCP forms; a classification Phase's emptied table, which keeps the
-   last built Standing (maintainer, 2026-11-06); a race the file does not name, which is a
-   snapshot of another race and states nothing (INV-1).
+   last built Standing (`RULINGS.md` R-3); a race the file does not name, which is a snapshot of
+   another race and states nothing (INV-1).
 
-**Example.** Bib 11 has a result from a TCP push at 10:40:59. The operator deletes the competitor.
-The file saved at 10:41:35 lists the race without bib 11; its `changedAfter` is 10:41:32. Bib 11's
-`outcome` and `placement` go `not-yet` and its `status` `not-started`, pushed as any change. Had
-the same file been a first read (`changedAfter: null`), nothing would move until the next save.
+**Example.** Bib 11 has a result from a TCP push at 10:40:59 and is still in the on-course set,
+so no snapshot is admitted for its removal (Revision 6 rule 2). The file saved at 10:41:35 lists
+the race without bib 11; its `changedAfter` is 10:41:32. Bib 11's `outcome` and `placement` go
+`not-yet`, pushed as any change. Had the same file been a first read (`changedAfter: null`),
+nothing would move until the next save.
 
-**What it costs.**
-- A save that lands between the two halves of a move shows the result in neither race for one
-  save cycle. That is upstream's own table at that instant, like every half-correction.
-- A competitor deleted upstream stayed on our start list as a `not-started` Attempt, on site and on
-  live. Revision 6 removes the Attempt instead (maintainer, 2026-11-12).
-- The level of `xml-table-emptied` is the admin log, no wire diagnostic (a default, confirmed by
-  the maintainer on 2026-11-12; `DERIVATIONS.md` §10 item 26).
+**What it costs.** A save that lands between the two halves of a move shows the result in neither
+race for one save cycle. That is upstream's own table at that instant, like every half-correction.
 
-**Vectors.** `inv2c-first-read-unknown-age-refused` pinned Revision 3's sentence in its last step;
-its expected outcome for the absent row is now `not-yet`. Four vectors are added:
-`retraction-xml-absent-row`, `retraction-xml-absent-row-guard`,
-`retraction-xml-absent-row-then-returns` and `retraction-xml-empty-table-retracts-nothing`. The
-core follows in the M2 server batch; until then the changed vector and the first three new ones
-are on the expected-red ledger (`CONFORMANCE-VECTORS.md` §2). The fourth passes today.
+## Revision 6 — an absent row removes the Attempt
 
-## Revision 6 — an absent row removes the Attempt (decided and written 2026-11-12)
-
-**Decision (maintainer, 2026-11-12; extends Revision 5 from the result to the Attempt):** "A
-competitor removed upstream (deleted, moved or re-bibbed) has their Attempt REMOVED." Removal
-applies when the row is absent from an admitted XML snapshot under the content-age guard
-(Revision 7: when no row of the race carries the bib; a re-bib or swap that leaves the bib in the
-race removes nothing). A moved
-competitor appears as a new Attempt in the other Phase. The bridge sends `DELETE` for it to live.
-
-**Why.** Revision 5's table shows what the next file holds after each action: the row is gone
-exactly for a competitor deleted, moved or re-bibbed (and for a redrawn start list), and stays,
-blanked, for a deleted result or a mark. So the absent row is a statement that the Attempt no
-longer exists upstream, not that its result was cleared. Under Revision 5 the Attempt stayed as
-a `not-started` ghost on every start list, on site and on live.
+The maintainer's ruling (`RULINGS.md` R-6): "A competitor removed upstream (deleted, moved or
+re-bibbed) has their Attempt REMOVED", from an admitted XML snapshot under the content-age guard. A
+moved competitor appears as a new Attempt in the other Phase. The bridge sends `DELETE` for it to
+live. By Revision 5's table, the row is gone exactly for a competitor deleted, moved or re-bibbed
+(and for a redrawn start list), and stays, blanked, for a deleted result or a mark, so an absent
+row states that the Attempt no longer exists upstream.
 
 **The rule** (`CONTRACTS.md` §2.6, §4 INV-7, §7.2, §8.3; `DERIVATIONS.md` §4.12, §10 item 38). The
-decision fixes the trigger and the guard; the rest are defaults taken inside it:
-1. **The trigger is the race's row in the snapshot's results table**, the one row per Attempt,
-   start-list rows included: the row upstream drops on a delete, a move or a re-bib and keeps,
-   blanked, on a result delete. The class's participants table carries the Entry, not the
-   Attempt, and removes nothing. (Narrowed by Revision 7: the row is the one that carries the
-   Attempt's bib, so the trigger is that no row of the race carries the bib.) Only an Attempt a results-table row of its race has named is
-   removed; one only the on-course stream has named is TCP's.
+ruling fixes the trigger and the guard; the rest are defaults taken inside it:
+1. **The trigger is the race's results table in the snapshot**, start-list rows included: an
+   Attempt is removed when no row of the race carries its bib (Revision 7 rule 1). The class's
+   participants table carries the Entry, not the Attempt, and removes nothing. Only an Attempt a
+   results-table row of its race has named is removed; one only the on-course stream has named is
+   TCP's.
 2. **The guard is decision 4's, over the whole Attempt.** The snapshot is admitted for the Attempt
    when its `changedAfter` is later than the latest delivery of every `tcp` observation of the
    Attempt, an on-course listing included; `null` never qualifies; and an Attempt in the on-course
    set is never removed. Where the snapshot is not admitted, Revision 5's per-field retraction
    applies as written, and a later snapshot settles the removal.
-3. **TCP's absent row still retracts and never removes.** The decision names the XML snapshot; the
+3. **TCP's absent row still retracts and never removes.** The ruling names the XML snapshot; the
    next save follows a removal within a save cycle.
 4. **What the removal does.** The Attempt is gone from every read and every Standing (the
    Standings that held it are pushed whole where they changed). On site it is one
-   `attempt.deleted { seq, attemptId }`, §8.4's shape, a new on-site message (additive), and no
-   `attempt.updated` for that Attempt in the unit. A pending `WriteRequest` of it resolves
-   `mismatched` without `confirmedValue`, as on a retraction, in the same unit, before the
-   removal. Its checks and flags stay in the store and are not served while it does not exist
-   (`CONTRACTS.md` §2.10). The Entry is not removed. The bridge sends
-   `DELETE /ingest/v2/attempts/{phaseId}/{bib}`.
-5. **A row that reappears** creates a new Attempt by the ordinary rule, `run` 1, carrying nothing
-   of the removed one. A moved or re-bibbed competitor's new row creates its Attempt the same
-   way, in the same unit as the old one's removal when one snapshot carries both. (Narrowed by
-   Revision 7: "nothing" is the removed one's result state; its checks and flags are the bib's
-   and are served again. A re-bib or swap that leaves the bib in the race removes nothing.)
+   `attempt.deleted { seq, attemptId }`, §8.4's shape, and no `attempt.updated` for that Attempt
+   in the unit. A pending `WriteRequest` of it resolves `mismatched` without `confirmedValue`, as
+   on a retraction, in the same unit, before the removal. Its checks and flags stay in the store
+   and are not served while it does not exist (`CONTRACTS.md` §2.10). The Entry is not removed.
+   The bridge sends `DELETE /ingest/v2/attempts/{phaseId}/{bib}`.
+5. **A row that reappears** creates a new Attempt by the ordinary rule, `run` 1, carrying none of
+   the removed one's result state (no generation, contradiction record or remembered mark); its
+   checks and flags are the bib's and are served again (Revision 7 rule 4). A moved or re-bibbed
+   competitor's new row creates its Attempt the same way, in the same unit as the old one's removal when one
+   snapshot carries both.
 6. **Unchanged:** a wholly empty table removes and retracts nothing (Revision 5 rule 5); a
    classification table holds no Attempts; a race the file does not name states nothing.
 
@@ -306,31 +269,22 @@ without bib 11 and `K1M_BR1_7` with it. In that unit `K1M_BR1_6:11` is removed
 (`attempt.deleted`, its Standings re-pushed) and `K1M_BR1_7:11` is created by its row.
 
 **What it costs.** A save that lands between the two halves of an operator's move shows the
-competitor in neither race for one save cycle, as Revision 5 already noted for the result; now the
-Attempt goes and comes back as a new one, so a client shows it as new. A judge's check on a
-removed Attempt is not shown until the Attempt returns. One wire message and one client duty are
-added. The guard can hold a removal back for one save cycle while TCP keeps listing the Attempt.
+competitor in neither race for one save cycle, and the Attempt goes and comes back as a new one, so
+a client shows it as new. A judge's check on a removed Attempt is not shown until the Attempt
+returns. The guard can hold a removal back for one save cycle while TCP keeps listing the Attempt.
 
-**Vectors.** `inv2c-first-read-unknown-age-refused`, `retraction-xml-absent-row`,
-`retraction-xml-absent-row-guard` and `retraction-xml-absent-row-then-returns` now expect the
-removal; `attempt-removed-xml-absent-start-list-row` and `attempt-removed-not-while-on-course`
-are added. All but the last are on the expected-red ledger until the core change (P3); the last
-passes on today's core, which removes nothing.
+## Revision 7 — the bib is the key of a run's data
 
-## Revision 7 — the bib is the key of a run's data (decided and written 2026-11-12)
-
-**Decision (maintainer, 2026-11-12, #349; narrows Revision 6):** "The data belongs to the bib.
-Timing is built on start numbers, and the names are secondary. Times, penalties, and the fact that
-penalties were checked are recorded against the bib, and that is also how they are collected on
-the course. If a different name later appears under a bib, nothing is wrong, because the data
-stays bound to the bib." Recorded as the principle "The bib is the key of a run's data; the
-competitor's identity under a bib may change" (`../README.md`, ground rules).
+The maintainer's ruling (`RULINGS.md` R-2, R-7): "The data belongs to the bib. Timing is built on
+start numbers, and the names are secondary. Times, penalties, and the fact that penalties were
+checked are recorded against the bib, and that is also how they are collected on the course. If a
+different name later appears under a bib, nothing is wrong, because the data stays bound to the
+bib."
 
 **The rule** (`CONTRACTS.md` §2.6, §2.10, §4 INV-7; `DERIVATIONS.md` §4.9, §4.12, §10 item 38):
 1. **The trigger is the bib.** An Attempt is removed only when its bib leaves the race: no row of
    the race's results table in a snapshot admitted for the Attempt (Revision 6 rule 2) carries
-   its bib. Revision 6's "the row is absent" means exactly that; a row is the Attempt's by its
-   bib, not by the competitor's `Id`.
+   its bib. A row is the Attempt's by its bib, not by the competitor's `Id`.
 2. **A re-bib or swap that leaves the bib in the race keeps the Attempt.** The row that carries
    the bib is the Attempt's row and is read by the present-row rules; its `Id` re-points `entry`
    (`CONTRACTS.md` §4 INV-4), and nothing else of the Attempt changes for that reason: not `run`,
@@ -342,67 +296,43 @@ competitor's identity under a bib may change" (`../README.md`, ground rules).
    recreates the Attempt of each bib that one save leaves out (Revision 6 rule 5).
 4. **Checks and flags stay the bib's.** They are keyed by the Attempt (Phase and bib) and served
    whenever that Attempt exists, whoever the competitor under the bib is, a recreated Attempt
-   included (`CONTRACTS.md` §2.10; `DERIVATIONS.md` §10 item 38 default (g) stands). Revision 6 rule 5's "carrying nothing of
-   the removed one" is the result state only: no generation, contradiction record or remembered
-   mark.
+   included (`CONTRACTS.md` §2.10; `DERIVATIONS.md` §10 item 38 default (g)).
 
 **What it costs.** A judge's check made under one competitor is served under the next one the
-bib carries; that is the decision (the paper protocol is per bib as raced). Whether upstream lets
+bib carries; that is the ruling (the paper protocol is per bib as raced). Whether upstream lets
 two rows of a race share a bib inside one save, or forces a swap through an intermediate bib, is
 not established (E4); rules 2 and 3 cover both.
 
-**Vectors.** No expected outcome changes: every removal vector drops the bib from the race.
-`attempt-kept-when-bib-stays-under-another-entry` is added (the bib stays under another `Id`: no
-`attempt.deleted`, `entry` re-pointed, `run` 1); it passes on today's core, which removes nothing.
+## Revision 8 — `xml-table-emptied` is raised under the content-age guard (a default)
 
-## Revision 8 — `xml-table-emptied` is raised under the content-age guard (a default, 2026-11-15)
-
-Revision 5, rule 5, raises `xml-table-emptied` "where the race holds at least one result an absent
+Revision 5 rule 5 raises `xml-table-emptied` "where the race holds at least one result an absent
 row would have retracted". Read with rule 2, that counts a result held from `tcp` only where the
 guard would have admitted the retraction: the snapshot's `changedAfter` is later than the result's
-latest delivery (`CONTRACTS.md` §4 INV-7; `DERIVATIONS.md` §4.12).
-
-So the guard narrows when the diagnostic appears:
+latest delivery (`CONTRACTS.md` §4 INV-7; `DERIVATIONS.md` §4.12). So:
 - a first read, whose `changedAfter` is `null`, raises nothing;
 - a file written before the results it lacks raises nothing;
 - the first later snapshot of the still-empty table that the guard admits raises it.
 
-A result held from `xml` alone counts at once, as before.
-
-**Why this is inside the decision** (maintainer, 2026-11-11: "a wholly empty XML table retracts
-nothing and raises a diagnostic"). The entry tells the operator that this file would have cleared
-results. A file older than those results would not have cleared them, table emptied or not, so
-it has nothing to report.
+A result held from `xml` alone counts at once. The entry tells the operator that this file would
+have cleared results; a file older than those results would not have cleared them, so it has
+nothing to report. A default (`DERIVATIONS.md` §10 item 41 (c)): it reopens if an operator misses
+an emptied table because every read of it was older than TCP's last delivery of the race.
 
 *Example.* TCP pushes a race's results at 10:40:59. A file whose `changedAfter` is 10:40:55 names
 the race with no row: nothing is retracted and nothing is logged. The next save, `changedAfter`
 10:41:32, still has no row: `xml-table-emptied` is logged once.
 
-**Status.** Round C owed this to the maintainer together with the question of the diagnostic's
-surface. That question is settled as the admin log (2026-11-12), and nothing here changes what an
-official or a spectator sees, so it is recorded as a default (`DERIVATIONS.md` §10 item 41 (c)).
-It reopens if an operator misses an emptied table because every read of it was older than TCP's
-last delivery of the race.
+## Revision 9 — a Phase that leaves the schedule is removed
 
-## Revision 9 — a Phase that leaves the schedule is removed (decided 2026-11-16, written the same day)
-
-**Decision (maintainer, 2026-11-16, relayed by the planner session: "Both yes, as recommended").**
-The recommendation answered: "Yes: remove it. It follows directly from your decision on
-competitors (what is removed in Canoe123 is removed here too) and from 'Canoe123 is right'. The
-safeguard is the same: only from an admitted XML snapshot, with the content-age check. An empty
-table does not count as a removal." The question was a race that disappears from Canoe123's
-schedule (deleted, or its `RaceId` rebuilt after a `ClassId` rename): until now the server kept
-it as last stated, and a deleted second run of a class went on pairing with the first run
-(`DERIVATIONS.md` §10 item 49 (c), the known gap). The decision names `phase.deleted` for clients
-and `DELETE` to live through the bridge.
-
-**Why.** It is Revision 6's reasoning one level up. Upstream rewrites the file whole from its
-current tables at every save, so a race its schedule no longer names no longer exists upstream.
-Kept, its Phase is a ghost: a race on every selector, a first run naming a second run that is not
-scheduled, a `pair` standing of nothing.
+The maintainer's ruling (`RULINGS.md` R-8): a race that disappears from Canoe123's schedule
+(deleted, or its `RaceId` rebuilt after a `ClassId` rename) has its Phase removed, `phase.deleted`
+for clients and `DELETE` to live through the bridge, only from an admitted XML snapshot under the
+content-age check; an empty table does not count as a removal. It is Revision 6's reasoning one
+level up: upstream rewrites the file whole at every save, so a race its schedule no longer names
+no longer exists upstream. No recording holds a race leaving the schedule (E4).
 
 **The rule** (`CONTRACTS.md` §2.4, §4 INV-7, §7.1, §7.2, §8.3, §8.4; `DERIVATIONS.md` §2.1,
-§4.12, §10 item 54). The decision fixes the trigger, the guard and the empty-table case; the rest
+§4.12, §10 item 54). The ruling fixes the trigger, the guard and the empty-table case; the rest
 are defaults taken inside it, by analogy with Revisions 6 and 7:
 1. **The trigger is the snapshot's schedule:** the races its `Schedule` table names, the
    staged-without-race placeholder and the pseudo-class `NA` excluded (`DERIVATIONS.md` §0.4). A
@@ -441,10 +371,10 @@ are defaults taken inside it, by analogy with Revisions 6 and 7:
    has its `pair` derived again (`DERIVATIONS.md` §10 item 49 (a)), `null` or another second run,
    sent as `phase.updated` after the `phase.deleted`. A second run whose presented sibling was
    the removed Phase presents `siblingPhaseId: null` from the removal, until a later statement
-   names a first run (review of PR #381, CQ1), its `phase.updated` likewise after the
-   `phase.deleted` in the same unit, so no message at a unit boundary names a removed Phase;
-   its `pair` standing, whose scope named the removed Phase, went with the `phase.deleted` and is
-   published again from its first entry once a first run is named.
+   names a first run, its `phase.updated` likewise after the `phase.deleted` in the same unit, so
+   no message at a unit boundary names a removed Phase; its `pair` standing, whose scope named
+   the removed Phase, went with the `phase.deleted` and is published again from its first entry
+   once a first run is named.
 7. **A Phase that returns** is created again, whole, by the ordinary rule: the first message for
    its id carries the whole resource, its `date` is the snapshot's (a new Phase, so INV-5's
    once-only date starts again), its Attempts are created by their rows, `run` 1, carrying none
@@ -473,17 +403,4 @@ Phase TCP is not naming, as it would every Attempt (Revision 6); TCP's next ment
 live race, and the operator's remedy is the right file. A rename shows the old Phase removed and
 the rebuilt one created, which is what upstream did. The guard can hold a removal back while TCP
 keeps naming the race; TCP's `Schedule` names every race of the event in each message in every
-recording (the P3c sweep part 4), so a race deleted upstream is expected to drop out of it at once,
-which is not recorded (E4; `DERIVATIONS.md` §10 item 54 reopens on it).
-
-**Evidence.** E4: no recording holds a race leaving the schedule (the P3c sweep part 4 (a), a scan: one
-fixed race set per recording in all 2,032 distinct snapshots and in every TCP `Schedule`
-message; no snapshot with an empty schedule). The rule rests on upstream's whole-file rewrite
-(observed upstream behaviour, Revision 5).
-
-**Vectors.** Four are added: `phase-removed-when-schedule-omits-it`,
-`phase-kept-when-schedule-table-empty`, `phase-removal-refused-by-guard` and
-`phase-removed-then-returns`. They use the vector format's new `schedule` element
-(`CONFORMANCE-VECTORS.md` §1), which the harness adapter learns with the core change (M2 P3c).
-All but the second are on the expected-red ledger until then; the second passes on today's core,
-which removes no Phase.
+recording, so a race deleted upstream is expected to drop out of it at once, which is not recorded (E4; `DERIVATIONS.md` §10 item 54 reopens on it).

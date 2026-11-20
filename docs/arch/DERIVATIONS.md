@@ -417,7 +417,7 @@ the parser's. Like the parser's four they reach the admin log and never `GET /ap
     refreshes that course only, and only its `captions` (`source: tcp`) — `gates`, `slots` and
     `splitsAfterGate` are equal by construction; two courses of one snapshot with equal stripped
     layouts are both refreshed, the captions describing the string they share (not recorded; a
-    default, `DECISIONS/LOG.md`); a string matching no snapshot course, a fabricated one included,
+    default); a string matching no snapshot course, a fabricated one included,
     refreshes nothing. `layout`
     and `sectorEndsAfterGate` are the snapshot's alone and are never emitted from `RaceConfig`
     (`CONTRACTS.md` §2.12). The parser emits `splitsArmed` from `NrSplits`; what `splits` presents is
@@ -613,7 +613,7 @@ row (§4.12; `CONTRACTS.md` §2.6).
   recorded start is kept all the same (§4.11); only the leave reads the current state. One rule for
   slalom and the time trial (E1: cp3-cross WX1_XT_26:25, start listed, deleted at 07:15:34, a finish
   impulse with no start at 07:16:59 withdrawn at 07:20:57, staged until it left at 07:30:02:
-  `not-started`, then the `dns` row; a default, `DECISIONS/LOG.md` 2026-11-16).
+  `not-started`, then the `dns` row; a default, 2026-11-16).
 - **Why a separate status.** Removal before a finish with DNF or DSQ, and DNS from the start judge's
   terminal, push nothing on TCP (observed upstream behaviour). Of 145 recorded transitions:
   - 59 arrived in their own immediate push;
@@ -622,7 +622,7 @@ row (§4.12; `CONTRACTS.md` §2.6).
   - 8 only by rotation, up to about 600 s.
 - **Where the mark comes from.** The XML snapshot at about 35 s (INV-2, rule 2's exception), or TCP's
   next push of the race.
-- **The Kayak Cross time trial follows slalom** (maintainer, 2026-11-16; `DECISIONS/LOG.md`): the
+- **The Kayak Cross time trial follows slalom** (maintainer, 2026-11-16; `RULINGS.md` R-23): the
   rule above applies to an `XT`, `XT1` or `XT2` Attempt as written, `left-without-finish` with a
   start observed and `not-started` from `at-start`, and INV-2 rule 2's exception brings the mark
   from the next save. This replaces §10 item 43 (c), (d) for the time trial. **A Kayak Cross
@@ -1771,7 +1771,7 @@ but no code path or recording ever filled it.
 Items 1–7 and 13 were answered on 2026-09-25 (#179; E1, verified upstream behaviour); item 8 was closed by INV-2c
 on 2026-10-14; items 15 and 17 were answered by the spike and the exit-delay measurement; item 16 by
 the round-20 measurement; item 22 by the maintainer (2026-11-06); items 23 and 25 are accepted
-risks and item 5 is closed (maintainer, 2026-11-11 and 2026-11-10; `DECISIONS/LOG.md`); item 21
+risks and item 5 is closed (maintainer, 2026-11-11 and 2026-11-10; `RULINGS.md` R-10, R-11, R-17); item 21
 by the maintainer's `NHT1`/`NHT2` decision (2026-11-11), which item 31's closure replaced
 (2026-11-12). Items 9, 11, 12, 18, 19, 20 and 24
 remain. Items 26 to 37 are defaults taken on 2026-11-12, in round C parts 2 and 3, under the
@@ -1797,7 +1797,7 @@ review of #318's code (PR #379).
 4. ~~Combination for the super-final and the legacy final.~~ **Answered:** sum of two runs, tie
    broken by the better run; relayed, never computed (`CONTRACTS.md` §2.4).
 5. ~~The base class of an attribute sub-class.~~ **Answered:** none is stored; an ordinary separate
-   class (§2.1). **Closed (maintainer, 2026-11-11; `DECISIONS/LOG.md`):** such classes were a
+   class (§2.1). **Closed (maintainer, 2026-11-11; `RULINGS.md` R-17):** such classes were a
    workaround for several races of a day in one XML; they stay separate classes until one race =
    one XML is solved in the live ingest (M5), and more such tricks are to be expected. Their
    operator-typed time-trial rows are handled as untimed rows (§4.4).
@@ -1890,7 +1890,7 @@ review of #318's code (PR #379).
     **Decided (maintainer, 2026-11-06):** the last built Standing is kept, `asOf` showing its age
     (§4.10; `CONTRACTS.md` §5, §8.3, §8.6).
 23. **A re-run inside a TCP outage.** **Closed as an accepted risk (maintainer, 2026-11-11;
-    `DECISIONS/LOG.md`, #261): no admin action, the defaults below stand and the operator resolves
+    `RULINGS.md` R-11, #261): no admin action, the defaults below stand and the operator resolves
     by hand.** A re-run whose start and finish both fall in an outage arrives
     as one listing with a new start and a new finish, which §4.11 reads as a start correction:
     `run` stays, the newest row is presented, a pending write of the old run is resolved by the new
@@ -1914,7 +1914,7 @@ review of #318's code (PR #379).
     `observedAt` included (`CONTRACTS.md` §1.2). Reopens on a recording where the default
     presents a wrong value for longer than a save cycle. (Round 26; round C part 3.)
 25. **The generation across a server restart.** **Closed as an accepted risk (maintainer,
-    2026-11-10; `DECISIONS/LOG.md`, #294): the server stores nothing extra, and the operator
+    2026-11-10; `RULINGS.md` R-10, #294): the server stores nothing extra, and the operator
     resolves mismatched checks and pending corrections by hand.** `CONTRACTS.md` §2.10 keys checks and flags by `run`,
     and live-mini holds each Attempt at its pushed `run`; a restarted server that re-derives the
     Attempt from upstream alone would present `1` for a re-run Attempt — the re-run's checks read
@@ -2257,14 +2257,14 @@ review of #318's code (PR #379).
     (`CONTRACTS.md` §7.1: "leaving the set never changes `status`") nor the stream's outcome
     (item 35). A `running` then stands only beside `on-course`, and a time-trial Attempt that
     leaves while staged stays `at-start` until a listing or a row (recorded: 3 such leaves in
-    MX1_XT_26 and WX1_XT_26). *Superseded for the time trial, 2026-11-16* (maintainer; LOG): a
+    MX1_XT_26 and WX1_XT_26). *Superseded for the time trial, 2026-11-16* (maintainer; `RULINGS.md` R-23): a
     time-trial leave is slalom's (§4.1), `left-without-finish` with a start observed and
     `not-started` from `at-start`, and no `running` survives it. The heats keep this paragraph
     and item 35. The three staged leaves measured by the P3c sweep (E2, cp3-cross at 77cdef8)
     stood `at-start` 0 s, 8.1 s and 17.3 s after the leave, each ended by a `dns` from a row;
     under the new rule each reads `not-started` for that span.
     (d) *A Cross time-trial athlete removed before a finish.* *Superseded 2026-11-16 by the
-    maintainer's decision recorded in LOG (the alternative named below was taken):* the Attempt
+    maintainer's decision, `RULINGS.md` R-23 (the alternative named below was taken):* the Attempt
     is `left-without-finish` at the leave and INV-2 rule 2's exception brings the mark from the
     next save. The paragraph is kept as the record of the default it replaces. By (c) the Attempt stays
     `on-course` with the clock frozen and stale, until a TCP push of the race states the mark.

@@ -17,7 +17,8 @@ is intended to become permanent documentation.
 | `inputs/CONSTRAINTS.md` | What is fixed, what is open, operating reality |
 | `ARCHITECTURE.md` | Target state — domain model, deployable boundaries, data flow, principles traced to `EVIDENCE.md`, nine scenario walkthroughs (A–I) |
 | `CONTRACTS.md` | The primary deliverable — domain entities, the observation envelope, merge invariants, ranking, the derivability ledger, the on-site and live-ingest contracts |
-| `DECISIONS/` | Seventeen ADRs, `ADR-001` through `ADR-017`. `ADR-004` and `ADR-008` are superseded by `ADR-011` and `ADR-012`; their original text is kept. `ADR-017` records what the M0 spike changed. `LOG.md` is the decision log: the maintainer's decisions, the defaults taken without the maintainer, and the ruling history of every contract round since 13 |
+| `DECISIONS/` | Seventeen ADRs, `ADR-001` through `ADR-017`. `ADR-004` and `ADR-008` are superseded by `ADR-011` and `ADR-012`; their original text is kept. `ADR-017` records what the M0 spike changed |
+| `RULINGS.md` | The maintainer's rulings on the contract, one row each, stated as rules, with the sections that apply them. The former decision log, with the defaults and the ruling history of every contract round, is in git under the tag `contract-archive-2026-11` |
 | `TEST-ARCHITECTURE.md` | Four test tiers, the fixture format, and the clock-control requirement that makes presentation-layer timing assertable |
 | `DERIVATIONS.md` | For every value `CONTRACTS.md` asserts: the exact upstream source field, transformation, conditionality, and resulting envelope. §9 lists every upstream field deliberately *not* modelled, and why; §10 lists open technical questions |
 | `schemas/` | JSON Schema for the two wire shapes reused everywhere — the observation envelope and the error response — and for a fixture's admission block |
@@ -33,7 +34,7 @@ folder front to back. Depending on what you are here to judge:
 |---|---|
 | **Whether the design is right at all** | `inputs/EVIDENCE.md` (the symptoms it answers) → `ARCHITECTURE.md` → `CONTRACTS.md` §1–§4 |
 | **Whether it can be built** | `CONTRACTS.md` §7–§8 (the wire contracts) → `DERIVATIONS.md` → `vectors/tier1-conformance.json` |
-| **A specific decision** | `DECISIONS/` — each ADR states the alternatives considered and what the choice costs |
+| **A specific decision** | `RULINGS.md` (what the maintainer decided), then `DECISIONS/` — each ADR states the alternatives considered and what the choice costs |
 | **The test strategy** | `TEST-ARCHITECTURE.md`, then `CONFORMANCE-VECTORS.md` |
 | **In one hour** | `ARCHITECTURE.md`, then `CONTRACTS.md` §1.2 (the observation envelope) and §4 (the merge invariants). Those two sections are the design; everything else follows from them |
 
@@ -120,13 +121,13 @@ reader can see the whole set at once.
   cited sections win. `scripts/check-obligations.js` runs in CI (`.github/workflows/docs-arch.yml`)
   and fails in two cases: a citation no longer resolves, or a cited section or ADR changed while the
   checklist did not. Label the PR `obligations-unchanged` when the change affects no obligation.
-- **The normative documents state each rule as it stands; the ruling history lives in
-  `DECISIONS/LOG.md`.** Who ruled what in which contract round, and the case that raised it, is a
-  LOG row. A clause names its row only where a reader needs the provenance, and a rule that took
-  several rulings is restated as one rule with its examples, never as layered amendments.
+- **The normative documents state each rule as it stands; a maintainer ruling is one row in
+  `RULINGS.md`.** A clause that applies a ruling names its row, and a rule that took several
+  rulings is restated as one rule with its examples, never as layered amendments. The ruling
+  history of the contract rounds is in git under the tag `contract-archive-2026-11`.
 - **A core/checker disagreement that moves no client obligation gets a default and a
   `DERIVATIONS.md` §10 item, not a round** (maintainer, 2026-11-11). The design authority states the
-  default, records it as a LOG row and as the §10 item, and the core and the gate-2 checker follow
+  default as the §10 item, and the core and the gate-2 checker follow
   it; a round is kept for a disagreement that moves what a client must do.
 
 ## Implementation sequence

@@ -120,7 +120,7 @@ what is relayed is now exactly what upstream has ranked, when it changes.
 
 The maintainer's ground rule: "Canoe123's results are the truth; the printed results come from
 there" (2026-11-12; `README.md`). Two of decision 2's details are changed by it (maintainer,
-2026-11-12; `DECISIONS/LOG.md`):
+2026-11-12; `RULINGS.md` R-20):
 - **Category rank is the position among the category's placed entries, in class order.** Entries
   tied on class rank get consecutive category ranks, as upstream numbers them (recorded once:
   jarni-ne-odp C1M_BR1_19, two entries on class rank 43, upstream's category ranks 5 and 6). The

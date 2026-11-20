@@ -19,10 +19,10 @@ The decisions behind it are `DECISIONS/ADR-011` to `ADR-014`, plus dated revisio
 Review history that used to live inline in this document now lives in those ADRs. This document
 states the contract as it now stands.
 
-**Revisions since** (contract rounds 13 to 29, 2026-11-05 to 2026-11-09, and the maintainer's
-decisions that followed) are recorded in `DECISIONS/LOG.md`: one row per round, with the question,
-the case that raised it and what it changed. This document states the contract as it now stands and
-carries no ruling history; where a clause's provenance matters to a reader, it names its row.
+**Revisions since** (contract rounds 13 to 29, 2026-11-05 to 2026-11-09, and what followed) are in
+the former decision log, in git under the tag `contract-archive-2026-11`. This document states the
+contract as it now stands and carries no ruling history; a maintainer's decision is one row of
+`RULINGS.md`, and a clause that applies one names its row.
 
 ---
 
@@ -446,7 +446,7 @@ carry no class, `Results` and the snapshot do): an on-course listing creates the
 `/api/events/current` names every such `phaseId` in `pendingPhaseIds`, and a hydrating client requests
 `/api/phases/{phaseId}/attempts` for each as it does for a listed Phase, so an Attempt that left the
 course before the client connected is held too and its later partial messages apply (accepted by
-the maintainer, 2026-11-10; `DECISIONS/LOG.md`, round 27b). The window lasts about one poll with the snapshot configured, and without it until the race's
+the maintainer, 2026-11-10; `RULINGS.md` R-24). The window lasts about one poll with the snapshot configured, and without it until the race's
 `Results` message — its first push or its turn in the rotation (§4 INV-2). `/api/classes/{classId}/phases`
 lists created Phases only; a client renders what such an Attempt carries until its Phase arrives,
 whole, `classId` included.
@@ -641,7 +641,7 @@ pairing and combination behaviour.
 | `FI` or `FIB` after an `SF` under upstream's legacy-finals setting; `TFI` after a `TSF` (whether under that setting is not established) | race | second of a pair with that semi-final, `combination: 'sum'` — only when its rows carry a combined total, see below | duration | no |
 | any unknown token | race | `null` | duration | no |
 
-**Pairing** (maintainer, 2026-11-11; `DECISIONS/LOG.md`, #287).
+**Pairing** (maintainer, 2026-11-11; `RULINGS.md` R-18; #287).
 - **A second run names its first by two fields of the Phase: its `classId` and its `format`.**
   The first run is the Phase with the same `classId` whose `format` this table gives for the
   second run's:
@@ -675,7 +675,7 @@ pairing and combination behaviour.
 - `combination` is `'best'` exactly for `BR2`, `HT2`, `EL2` and `TR2`. Upstream sums both runs
   for every other second run.
 - **`NHT1` and `NHT2` are two single runs, `pair: null`** (maintainer, 2026-11-12;
-  `DECISIONS/LOG.md`): the heats with direct qualification. Upstream builds no combined result
+  `RULINGS.md` R-19): the heats with direct qualification. Upstream builds no combined result
   for them: `NHT2` is ranked as its own run, and `NHT1` only qualifies its runners and seeds
   `NHT2`'s start list (upstream behaviour). That link is a qualification and start-list relation,
   which the contract does not model, so neither token is in the pairing table. *Example:* an
@@ -1004,7 +1004,7 @@ stream `finished` stays.
   INV-2, rule 2's exception; one save cycle, 35 s at the recorded venue), or from TCP's next push of
   the race, whichever comes first. A late DNS is acceptable (maintainer answer, round 2): the athlete
   never reached the course.
-- **The Kayak Cross time trial follows slalom** (maintainer, 2026-11-16; `DECISIONS/LOG.md`):
+- **The Kayak Cross time trial follows slalom** (maintainer, 2026-11-16; `RULINGS.md` R-23):
   athletes start one by one, as in slalom, and upstream removing one before a finish means the
   athlete is no longer on course. So the leave rule (`DERIVATIONS.md` §4.1) gives a time-trial
   Attempt `left-without-finish` where a start was observed and `not-started` from `at-start`, the
@@ -1662,7 +1662,7 @@ implementation must satisfy, not an algorithm.
        observation of every field it retracts:** it changes its source's retained value, so it
        displaces the write's presentation and an assertion alike, and resolves a pending write
        `mismatched` with no `confirmedValue` — upstream's table holds no result where one was
-       requested (kept by the maintainer, 2026-11-11, to be revisited in M4; `DECISIONS/LOG.md`).
+       requested (kept by the maintainer, 2026-11-11, to be revisited in M4; `RULINGS.md` R-13).
        A removal of the Attempt (INV-7, an absent XML row) resolves it the same way, in the
        removal's unit and before it.
        **The presented value under this rule is a whole
@@ -1987,7 +1987,7 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    leaves the Standing as last built (maintainer, 2026-11-06). **A standing is first published at
    its first entry:** before one, its key is known and nothing is sent, and §7.1's hydration lists
    it only once it has been published — a standing emptied afterwards (a retraction, a re-run) stays
-   published, empty, its emptying being a change (`DECISIONS/LOG.md`, round 25). **On site, no earlier than
+   published, empty, its emptying being a change. **On site, no earlier than
    its Phase:** a Phase exists once its class is known (§1.6) and the standing's `classId` is the
    Phase's (§2.7), so a standing whose first entry is a running athlete at a TCP cold start waits for
    the race's `Results` message or the snapshot (§1.6's window), and within that unit the Phase's

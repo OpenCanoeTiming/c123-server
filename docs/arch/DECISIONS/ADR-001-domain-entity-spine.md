@@ -111,4 +111,4 @@ operator who builds the heats by hand keeps the time-trial bibs, so a round's bi
 differ from the time trial's (`DERIVATIONS.md` §4.10). The decision stands, and the reasoning
 holds more strongly: the bib is a per-Phase fact, `(phaseId, bib)` is unaffected, and across the
 Phases of a class a competitor is `entryId`, never a bib (`CONTRACTS.md` §2.6; maintainer,
-2026-11-15, `DECISIONS/LOG.md`).
+2026-11-15, `RULINGS.md` R-21).
