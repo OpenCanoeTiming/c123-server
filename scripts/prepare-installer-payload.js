@@ -18,8 +18,8 @@
  * so the .iss script can pick them up via #include.
  *
  * Node.js runtime is downloaded once and cached in .cache/node-runtime/.
- * The zip is extracted with PowerShell's Expand-Archive, which is built into
- * every Windows 10+ machine and GitHub Actions windows-latest runners.
+ * The zip is extracted with the tar.exe that ships with Windows 10 1803+
+ * (bsdtar, which reads zip) and with GitHub Actions windows-latest runners.
  *
  * Intentionally Windows-only — this script produces a Windows installer
  * payload and is not expected to run on Linux/macOS.
@@ -37,13 +37,13 @@ import {
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, '..');
 
-// Hard-fail early on non-Windows — the script uses PowerShell Expand-Archive
+// Hard-fail early on non-Windows — the script uses the Windows tar.exe
 // and downloads node.exe. Running it on Linux/macOS would fail opaquely
 // somewhere in the middle.
 if (process.platform !== 'win32') {
@@ -143,12 +143,11 @@ async function ensureNodeRuntime() {
   await pipeline(response.body, createWriteStream(zipPath));
 
   log('Extracting Node.js zip');
-  // Expand-Archive is built into every Windows 10+ PowerShell install.
-  // -LiteralPath avoids wildcard interpretation of paths containing []/?.
-  execSync(
-    `powershell -NoProfile -NonInteractive -Command "Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${CACHE_ROOT}' -Force"`,
-    { stdio: 'inherit' },
-  );
+  // tar.exe (bsdtar) ships with Windows 10 1803+ and reads zip archives. It is called by its full
+  // path so that a GNU tar earlier on PATH (Git for Windows), which cannot read zip, is never used.
+  // execFileSync throws on a non-zero exit, so a failed extraction stops here.
+  const tarExe = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe');
+  execFileSync(tarExe, ['-xf', zipPath, '-C', CACHE_ROOT], { stdio: 'inherit' });
   rmSync(zipPath, { force: true });
 
   if (!existsSync(CACHED_NODE_EXE)) {
