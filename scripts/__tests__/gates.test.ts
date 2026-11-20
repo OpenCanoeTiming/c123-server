@@ -43,8 +43,22 @@
  *   fails step 3. A known-differences entry without a non-blank `issue` is refused (exit 2, names the entry).
  *   exit codes: 0 all steps pass; 1 a step FAILS (all steps still run and report); 2 a prerequisite is missing (protocol-docs dir,
  *     checker, comparator, a recording): stderr names the missing piece, no step line says PASS.
+ *   #324 additions (pinned checker, pinned known-difference values, partial runs):
+ *     --protocol-docs-ref <file>   the file holding the protocol-docs commit SHA the gates must use (40 hex); default
+ *                                  scripts/gates/protocol-docs.ref. A non-default file is an override line.
+ *                                  The protocol-docs HEAD must equal the pin and tools/ must have no uncommitted or untracked change,
+ *                                  else exit 2; the message names both SHAs and the bump path (scripts/gates/README.md).
+ *     header: protocol-docs pin: <sha>
+ *     known-differences entry: { recording, attemptId, field, xml, presented, issue, gate? }; `xml` and `presented` are the two values
+ *       it tolerates (the comparator summary's names). A listed difference with other values FAILS step 3; an entry without both
+ *       values is refused (exit 2, names the entry). tolerated line: tolerated: <rec> <attemptId> <field> <issue> xml <json> presented <json>
+ *     --only <name[,name...]>      PARTIAL run: step 1 is not run, steps 2 and 3 run on the named recordings only, only those recordings
+ *                                  must exist; an unknown name is exit 2. Header line `run: PARTIAL ...`; the last line is
+ *                                  `verdict: PARTIAL PASS|PARTIAL FAIL`. The stale check covers entries of the selected recordings only.
+ *     a full run's last line is `verdict: PASS|FAIL`.
+ *     env C123_GATES_STUBS=1 lets the tools project collect the stub data-gate files under fixtures/gates (the normal run does not).
  *
- * Sources: the issue #313 scope and test plan rows 1-6 (named `#313 row N`).
+ * Sources: the issue #313 scope and test plan rows 1-6 (named `#313 row N`); #324 (named `#324 ...`), #319 N14.
  */
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -112,6 +126,9 @@ interface World {
   out: string
   replay: string
   known: string
+  /** the --protocol-docs-ref file; run() writes the stub checkout's HEAD into it unless `pin` is set */
+  ref: string
+  pin?: string
   gate3: Record<string, Record<string, unknown>[] | string>
 }
 const recDir = (name: string): string => `2026-01-01-${name}`
@@ -143,18 +160,24 @@ function world(opts: { omitChecker?: boolean; omitComparator?: boolean; omit?: s
     writeFileSync(path.join(rec, recDir(n), 'manifest.json'), manifest(n))
     writeFileSync(path.join(rec, recDir(n), '001-chunk.jsonl'), chunk(n))
   }
-  return { pd, rec, out: path.join(root, 'out'), replay: path.join(root, 'replay.mjs'), known: path.join(root, 'known.json'), gate3: {} }
+  return { pd, rec, out: path.join(root, 'out'), replay: path.join(root, 'replay.mjs'), known: path.join(root, 'known.json'),
+    ref: path.join(root, 'protocol-docs.ref'), gate3: {} }
+}
+/** Writes the stub comparator's config (it is gitignored by nobody, so it sits outside tools/) and the pin file. */
+function prepare(w: World): void {
+  if (existsSync(w.pd)) writeFileSync(path.join(w.pd, 'stub-gate3.json'), JSON.stringify(w.gate3))
+  writeFileSync(w.ref, (w.pin ?? (existsSync(w.pd) ? git(w.pd, 'rev-parse', 'HEAD') : '0'.repeat(40))) + '\n')
 }
 function run(w: World, tests: string[] = [STUB_PASS], extra: string[] = [], extraEnv: Record<string, string> = {}) {
-  if (existsSync(w.pd)) writeFileSync(path.join(w.pd, 'stub-gate3.json'), JSON.stringify(w.gate3))
-  const env: NodeJS.ProcessEnv = { ...process.env }
+  prepare(w)
+  const env: NodeJS.ProcessEnv = { ...process.env, C123_GATES_STUBS: '1' }
   delete env.C123_PROTOCOL_DOCS
   delete env.C123_GATES_DATA_TESTS
   Object.assign(env, extraEnv)
   const r = spawnSync(
     TSX,
     [SCRIPT, '--protocol-docs', w.pd, '--recordings', w.rec, '--out', w.out, '--data-gate-tests', tests.join(','),
-      '--replay-script', w.replay, '--known-differences', w.known, ...extra],
+      '--replay-script', w.replay, '--known-differences', w.known, '--protocol-docs-ref', w.ref, ...extra],
     { cwd: ROOT, encoding: 'utf8', timeout: T, env },
   )
   return { status: r.status, stdout: r.stdout, stderr: r.stderr, all: r.stdout + r.stderr }
@@ -168,6 +191,9 @@ describe('npm run gates (#313)', () => {
     expect(r.stdout).toMatch(/step 2 gate 2: PASS/)
     expect(r.stdout).toMatch(/step 3 gate 3: PASS/)
     expect(r.stdout).toMatch(/skip count: 0\b/)
+    expect(r.stdout).toMatch(/^run: FULL$/m)
+    expect(r.stdout.trimEnd().split('\n').at(-1)).toBe('verdict: PASS')
+    expect(r.stdout).not.toMatch(/PARTIAL/)
   }, T)
 
   it('#313 row 1: protocol-docs without the gate-2 checker -> exit 2, names tools/gate2/check.js, no step PASS', () => {
@@ -193,9 +219,10 @@ describe('npm run gates (#313)', () => {
 
   it('#313 row 1: protocol-docs location falls back to env C123_PROTOCOL_DOCS when --protocol-docs is absent', () => {
     const w = world({ omitChecker: true })
-    const env = { ...process.env, C123_PROTOCOL_DOCS: w.pd }
+    prepare(w)
+    const env = { ...process.env, C123_PROTOCOL_DOCS: w.pd, C123_GATES_STUBS: '1' }
     const r = spawnSync(TSX, [SCRIPT, '--recordings', w.rec, '--out', w.out, '--data-gate-tests', STUB_PASS, '--replay-script', w.replay,
-      '--known-differences', w.known], { cwd: ROOT, encoding: 'utf8', timeout: T, env })
+      '--known-differences', w.known, '--protocol-docs-ref', w.ref], { cwd: ROOT, encoding: 'utf8', timeout: T, env })
     expect(r.status).toBe(2)
     expect(r.stdout + r.stderr).toContain('tools/gate2/check.js')
   }, T)
@@ -272,7 +299,8 @@ describe('npm run gates (#313)', () => {
 
   it('#313 row 5: a known-differences entry that no longer differs -> step 3 FAIL, names the stale entry, exit 1', () => {
     const w = world()
-    writeFileSync(w.known, JSON.stringify([{ recording: 'nkz-19so', attemptId: 'K1M_BR2_19:67', field: 'countingRun', issue: 'OpenCanoeTiming/c123-server#999' }]))
+    writeFileSync(w.known, JSON.stringify([{ recording: 'nkz-19so', attemptId: 'K1M_BR2_19:67', field: 'countingRun', xml: 1, presented: 'not-yet',
+      issue: 'OpenCanoeTiming/c123-server#999' }]))
     const r = run(w)
     expect(r.status, r.all).toBe(1)
     expect(r.stdout).toMatch(/step 3 gate 3: FAIL/)
@@ -295,7 +323,8 @@ describe('npm run gates (#313)', () => {
   it('#313 row 6: a difference listed with an issue is tolerated -> step 3 PASS, exit 0', () => {
     const w = world()
     w.gate3['nkz-19so'] = [{ attemptId: 'K1M_BR2_19:67', field: 'countingRun', xml: 1, presented: 'not-yet' }]
-    writeFileSync(w.known, JSON.stringify([{ recording: 'nkz-19so', attemptId: 'K1M_BR2_19:67', field: 'countingRun', issue: 'OpenCanoeTiming/c123-server#999' }]))
+    writeFileSync(w.known, JSON.stringify([{ recording: 'nkz-19so', attemptId: 'K1M_BR2_19:67', field: 'countingRun', xml: 1, presented: 'not-yet',
+      issue: 'OpenCanoeTiming/c123-server#999' }]))
     const r = run(w)
     expect(r.status, r.all).toBe(0)
     expect(r.stdout).toMatch(/step 3 gate 3: PASS/)
@@ -307,13 +336,14 @@ describe('npm run gates (#313)', () => {
       { attemptId: 'K1M_BR2_19:67', field: 'countingRun', xml: 1, presented: 'not-yet' },
       { attemptId: 'K1M_BR2_19:67', field: 'pen', xml: 2, presented: 0 },
     ]
-    writeFileSync(w.known, JSON.stringify([{ recording: 'nkz-19so', attemptId: 'K1M_BR2_19:67', field: 'countingRun', issue: 'OpenCanoeTiming/c123-server#999' }]))
+    writeFileSync(w.known, JSON.stringify([{ recording: 'nkz-19so', attemptId: 'K1M_BR2_19:67', field: 'countingRun', xml: 1, presented: 'not-yet',
+      issue: 'OpenCanoeTiming/c123-server#999' }]))
     const r = run(w)
     expect(r.status, r.all).toBe(1)
     expect(r.all).toContain('pen')
   }, T)
 
-  const KNOWN = { recording: 'nkz-19so', attemptId: 'K1M_BR2_19:67', field: 'countingRun', issue: 'OpenCanoeTiming/c123-server#999' }
+  const KNOWN = { recording: 'nkz-19so', attemptId: 'K1M_BR2_19:67', field: 'countingRun', xml: 1, presented: 'not-yet', issue: 'OpenCanoeTiming/c123-server#999' }
   const DIFF = { attemptId: 'K1M_BR2_19:67', field: 'countingRun', xml: 1, presented: 'not-yet' }
 
   it.each(['crash', 'exit3'])('#313 B1: comparator %s with an old listed-only summary in --out -> step 3 FAIL, never PASS', (mode) => {
@@ -363,7 +393,7 @@ describe('npm run gates (#313)', () => {
   }, T)
 
   it.each([
-    ['missing', { recording: 'nkz-19so', attemptId: 'K1M_BR2_19:67', field: 'countingRun' }],
+    ['missing', { recording: 'nkz-19so', attemptId: 'K1M_BR2_19:67', field: 'countingRun', xml: 1, presented: 'not-yet' }],
     ['empty', { ...KNOWN, issue: '' }],
     ['blank', { ...KNOWN, issue: '   ' }],
   ])('#313 B3: a known-differences entry with %s issue is refused, exit != 0, names the entry', (_n, entry) => {
@@ -384,7 +414,7 @@ describe('npm run gates (#313)', () => {
     const r = run(w)
     expect(r.status, r.all).toBe(0)
     expect(r.stdout).toContain(`known-differences: ${w.known} sha256 ${sha(text)}`)
-    expect(r.stdout).toMatch(/^tolerated: nkz-19so K1M_BR2_19:67 countingRun OpenCanoeTiming\/c123-server#999$/m)
+    expect(r.stdout).toMatch(/^tolerated: nkz-19so K1M_BR2_19:67 countingRun OpenCanoeTiming\/c123-server#999 xml 1 presented "not-yet"$/m)
   }, T)
 
   it('#313 B4: no tolerated lines when nothing is tolerated, and the known-differences sha256 is still printed', () => {
@@ -405,11 +435,181 @@ describe('npm run gates (#313)', () => {
 
   it('#313 B4: an override from env C123_GATES_DATA_TESTS is listed too', () => {
     const w = world()
-    const env: NodeJS.ProcessEnv = { ...process.env, C123_GATES_DATA_TESTS: STUB_PASS }
+    prepare(w)
+    const env: NodeJS.ProcessEnv = { ...process.env, C123_GATES_DATA_TESTS: STUB_PASS, C123_GATES_STUBS: '1' }
     delete env.C123_PROTOCOL_DOCS
     const r = spawnSync(TSX, [SCRIPT, '--protocol-docs', w.pd, '--recordings', w.rec, '--out', w.out, '--replay-script', w.replay,
-      '--known-differences', w.known], { cwd: ROOT, encoding: 'utf8', timeout: T, env })
+      '--known-differences', w.known, '--protocol-docs-ref', w.ref], { cwd: ROOT, encoding: 'utf8', timeout: T, env })
     expect(r.status, r.stdout + r.stderr).toBe(0)
     expect(r.stdout).toMatch(/^override: C123_GATES_DATA_TESTS .*stub-pass\.test\.ts/m)
+  }, T)
+
+  // ---- #324: the checker is pinned
+  it('#324 pin: the committed pin file holds one full commit SHA', () => {
+    expect(readFileSync(path.join(ROOT, 'scripts/gates/protocol-docs.ref'), 'utf8')).toMatch(/^[0-9a-f]{40}\n?$/)
+  })
+
+  it('#324 pin: the header prints the pin and an override line for a non-default pin file', () => {
+    const w = world()
+    const r = run(w)
+    expect(r.status, r.all).toBe(0)
+    expect(r.stdout).toContain(`protocol-docs pin: ${git(w.pd, 'rev-parse', 'HEAD')}`)
+    expect(r.stdout).toContain(`override: --protocol-docs-ref ${w.ref}`)
+  }, T)
+
+  it('#324 pin: a protocol-docs checkout at another commit -> exit 2, names both SHAs and the bump path, no PASS', () => {
+    const w = world()
+    const head = git(w.pd, 'rev-parse', 'HEAD')
+    w.pin = 'a'.repeat(40)
+    const r = run(w)
+    expect(r.status, r.all).toBe(2)
+    expect(r.all).toContain(head)
+    expect(r.all).toContain('a'.repeat(40))
+    expect(r.all).toContain('protocol-docs.ref')
+    expect(r.all).toContain('scripts/gates/README.md')
+    expect(r.all).not.toMatch(/PASS/)
+  }, T)
+
+  it.each([
+    ['a modified tracked file', 'tools/gate2/check.js'],
+    ['an untracked file', 'tools/gate3/extra.js'],
+  ])('#324 pin: %s under tools/ in the protocol-docs checkout -> exit 2, no PASS', (_n, file) => {
+    const w = world()
+    writeFileSync(path.join(w.pd, file), '// changed\n', { flag: 'a' })
+    const r = run(w)
+    expect(r.status, r.all).toBe(2)
+    expect(r.all).toContain('tools/')
+    expect(r.all).not.toMatch(/PASS/)
+  }, T)
+
+  it.each([['not a SHA', 'f7f56eb'], ['empty', '']])('#324 pin: a pin file that is %s -> exit 2, no PASS', (_n, pin) => {
+    const w = world()
+    w.pin = pin
+    const r = run(w)
+    expect(r.status, r.all).toBe(2)
+    expect(r.all).toContain('protocol-docs.ref')
+    expect(r.all).not.toMatch(/PASS/)
+  }, T)
+
+  it('#324 pin: a protocol-docs directory that is not a git checkout -> exit 2, no PASS', () => {
+    const w = world()
+    rmSync(path.join(w.pd, '.git'), { recursive: true, force: true })
+    w.pin = '0'.repeat(40)
+    const r = run(w)
+    expect(r.status, r.all).toBe(2)
+    expect(r.all).not.toMatch(/PASS/)
+  }, T)
+
+  // ---- #319 N14: a known difference pins its two values
+  it('#319 N14: the committed known-differences entries all carry xml and presented', () => {
+    const entries = JSON.parse(readFileSync(path.join(ROOT, 'scripts/gates/known-differences.json'), 'utf8')) as Record<string, unknown>[]
+    expect(entries.length).toBeGreaterThan(0)
+    for (const e of entries) {
+      expect(e, JSON.stringify(e)).toHaveProperty('xml')
+      expect(e, JSON.stringify(e)).toHaveProperty('presented')
+      expect(e.xml, JSON.stringify(e)).not.toBeNull()
+      expect(e.presented, JSON.stringify(e)).not.toBeNull()
+    }
+  })
+
+  it.each([
+    ['presented', { ...DIFF, presented: 'counting' }],
+    ['xml', { ...DIFF, xml: 2 }],
+    ['type of xml', { ...DIFF, xml: '1' }],
+  ])('#319 N14: a listed difference whose %s differs from the entry -> step 3 FAIL naming both values, exit 1', (_n, diff) => {
+    const w = world()
+    w.gate3['nkz-19so'] = [diff]
+    writeFileSync(w.known, JSON.stringify([KNOWN]))
+    const r = run(w)
+    expect(r.status, r.all).toBe(1)
+    expect(r.stdout).toMatch(/step 3 gate 3: FAIL/)
+    expect(r.stdout).not.toMatch(/^tolerated:/m)
+    const line = r.stdout.split('\n').find((l) => l.startsWith('step 3: ') && l.includes('K1M_BR2_19:67')) ?? ''
+    expect(line, r.stdout).toContain('countingRun')
+    expect(line).toContain(JSON.stringify(diff.xml))
+    expect(line).toContain(JSON.stringify(diff.presented))
+    expect(line).toContain('"not-yet"')
+  }, T)
+
+  it.each([
+    ['no xml', { recording: 'nkz-19so', attemptId: 'K1M_BR2_19:67', field: 'countingRun', presented: 'not-yet', issue: 'OpenCanoeTiming/c123-server#999' }],
+    ['no presented', { recording: 'nkz-19so', attemptId: 'K1M_BR2_19:67', field: 'countingRun', xml: 1, issue: 'OpenCanoeTiming/c123-server#999' }],
+  ])('#319 N14: a known-differences entry with %s is refused -> exit 2, names the entry, no PASS', (_n, entry) => {
+    const w = world()
+    w.gate3['nkz-19so'] = [DIFF]
+    writeFileSync(w.known, JSON.stringify([entry]))
+    const r = run(w)
+    expect(r.status, r.all).toBe(2)
+    expect(r.all).toContain('K1M_BR2_19:67')
+    expect(r.all).not.toMatch(/PASS/)
+  }, T)
+
+  // ---- #324: partial runs
+  const stepLogLines = (out: string): string[] => [...out.matchAll(/^step-log (\S+) sha256/gm)].map((m) => m[1]!)
+
+  it('#324 --only: steps 2 and 3 on the named recordings only, step 1 not run, PARTIAL in header and verdict, exit 0', () => {
+    const w = world({ omit: ['nkz-20ne', 'jarni-so-do'] }) // unselected recordings need not exist
+    // a skipping data-gate file would FAIL step 1, so a PASS proves step 1 did not run
+    const r = run(w, [STUB_SKIP], ['--only', 'cp3-cross,nkz-19so'])
+    expect(r.status, r.all).toBe(0)
+    expect(r.stdout).toMatch(/^run: PARTIAL .*cp3-cross.*nkz-19so/m)
+    expect(r.stdout).not.toMatch(/^run: FULL$/m)
+    expect(r.stdout).not.toMatch(/step 1 data-gate tests: (PASS|FAIL)/)
+    expect(r.stdout).toMatch(/step 1 data-gate tests: NOT RUN/)
+    expect(r.stdout).toMatch(/step 2 gate 2: PASS/)
+    expect(r.stdout).toMatch(/step 3 gate 3: PASS/)
+    expect(stepLogLines(r.stdout).sort()).toEqual(['cp3-cross', 'nkz-19so'])
+    expect([...r.stdout.matchAll(/^recording (\S+) sha256/gm)].map((m) => m[1]).sort()).toEqual(['cp3-cross', 'nkz-19so'])
+    expect(r.stdout.trimEnd().split('\n').at(-1)).toMatch(/^verdict: PARTIAL PASS\b/)
+    expect(r.stdout).not.toMatch(/^verdict: PASS/m)
+  }, T)
+
+  it('#324 --only: a failure on a selected recording -> exit 1, verdict PARTIAL FAIL', () => {
+    const w = world()
+    writeFileSync(path.join(w.rec, recDir('cp3-cross'), 'FAIL_GATE2'), '')
+    const r = run(w, [STUB_PASS], ['--only', 'cp3-cross'])
+    expect(r.status, r.all).toBe(1)
+    expect(r.stdout).toMatch(/step 2 gate 2: FAIL/)
+    expect(r.stdout.trimEnd().split('\n').at(-1)).toMatch(/^verdict: PARTIAL FAIL\b/)
+  }, T)
+
+  it('#324 --only: an unselected recording\'s failure is not run', () => {
+    const w = world()
+    writeFileSync(path.join(w.rec, recDir('nkz-20ne'), 'FAIL_GATE2'), '')
+    const r = run(w, [STUB_PASS], ['--only', 'cp3-cross'])
+    expect(r.status, r.all).toBe(0)
+  }, T)
+
+  it.each([['unknown', 'cp3-cross,no-such-recording'], ['empty', '']])('#324 --only: an %s name -> exit 2, no PASS', (_n, list) => {
+    const r = run(world(), [STUB_PASS], ['--only', list])
+    expect(r.status, r.all).toBe(2)
+    if (list !== '') expect(r.all).toContain('no-such-recording')
+    expect(r.all).not.toMatch(/PASS/)
+  }, T)
+
+  it('#324 --only: a selected recording that is missing -> exit 2, names it', () => {
+    const r = run(world({ omit: ['cp3-cross'] }), [STUB_PASS], ['--only', 'cp3-cross'])
+    expect(r.status, r.all).toBe(2)
+    expect(r.all).toContain('cp3-cross')
+    expect(r.all).not.toMatch(/PASS/)
+  }, T)
+
+  it('#324 --only: the stale check covers only the selected recordings', () => {
+    const w = world()
+    writeFileSync(w.known, JSON.stringify([{ ...KNOWN, recording: 'nkz-20ne' }]))
+    const quiet = run(w, [STUB_PASS], ['--only', 'cp3-cross'])
+    expect(quiet.status, quiet.all).toBe(0)
+    const stale = run(w, [STUB_PASS], ['--only', 'cp3-cross,nkz-20ne'])
+    expect(stale.status, stale.all).toBe(1)
+    expect(stale.stdout).toMatch(/stale known-differences entry.*nkz-20ne/)
+  }, T)
+
+  it('#324 --only: a listed difference on a selected recording is tolerated by value', () => {
+    const w = world()
+    w.gate3['nkz-19so'] = [DIFF]
+    writeFileSync(w.known, JSON.stringify([KNOWN]))
+    const r = run(w, [STUB_PASS], ['--only', 'nkz-19so'])
+    expect(r.status, r.all).toBe(0)
+    expect(r.stdout).toMatch(/^tolerated: nkz-19so K1M_BR2_19:67 countingRun /m)
   }, T)
 })

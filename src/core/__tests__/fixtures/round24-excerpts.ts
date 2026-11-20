@@ -1,4 +1,4 @@
-// Real records for the round 24 core tests (#242), cut BY SCRIPT from /workspace/timing/c123-protocol-docs/recordings/.cache, never typed.
+// Real records for the round 24 core tests (#242), cut BY SCRIPT from the c123-protocol-docs recordings, never typed.
 // 2026-04-19-jarni-ne-do, chunk 004-0824-time-limit.jsonl, tcp records 2026-04-19T08:50:00Z..08:50:25Z (first row of triage group C1 and of D1: K1M_BR2_19:51,
 // ja window 08:50:17.620Z / 08:50:22.604Z): every OnCourse listing that names bib 51 (the Total 0 messages dropped) and every Results push of RaceId K1M_BR2_19,
 // the latter reduced to the one <Row> of bib 51 (the other rows dropped). Verbatim otherwise, file order. observedAt = chunk _meta.startTime + ts.

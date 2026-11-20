@@ -1,4 +1,4 @@
-// Real records for the round-19 tests (#203), cut BY SCRIPT from /workspace/timing/c123-protocol-docs/recordings/.cache, never typed.
+// Real records for the round-19 tests (#203), cut BY SCRIPT from the c123-protocol-docs recordings, never typed.
 // `data` is the recorded text verbatim (a TCP message is whole; where a Results message held more rows than the case needs, the other <Row>
 // elements are dropped and the kept ones are verbatim; an XML snapshot keeps its root and the Participants/Schedule/Results blocks of the
 // case's Attempt and race, Classes, Categories, Attributes and CourseData as recorded; Events, GateStatistics and CompOfficials dropped). `observedAt` = chunk _meta.startTime + ts.

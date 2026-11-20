@@ -1,4 +1,4 @@
-// Real records for the row-cell and carry tests (#204), cut BY SCRIPT from /workspace/timing/c123-protocol-docs/recordings/.cache/2026-04-18-jarni-so-odp, never typed.
+// Real records for the row-cell and carry tests (#204), cut BY SCRIPT from the recording 2026-04-18-jarni-so-odp, never typed.
 // `data` is the recorded text verbatim; a Results push is cut to the one <Row> of the Attempt (the other rows dropped, the kept one verbatim); an XML snapshot
 // is reduced to the root and the race's Schedule, CourseData 1, and the Attempt's own Participants and Results blocks (the kept blocks verbatim).
 // Kept: every OnCourse message naming the Attempt, its Results rows, in file order. `observedAt` = chunk _meta.startTime + ts.

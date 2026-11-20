@@ -1,4 +1,4 @@
-// Real records for the #258 O1 instances (design-round20 CQ1; P12), cut BY SCRIPT from /workspace/timing/c123-protocol-docs/recordings/.cache.
+// Real records for the #258 O1 instances (design-round20 CQ1; P12), cut BY SCRIPT from the c123-protocol-docs recordings.
 // Per instance: every TCP record naming the Attempt (and every TimeOfDay tick: other TCP messages keep arriving, DERIVATIONS §4.1) in the 45 s before the first record at which the pre-round-20 core presented an outcome
 // no-result its presented status did not carry, to 4 s after; a Results push is cut to the Attempt's row (the other <Row> elements dropped, the kept
 // one verbatim); the last XML snapshot read at or before then, reduced to the root, Classes, CourseData, Attributes, the race's Schedule and the
