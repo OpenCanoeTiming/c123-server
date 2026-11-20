@@ -9,10 +9,8 @@ ways:
 3. the **resulting envelope**;
 4. the **failure mode**.
 
-**Consolidated revision, 2026-09-24.** Rewritten after the reverse pass, which checked every field
-Canoe123 emits on TCP, in the XML snapshot and on CIS, and after a latency measurement. The previous
-version read three TCP fields that do not exist or are never filled. It sliced result gate strings by
-the wrong width, gave no XML units, and derived the Cross order from `Time`. §8 records what changed.
+**History.** How this document came to be, and every earlier version of it, is in git under the tag
+`contract-archive-2026-11`.
 
 **Scope.** §1–§6 cover every value the contract asserts. **§9 covers every upstream field the
 contract does *not* model, and why.** A field in neither place is a gap, and should be reported.
@@ -988,6 +986,11 @@ results push precedes the first snapshot" (`DECISIONS/ADR-017` D4); whole record
   the last slot judged `0` before the first fault; `0` if none; a clean run on the recorded 9-slot
   course reads `9`, above its 7 numbered gates (values seen: 0 ×176, 9 ×122, then 3, 8, 6, 2, 1). This
   reproduced `XML.Results.NrFLT`/`FLT`/`LastCleanGate` exactly: 136 of 136 rows.
+- **`faults` is not merged across the two streams** (a default, §10 item 24). `gates` merges cell
+  by cell ((e)), but a Cross Attempt's `faults` is the presented observation's value whole, with
+  that observation's envelope, `observedAt` included (`CONTRACTS.md` §1.2). A fault the stream
+  judges after a row shows at the next row, and one the stream judges and withdraws after a row
+  never shows.
 - **Ignore `Pen` in Cross.** In the time trial the marks are never added into `Pen` (`Pen 0` and
   `Total = Time` in all 293 rows); in heats the on-course stream adds them while the result rows
   are inconsistent (3 of 16 faulted bibs showed `Pen 0`). The time trial ranks by faults, then last
@@ -1313,6 +1316,11 @@ All encodings produce `Gate[]` with exactly the course's gate count. The encodin
   observation when it attributes it (below), and that stamped element is what the replay log and the
   vectors carry (`CONFORMANCE-VECTORS.md` §1). An observation the parser marked `run: 1` would claim
   a generation it cannot know.
+- **Nothing persists `run` across a server restart** (an accepted risk, maintainer 2026-11-10,
+  `RULINGS.md` R-10; §10 item 25). A restarted server re-derives it from upstream alone, so a
+  re-run Attempt presents `run` 1: the re-run's checks read `stale`, run 1's compare against the
+  re-run's gates, and the operator resolves checks and pending corrections by hand (§6). Live never
+  lowers a stored `run` (`CONTRACTS.md` §8.3; R-12).
 - **Attribution per source.** An XML row whose `dtFinish` precedes the new generation's start
   describes the replaced run. A TCP row carries no finish time: within a generation that began with
   an observed new start, it is the current generation's only once that generation's finish has been
@@ -1440,6 +1448,11 @@ Otherwise the snapshot may predate the push, and it is ignored for that field un
 snapshot, the field's earlier `xml` value included (§10 item 41 (b)). The same guard applies to the mark exception of INV-2 rule 2, and to any snapshot value
 displacing a `tcp` value during an outage. Recorded: the XML was five minutes *ahead* of TCP's rotation on one
 jury-invalidated row (C1M_BR1_19 bib 7, later re-run, §4.11), and 7 s behind TCP on a cleared DNS.
+Its cost, accepted (§10 item 9): a real `dns` saved in the seconds before the leave is refused
+against the listing and waits for the next rewrite (recorded: 105 s of `not-started`, nkz-20ne
+C1M_BR1_20:64), and a snapshot written between a DNS cleared in the grid and the athlete's
+restaging can show the cleared `dns` for up to about 35 s; a late `dns` is acceptable
+(`CONTRACTS.md` §2.6).
 
 **After a retraction,** `status` is what the on-course stream currently shows for the Attempt
 (`at-start`, `on-course`, or a `finished` it still lists), else `not-started`. What the stream
@@ -1617,7 +1630,12 @@ review R16, E2: the spike applied the stale-mark check only to rows it had attri
   the first delivery is a change and resolves it, as `operator-write-mismatched-echo-wins` pins in
   any lifetime. On XML the content-age guard against `submittedAt` applies as always (the first read
   after a restart has `changedAfter: null` and resolves nothing). No on-course condition applies:
-  the write was accepted when the Attempt had left the set, and acceptance is not re-judged. A target
+  the write was accepted when the Attempt had left the set, and acceptance is not re-judged. The
+  on-site layer hands a stored `pending` write to the core once the core holds its Attempt, as an
+  operator element carrying the stored `target.run`: where the Attempt's generation has passed
+  it, the core creates the write `superseded`, with no optimistic value, and pushes it; where the
+  generation is the stored one, the rule above runs; where the core does not yet present that
+  generation, nothing is handed over (§10 item 44 (c)). A target
   generation the restarted core does not present is §10 item 25's accepted risk: nothing more is
   stored, and the operator resolves the pending correction by hand (maintainer, 2026-11-10).
 
@@ -1642,74 +1660,14 @@ changes: a late correction, a retraction, a contradiction, a re-baseline. The di
   (`CONTRACTS.md` §2.2). The grouping of days is visible from Phase dates. Identity is asserted by the
   bridge.
 - **Which registry an external id belongs to** ([N], configuration).
-- **The base class of an attribute sub-class** (§10).
+- **The base class of an attribute sub-class** (§2.1; §10 item 5).
 
 ---
 
 ## 8. Findings — what the consolidated revision changed here
 
-1. **Nonexistent or never-filled TCP fields were read.** Three were corrected: `Schedule.DisId`, which
-   does not exist; `RaceConfig.RaceStatus`, which does not exist; and `Schedule.StartTime`, which is
-   always empty.
-2. **`RemoveFromCourse.Reason` was never an upstream message.** It is our own command. The highlight
-   signal is our own derivative. Both are removed as sources (§4.1).
-3. **The result-row gate width was derived wrongly.** The width is 3 and there are always 30 cells
-   (§4.6(b)). The previous "finding 3", which claimed to avoid a latent bug, had introduced one.
-4. **XML units were never stated.** Milliseconds for times, seconds for penalties (§0.1).
-5. **The Cross order from `Time/1000` was wrong twice over:** the TCP format, and faults (§4.7).
-6. **The Class came from the `RaceId` prefix.** It now comes from `ClassId` (§1).
-7. **The registry number was sourced from TCP, which carries none** (§3).
-8. **Bib padding and the `<unassigned>` sentinel** now have ingest rules (§0.1, §0.3).
-9. **Completed and the stop-recompute rule.** Upstream's own run-closed mark is used, alongside two
-   other triggers. The blank-slot heuristic is dropped as a stop signal (§4.3). It stays as the
-   definition of *provisional* judging, where it is exact.
-10. **The Results cadence is two mechanisms**, event-driven and rotation. The ~30 s rotation carries
-    none of the latency-relevant values (§0).
-11. **CIS paths removed** (`DECISIONS/ADR-011`). Their facts are all available from TCP or the XML.
-12. **A second run's own outcome comes from time plus the sum of the gate cells**, with the cells
-    merged across the on-course and result streams (§4.4, §4.6(e)). This settles a recurring
-    maintainer complaint without CIS: run 2's detail is complete on TCP within a second, even when run
-    1 is the better run.
-13. **Result marks are not always pushed**, and `left-without-finish` is the honest interim state
-    (§4.1).
-15. **#179 answered** (2026-09-25, E1): start ramp and roll zone as judging slots (§2.3,
-    §4.6); Cross faults derived from the cells, `Pen` ignored (§4.6(d)); `SLER`/`WWER` as
-    classifications with stated staleness (§4.10); super-final and legacy final as summed pairs,
-    relayed (`CONTRACTS.md` §2.4); attribute sub-classes as ordinary classes (§2.1); the re-run
-    wizard's silent wipe and the stale mark (§4.11, §4.12); the reset-scoring-terminals action never
-    touching the write channel, and writes addressed to the connected instance (`CONTRACTS.md` §7.3).
-14. **Retraction is first-class** (§0.3, §4.12; `DECISIONS/ADR-015`). A TCP result push and an XML
-    snapshot are complete statements of a race; their stated absence retracts. The on-course stream
-    contradicts a finish taken away on the on-course grid, which upstream never clears. A mark
-    overrides a time. A result row observed cleared is a retraction, not a new run generation.
-16. **INV-2c compared event times; it now compares content age across sources** (round 8,
-    2026-10-14; §4.12). The event-time floor refused a corrected finish earlier than the presented one,
-    the routine shape of a swap or a shift back. The replaced run of a re-run is kept out by
-    generation attribution alone (§4.11).
-17. **The on-course set is upstream's list** (round 8; §4.8). A finisher stays in it as `finished`
-    until closure; the earlier `CONTRACTS.md` §7.1 dropped it at the finish, 20 s before the write
-    rule's closure.
-18. **A TCP result row carries no finish time** (round 9, `DECISIONS/ADR-017` D1; §4.4, §4.11, §4.12).
-    Attribution to a generation and the INV-2d match work by run time on TCP, by `dtFinish` on XML.
-19. **`placement` is known only when upstream ranks the row** (D2; §4.2, §4.7). `RankOrder` alone is a
-    sort key: a marked row's moves with every finish, a Cross heat's is the lane order.
-20. **Provisional is computed on the presented gates; `status` is never provisional** (D4; §4.4).
-21. **The leave rule has a number**, `onCourseLeaveAfterSeconds` = 3 s, and `at-start` is any listing
-    without a start (S1-8, S1-16, S1-17; §4.1). Round 20 set it to 4 s from the whole distribution
-    (§4.1).
-22. **The parser/core line is stated** (round 17, 2026-11-05, server#201 review and #247; §0.5).
-    the six `Prev*` run-1 columns are not read (§4.5); `run` is stamped by the core (§4.11); cells are retained before a
-    course binds (§4.6); the untimed flag is the parser's and its inheritance the core's, 47 Attempts
-    (§4.4); an untimed row is `finished` (§4.2); an `XT` `duration` carries `penaltySeconds: 0`
-    (§4.4); `faults` is `not-yet` until a cell is judged (§4.6(d)); `qualified` is bounded by `stage`
-    (§4.7); every row states `underReview` (§4.1); `decidedIn` is `null` from TCP (§4.10); DST
-    arithmetic and the `NA` schedule rows are stated (§0.2, §0.4); `Member1..3` are not carried (§3).
-23. **Content age is the reader's `changedAfter`, not detection minus the interval** (round 18,
-    2026-11-05, server#202 review; §0.3, §4.12). The subtraction overstated a first read's freshness
-    by the file's whole age and a delayed poll's by the delay; `null` on a first read refuses what
-    cannot be dated. Also: an empty table is a start-list scope snapshot, the on-site parsers emit no
-    classification push, the `xml` states are defined for an invalid and an empty file (§5), and a
-    repeated sector end is dropped (§2.3).
+What the consolidated revision of 2026-09-24 and the later reviews changed here is in git under the tag
+`contract-archive-2026-11`.
 
 ---
 
@@ -1762,1004 +1720,122 @@ but no code path or recording ever filled it.
 - live judge-entry gate stamps;
 - retained split differences;
 - the initialisation session id;
-- the scoring-terminal reset flag (§10).
+- the scoring-terminal reset flag (§10 item 1).
 
 ---
 
-## 10. Open technical questions
+## 10. Cases, defaults and what reopens them
 
-Items 1–7 and 13 were answered on 2026-09-25 (#179; E1, verified upstream behaviour); item 8 was closed by INV-2c
-on 2026-10-14; items 15 and 17 were answered by the spike and the exit-delay measurement; item 16 by
-the round-20 measurement; item 22 by the maintainer (2026-11-06); items 23 and 25 are accepted
-risks and item 5 is closed (maintainer, 2026-11-11 and 2026-11-10; `RULINGS.md` R-10, R-11, R-17); item 21
-by the maintainer's `NHT1`/`NHT2` decision (2026-11-11), which item 31's closure replaced
-(2026-11-12). Items 9, 11, 12, 18, 19, 20 and 24
-remain. Items 26 to 37 are defaults taken on 2026-11-12, in round C parts 2 and 3, under the
-maintainer's rule of 2026-11-11 that a disagreement moving no client obligation gets a default
-and an item here, not a contract round (`README.md`, ground rules); each says what would reopen
-it. Round C part 4 (maintainer, 2026-11-12) closed item 31, settled items 26, 33 and 34, added
-the live side to item 25's closure, and added item 38, the defaults inside the removal
-decision. Items 40 to 42, and item 38 (k) to (m), are defaults of 2026-11-15 from the reviews
-of M2 P3a, under the same rule. Items 43 to 48, and item 41 (c), are defaults of 2026-11-15
-from M2 P3b: the questions round C left open (#346), the rules that package's code needed
-(#300, #318), and one from the review of its text (item 48). Item 49 is a default of 2026-11-16
-from the review of #287's code (PR #376), under the same rule, and item 50 one of the same day
-from #345's code (several writes pending at once). Item 51 is a default of 2026-11-16 from the
-review of #318's code (PR #379).
+One row per case the sections above leave to a default, per question answered, and per question still open: what the server does, on what basis, and what evidence would reopen it.
+A new default, for a case a recording or a known operator action shows, is one new row cited by its number; its reasoning goes into the pull request, not into this document.
 
-1. ~~Does "reset scoring terminals" reach the write channel?~~ **Answered:** no. It resets the
-   hardware judge terminals on their own port and raises a flag on the scoring service for about
-   11 s; the TCP command receiver is untouched and nothing is emitted on TCP (`CONTRACTS.md` §7.3).
-2. ~~The layout letters `D` and `E`.~~ **Answered:** the Cross start ramp and roll zone, judging
-   slots that do not advance the gate number (§2.3, §4.6).
-3. ~~Are `RXER`, `SLER` and `WWER` classifications?~~ **Answered:** `SLER` and `WWER` are event-result
-   classifications like `XER`; `RXER` is a title only (§4.10).
-4. ~~Combination for the super-final and the legacy final.~~ **Answered:** sum of two runs, tie
-   broken by the better run; relayed, never computed (`CONTRACTS.md` §2.4).
-5. ~~The base class of an attribute sub-class.~~ **Answered:** none is stored; an ordinary separate
-   class (§2.1). **Closed (maintainer, 2026-11-11; `RULINGS.md` R-17):** such classes were a
-   workaround for several races of a day in one XML; they stay separate classes until one race =
-   one XML is solved in the live ingest (M5), and more such tricks are to be expected. Their
-   operator-typed time-trial rows are handled as untimed rows (§4.4).
-6. ~~Per-gate marks in Kayak Cross on TCP.~~ **Answered:** fault marks in the cells, never `Pen`
-   (§4.6(d)).
-7. ~~Does a re-run clear the row at staging or at the new finish?~~ **Answered:** the wizard wipes it
-   at once with no push; staging without the wizard never clears it (§4.11).
-8. ~~After a TCP disconnect, the first snapshot rewrite detected afterwards takes over (INV-2, rule 2).
-   If that rewrite happened in the few seconds *before* the disconnect, its content can predate TCP's
-   last push.~~ **Closed (round 8, 2026-10-14):** INV-2c compares content age across sources; a
-   snapshot whose `lastRewriteDetectedAt` minus the poll interval predates TCP's last observation of
-   the field is not presented, and the next snapshot is.
-9. Rule 2's exception lets an XML mark supersede a TCP `at-start`. If a DNS is *cleared* in the grid,
-   which pushes immediately, and the athlete is staged again within one snapshot interval, a
-   snapshot written before the clearing can show DNS for up to about 35 s. This is rare, and accepted
-   as residual. Narrowed (round 20, second pass): the restaging listing is a delivery of the
-   `at-start` (`CONTRACTS.md` §4 INV-2c), so a snapshot written before it is refused by the guard;
-   what remains is a snapshot written between the clearing and the restaging. The guard's cost
-   on the other side, recorded since (E2, replayed 2026-11-12 on a cut of nkz-20ne): a real
-   `dns` written to the file in the seconds before the leave is evaluated is refused and waits
-   for the next rewrite, which upstream makes only on a flagged change. C1M_BR1_20:64: last
-   listed 09:40:01.810Z, the leave at 09:40:05.837, the file with `DNS` read at 09:40:06.618 and
-   refused, the next rewrite at 09:41:51.770: 105 s of `not-started` where rule 2's text weighs
-   "1.1 s once". The recording's snapshot record of 09:40:41.676 in between is no rewrite: it is
-   byte for byte the file read at 09:40:06.618 (2,078,513 characters, equal; E1, compared
-   2026-11-15), so the reader delivers nothing for it (§0.3). Ratified as ruled: a late `dns` is
-   acceptable (`CONTRACTS.md` §2.6).
-10. ~~The cause of the 11–27 s late-finish outliers.~~ Answered (maintainer, round 2): the operator
-    assigns a finish retroactively after a judge reports the passage, or swaps two athletes' finishes
-    noticed late. Both are corrections that §4.12 now models.
-11. Which operator action produced each recorded retraction cannot be read from the stream. The
-    "stale row survives" behaviour matches the on-course grid edit path. No recorded instance of
-    "delete selected results" exists; its no-push behaviour is verified but unrecorded (E1).
-12. Whether today's live-mini XML ingest overwrites results that were cleared on TCP (E4).
-14. ~~Whether upstream's terminal channel can set a result mark on a closed run.~~ **Answered (2026-09-25,
-    E1):** no. The only status command targets an on-course slot by position and
-    ignores the bib; on a closed or never-started run there is no slot, and no command clears a mark.
-    The status write has left the contract; marks are the operator's (`CONTRACTS.md` §7.3).
-13. ~~A no-reorder penalty correction after racing ends may never trigger an XML write.~~ **Answered:**
-    confirmed (E1); the conditions are stated in §5 and `CONTRACTS.md` §2.8. TCP carries
-    it regardless, and the maintainer confirms the file is always saved at the end, so the gap is a
-    transient window, never lasting.
-15. ~~Whether upstream's on-course message still carries `Position` for a finisher it keeps listed
-    until closure.~~ **Answered (spike S1 sweep, E1): yes.** 68,894 of 68,894 on-course messages for
-    listed finishers carry `Position`.
-16. ~~The distribution of unchanged-listing gaps behind `onCourseLeaveAfterSeconds` (§4.1), measured over
-    all recordings **with no cut-off** (the spike's measurement evicted entries older than 2.5 s first and
-    was circular). Known so far: 3.04, 3.68, 3.86, 4.29 s with the stream alive, then 9.67 s. The
-    constant is 5 s until M1 sets it; whether the four gaps are rotation hiccups or real unstage/restage
-    decides whether it can be smaller.~~ **Answered (round 20, 2026-11-06, E1):** measured over all
-    seven recordings; the four gaps and the 9.67 s one are real unstage/restage (a full cycle of
-    `Total` distinct other bibs listed inside each), the longest hiccup is 2.59 s, the constant is
-    4 s (§4.1). Re-measure when a recording is added, and on the venue laptop (S5): a
-    non-removal gap above 3.0 s, a whole-list pause above 2.5 s, or a TCP silence between 2.0 s
-    and the constant reopens it (second pass: the trigger named in numbers; the recorded maxima
-    are 2.59, 2.16 and 1.90 s).
-19. **Two runs of one athlete with the same `Time` to 0.01 s.** A stale row from before a non-wizard
-    re-run, re-sent by rotation during run 2 and carrying exactly run 2's finishing time, is attributed
-    to run 2 and presents run 1's penalty and placement until upstream's next push (opponent review R17,
-    E2; needs the finish-first order, 28 %, a rotation inside run 2 and an equal time; lasts under a
-    second). Accepted as residual unless M1's data shows it; a remedy would compare the row's cells with
-    the on-course stream's before attributing.
-20. **`duplicate-finish` on TCP after D1.** Replayed, not yet pinned. The whole-recording replays
-    raise the diagnostic (E2, the M1 exit review's runs). Two instances in jarni-ne-odp, each
-    named by the finish time the two bibs share: C1M_BR1_19 bibs 64 and 65 at 11:39:27.400Z, and
-    K1W_BR2_19 bibs 18 and 19 at 13:01:21.040Z. A sweep of the merge core over the seven whole
-    recordings raises those two and a third, jarni-ne-do K1M_BR1_19 bibs 133 and 134 at
-    07:57:32.070Z (E2, 2026-11-12). No test pins a recorded instance yet. The item closes when
-    one does (#340).
-21. ~~**`NHT2`'s first-run token.** `CONTRACTS.md` §2.4 pairs it "where upstream defines one"; which
-    schedule token it pairs with is unstated, so until it is settled an `NHT2` has `pair: null`
-    (§2.1). In no recording. (Round 17.)~~ **Decided (maintainer, 2026-11-11):** `NHT1`/`NHT2` are
-    a pair like `HT1`/`HT2`, `combination: 'best'`; `NHT2`'s first run is `NHT1` (§2.1;
-    `CONTRACTS.md` §2.4). **Replaced (maintainer, 2026-11-12; item 31):** there is no NHT
-    combination; `NHT1` and `NHT2` are single runs, `pair: null`.
-17. ~~The finish → on-course-exit interval per recording.~~ **Measured (E1, seven recordings, 1,995
-    closures):** about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % in [18, 20) s), about
-    47 s at cp3-cross (p90 57 s), manual closes under 5 s on the two NKZ days (12.6 %, 34.9 %) — the
-    path `C123-PROTOCOL.md`'s "~4 s" describes — and a tail to 126–781 s. A venue setting;
-    `CONTRACTS.md` §7.1 states the range. The protocol doc's figure is corrected in that repository.
-18. The XML poll interval (`pollIntervalMs`, 5 s in the spike and the vectors) and the torn-read retry
-    budget are deployment settings. Since round 18 the guard reads the reader's `changedAfter` (§0.3),
-    so the interval bounds only how late a change is seen; the vectors keep `xmlPollIntervalSeconds`
-    for events written without `changedAfter`. The venue values come from
-    S5's execution against Canoe123's real copy-over writer (maintainer).
-22. ~~**A classification table emptied after it had rows.** The core would publish the Standing empty
-    (§4.10, whole replacement). No recording shows one (cp3-cross: all 508 empty classification
-    tables precede the first row). A default; if upstream can clear a built classification, the
-    maintainer says whether an empty Standing or the last built one is wanted. (Round 18.)~~
-    **Decided (maintainer, 2026-11-06):** the last built Standing is kept, `asOf` showing its age
-    (§4.10; `CONTRACTS.md` §5, §8.3, §8.6).
-23. **A re-run inside a TCP outage.** **Closed as an accepted risk (maintainer, 2026-11-11;
-    `RULINGS.md` R-11, #261): no admin action, the defaults below stand and the operator resolves
-    by hand.** A re-run whose start and finish both fall in an outage arrives
-    as one listing with a new start and a new finish, which §4.11 reads as a start correction:
-    `run` stays, the newest row is presented, a pending write of the old run is resolved by the new
-    run's row and the old run's checks compare against the new gates. Nothing upstream distinguishes
-    it from a start and a finish both corrected. The safer default is the correction (nothing is
-    hidden). The
-    mirror shape (second pass): a mark attributed while the athlete is still listed records the
-    generation, so a later start change with no finish reads as a re-run; a slip of a mark followed
-    by a start correction would therefore increment. Not recorded either way. (Round 19.)
-24. **A Kayak Cross `faults` merge.** `CONTRACTS.md` §4 INV-2 rule 1 merges `gates` cell by cell and
-    names nothing else; a Cross Attempt's `faults` is presented whole from the presented observation,
-    so a fault the stream judges after a row shows at the next row. Recorded twice, both at
-    cp3-cross (E2, the round-26 review's scan of the step log). MX1_XT_26:26: the stream's slot 9
-    `2` from 08:27:10, the row of 08:27:44 blank there, the next row at 08:27:51 — 7 s of
-    `count 0`, `provisional: true`, the honest label. WX1_XT_26:9, the opposite sign: the row of
-    07:47:07.443 presents `count 0`, settled; the stream shows the roll zone faulted from
-    07:47:32.949 to 07:47:42.835 and withdraws it; the rows keep `count 0`. There a merge would
-    have shown a fault upstream withdrew. A merge would be a new rule (slot cells against
-    captions, and which stamp property 11 reads); not taken on these two. With no merge,
-    `faults` has no merged-vector rule either: its envelope is the presented observation's own,
-    `observedAt` included (`CONTRACTS.md` §1.2). Reopens on a recording where the default
-    presents a wrong value for longer than a save cycle. (Round 26; round C part 3.)
-25. **The generation across a server restart.** **Closed as an accepted risk (maintainer,
-    2026-11-10; `RULINGS.md` R-10, #294): the server stores nothing extra, and the operator
-    resolves mismatched checks and pending corrections by hand.** `CONTRACTS.md` §2.10 keys checks and flags by `run`,
-    and live-mini holds each Attempt at its pushed `run`; a restarted server that re-derives the
-    Attempt from upstream alone would present `1` for a re-run Attempt — the re-run's checks read
-    `stale`, run 1's are compared against run 2's gates, and the bridge's re-push (§8.2) sends `1`
-    over live's `2`, which property 10 forbids. Nothing persists the generation today. Options: persist
-    `run` per Attempt with §2.10's discipline, or seed it from the store's highest `run` for the
-    Attempt and from live's state. A rare conjunction (one recorded re-run in seven recordings, then a
-    restart inside the event) with a wrong-workflow, never a wrong-result, consequence on site
-    (`ADR-016`). (Round 27i, second pass.) **The accepted risk covers on site only (maintainer,
-    2026-11-12): live never shows `run` decreasing.** The live store never lowers an Attempt's
-    `run`: a push carrying a lower `run` than the stored one leaves `run` as stored and applies
-    its other fields (a default; the restarted bridge has no memory of what it pushed, live
-    holds it; `CONTRACTS.md` §8.3). Upstream's current row is the re-run's, so the fields are
-    right and only the restarted server's label is low. *Example:* live holds
-    `K1M_BR1_19:9` at `run` 2; after a restart the bridge re-pushes it with `run` 1 and the
-    re-run's result; live keeps 2 and stores the result. M5 work.
-26. **The level of `xml-table-emptied`.** An XML table with no rows over a race that holds results
-    retracts nothing and raises this diagnostic (`CONTRACTS.md` §4 INV-7; maintainer, 2026-11-11).
-    The decision says "raises a diagnostic" and not where. Default: ingest-only, the admin log, as
-    the parser's own kinds are (§0.5), so no wire shape moves. The alternative is a seventh
-    `Diagnostic` kind on `GET /api/diagnostics`, visible in the admin UI: a change of the contract
-    package and of one admin obligation. **Settled (maintainer, 2026-11-12): the admin log, no
-    wire diagnostic.** The Canoe123 operator watches the admin UI and receives the system
-    notifications about problems.
-27. **What a per-Phase re-baseline replaces on a paired Phase.** `CONTRACTS.md` §7.2 sends the
-    Attempts of the named Phase and every Standing whose scope names it, a `pair` Standing on
-    either side included. The gate-2 checker's scope added the sibling Phase and so reported the
-    sibling's Attempts and `phase` Standings as omitted (#333: 124 reports for a second-run scope,
-    2,070 for the first-run mirror). Default: §7.2 stands as written and the checker's scope
-    becomes the named Phase alone (E3: §4 step 1 discards "the scope's" result fields, and
-    property 13 already says a first-Phase message does not carry the second Phase's Attempts). A
-    second run's row carries the combined placement and total itself, so a Phase rebuilt alone is
-    whole. The core agrees for a second-run scope (E2, the run in #333: the Phase's 117 Attempts
-    and 14 Standings). For a first-run scope it also sends the second Phase's `phase` Standings,
-    which §7.2 does not name (read in the core, not run): redundant for a client, which applies
-    them like a `standing.updated`, and to be dropped with the gate row. Property 13's "the
-    Standings §7.2 names" is read as exactly those. Closes with that row
-    (#333): one per-Phase re-baseline on each side of a pair and one per-Event, stated, on a
-    paired slalom cut, 0 violations, property 13 exercised.
-28. **A merged `gates` vector whose presented row is the other source's.** After a per-Event
-    re-baseline, or after an outage in which the XML took over, the presented row is the XML's
-    and a TCP listing then judges a cell. `CONTRACTS.md` §1.2 gives the merged vector the
-    presented row's `source` and the instant of the element that last changed the presented
-    cells, so the vector is `xml` on the listing's instant. Property 1(c) asks for a producer of
-    the envelope's own `source` in the unit and rejected it (#333: 3 reports, K1M_BR2_19:65).
-    Default: §1.2 stands and the core is right; for a merged vector, the unit's cell-changing
-    listing of the Attempt is the producer of its instant whatever the row's source. No client
-    reads the combination. Reopens if a client ever branches on `source` together with
-    `observedAt`; closes with the gate row of item 27.
-29. **A classification Standing across a re-baseline.** `CONTRACTS.md` §7.2 does not carry "a
-    Standing whose own Attempts give no entry", and a classification Standing has no Attempts.
-    Default, from the text: its entries are the classification Phase's rows (`CONTRACTS.md` §5
-    step 2), which §4 step 1 does not discard, since they are no Attempt's result fields. The
-    re-read snapshot replaces them under §4.10's rule or, with an empty table, changes nothing
-    (maintainer, 2026-11-06). So a published classification Standing is always carried by
-    `scope.replaced`, as last built, and a re-baseline never drops one. Not exercised by any gate
-    run; reopens if a replay of a re-baseline over a classification Phase shows otherwise.
-30. **`unavailable{source-unreachable}` on site.** Default: the on-site process never gives it
-    (§4.5); a first run's detail stays `not-yet` while a configured XML source is unreachable.
-    The core option that only the conformance harness set to give the reason is gone (#337, PR
-    #371), and the vector `two-run-br1-unavailable-no-live-no-xml` was reshaped to the case the
-    process does give: no XML configured, `unavailable{not-configured}` once run 2 is observed,
-    `not-yet` before. Reopens if a client needs to tell the two states apart; feeding the
-    reader's state to the core as an ingest event would then be the change. The reason stays in
-    the closed set although nothing on site produces it (item 47).
-31. ~~**The combination of `NHT1`/`NHT2`.** Whether upstream builds a combined result for these
-    two runs as it does for `HT1`/`HT2`.~~ **Closed (maintainer, 2026-11-12):** it does not.
-    Upstream's two-run total and better-run path includes `BR2`, `HT2`, `EL2` and `TR2` and
-    excludes `NHT2` (and `SP2`); `NHT2` is ranked as its own run, `NHT1` only qualifies and seeds
-    it (upstream behaviour, verified on the maintainer's side). Both are single runs, `pair:
-    null` (§2.1; `CONTRACTS.md` §2.4), and an `NHT2` row's `Total` and `Rank` are run 2's own.
-32. **Kayak Cross slot captions.** `faults.gates` names a faulted slot by the slot itself: the
-    gate number, `ST`, `RZ` (§4.6(d)); `Course.slots` carries no `caption` on site and upstream's
-    captions are `Course.captions` (§2.3). Every recorded `GateCaptions` equals those names
-    (`ST,1,2,3,4,5,6,RZ,7`), so nothing recorded differs. Default: it stays so, which keeps a
-    `faults` value equal from TCP and from the XML and independent of whether a `RaceConfig` has
-    arrived. Reopens on a recording whose Cross captions are other than the structural names.
-33. **A store file that fails validation at load** (#273). `CONTRACTS.md` §2.10 says such a file is
-    reported and never silently replaced; the maintainer's triage decision (2026-11-11) adds
-    that it must not stop the startup. Default, for the checks and flags store, the writes
-    store and the `seq` file alike: the file is set aside under another name, the store opens
-    empty, the server starts, and the admin log says so. Nothing is on the wire: no
-    `SourceStatus` slot, no `Diagnostic` kind and no error code is added. For the `seq` file one
-    rule still binds: `seq` never regresses across a restart (`CONTRACTS.md` §1.6), so the
-    counter restarts above any value the server can have issued in practice, never at zero.
-    **Default (M2 P2 ruling, 2026-11-14; #273 review CQ-A):** the floor is the process clock's
-    `now()` in milliseconds. A counter that started at zero stays far below it. The residual: a
-    second set-aside after an earlier recovery, with the clock set back below that recovery's
-    floor (a laptop clock reset), can regress `seq` once. A client that kept its last applied
-    `seq` across the restart then discards new messages until the counter passes it, and its
-    next handshake recovers (`CONTRACTS.md` §1.6). It needs two invalid `seq` files and a clock
-    set back across them, and none is recorded (E4). **Settled (maintainer, 2026-11-14): accepted**
-    as a residual risk, the same class as #294 and item 23; `CONTRACTS.md` §1.6's guarantee
-    carries it and points here. No floor read from the server's own state removes it entirely:
-    the set-aside file is invalid by definition, and the floor of an earlier recovery bounds
-    neither the counter reached after it nor survives the operator deleting the set-aside files.
-    No narrowing: the optional `max(now(), F + 2^40)` offered with the default (F the highest
-    floor used by an earlier `seq` set-aside) is dropped by the same decision. The `seq` file is copied aside, not
-    renamed, and stays under its own name until a valid mark replaces it by temporary file and
-    rename, so a crash at any point leaves a file from which the next start recovers, never no
-    file (a missing file is a first start, at zero). The copy is the file's text: bytes that are
-    not valid UTF-8 are not kept byte for byte (#352). Accepted: the copy is forensic only and
-    the counter's recovery never reads it. Reopens if a venue reports a clock set back across a
-    recovery. What is lost is
-    workflow state: checks and flags read as never made, a pending write is forgotten and the
-    operator resolves it by hand, as after §10 item 25; the idempotency keys go with the writes
-    store, so a same-key retry carried across that restart is a new request (item 44 (a)). **Settled (maintainer, 2026-11-12), with
-    item 26:** the admin log entry is the report; nothing goes on the wire.
-34. **What "durable" covers** (#273). `CONTRACTS.md` §2.10 states the guarantee against a crash:
-    "a crash at any point leaves the previous complete state". That is a crash of the server
-    process, on every platform: a temporary file, flushed, then a rename. Against a power loss
-    it is best effort: the directory entry is flushed where the platform offers it, and on
-    Windows it does not, so a write acknowledged in the last moments before the power fails
-    may roll back to the previous complete state. Nothing acknowledged is ever half-written.
-    The venue-laptop check (#198) measures what Windows does. **Settled (maintainer, 2026-11-12):
-    accepted.** The venue documentation tells the operator to run the laptop on a charged
-    battery. Covering power loss would need a write-through store the check would have to
-    verify.
-35. **A Kayak Cross heat's leave and the stream's `running` outcome** (#318; scoped to the heats
-    2026-11-16). A Cross heat Attempt that leaves the list keeps `status: on-course` (§4.2; `CONTRACTS.md` §7.1), and it keeps the
-    stream's `running` outcome with it: `running` is the outcome of an Attempt on course
-    (`CONTRACTS.md` §2.6), and withdrawing it would present `on-course` beside `not-yet`, a pair
-    no state has. The clock no longer ticks; a client freezes it and shows it stale after
-    `runningStaleAfterSeconds` (§2.6), until the row brings the placement. Property 4's
-    withdrawal of `running` at a leave is slalom's, with `left-without-finish`. The core and
-    the gate-2 checker agree (E2, the M1 run: 0 reports on the seven whole recordings at
-    86ed855). This item is the heats' (`heats: true`). *Amended 2026-11-16:* the time trial no
-    longer follows it: by the maintainer's decision of that day a time-trial leave is slalom's
-    (§4.1), so item 43 (c), (d) no longer hold for it.
-    Reopens if the scoreboard work (M3) finds a frozen heat clock misleading.
-36. **A re-run finished over a standing mark without the wizard** (#301). Upstream does not
-    clear the old mark (§4.11, §4.12). Whether it then ranks the marked row — a `Rank` and a
-    `Total` beside `IRM="DNF"` — is not known: every recorded marked row has both empty, and no
-    recording holds such a re-run (E4). The contract reads either shape: the stale mark is
-    withheld, the row's time and cells are presented, and `placement` is `known` exactly when
-    `Rank` is non-empty (§4.7). The re-run fixtures assert the ranked shape; that is their
-    stated assumption, to be named in their manifests, and their end-state and Standing
-    assertions hold for that shape only. Reopens on a recording of the case.
-37. **`format` after the snapshot has stated `DisId`** (§2.1). On TCP the token of the `RaceId`
-    is the fallback for `format`, the one read of an id by any parser; pairing then reads the
-    field (`CONTRACTS.md` §2.4). If upstream let a `DisId` be edited on a started race, the
-    token would go stale as the class part does (§1). Default: the snapshot's `DisId` is the
-    Phase's `format` from its first statement on, and a later TCP message's token does not
-    displace it. Not recorded, and whether upstream allows such an edit is not established
-    (E4). Reopens on a recording where a Phase's token and its `DisId` differ.
-38. **An upstream removal and the Attempt** (maintainer, 2026-11-12; `DECISIONS/ADR-015`
-    Revisions 6 and 7; §4.12). The decision: an Attempt is removed when no row of its race in an
-    admitted XML snapshot carries its bib; a moved competitor is a new Attempt in the other Phase;
-    the bridge sends `DELETE`. Narrowed by #349 (maintainer, 2026-11-12, "The data belongs to the
-    bib"): the trigger is the bib, so a re-bib or swap that leaves the bib in the race keeps the
-    Attempt and re-points its `entry`; and checks and flags are the bib's. Defaults taken inside
-    it, each the smallest that fits:
-    (a) the trigger is the race's `Results` row, never the `Participants` row, since a deleted
-    result keeps the first blanked and a move between races of one class keeps the second;
-    (b) only an Attempt a results-table row of its race has named is removed;
-    (c) the guard covers the whole Attempt: every `tcp` observation, listings included, must
-    predate the snapshot's `changedAfter`, and an Attempt in the on-course set is never removed;
-    where it refuses, Revision 5's per-field retraction applies;
-    (d) TCP's absent row only retracts (the decision names the XML; the next save follows);
-    (e) on site the removal is `attempt.deleted { seq, attemptId }`, §8.4's shape, a new
-    message, and the unit sends no `attempt.updated` for the Attempt;
-    (f) a pending write resolves `mismatched` without `confirmedValue`, before the removal;
-    (g) checks and flags stay in the store, unserved while the Attempt does not exist, served
-    again if the same `attemptId` returns, whoever the competitor under the bib then is (the
-    maintainer's, 2026-11-12, #349 CQ2; no longer a default);
-    (h) the Entry stays; (i) a returning row creates a new Attempt, `run` 1, carrying none of the
-    removed one's result state (generation, contradiction record, remembered mark); its checks
-    and flags are (g)'s, not (i)'s;
-    (j) a wholly empty table removes nothing;
-    (k) a flag's resolution is a flag write: while the Attempt does not exist it is
-    `404 attempt-not-found` (after `flag-not-found`), and nothing is stored or pushed; a resolved
-    flag returned or pushed then would serve what (g) does not serve (`CONTRACTS.md` §2.10, §7.4;
-    2026-11-15, review of PR #370, CQ1);
-    (l) a removal inside a re-baseline (2026-11-15, CQ2; corrected on review of PR #372).
-    *Messages:* an Attempt the re-read removes is sent as `attempt.deleted`, as every removal is,
-    with its pending write's `write.updated` before it, and the unit's `scope.replaced` follows
-    without it; on live the Phase replace removes it (`CONTRACTS.md` §8.3). A client's removal
-    handling (penalty-check's "competitor removed in Canoe123" and the dropping of the Attempt's
-    checks and flags) is keyed on `attempt.deleted`, so one signal for every removal moves no
-    client duty, and the replace that follows finds nothing left to remove (§1.6, every message
-    idempotent). *Guard:* the removal still counts every `tcp` delivery that named the Attempt,
-    a results row and an on-course listing alike; the re-baseline does not reset it. Step 1
-    discards a row's result values, but keeps what the same delivery stated of the Attempt
-    itself: its identity (`entry`, `startOrder`, `heat`, `startLane`) and its lifecycle `status`,
-    `source: 'tcp'`, which say that the bib was in upstream's race at that delivery
-    (`CONTRACTS.md` §4 step 1; step 2, "met by nothing step 1 discarded"). A file older than
-    TCP's latest naming of the bib therefore removes nothing, also in a re-baseline: otherwise a
-    re-baseline against a save not yet written would remove an Attempt TCP had just stated, resolve
-    its pending write `mismatched` as a removal, and the next push would create it again. Where
-    the snapshot is not admitted, the per-field retraction finds no result left after step 1, and
-    step 3 refills it. Both halves are the merged core's. Reopens on a recording where TCP keeps
-    naming a bib the file has dropped, so that no re-baseline can remove it;
-    (m) a returning Attempt's checks and flags come back over the push: the unit that creates it
-    sends, after its `attempt.updated`, one `check.updated` per check and one `flag.updated` per
-    flag that its reads then serve, so a connected tablet, which dropped them on
-    `attempt.deleted`, holds what a fresh hydration serves; the same holds for any Attempt created
-    while the store holds checks or flags for it, such as the first creation after a restart,
-    when a tablet that hydrated before the first snapshot was served none (`CONTRACTS.md` §1.6, "a client never
-    needs to re-hydrate to learn of a new Attempt"; §7.2; 2026-11-15, CQ3). No client duty moves:
-    a tablet applies them as any `check.updated` and `flag.updated`, and re-reads nothing.
-    *Example (#349 CQ2):* bibs 11 (X) and 12 (Y) of `K1M_BR1_6` are swapped. Saved in one step,
-    both bibs stay: both Attempts stay, `entry` re-pointed, every check kept and served. Saved
-    through an intermediate bib, a save that leaves bib 11 out removes `K1M_BR1_6:11` (the guard
-    permitting); the next save that carries bib 11, now Y's, creates it again, `run` 1, and serves
-    X's run-1 checks under it, `status` derived against Y's presented gates (`CONTRACTS.md`
-    §2.10). That is the decision: the paper protocol is per bib as raced. Whether upstream allows
-    the one-step swap is not established (E4).
-    No recording holds a removal (E2: a scan of every pair of consecutive snapshots in the
-    recordings found no row dropped; the start-list trigger checked on its own by the P3c sweep,
-    2026-11-16, E2 over the 2,032 distinct snapshots: no (race, bib) left a non-empty race table,
-    0 of them holding a result and 0 start-list rows only, and no race table vanished; #349 N1).
-    Reopens on a recording of a removal that these defaults present
-    wrongly, or if the TCP push is to remove as well.
-39. **A TCP outage while no course is bound** (#295 re-review, PR #353; M2 P2 ruling,
-    2026-11-14). Gate cells are retained while no course is bound (§4.6). TCP delivers C and
-    disconnects. An XML snapshot during the outage states D, with a content age that would have
-    displaced TCP on a bound course (`CONTRACTS.md` §4 rule 2, INV-2c). D may differ from C or
-    equal it. TCP reconnects and
-    re-sends C unchanged, and then a snapshot binds the course. Ruled from the text (E3), not a
-    default. Three passages give the bound-throughout answer:
-    - §1.2 "whether a course was bound when the row arrived changes nothing of this";
-    - §4.6 "as an earlier binding would have presented them";
-    - `TEST-ARCHITECTURE.md` §3.2 property 1, "the envelope is the one an earlier binding would
-      have given".
-    So the vector is TCP's at the re-delivery's instant: INV-5's regained precedence, +8.5 s after
-    the first delivery in the review's probe. Where the outage snapshot would have been refused
-    (INV-2c), nothing displaced TCP, and the instant stays the first delivery's. The merged core
-    gives the first delivery's instant in both cases and is to change. In #353's row 2, the later
-    XML step expects the re-delivery's instant; the earlier step keeps the first delivery's.
-    "Would have displaced" is rule 2's and INV-2c's question, decided as on a bound course:
-    - by ingest order, the connection and content age;
-    - never by comparing cells. INV-5's no-op covers only a value already presented from the same
-      source, so an `xml` vector equal to C also takes over during the outage, and TCP's re-send
-      then regains precedence at its own instant.
-
-    The course's slot count therefore decides only what the vector reads, never whether
-    displacement happened. This corrects the first version of this item, which compared the
-    retained cells (review of PR #355, CQ2). No vector asserts the case, and no client duty
-    moves: a client reads `observedAt` as served.
-40. **The Event's name and dates** (#368; review of PR #366, CQ1 and CQ2; 2026-11-15). Two
-    defaults inside `CONTRACTS.md` §2.2, read from its text (E3); neither case is recorded (E4).
-    No client duty moves: a client shows `name` and `details` as served.
-    (a) *Which name wins.* "Defaults to the snapshot's own title" made the title what applies
-    where the operator has not said otherwise. The boot flag and the "start a new event" action
-    are both the operator entering a name, so both win, and the snapshot's title never displaces
-    either. An empty or whitespace-only name counts as none entered. The bridge holds, with the
-    Event, whether `name` was entered or taken from the snapshot, and persists that with the name
-    wherever it persists the Event. *Example:* the operator starts a new event named "Jarní slalom
-    2027, sobota"; the next snapshot's `MainTitle` "Jarní slalom" changes nothing and sends no
-    `event.changed`. Started with an empty name, the event takes "Jarní slalom" from that
-    snapshot, with a same-id `event.changed`. Reopens if organisers want the file's title to
-    follow edits made in Canoe123 after a name was typed; the admin UI would then offer that.
-    (b) *What an unparseable date is.* The date part is the first ten characters, `YYYY-MM-DD`,
-    and it is unparseable unless it names a calendar day: month `01`–`12`, a day the month has,
-    29 February only in a leap year. What follows it is not read: no zone conversion needs the
-    time, and the date is what the organiser entered, so `2026-04-25garbage` gives `2026-04-25`
-    and `2026-13-45T00:00:00+02:00` states no `details` and raises `unparseable-field`. Every
-    recorded snapshot carries a calendar date and a well-formed time. Reopens on a recording
-    whose time part shows that its date part is not the day the organiser meant.
-41. **Three readings inside the XML retraction** (review of PR #369, CQ-A and CQ-B, 2026-11-15;
-    (c) from #346, the same day). All keep the merged core; no client duty moves, no vector
-    changes.
-    (a) *What re-arms `xml-table-emptied`* (§4.12): an XML snapshot of the race that carries a
-    row. A TCP push carrying rows does not. The emptied table is the file's, as is "a table that
-    never had rows"; under the TCP reading every push and rotation of a race live on TCP over an
-    emptied file would re-arm it, and the admin log would repeat it at every save (E3). Reopens
-    if an operator misses an emptying that came after a TCP-only stretch.
-    (b) *A refused retraction and the field's earlier `xml` value.* Where INV-2c's guard refuses
-    an XML retraction, absent row or present row, against a field's standing `tcp` observation,
-    the snapshot moves nothing of that field, its `xml` slot included: "ignored for that field" is
-    the whole field, and `DECISIONS/ADR-015` Revision 5 rule 2's "the snapshot's own earlier `xml`
-    observation is always superseded" governs a field the guard does not refuse (no `tcp`
-    observation stands, or the guard passes), as a refused classification snapshot moves nothing
-    (`TEST-ARCHITECTURE.md` §3.2 property 15). The retained `xml` value is never presented and
-    raises no disagreement (E3, the core's slot paths read): it is no later than the refused
-    snapshot, whose `changedAfter` is not later than the `tcp` value's latest delivery, so rule 2,
-    INV-2b and INV-2c all keep the `tcp` value; and every path that takes a `tcp` value away
-    replaces the `xml` slot in the same unit or puts a later `tcp` observation in its place: TCP's
-    own retraction writes a later `tcp` marker, which rule 2 keeps over the older `xml` slot (lower
-    ingest sequence); a passing XML retraction writes the `xml` marker,
-    the re-baseline's step 1 discards both and its read restates the field, a contradiction
-    (INV-2d) replaces both, and a new generation clears the run's fields. Reopens if a path is
-    added that takes a `tcp` value away and leaves the `xml` slot with no later `tcp` observation
-    over it; the `xml` slot then takes the absence as well.
-    (c) *When `xml-table-emptied` is raised* (§4.12; `DECISIONS/ADR-015` Revision 8). The
-    maintainer's decision raises it where an emptied table "retracts nothing". The text counts a
-    result held from `tcp` only where the content-age guard would have admitted the retraction,
-    so a first read (`changedAfter: null`), or a file written before the results it lacks,
-    raises nothing, and the first later snapshot the guard admits raises it. That narrows when
-    the diagnostic appears. It stays inside the decision: the entry says "this file would have
-    cleared results", and a file older than the results would not have. A default, since the
-    surface it was to go to the maintainer with is settled as the admin log (item 26). Reopens
-    if an operator misses an emptied table because every read of it was older than TCP's last
-    delivery of the race.
-42. **Every date the XML states** (2026-11-15, following item 40 (b)). Default, the smallest
-    that fits: item 40 (b)'s rule reads every date part the snapshot states, not only the
-    Event's. That is `Schedule.StartTime` (a Phase's `date`, §2.1, and the date pairing and
-    `eventTime` take from it, §0.2) and `Participants.Birthdate`/`Birthdate2` (§3). The date part
-    is the first ten characters and names a calendar day; what follows is not read. A non-empty
-    value whose date part does not is unparseable, and is absent, not invented (§0.5):
-    - `Schedule.StartTime`: the snapshot states neither `date` nor `scheduledStart` for that
-      Phase (a `Timestamp` with no calendar date is not one, `CONTRACTS.md` §1.3), and the parser
-      raises one `unparseable-field` (`where` the `phaseId`, `name` `StartTime`). The Phase keeps
-      what it holds: its inferred date while no snapshot has stated one (§2.1), else `not-yet`; a
-      date a snapshot stated earlier stays (INV-5). Pairing and `eventTime` take no date from it.
-    - `Birthdate`: the member's `birthDate` is absent, `birthYear` falls back to
-      `Participants.Year` as for an empty one, and the parser raises `unparseable-field` (`where`
-      the participant's `Id`, `name` `Birthdate` or `Birthdate2`).
-    - An empty value is unchanged: absent, no diagnostic.
-
-    Evidence (E2, a scan of the seven recordings' snapshots): every value found has a calendar
-    date part followed by a time and an offset (64 distinct `Schedule.StartTime` values on 5
-    dates, 3 distinct `StartDate` and 3 `EndDate` values, 61 distinct `Birthdate` values), so
-    nothing recorded moves. No client duty moves: a
-    client shows `date`, `scheduledStart` and birth data as served, and `not-yet` as not known.
-    Reopens on a recording with an invalid date part, or if organisers enter birth dates in a
-    form this reads as unparseable often enough to crowd the admin log.
-43. **The stream's `running` outcome outside `on-course`, and a Kayak Cross leave** (#318 N1,
-    N3; #346; M2 P3b, 2026-11-15). `running` is the outcome of an Attempt on course
-    (`CONTRACTS.md` §2.6), and a client reads from `outcome.kind` alone that a value is still
-    accruing. The rule the tests read: **no presented state pairs a `running` outcome with a
-    `status` other than `on-course`** (§4.3). Four defaults inside it. No client duty moves.
-    Evidence (E2, a scan of the TCP on-course stream of the seven recordings, 564,120 listings,
-    2026-11-15): none of the four shapes occurs there with a `running` to lose.
-    (a) *A finish listed with no `duration` to infer.* A listing with a `dtFinish` ends the
-    stream's `running`. Ordinarily the `duration` inference replaces it. Where the listing
-    yields none — an empty `Time`, or a slalom listing without `Gates` (§0.5, `gates-absent`) —
-    nothing is invented, and `outcome` is `not-yet` until a row states one. Slalom and the Cross time trial alike, as the stream lists a finish per competitor in
-    both (§4.1). `TEST-ARCHITECTURE.md` §3.2 property 4 names this listing. Recorded: 234 such
-    listings, all of cp3-cross WX1_XT_26:25 and all with `dtStart` empty too, so the `running`
-    had ended at the deleted start; no listing carries `dtStart`, `dtFinish` and an empty
-    `Time`.
-    (b) *A listing that shows `at-start` and carries a `Time`.* It states no `running` (§4.3:
-    "a listing with `dtStart` empty ends it"), whichever of the unit's elements the core reads
-    first. Recorded: none.
-    (c) *What a leave yields.* In slalom no `running` survives a leave, on any path: `status`
-    stays a stream `finished` or a table's `finished` or mark, becomes `left-without-finish`
-    where a start was observed, or `not-started` from `at-start` (§4.1). A `duration` inference
-    stays (§4.3). In Kayak Cross, heat and time trial, the leave changes neither `status`
-    (`CONTRACTS.md` §7.1: "leaving the set never changes `status`") nor the stream's outcome
-    (item 35). A `running` then stands only beside `on-course`, and a time-trial Attempt that
-    leaves while staged stays `at-start` until a listing or a row (recorded: 3 such leaves in
-    MX1_XT_26 and WX1_XT_26). *Superseded for the time trial, 2026-11-16* (maintainer; `RULINGS.md` R-23): a
-    time-trial leave is slalom's (§4.1), `left-without-finish` with a start observed and
-    `not-started` from `at-start`, and no `running` survives it. The heats keep this paragraph
-    and item 35. The three staged leaves measured by the P3c sweep (E2, cp3-cross at 77cdef8)
-    stood `at-start` 0 s, 8.1 s and 17.3 s after the leave, each ended by a `dns` from a row;
-    under the new rule each reads `not-started` for that span.
-    (d) *A Cross time-trial athlete removed before a finish.* *Superseded 2026-11-16 by the
-    maintainer's decision, `RULINGS.md` R-23 (the alternative named below was taken):* the Attempt
-    is `left-without-finish` at the leave and INV-2 rule 2's exception brings the mark from the
-    next save. The paragraph is kept as the record of the default it replaces. By (c) the Attempt stays
-    `on-course` with the clock frozen and stale, until a TCP push of the race states the mark.
-    That push is not prompt. A removal before a finish is one of rule 2's silent paths, so the
-    mark reaches TCP with another athlete's push of the race or with the rotation: for slalom's
-    marks §4.1 records a median of 20–52 s and a worst of 522 s on another athlete's push, and
-    up to about 600 s by rotation. After the last finisher of a time trial no other finish
-    follows, and only the rotation is left. The XML's mark does not displace it while TCP is
-    connected: INV-2 rule 2's exception
-    reaches `not-started`, `at-start` and `left-without-finish` only. Recorded: none. Of 71
-    leaves in the two recorded time trials, 68 followed a listed finish and 3 had no start.
-    Giving the time trial slalom's `left-without-finish` would bring the mark at the next save.
-    It would also put a status into Cross Phases that `CONTRACTS.md` §2.6 and §7.1 exclude,
-    which clients would see: a round's change, not taken here.
-    Gate 2 has no clause for the pairing, and none is added. The P3c recording sweep counts,
-    over the whole replays, presented `running` outcomes beside another `status`, and reports
-    how long each of (c)'s three staged time-trial leaves stood `at-start` (counted here, not
-    traced). *Measured (P3c sweep, 2026-11-16, E2, replays at 77cdef8):* **0** presented
-    `running` beside a `status` other than `on-course` over every step of the seven replays
-    (736,130 steps, nkz-20ne full only to 13:58:26Z, plus 35,112 steps of its tail from a cold
-    start);
-    the three staged leaves, (c) above. Reopens on a non-zero count, or with item 35.
-44. **Four readings in the write path** (#300 N3 to N5; #346; M2 P3b, 2026-11-15). Each is
-    read from the text (E3); no recording holds a write (E4). No client duty moves.
-    (a) *A same-key retry after the keys were lost.* `CONTRACTS.md` §1.5 promises that a
-    same-key retry "never submits a second command upstream". Two cases lose the key across a
-    restart: a store write that failed after the socket accepted the command (§7.3), with a
-    restart before the store wrote again; and a store file set aside at load (item 33). A
-    retry with that key in the new lifetime is a new request: the same gate and value go
-    upstream again, or a second flag is raised. Default: accepted as a residual, and §1.5
-    says so. The second command restates the first, so upstream's table ends as the one
-    command left it, unless someone changed that cell in between. It needs a failed or invalid
-    store, a restart, and a tablet that carries one retry across it. Reopens if a venue
-    reports a doubled correction or flag after a restart, or if the venue-laptop check (#198)
-    shows the store failing validation in ordinary use.
-    (b) *"The Attempt has no run yet".* No such refusal exists. An Attempt presents `run` from
-    the observation that creates it, `1` on an upstream stream (`CONTRACTS.md` §2.6;
-    `TEST-ARCHITECTURE.md` §3.2 property 10), and a route that finds no Attempt answers
-    `404 attempt-not-found`. The server's `400` with `field: 'run'` after the
-    `upstream-disconnected` check is unreachable and goes: the creating step takes the
-    generation from the core. *Example:* an Attempt known only from a start-list row, never
-    listed, takes a write: `202`, `target.run` `1`.
-    (c) *Who decides `superseded` for a write resumed after a restart.* The core: §0.5 gives it
-    echo matching, and `superseded` is one of §6's three outcomes. The on-site layer hands a
-    stored `pending` write to the core once the core knows its Attempt, as the operator element
-    carrying the stored `target.run`. Where the Attempt's generation is already past it, the
-    core creates the write `superseded`, presents no optimistic value and pushes it. Where the
-    generation is the stored one, §6's rule runs unchanged. Where the core does not yet present
-    that generation, nothing is handed over (item 25). On an upstream stream the first case
-    cannot arise today, since a write is handed over right after the unit that creates its
-    Attempt, at generation `1`.
-    (d) *A non-`known` retained value.* §6: a slot that is `not-yet` or `unavailable` retains no
-    cell, at submission and as a prior at a later delivery. The comparison then uses the value
-    the write recorded, or none. Treating such a prior as a cell of `null` reads a later
-    re-delivery of the retained value as a change and resolves the write `mismatched` falsely.
-45. **A second run withdrawn with no run to come** (#266; #346; M2 P3b, 2026-11-15). After a row
-    of run 2 is retracted, the time-empty row that follows leaves `placement`, `pairTotal` and
-    `countingRun` carried, `provisional: true`: the run is about to happen once more
-    (`CONTRACTS.md` §1.2, condition 3; `TEST-ARCHITECTURE.md` §3.2 property 11(c)). Where the
-    run never comes, they stay provisional until a row of run 2 states a time or a mark.
-    Default: that stands. Nothing upstream tells a run still to come from one that will not
-    come: the row is the one every second-run Attempt carries before its run. And the flag is
-    honest: the stream showed the Attempt in run 2, and upstream's table states no result for
-    it. The cost is a `pair` standing entry that stays provisional for as long as the operator
-    enters neither a time nor a mark. Not recorded (E4: the one recorded run-2 mark cleared in
-    place, jarni-so-odp C1M_BR2_18:51, raced 44 s later). No client duty moves. Reopens on a
-    recording of the case, or if M3 or M5 find a provisional entry in the standing of an
-    `official` Phase misleading; ending the carry when `Phase.status` reaches `official` is
-    then the rule to weigh.
-46. **Three notes on what the gates measure** (#346; M2 P3b, 2026-11-15). None moves a client
-    duty or a vector.
-    (a) *The merged run-2 `outcome`'s instant and property 1* (round-26 review, CQ2). §4.4 gives
-    the instant: the element's that last changed `runSeconds` or a presented merged cell.
-    Property 1 has no clause for it, so a core that kept the row's instant when a listing
-    changed a merged cell would pass gate 2. Default: none is added. No client reads the
-    instant, the value is checked (property 6(b), gate 3), and the core's own test pins the
-    rule on the recorded case (nkz-20ne K1M_BR2_20:63, `src/core/__tests__/round26-rules.test.ts`).
-    Reopens if a client ever orders or ages by that `observedAt`.
-    (b) *`exercised` under a stated input* (round 24). A stated outage or re-baseline counts as
-    exercise for properties 8 and 13, and the counts carry no mark of it. Default: the
-    fixture's own `source.events` is the mark, and no count is split: a fixture with no
-    `source.events` exercised those properties on recorded input alone. Reopens when a
-    fixture holds a recorded outage beside a stated one, where one count would mix the two.
-    (c) *`CONTRACTS.md` §5 step 4's "0 mismatches".* The figure is the earlier rule's, on
-    1,855 rows whose selection is not recorded, and it was not measured again when the
-    category numbering changed (2026-11-12). The P3c recording sweep measures the current rule once:
-    every placed row with a `CatId` in the recordings' snapshots, the assembled category rank
-    against `CatRnk`, rows tied on class rank counted on their own. A mismatch is a defect of
-    the assembly (§5 step 4) and is reported, not accepted. *Measured and closed, 2026-11-16:*
-    item 53.
-47. **`source-unreachable` in the closed set** (#346; item 30; M2 P3b, 2026-11-15). No tier
-    produces the reason; for the on-site process that is item 30's default. Default: it stays in
-    `unavailable.reason`'s closed set. Removing it changes `schemas/observed.schema.json` and
-    the contract package, a breaking change for nothing a client sees, since all three reasons
-    render alike (`CONTRACTS.md` §1.2). Revisit once, at the 1.0 contract freeze (M6): drop
-    it there if it still has no producer.
-48. **A first run's `siblingPhaseId`** (review of PR #375, CQ2; M2 P3b, 2026-11-15). The
-    maintainer's pairing decision (2026-11-11, #287) is made from the second run's side: a
-    second run's first run is the Phase with its class and the paired token, the same day
-    breaking a tie. Read "the other way" as a lookup of its own, a first run could name a
-    second run that names another first run: with a `BR1` on the 19th, a `BR1` on the 20th and
-    a `BR2` on the 20th, the `BR1` of the 19th finds one `BR2` and would name it. Default: a
-    first run's sibling is the inverse of the second runs' lookup. It names the second run
-    that names it; where several name it, the one on its day; where that leaves none or more
-    than one, `null` (§2.1; `CONTRACTS.md` §2.4). A first run's sibling therefore always names
-    it back, and a client that follows the pointer from a first run lands on its pair. The
-    second run's side is the decision's and does not move, so no `pair` standing moves. One
-    shape stays one-way: two second runs that both name one first run, which names only the
-    one on its day. A single pointer cannot hold both. Nothing recorded tells the two
-    readings apart (E2, the last snapshot of each recording, 2026-11-15): in the six slalom
-    files every paired class has two first and two second runs, one of each per day, so the
-    day pairs them and each names the other; cp3-cross has no pair. No client duty moves:
-    `siblingPhaseId` is `null` wherever no pair is stated. Reopens on a recording where a
-    class's first and second runs are not one of each per day.
-49. **Who derives a first run's sibling, and which second runs count** (review of PR #376, CQ1
-    and CQ2; M2 P3b, 2026-11-16). Item 48 says what a first run's `siblingPhaseId` is. It did
-    not say who computes it, or what a Phase that is no longer stated counts for.
-    (a) *The owner is the core* (§0.5, §2.1). The value is the inverse of other Phases' stated
-    pairs: it changes when a second run is stated, and on TCP a first run's `Results` precedes
-    its second run and is not sent again, so a parser, which sees one message, cannot keep it.
-    A parser states a first run's `pair` with `siblingPhaseId: null`, always, as the vectors'
-    adapter does (`CONFORMANCE-VECTORS.md` §1). The core derives the presented value in every
-    unit that changed a Phase and reads no sibling stated for a first run. That leaves one
-    implementation of item 48, not two that can disagree. `CONTRACTS.md` §5 step 1's "known
-    means stated on the Phase" is about the second Phase's sibling, which stays the parser's
-    statement.
-    (b) *A second run stops naming a first run when the two Phases' stated `classId` differ.*
-    This is `CONTRACTS.md` §2.4's class rule, read on the fields as they stand (E3, from the
-    text). It decides §2.4's own rename example once the rename is seen over two snapshots:
-    the Phase of the rebuilt id keeps its last stated class and `pair`, and without the rule
-    it would still name the first run and tie with the rebuilt second run (§2.1's example).
-    The check needs both classes stated. Where the first run's class has not been stated,
-    which includes a first run nothing has stated at all, the second run's `pair` stands: the
-    stater applied the class rule when it named the first run, and nothing stated since
-    contradicts it. Read as "an unknown class is not equal", the rule broke the vector
-    `two-run-br1-unavailable-no-live-no-xml`, whose first run no element describes; the
-    vector is unchanged and the adapter describes no further Phase.
-    (c) *A Phase the schedule no longer holds is not otherwise special-cased* (E4: no recording
-    holds a rename, a moved race or a deleted one). *Closed 2026-11-16: by the maintainer's
-    decision of that day such a Phase is removed (`DECISIONS/ADR-015` Revision 9; item 54), which
-    closes the gap stated below; the rest of (c) is the record of the default it replaced.*
-    Nothing in the contract removed a Phase until then.
-    It stays as last stated, with its own `pair`; a standing of it that was published stays
-    published. Upstream rebuilds an id only while its race is at the initial status (§1), so
-    the Phase of a rebuilt id normally holds no result, and a `pair` standing that never had
-    an entry was never published.
-    What this default leaves wrong, stated: an old Phase that still has the first run's class
-    goes on naming it. That is a deleted second run, one moved to another class while the
-    first run stays, or one whose id was rebuilt for another reason (another day, if the id
-    follows the day, which is not established). The first run then names a Phase that is no
-    longer scheduled, or `null` where the old and a new second run both name it and the day
-    does not decide. The second run's own side is unaffected: a new Phase names its first run
-    by the lookup and has its `pair` standing.
-    No client duty moves: a client reads `Phase.pair` as before, and `siblingPhaseId` may be
-    `null`. Reopens on a recording where a race was deleted or moved, or an id rebuilt. The
-    remedy would be to remove a Phase that left the schedule, as an Attempt is removed (item
-    38); that changes the wire and is the maintainer's to decide.
-    (d) *A Phase named by a second run, with no `format` and no `pair` of its own* (#377, PR #389,
-    2026-11-16). Once the core reads no id token (§2.1), such a Phase has no role from its own
-    statements. Read from the text (E3, §2.1 "the class check needs both classes stated"): being
-    named by a second run's stated `pair` makes it that pair's first run, of the naming pair's
-    `combination`; no id is read to say so. That sentence covers a Phase nothing has stated at
-    all, which the core does not hold and which serves only what reads across the pair (§4.5;
-    `two-run-br1-unavailable-no-live-no-xml`). Default, the same reading for a Phase the core
-    holds (its class stated, say) with neither `format` nor `pair` stated, named by a second run
-    that names it under (b), that is whose stated `classId` does not differ from its own: it is
-    that first run,
-    its `pair` presented as `{ role: 'first', combination, siblingPhaseId }` with the sibling
-    item 48's inverse; its `format`, `stage`, `kind`, `scoringKind` and `heats` are not presented
-    until a `format` is stated, and the core reads them meanwhile as `CONTRACTS.md` §2.4's
-    unknown-token row (a `run`, `race`, `duration`, no heats). The first `format` stated decides
-    them and its role, as for any Phase. No client meets this shape: on site every first
-    statement of a Phase carries its `format` (the snapshot's `DisId`, or the TCP parser's token
-    on every message that first names a `RaceId`, §2.1), and the vectors' adapter states one for
-    every Phase (`CONFORMANCE-VECTORS.md` §1); it exists for core tests that state neither. No
-    client duty moves. Reopens if a deployable creates a Phase without a stated `format`.
-50. **Several writes pending on one Attempt** (#345; M2 P3b, 2026-11-16). `CONTRACTS.md` §4 rule
-    4 gives a write "the vector presented from rules 1–3 with the target cell replaced", a
-    sentence written for one write. Two defaults. No recording holds a write (E4). No client
-    duty moves: no refusal is added, and a tablet renders `gates` as served and each write
-    from its own `WriteRequest`.
-    (a) *What is presented.* The rules 1–3 vector as it stands at each step, with the target
-    cell of every pending write replaced by its requested value; on a cell two pending writes
-    target, the later one's. A pending write is "presented the instant it is submitted" and
-    stays presented until its echo (rule 4; `CONTRACTS.md` §2.9), so a second write does not
-    take the first one's cell away, and a write that resolves does not take the others'. Read
-    per write, the second write's vector dropped the first one's cell until its echo: the
-    tablet would show a gate revert and flip back while its write stayed `pending`. The base
-    is live for the same reason: a row that moves another cell while a write is pending is
-    upstream's table and shows at once, also under a write whose echo never comes. The
-    envelope is `operator-write`, `provisional: true`, while any write is pending. Its
-    `observedAt` is the element's that last changed the presented vector, a submission or an
-    observation that changed a presented cell, so a step that changes no presented cell sends
-    no `gates` (INV-5; `CONTRACTS.md` §1.6). *Example:* writes are pending on gates 3 and 5.
-    The row that confirms gate 3 states the value already presented there: `write.updated`
-    goes out, `gates` does not, and gate 5 keeps its requested value.
-    The base follows whatever changes it: a row, a listing's cell, and the Attempt entering or
-    leaving the on-course set, since rule 1's cell merge applies only while it is listed.
-    (b) *How echoes resolve them* (§6). On different cells, independently. On one cell, in the
-    order sent, the oldest pending write first. Judged independently, the second write would
-    take the first command's echo for its own, find it unequal and resolve `mismatched`,
-    although upstream applies it a moment later. A retraction resolves every pending write of
-    the field, and a new generation supersedes each (rule 4; §6).
-    (c) *A delivery the oldest write cannot use* (review of PR #378, CQ1; 2026-11-16). A judge
-    writes `2` by a slip and then `0` on a gate that holds `0`, and one row restating `0`
-    answers both: a re-delivery for the first write, and by "oldest first" alone the second
-    is never judged. Both would stay `pending`, and so would every later write on that gate,
-    until the cell changed. Default, §6's second case: such a delivery answers the latest
-    write whose value it states and resolves the ones before it. The ground is the order of
-    the commands on one socket. It also settles what a single row left open: writes `2`,
-    `0`, `50` and one row with `50` resolve the first `mismatched` and leave two pending; the
-    next push of the race restates `50` and resolves them, `mismatched` and `confirmed`.
-    (d) *After a restart* (review of PR #378, O1). The pending writes of one Attempt resume in
-    one step, in the order sent, and the first delivery is judged once against all of them
-    (§6). Handed over one by one, the first write resolves before the second exists, and the
-    second is then judged against the value it stored at submission: `mismatched` where one
-    lifetime leaves it `pending`.
-    (e) *No course bound* (N2). A pending write lays its cell over a `gates` vector, and there
-    is none without a course (§4.6; `CONTRACTS.md` §2.6: `gates` keeps the course's count). A
-    write resumed after a restart before its course binds therefore presents nothing: `gates`
-    is what rules 1–3 give, the write is `pending` on its `WriteRequest`, and from the step
-    the course binds its cell is laid over, for an Attempt with no cells of its own too. A
-    write whose gate the bound course does not have lays nothing over and stays `pending`.
-    (f) *An assertion beside a pending write* (N3). No deployable has both: the on-site
-    process takes no assertion (`CONTRACTS.md` §7.3, one write) and the live tier holds no
-    pending write (§8.5). For the shared core, one guard: a pending write is judged at every
-    delivery whether or not its value is presented, and of two operator observations the
-    later-ingested is the one presented.
-    (g) *A resolution moves the later writes' retained value for both sources* (re-review of
-    PR #378, CQ3). Writes `2` and `50` are pending on a gate that holds `0`, and an XML save
-    confirms the first before TCP's row does. TCP's row stating `2` is then the first write's
-    echo on the other channel. Compared with what TCP itself last held, `0`, it reads as a
-    change and resolves the second write `mismatched`, although upstream applies it next. The
-    retained value of a write left pending is the value its command was sent over, upstream's
-    table as the earlier write's echo showed it, and both sources render that one table. So
-    §6's sentence is not per source: the delivered value replaces the record whichever source
-    resolved the earlier write, and a later delivery of it from either source is no echo. A
-    write whose command was lost then stays `pending`, as any lost echo does (`ADR-010`).
-    Near-unreachable: TCP pushes a correction at once, and a save rarely comes first. A first
-    or only write is untouched: it compares with its own source's retained value as before.
-    Not taken: one write per Attempt, or per gate, at a time. Either needs a refusal, which is
-    a client duty. Residuals, stated.
-    - With one cell written twice, a change from elsewhere that lands between the two
-      commands' pushes resolves the first write `mismatched`, and the first command's late
-      echo can then resolve the second the same way. That is the single-write rule's own
-      limit: the next observation of the cell settles the write.
-    - Under (c), a re-delivery of the old value that arrives before upstream has applied
-      anything, or between two echoes, can state a later write's value and resolve the
-      earlier ones `mismatched` early. The rows that follow then pass through upstream's
-      states unlaid; the end state is right.
-    - A restart or an outage that misses the first command's push leaves one row for two
-      commands, and the outcome is the one-row outcome above.
-
-    Whether upstream pushes once or twice for two commands on one cell is not established
-    (E4). Reopens if penalty-check (M4) wants one correction per gate at a time.
-51. **A `Completed` stop and a stream finish withdrawn afterwards** (review of PR #379, CQ1;
-    M2 P3b, 2026-11-16). §4.3 stops the `duration` recomputation at a `Completed="Y"` on a
-    listing carrying the finish, and §4.4 closes the run there. §4.1 lets the stream withdraw
-    a finish it alone stated: "the generation's finish and the `duration` inference are
-    forgotten". Neither says what becomes of the stop when both happen in one generation.
-    Default: the closure belongs to the finish that listing carried and is forgotten with it.
-    The next finish listing's `duration` is inferred and recomputed like a first one, and
-    the run closes again at that finish's own `Y`, at the leave or at a mark; `provisional`
-    follows (§4.4). The ground is §4.4's own: "a `Y` on a listing with no finish closes
-    nothing, there being no result to complete", and once the finish is withdrawn there is
-    none. The parallel is the leave: a re-listing undoes that closure too. Kept otherwise,
-    the stop would freeze the new finish's inference at its first listing, cells judged
-    afterwards would not reach it, and a row with a blank cell would be presented settled.
-    Not recorded (E2: the one recorded withdrawal, cp3-cross WX1_XT_26:25, carries
-    `Completed="N"` on all 234 listings of its finish). No client duty moves. Not ruled here:
-    a finish the stream contradicts after a row presented it (INV-2d). Seven are recorded, so
-    whether a `Y` preceded any of them is read on the replays first, in the P3c sweep.
-    *The contradicted case, 2026-11-16* (P3c sweep, E2: replays at 77cdef8 and the raw
-    on-course stream). Seven withdrawn finishes are recorded: the one above and six
-    `contradicted-finish` diagnostics (jarni-ne-do K1M_BR1_19:133; nkz-19so K1M_BR1_19:55,
-    C1W_BR1_19:39, C1W_BR1_19:33, C1W_BR1_19:3, K1M_BR2_19:67). **None had a `Y` before the
-    contradiction:** 14 to 44 listings carried each contradicted finish, all `Completed="N"`;
-    the stream listed the Attempt running again 6 to 30 s after the finish, and in three cases
-    the real finish reached `Y` afterwards. Default, the same as above: a closure a `Completed`
-    gave belongs to the finish its listing carried, and a contradiction (INV-2d) takes it away
-    with that finish; the next finish's `duration` is inferred and recomputed like a first one,
-    and the run closes again at its own `Y`, the leave or a mark. The ground is the one above,
-    and INV-2d's own: the contradicted finish is no longer the run's result. Whether a row had
-    presented the finish before each of the six was not read (the stream side only). No client
-    duty moves.
-    Reopens on a recording of a `Completed` finish withdrawn or contradicted.
-52. **The kept `decidedIn` of an omitted entry, and the re-baseline** (#358, CQ-A and CQ-B;
-    #271 CQ6; M2 P3c, 2026-11-16). §4.10 keeps a classification row's `decidedIn` per `entryId`
-    from the last admitted XML row, for the TCP rows that carry none. Two defaults inside it.
-    No client duty moves: a client shows `decidedIn` verbatim and absent while `null`, as
-    before.
-    (a) *An entry the latest admitted XML omits reads `null`.* The kept values are the latest
-    admitted XML snapshot's that carries rows, replaced whole by the next such snapshot, as the
-    rows themselves are; they are not merged across snapshots. A snapshot is a complete statement
-    of the table, and its absence retracts (`DECISIONS/ADR-011`, `ADR-015`): an earlier build's
-    round for an entry the later build left out is not upstream's statement any more, and the
-    entry, when a later TCP build carries it again, may have been decided in another round.
-    The entry's `decidedIn` is `null` from that TCP row until the next save states it, one
-    save cycle. An emptied XML table, or a refused one, replaces nothing (§4.10). *Example:*
-    the admitted XML carries A (`F`) and B (`SF`); the next admitted XML carries only B (`SF`);
-    TCP then pushes A and B: A reads `null`, B `SF`. Read the other way, A would read `F` from a
-    build upstream has since replaced. Not recorded (E4: #271 N1 found 0 such cases on
-    cp3-cross, the one recording with classification tables). Reopens on a recording where an
-    entry leaves a classification build and returns.
-    (b) *A re-baseline keeps the classification rows and the kept `decidedIn`.* `CONTRACTS.md` §4
-    step 1 discards the retained observations of an Attempt's result fields; classification rows
-    are no Attempt's fields, and the re-baseline does not discard them. Its read replaces them
-    as any snapshot does, under INV-2c's guard alone (§4.10). The ground: what the re-baseline
-    exists for, a value no message will ever clear, cannot arise for these rows, since every
-    admitted snapshot replaces them whole and TCP re-sends upstream's current build on its
-    rotation. Discarding them would empty a class's overall result whenever the re-read file's
-    table is empty, and a read older than TCP's last delivery of the rows (#271 CQ6) is rightly
-    refused: those rows are upstream's newer build. `scope.replaced` carries the classification
-    Standing as it then stands (`CONTRACTS.md` §7.2). E3, from the text; E4, no recording holds
-    a re-baseline. Reopens if an operator needs a re-baseline to clear a classification.
-    *Code (M2 P3c):* (a) moves the merged core (PR #357), which merges the per-`entryId` map
-    across admitted snapshots: an admitted XML snapshot carrying rows replaces the map whole. A
-    core test pins the example above (XML snapshots and TCP rows of a classification Phase).
-    (b) moves no code; a core test pins it (a re-baseline over XML and TCP classification rows
-    keeps the rows and `decidedIn`).
-53. **Category numbering on a class tie, re-measured; what the category check reads** (#349 CQ3;
-    item 46 (c); M2 P3c sweep part 1, 2026-11-16). `CONTRACTS.md` §5 step 4 numbers a
-    category's placed entries by position in class order (the maintainer, 2026-11-12), which
-    numbers entries tied on class rank consecutively, and checks the assembled rank against
-    upstream's own when the snapshot carries it.
-    (a) *The measurement* (E2, the sweep's scan and mine, over the 2,032 distinct XML snapshots
-    of the seven recordings; per race, the placed rows with a `CatId`, in `RnkOrder` order;
-    the expected rank is the 1-based position within the category). The rule's domain is a
-    `phase` standing of a first-run or single-run duration Phase (§5 step 1: an age-category
-    standing exists only for a duration-scored scope): 43 races, 39 `BR1` and 4 Cross `XT`,
-    **493,763 row-instances, 19,070 distinct, 0 mismatches against `CatRnk`.** The one class tie
-    inside a category (jarni-ne-odp C1M_BR1_19, category ZM, bibs 53 and 54 sharing class rank
-    39 to 43 across the snapshots) is numbered consecutively, in class order, in every snapshot
-    (4 and 5, later 5 and 6): upstream's own numbering is the rule. No tie in the domain is
-    numbered shared.
-    (b) *Outside the domain.* Kayak Cross heat Phases and classifications publish no category
-    standing (ordinal and classification scopes, §5 step 1). Their rows still carry `CatId`:
-    in cp3-cross's `XS`, `XF` and `XER` tables `CatRnk` is absent on 129 distinct placed rows
-    and differs on 38 (50 instances: 26 in MX1_XER_26, one early snapshot each, and 12 in
-    WX1J_XER_26_JUN), and one classification (WX1J_XER_26_JUN)
-    shares a category rank on a tie (DS rank 1: 1 and 1; DS rank 2: 2 and 2) while another tie
-    there is numbered against `RnkOrder`. None of it reaches a standing, so it rules nothing.
-    So CQ3 closes: upstream numbers class ties consecutively wherever the rule applies, and
-    nothing goes back to the maintainer. It reopens if age-category standings are ever
-    published for a Cross heat or a classification.
-    (c) *A second-run Phase is not checked.* Its standings carry the combined placement (§5
-    steps 2 and 6), so their category ranks are a combined category numbering. The row's own
-    `CatRnk` ranks run 2 alone (it matches the rule on the row's run-2 `Rnk`: 366,733
-    row-instances, 0 mismatches, 37 races), so it is no check of a combined numbering.
-    `TotalCatRnk` is the combined category rank, but upstream fills it late: by `TotalRnkOrder`
-    within the category it disagrees with the position on 459 distinct row facts (7,201
-    instances, 455,213 compared), of which 414 hold the class rank `TotalRnk`, 2 the class order
-    `TotalRnkOrder`, and 43 a partial numbering in one snapshot of nkz-19so C1M_BR2_19; in the
-    last snapshot of each recording it matches on all 1,882 rows. Read as a check, it would
-    record a `category-rank-disagreement` for every row upstream has not yet renumbered and
-    clear it later, an anomaly that reports upstream's lag, not a defect of ours. Default: the
-    check reads `CatRnk` of first-run and single-run rows only; a second-run row's `CatRnk`,
-    `TotalCatRnk` and `PrevCatRnk` are not read (run 1's own row is the first run's check). The
-    combined numbering is the same rule over the combined placement, and the final snapshots
-    agree with it. No client duty moves: anomalies are admin-only and the presented ranks are
-    unchanged.
-    (d) *An unplaced row's `CatRnk`* (bib 64 of §5 step 4's example; K1M_BR2_19 bib 1, `CatRnk`
-    6): 2 distinct rows in 309 instances, both jarni-ne-odp. The check already reads placed rows
-    only (§5 step 4); nothing moves.
-    *Code:* the check has no path on a real stream yet (#271 N3: the parser emits no `CatRnk`);
-    when it is wired, the parser carries `CatRnk` from the rows of first-run and single-run
-    races with a `CatId` and nothing from second-run rows. No vector changes; the standing
-    vectors keep `upstreamCategoryRanks` as stated.
-    (e) *When the check compares* (#271's code, PR #388, the verifier's differences;
-    2026-11-16). Wired, the check recorded transient anomalies on all four reference
-    recordings (93, 43, 95 and 234 `standing.updated` deltas; none left at the end of any
-    standing). (a) measured 0 mismatches between a snapshot's `CatRnk` and that same
-    snapshot's class order, so these are the snapshot's ranks against a standing assembled from
-    a newer TCP class order: upstream's save lagging its push, the reason (c) leaves
-    `TotalCatRnk` unread, not a defect of the assembly. Default: the comparison is made only
-    while the whole-class standing presents the snapshot's class order, its placed entries
-    exactly the race's placed rows of the latest snapshot, each with the row's `rank` and
-    `order` (whichever source presents them); otherwise nothing is compared and an anomaly
-    recorded earlier is withdrawn. So the check still tests what is ours, the category
-    filter, the numbering and the unplaced tail, on the order upstream numbered from. Not
-    taken: comparing `CatRnk` with a numbering of the snapshot's own rows, which would test
-    upstream against itself and miss a category membership read wrongly from `Participants`;
-    and no check at all. *The content-age guard* (the implementer's question): not asked.
-    `CatRnk` is an `xml`-only field (INV-2 rule 3), so INV-2c's "from the other source" has
-    nothing to compare; it is a check input, never presented, and a refused or stale file
-    either restates the presented order, when its ranks are comparable, or does not, when
-    nothing is compared. E2 for the lag (the verifier's replays), E3 for the rule. No client
-    duty moves: anomalies are admin-only and the presented ranks are unchanged.
-    *Code (PR #388):* in `src/core` where the anomalies are assembled (`publish.ts` setting
-    `upstreamCategoryRanks` for `assembleStanding`), pass the snapshot's category ranks only
-    when the whole-class standing's placed entries and their `(rank, order)` equal the latest
-    snapshot's placed rows of the race; else pass none, so a standing that carried the anomaly
-    drops it. The standing vectors are unchanged (`assembleStanding` takes the ranks as given).
-    Tests: a core test with an XML class order A 1, B 2 (`CatRnk` 1, 2 in one category), then a
-    TCP push B 1, A 2: no anomaly, and one recorded before is withdrawn; a snapshot restating
-    B 1, A 2 with `CatRnk` 1, 2: none; the same with a wrong `CatRnk`: one. Replays: 0
-    `category-rank-disagreement` in any `standing.updated` on the four reference recordings.
-54. **A Phase that leaves the schedule: the defaults inside the removal** (maintainer,
-    2026-11-16, Q-PH; `DECISIONS/ADR-015` Revision 9; M2 P3c). The decision: a Phase is removed
-    when an admitted XML snapshot no longer carries it, under the content-age guard; an empty
-    schedule table removes nothing (admin log); clients get a `phase.deleted`, live a `DELETE`.
-    It closes item 49 (c)'s gap. Defaults taken inside it, each by analogy with item 38:
-    (a) *The trigger is the schedule statement* (§0.3), the races the snapshot's `Schedule`
-    table names, never its results tables: a race scheduled with no row is item 41's emptied
-    table. Upstream rewrites the schedule whole at every save, as it does the tables.
-    (b) *Only a Phase an XML schedule statement has named is removed* (item 38 (b)'s scope):
-    any statement, admitted or not, a first read's included; admission is asked only of the
-    statement that would remove it (c). A
-    Phase only TCP has named, before the first snapshot or with no XML configured, stays TCP's;
-    TCP's own `Schedule` never removes (item 38 (d)).
-    (c) *The guard covers the whole Phase:* every `tcp` observation of the Phase or of any of its
-    Attempts, the TCP `Schedule` naming it included, must predate the snapshot's `changedAfter`,
-    and a Phase with an Attempt in the on-course set is never removed. Not admitted, nothing
-    moves; there is no per-field fallback, since a Phase's own fields are not retracted.
-    (d) *One message.* `phase.deleted { phaseId }` implies the Phase's Attempts and every
-    Standing whose scope names it; no `attempt.deleted` or `standing.updated` is sent for them.
-    The alternative, an `attempt.deleted` per Attempt then the Phase's message, sends a Phase's
-    whole start list one Attempt at a time, each with its emptied Standings, before the Standings
-    are removed anyway; one message is atomic, and the removal is the Phase's. On live the same
-    holds: one `DELETE` of the Phase.
-    (e) *Pending writes* of its Attempts resolve `mismatched` without `confirmedValue`, before the
-    `phase.deleted`, as for a removed Attempt (item 38 (f)).
-    (f) *Checks and flags* stay in the store, unserved while their Attempt does not exist, served
-    again when the same `attemptId` returns (item 38 (g), (m)). A Phase's reads of checks answer
-    `404 phase-not-found` while it does not exist.
-    (g) *The Standings removed* are those whose scope names the Phase: `phase`, `heat` and
-    `classification` of it, a `pair` keyed by it and a `pair` naming it as the first run, whole
-    class and every category, the same set `scope.replaced` covers (`CONTRACTS.md` §7.2). A
-    surviving second run's `pair` standing is published again from its first entry once a first
-    run is named.
-    (h) *Pairing after a removal.* A first run that named the removed Phase is derived again in
-    the unit (item 49 (a)). A second run whose presented `siblingPhaseId` is the removed Phase
-    presents `null` from the removal (review of PR #381, CQ1), until a later statement names a
-    first run; the parser's statement from the same read gives the same, so the rule fixes the
-    order and covers a read that does not restate it. It is narrow on purpose: a second run
-    naming a Phase nothing has stated stays as item 49 (b) has it. Each such Phase, first or
-    second run, is sent as `phase.updated` after the `phase.deleted`, in one unit, so no
-    client sees a pointer to a removed Phase at a unit boundary. *Amended 2026-11-16 (#382, PR #390):* the
-    parser keeps the pairing candidates it has learned (§2.1) and cannot know whether the core
-    admitted a removal, since the guard is the core's; so a later statement of a second run can
-    name the removed Phase again. **The core presents no `siblingPhaseId` that names a Phase it
-    has removed and not created again:** such a stated sibling is retained and presents `null`,
-    at the removal and at every later statement, until that `phaseId` is created again (j; as clients see it, (n)),
-    when the stated sibling presents as stated. One rule, in the core; the parser stays
-    stateless about admission. A refused removal leaves the Phase held, so a statement naming it
-    presents as stated and nothing diverges. Not taken: the parser forgetting every race the
-    latest schedule statement drops, which would make a second run lose a first run the core
-    kept whenever the guard refuses. Still narrow: a second run naming a Phase nothing has
-    stated, never held, stays as item 49 (b), (d) have it. What a client sees is (h)'s value,
-    now held across later units as well; no further duty moves.
-    (i) *Classification rows and their kept `decidedIn`* go with the Phase (item 52).
-    (j) *A returning Phase* is a new Phase: created whole by the ordinary rule, its `date` the
-    snapshot's (INV-5's once-only date is per Phase), its Attempts `run` 1 with none of the
-    removed ones' result state, their checks and flags served again.
-    (k) *`xml-schedule-emptied`* is raised as `xml-table-emptied` is (items 26, 41): once per
-    emptying, under the guard, re-armed by a schedule statement that names a race.
-    (l) *The re-baseline* removes under the same guard and counts every `tcp` delivery that named
-    the Phase (item 38 (l)). An event re-baseline sends each `phase.deleted` before its
-    `scope.replaced`; a Phase re-baseline whose read removes its own Phase sends the
-    `phase.deleted` and no `scope.replaced` and answers `200` with `attempts: 0`.
-    (m) *A race the read's own tables carry is not removed by that read* (review of PR #390,
-    CQ1; E4). The decision removes a Phase when an admitted snapshot "no longer carries it", and
-    a read that holds a results-table row of the race still carries it, schedule row or not.
-    So the removal is decided over the whole read: a Phase the schedule statement omits is not
-    removed where the same read carries a scope snapshot of its race with at least one row; the
-    table is read by the ordinary rules, and a later read that carries neither removes it. A
-    table with no rows carries nothing (an emptied table is item 41's), and the empty-schedule
-    rule is unchanged. Not taken: removing and recreating the Phase in one unit, which sends
-    `phase.deleted` and then its Attempts again under a Phase the read states no class for, so
-    clients would hold Attempts of a Phase they removed; nor ignoring the table, which drops
-    rows upstream wrote. Upstream writes the two tables from one schedule, so this is not
-    expected; nothing recorded holds it.
-    (n) *"Created again" means created as clients see it* (review of PR #390, CQ2; E4): at the
-    first observation that states its class, when its whole-resource `phase.updated` goes out
-    (`CONTRACTS.md` §1.6). A classless observation of the removed id, such as a TCP on-course
-    listing of one of its Attempts, makes the core hold the id but creates no Phase for a
-    client, so a second run's stated sibling naming it keeps presenting `null` (h) until the
-    Phase's creating message has been sent; then the second run's `phase.updated` follows it in
-    the same unit. A second run never names a Phase a client has not received.
-    *Code (PR #390 follow-up):* (m) in `src/core` evaluate a read's schedule-statement removals at
-    the end of the XML unit and skip a Phase for which the unit carried a scope snapshot with a
-    row; test: an admitted read scheduling A only and carrying B's table with a row sends no
-    `phase.deleted` and keeps B and its Attempt; the next read without B's table removes it. (n)
-    clear the removed-ids marker when the Phase's creating message is sent (class known), not
-    when the core's resource is created; test: removal of `K1M_BR1_6`, a classless on-course
-    listing of `K1M_BR1_6:3` (no `phase.updated` for `K1M_BR2_6`, sibling still `null`), then a
-    statement of its class (`K1M_BR1_6` created, then `K1M_BR2_6`'s `phase.updated` naming it).
-    Both cases are unrecorded and need an upstream file that disagrees with itself or TCP
-    naming a deleted race, so the code as merged is acceptable until the follow-up lands.
-    Evidence: E4, by the P3c sweep's scan (part 4 (a)): no race left the schedule in any of the seven
-    recordings (one fixed set per recording over 2,032 distinct snapshots; every TCP `Schedule`
-    message names the same set), and no snapshot has an empty schedule. So nothing recorded
-    moves; the rule rests on upstream's whole-file rewrite. Client duties move (CLIENT-OBLIGATIONS:
-    remove a Phase with what it holds, on site and on live; live-mini-server's Phase `DELETE`).
-    Reopens on a recording of a race leaving the schedule that these defaults present wrongly,
-    or of TCP's `Schedule` going on naming a race the file has dropped: the guard counts those
-    deliveries (c), so such a race would never be removed while TCP is connected. That TCP drops
-    a deleted race at once is inferred from every recorded `Schedule` naming the full set (E4).
+| item | case | behaviour | basis | reopens when |
+|---|---|---|---|---|
+| 1 | Does "reset scoring terminals" reach the write channel? | Answered: no, see `CONTRACTS.md` §7.3. | operator action | never |
+| 2 | The layout letters `D` and `E` | Answered: the Cross start ramp and roll zone, judging slots that do not advance the gate number, see §2.3, §4.6. | recording cp3-cross | never |
+| 3 | Are `RXER`, `SLER` and `WWER` classifications? | Answered: `SLER` and `WWER` are, like `XER`; `RXER` is a title only, see §4.10. | upstream behaviour | never |
+| 4 | The super-final and legacy-final combination | Answered: the sum of two runs, a tie broken by the better run, relayed and never computed, see `CONTRACTS.md` §2.4. | upstream behaviour | never |
+| 5 | The base class of an attribute sub-class | Answered: none is stored; it is an ordinary separate class, see §2.1. | maintainer ruling 2026-11-11, `RULINGS.md` R-17 | never |
+| 6 | Kayak Cross per-gate marks on TCP | Answered: fault marks in the cells, never `Pen`, see §4.6(d). | recording cp3-cross | never |
+| 7 | Does a re-run clear the row at staging or at the new finish? | Answered: the wizard wipes it at once with no push; staging without the wizard never clears it, see §4.11. | operator action | never |
+| 8 | A snapshot rewritten just before a TCP disconnect | Answered by INV-2c, content age across sources, see `CONTRACTS.md` §4 and §4.12. | contract rule | never |
+| 9 | A DNS cleared in the grid and the athlete restaged; a real `dns` saved just before the leave | The guard refuses a snapshot older than the restaging listing. Accepted: a snapshot written between the clearing and the restaging can still show the `dns` for up to about 35 s, and a real `dns` saved just before the leave waits for the next rewrite, see §4.12, Guard. | recording nkz-20ne C1M_BR1_20:64 (105 s); a late `dns` is acceptable, `CONTRACTS.md` §2.6 | a recording where a cleared `dns` shows after the restaging |
+| 10 | The 11–27 s late-finish outliers | Answered: a finish assigned after the fact, or two finishes swapped late; both are corrections, see §4.12, "A finish moved earlier". | operator action | never |
+| 11 | Which operator action caused each recorded retraction | Not a question: the stream does not say, and no rule depends on it; what each action emits is §4.12's tables. | operator action | never |
+| 12 | Does the legacy live-mini XML ingest overwrite results cleared on TCP? | Open, legacy line only: the rebuilt live tier reads no XML and takes the bridge's pushes alone (`CONTRACTS.md` §8). No issue tracks it. | default, nothing recorded | the legacy line is used as the fallback at an event |
+| 13 | A no-reorder penalty correction after racing ends may not reach the XML | Answered: TCP carries it, and the end-of-day save always writes it, see §5 and `CONTRACTS.md` §2.8. | operator action | never |
+| 14 | Can the terminal channel set a mark on a closed run? | Answered: no; marks are the operator's, see `CONTRACTS.md` §7.3. | upstream behaviour | never |
+| 15 | Does the on-course message carry `Position` for a listed finisher? | Answered: yes, on every one, see §4.8. | recordings, 68,894 of 68,894 messages | never |
+| 16 | The leave constant `onCourseLeaveAfterSeconds` | Answered: 4 s, see §4.1. | recordings (seven); maintainer ruling 2026-11-06, `RULINGS.md` R-9 | a recording or the venue-laptop check (#198) shows a non-removal gap above 3.0 s, a whole-list pause above 2.5 s, or a TCP silence between 2.0 s and the constant |
+| 17 | The interval from a finish to the on-course exit | Answered: a venue setting, about 20 s at most venues, see `CONTRACTS.md` §7.1. | recordings (seven, 1,995 closures) | never |
+| 18 | The XML poll interval and the torn-read retry budget | Open: deployment settings, the poll interval 5 s by default; the guard reads `changedAfter` (§0.3), so the interval bounds only how late a change is seen. | default | the venue values from the venue-laptop check (#198) |
+| 19 | Two runs of one athlete with the same `Time` to 0.01 s | A stale row from before a re-run without the wizard, re-sent by rotation during run 2 with exactly run 2's time, is attributed to run 2 and presents run 1's penalty and placement until upstream's next push, under a second. Accepted residual. | default, nothing recorded | a recording shows it; the remedy would compare the row's cells with the stream's before attributing |
+| 20 | A recorded `duplicate-finish` on TCP | Raised as §4.12, "Duplicate finishes", states. | recordings jarni-ne-odp (C1M_BR1_19 bibs 64 and 65; K1W_BR2_19 bibs 18 and 19) and jarni-ne-do (K1M_BR1_19 bibs 133 and 134) | pinned by a test (#340) |
+| 21 | `NHT2`'s first-run token | Superseded by item 31. | maintainer ruling 2026-11-12, `RULINGS.md` R-19 | never |
+| 22 | A classification table emptied after it had rows | Answered: the last built Standing stays, `asOf` showing its age, see §4.10. | maintainer ruling 2026-11-06, `RULINGS.md` R-3 | never |
+| 23 | A re-run inside a TCP outage; a mid-run mark followed by a start change | The first reads as a start correction and the second as a re-run, see §4.11. Accepted risks; the operator resolves them by hand. | maintainer ruling 2026-11-11, `RULINGS.md` R-11 | a recording of either shape |
+| 24 | A Kayak Cross `faults` value the stream and a row judge differently | No merge: the presented observation's `faults` whole, with its own envelope, see §4.6(d). | recording cp3-cross (MX1_XT_26:26, WX1_XT_26:9) | a recording where this presents a wrong value for longer than a save cycle |
+| 25 | `run` across a server restart | Not persisted: a restarted server re-derives it, so a re-run Attempt can present `1`, see §4.11 and §6. Live never lowers a stored `run` (`CONTRACTS.md` §8.3). | maintainer rulings 2026-11-10 and 2026-11-12, `RULINGS.md` R-10, R-12 | never: accepted risk |
+| 26 | Where `xml-table-emptied` is reported | Answered: the admin log only, no wire diagnostic, see §0.5, §4.12. | maintainer ruling 2026-11-12, `RULINGS.md` R-5 | never |
+| 27 | What a per-Phase re-baseline of a paired Phase replaces | Checker only, see `TEST-ARCHITECTURE.md` §3.2 property 13: `CONTRACTS.md` §7.2 stands, and the checker's scope is the named Phase alone. | default | the gate row in #333 |
+| 28 | A merged `gates` vector whose presented row is the other source's | Checker only, see `TEST-ARCHITECTURE.md` §3.2 property 1. | default | a client branches on `source` together with `observedAt` |
+| 29 | A classification Standing across a re-baseline | Its entries are the classification Phase's rows, which step 1 does not discard; the read replaces them under §4.10's rule, or changes nothing with an empty table. So `scope.replaced` carries a published classification Standing as last built, and a re-baseline never drops one. | default, nothing recorded | a replay of a re-baseline over a classification Phase shows otherwise |
+| 30 | `unavailable{source-unreachable}` on site | Never given on site: run 1's detail stays `not-yet` while a configured XML source is unreachable, see §4.5. | default, nothing recorded | a client needs to tell the two states apart |
+| 31 | The `NHT1`/`NHT2` combination | Answered: there is none; both are single runs, `pair: null`, and an `NHT2` row's `Total` and `Rank` are run 2's own, see §2.1. | maintainer ruling 2026-11-12, `RULINGS.md` R-19 | never |
+| 32 | Kayak Cross slot captions | A faulted slot is named by the slot itself (the gate number, `ST`, `RZ`), never from `GateCaptions`, so `faults` is equal from TCP and the XML, see §2.3, §4.6(d). | recordings: every `GateCaptions` equals those names | a recording whose Cross captions differ from them |
+| 33 | A store file that fails validation at load | Set aside under another name; the store opens empty, the server starts, and the admin log says so; nothing is on the wire (`CONTRACTS.md` §2.10). The `seq` counter then restarts at the process clock's `now()` in milliseconds, never at zero (`CONTRACTS.md` §1.6). The `seq` file is copied aside as text, so bytes that are not valid UTF-8 are not kept, and stays under its own name until a valid mark replaces it by temporary file and rename: a crash at any point leaves a file the next start recovers from. Lost: checks and flags, pending writes (resolved by hand), and the idempotency keys (item 44 (a)). Residual: a second set-aside with the clock set back below an earlier recovery's floor can regress `seq` once; a client that kept its last `seq` discards messages until the counter passes it, and its next handshake recovers. | maintainer rulings 2026-11-11, 2026-11-12 and 2026-11-14, `RULINGS.md` R-14, R-5, R-16 | a venue reports a clock set back across a recovery |
+| 34 | What "durable" covers | A crash of the server process leaves the previous complete state on every platform (`CONTRACTS.md` §2.10). Against a power loss it is best effort: the directory entry is flushed where the platform offers it, and Windows does not, so a write acknowledged just before the power fails may roll back to the previous complete state. Nothing acknowledged is ever half-written. | maintainer ruling 2026-11-12, `RULINGS.md` R-15 | the venue-laptop check (#198) shows a half-written file |
+| 35 | A Kayak Cross heat's leave | Changes neither `status` nor the stream's `running` outcome: the clock no longer ticks, and a client shows it stale after `runningStaleAfterSeconds` (`CONTRACTS.md` §2.6) until the row brings the placement, see §4.2, §4.3. | recording cp3-cross: every heat leaves the list together | the scoreboard work (M3) finds a frozen heat clock misleading |
+| 36 | A re-run finished over a standing mark without the wizard: does upstream rank the marked row? | Either shape is read: the stale mark is withheld, the row's time and cells are presented, and `placement` is `known` exactly when `Rank` is non-empty (§4.7, §4.12). The re-run fixtures assume the ranked shape and name it in their manifests. | default, nothing recorded | a recording of the case |
+| 37 | `format` once the snapshot has stated `DisId` | The snapshot's `DisId` holds from its first statement; a later TCP token does not displace it, see §2.1. | default, nothing recorded | a recording where a Phase's token and its `DisId` differ |
+| 38 | An upstream removal and the Attempt | Removed when no row of its race in an admitted XML snapshot carries its bib; a moved competitor is a new Attempt in the other Phase; a re-bib or swap that leaves the bib in the race keeps the Attempt and re-points `entry`, see §4.12. Rows 38 (a) to (m) are the defaults inside it. | maintainer rulings 2026-11-12, `RULINGS.md` R-6, R-7; no recording holds a removal | a recording of a removal that these rows present wrongly, or if TCP is to remove as well |
+| 38 (a) | What triggers the removal | The race's `Results` row, never the `Participants` row, see §4.12. | operator action: a deleted result keeps the `Participants` row, a move between races of one class keeps it too | as item 38 |
+| 38 (b) | Which Attempt can be removed | Only one a results-table row of its race has named, a start-list row included, see §4.12. | default, nothing recorded | as item 38 |
+| 38 (c) | The guard | Covers the whole Attempt: every `tcp` observation, on-course listings included, predates the snapshot's `changedAfter`, and an Attempt in the on-course set is never removed; where the guard refuses, the per-field retraction applies, see §4.12. | default | as item 38 |
+| 38 (d) | TCP's absent row | Retracts and never removes, see §4.12. | maintainer ruling 2026-11-12, `RULINGS.md` R-6 (the ruling names the XML) | as item 38 |
+| 38 (e) | The message | On site `attempt.deleted { seq, attemptId }`, and no `attempt.updated` for the Attempt in that unit; to live `DELETE`, see `CONTRACTS.md` §7.2, §8.3. | default inside `RULINGS.md` R-6 | never |
+| 38 (f) | A pending write of the removed Attempt | Resolves `mismatched` without `confirmedValue`, before the removal, see §4.12. | default | as item 38 |
+| 38 (g) | Its checks and flags | Stay in the store, unserved while the Attempt does not exist, served again if the same `attemptId` returns, whoever the competitor then is, see `CONTRACTS.md` §2.10. | maintainer ruling 2026-11-12, `RULINGS.md` R-7 | never |
+| 38 (h) | Its Entry | Stays. | default, nothing recorded | as item 38 |
+| 38 (i) | A row that returns | Creates a new Attempt, `run` 1, carrying none of the removed one's result state (generation, contradiction record, remembered mark); its checks and flags are (g)'s, see §4.12. | default, nothing recorded | as item 38 |
+| 38 (j) | A wholly empty table | Removes nothing, see §4.12. | maintainer ruling 2026-11-11, `RULINGS.md` R-4 | never |
+| 38 (k) | A flag's resolution while the Attempt is removed | A flag write: `404 attempt-not-found`, checked after `flag-not-found`, with nothing stored or pushed, see `CONTRACTS.md` §2.10, §7.4. | default, nothing recorded | as item 38 |
+| 38 (l) | A removal inside a re-baseline | Sent as `attempt.deleted` like every removal, its pending write's `write.updated` first; the unit's `scope.replaced` follows without it, and on live the Phase replace removes it. The guard still counts every `tcp` delivery that named the Attempt, a row or a listing: step 1 discards result values and keeps identity and lifecycle `status`, so a file older than TCP's latest naming of the bib removes nothing, see §4.12, `CONTRACTS.md` §4. | default, nothing recorded | a recording where TCP keeps naming a bib the file has dropped, so that no re-baseline can remove it |
+| 38 (m) | A returning Attempt's checks and flags | The unit that creates it sends, after its `attempt.updated`, one `check.updated` per check and one `flag.updated` per flag its reads then serve. The same holds for any Attempt created while the store holds checks or flags for it, such as the first creation after a restart, see `CONTRACTS.md` §2.10, §7.2. | default, nothing recorded | as item 38 |
+| 39 | A TCP outage while no course is bound | Answered: decided as on a bound course. Where an XML snapshot during the outage would have displaced TCP (rule 2 and INV-2c: ingest order, the connection and content age, never a cell comparison), TCP's identical re-send regains precedence at its own instant; otherwise the first delivery's instant stays, see §4.6(b), `CONTRACTS.md` §1.2. | contract rule | never |
+| 40 (a) | Which Event name wins | A non-blank name the operator entered, by boot flag or "start a new event", wins, and the snapshot's title never displaces it. With none entered, the name is the snapshot's title and follows it, each change sent as a same-id `event.changed`. Whether the name was entered is held and persisted with the Event, see `CONTRACTS.md` §2.2. | default, nothing recorded | organisers want the file's title to follow edits made after a name was typed |
+| 40 (b) | What an unparseable date is | The date part is the first ten characters and must name a calendar day (month `01`–`12`, a day the month has, 29 February only in a leap year); what follows is not read. Otherwise `details` is not stated and `unparseable-field` is raised, see `CONTRACTS.md` §2.2. | default, nothing recorded: every recorded date is well formed | a recording whose time part shows its date part is not the day the organiser meant |
+| 41 (a) | What re-arms `xml-table-emptied` | An XML snapshot of the race that carries a row; a TCP push carrying rows does not, see §4.12. | default, nothing recorded | an operator misses an emptying that came after a TCP-only stretch |
+| 41 (b) | A refused XML retraction and the field's earlier `xml` value | Answered, see §4.12, Guard: the refused snapshot moves nothing of the field, its `xml` slot included. The retained `xml` value is never presented, since every path that takes a `tcp` value away replaces the `xml` slot or puts a later `tcp` observation over it. | default | a path is added that takes a `tcp` value away and leaves the `xml` slot with no later `tcp` observation over it |
+| 41 (c) | When `xml-table-emptied` is raised | Only where the guard would have admitted the retraction: a first read or a file older than the results it lacks raises nothing, and the first later admitted snapshot raises it, see §4.12. | default inside `RULINGS.md` R-4 | an operator misses an emptied table because every read of it was older than TCP's last delivery |
+| 42 | Every date the XML states | Item 40 (b)'s rule reads every date part: `Schedule.StartTime` and `Participants.Birthdate`/`Birthdate2`. An unparseable `StartTime` states neither `date` nor `scheduledStart` and raises one `unparseable-field` (`where` the `phaseId`, `name` `StartTime`); the Phase keeps what it holds, and pairing and `eventTime` take no date from it. An unparseable `Birthdate` leaves `birthDate` absent, `birthYear` falls back to `Participants.Year`, and raises `unparseable-field` (`where` the participant's `Id`, `name` `Birthdate` or `Birthdate2`). An empty value is absent, with no diagnostic. See §2.1, §3. | default, nothing recorded: every recorded value is well formed | a recording with an invalid date part, or birth dates entered in a form that crowds the admin log |
+| 43 | `running` beside a status other than `on-course` | Never presented: `running` ends where the stream's own status leaves `on-course`, see §4.3. | recordings: 0 such pairs over every step of the seven replays | a non-zero count, or with item 35 |
+| 43 (a) | A finish listing with no `duration` to infer | `running` ends, and `outcome` is `not-yet` until a row states one; slalom and the Cross time trial alike, see §4.3. | recording cp3-cross WX1_XT_26:25 (234 such listings) | as item 43 |
+| 43 (b) | An `at-start` listing that carries a `Time` | States no `running`, see §4.3. | default, nothing recorded | as item 43 |
+| 43 (c) | What a leave yields | In slalom and the Cross time trial no `running` survives a leave (§4.1); in a Cross heat the leave changes neither `status` nor the outcome (item 35). | maintainer ruling 2026-11-16, `RULINGS.md` R-23 | as item 43 |
+| 43 (d) | A Cross time-trial athlete removed before a finish | Superseded by `RULINGS.md` R-23: `left-without-finish`, the mark from the next save, see §4.1. | maintainer ruling 2026-11-16, `RULINGS.md` R-23 | never |
+| 44 (a) | A same-key retry after the keys were lost | A new request: the same gate and value go upstream again, or a second flag is raised. Accepted residual, see `CONTRACTS.md` §1.5. | default, nothing recorded | a venue reports a doubled correction or flag after a restart, or the venue-laptop check (#198) shows a store failing validation in ordinary use |
+| 44 (b) | A refusal "the Attempt has no run yet" | Answered: there is none, see `CONTRACTS.md` §7.3. | contract rule | never |
+| 44 (c) | Who decides `superseded` for a write resumed after a restart | The core, see §6, "After a restart". | default | never |
+| 44 (d) | A retained value that is not `known` | Retains no cell, see §6. | default | never |
+| 45 | A second run withdrawn with no run to come | After a run-2 row is retracted, the time-empty row keeps `placement`, `pairTotal` and `countingRun` carried, `provisional: true`, until a row of run 2 states a time or a mark, also where the run never comes. | default, nothing recorded (the one recorded cleared run-2 mark, jarni-so-odp C1M_BR2_18:51, raced 44 s later) | a recording of the case, or M3 or M5 find a provisional entry in an `official` Phase's standing misleading; ending the carry at `official` is then the rule to weigh |
+| 46 (a) | The merged run-2 `outcome`'s instant and gate 2 | Checker only, see `TEST-ARCHITECTURE.md` §3.2 property 1. | default | a client orders or ages by that `observedAt` |
+| 46 (b) | `exercised` counts under a stated outage or re-baseline | Checker only, see `TEST-ARCHITECTURE.md` §3.2. | default | a fixture holds a recorded outage beside a stated one |
+| 46 (c) | `CONTRACTS.md` §5 step 4's "0 mismatches" not re-measured | Superseded by item 53 (a). | recordings | never |
+| 47 | `source-unreachable` in the closed set | It stays, although nothing on site produces it (§4.5): removing it changes the schema and the contract package for nothing a client sees. | default | the 1.0 contract freeze (M6): drop it there if it still has no producer |
+| 48 | A first run's `siblingPhaseId` | The inverse of the second runs' lookup, see §2.1. One shape stays one-way: two second runs that name one first run, which names only the one on its day. | default inside `RULINGS.md` R-18; recordings: every paired slalom class has one first and one second run per day | a recording where a class's first and second runs are not one of each per day |
+| 49 (a) | Who derives a first run's sibling | Answered: the core; a parser states a first run's `pair` with `siblingPhaseId: null`, see §2.1. | default | never |
+| 49 (b) | A second run and a first run of another class | It stops naming the first run once both Phases' stated `classId` differ; while the first run's class is not stated, the second run's `pair` stands, see §2.1. | default, nothing recorded | a recording of a class rename |
+| 49 (c) | A Phase the schedule no longer holds | Superseded by item 54. | maintainer ruling 2026-11-16, `RULINGS.md` R-8 | never |
+| 49 (d) | A held Phase with neither `format` nor `pair` stated, named by a second run under (b) | It is that pair's first run: `pair` is `{ role: 'first', combination, siblingPhaseId }`, the combination the naming pair's and the sibling item 48's. Its `format`, `stage`, `kind`, `scoringKind` and `heats` are not presented until a `format` is stated, and the core reads them meanwhile as `CONTRACTS.md` §2.4's unknown-token row; the first `format` stated decides them and the role. | default, nothing recorded: on site every first statement of a Phase carries its `format` | a deployable creates a Phase without a stated `format` |
+| 50 | Several writes pending on one Attempt | See `CONTRACTS.md` §4 rule 4 and §6; rows 50 (a) to (g) are the defaults. | default; no recording holds a write | penalty-check (M4) wants one correction per gate at a time |
+| 50 (a) | What is presented | The rules 1–3 vector as it stands at each step, every pending write's cell laid over it, the later write's on a shared cell; `operator-write`, `provisional: true` while any write is pending; `observedAt` the element's that last changed the presented vector, and a step that changes no presented cell sends no `gates`. See `CONTRACTS.md` §4 rule 4. | default | as item 50 |
+| 50 (b) | How echoes resolve them | Different cells independently; one cell in the order sent, the oldest first, see §6. | default | as item 50 |
+| 50 (c) | A delivery the oldest write cannot use | It answers the latest write whose value it states and resolves the ones before it, see §6. | default | as item 50 |
+| 50 (d) | Several pending writes after a restart | They resume in one step, in the order sent, and the first delivery is judged once against all of them, see §6. | default | as item 50 |
+| 50 (e) | A pending write with no course bound | It presents nothing; from the step the course binds its cell is laid over, for an Attempt with no cells of its own too. A write whose gate the bound course does not have lays nothing over and stays `pending`. See `CONTRACTS.md` §4 rule 4. | default | as item 50 |
+| 50 (f) | An assertion beside a pending write | No deployable has both. In the shared core a pending write is judged at every delivery whether or not its value is presented, and of two operator observations the later-ingested one is presented. | default | as item 50 |
+| 50 (g) | A resolution and the later writes' retained value | The delivered value becomes every remaining write's retained value, against both sources, see §6. | default | as item 50 |
+| 51 | A stream finish withdrawn or contradicted after its `Completed` stop | The closure goes with the finish its listing carried: the next finish's `duration` is inferred afresh, and the run closes again at its own `Y`, the leave or a mark, see §4.1, §4.4. | default; recordings: the seven recorded withdrawn or contradicted finishes carried no `Y` before | a recording of a `Completed` finish withdrawn or contradicted |
+| 52 (a) | An entry the latest admitted XML leaves out | Its kept `decidedIn` reads `null` on later TCP rows until a save states it: the kept values are the latest admitted snapshot's that carries rows, replaced whole, see §4.10. | default, nothing recorded | a recording where an entry leaves a classification build and returns |
+| 52 (b) | A re-baseline and the classification rows | Kept, with the kept `decidedIn`; the read replaces them as any snapshot does, under INV-2c's guard, see §4.10, `CONTRACTS.md` §4. | default, nothing recorded | an operator needs a re-baseline to clear a classification |
+| 53 (a) | Category numbering on a class tie | Answered: consecutive, in class order, as upstream numbers it, see `CONTRACTS.md` §5 step 4. | recordings: 0 mismatches over 493,763 row-instances of the seven | never |
+| 53 (b) | Category ranks in Kayak Cross heats and classifications | Answered: no category standing is published there, so nothing is checked, see `CONTRACTS.md` §5 step 1. | recording cp3-cross | age-category standings are published for a Cross heat or a classification |
+| 53 (c) | A second-run Phase's category ranks | Not checked: the check reads `CatRnk` of first-run and single-run rows only, see `CONTRACTS.md` §5 step 4. | recordings: upstream fills `TotalCatRnk` late | never |
+| 53 (d) | An unplaced row's `CatRnk` | Answered: not read, the check reads placed rows only, see `CONTRACTS.md` §5 step 4. | recording jarni-ne-odp | never |
+| 53 (e) | When the category check compares | Only while the whole-class standing presents the latest snapshot's class order; otherwise nothing is compared and an anomaly recorded earlier is withdrawn, see `CONTRACTS.md` §5 step 4. | recordings: a save lagging TCP's push raised transient anomalies | never |
+| 54 | A race that leaves the schedule | Its Phase is removed when an admitted XML snapshot no longer schedules it; an empty schedule removes nothing, see §4.12. Rows 54 (a) to (n) are the defaults inside it. | maintainer ruling 2026-11-16, `RULINGS.md` R-8; no recording holds a race leaving the schedule | a recording of a race leaving the schedule that these rows present wrongly, or of TCP's `Schedule` still naming a race the file has dropped, which the guard would then never remove while TCP is connected |
+| 54 (a) | What triggers the removal | The snapshot's `Schedule` table (§0.3), never its results tables, see §4.12. | default inside `RULINGS.md` R-8 | as item 54 |
+| 54 (b) | Which Phase can be removed | Only one an XML schedule statement has named, admitted or not, a first read's included; a Phase only TCP has named stays, and TCP's `Schedule` never removes, see §4.12. | default | as item 54 |
+| 54 (c) | The guard | Covers the whole Phase: every `tcp` observation of it or of its Attempts predates the snapshot's `changedAfter`, and a Phase with an Attempt in the on-course set is never removed; not admitted, nothing moves, see §4.12. | default | as item 54 |
+| 54 (d) | The message | One `phase.deleted { phaseId }`, which implies its Attempts and Standings, with no `attempt.deleted` or `standing.updated` for them; on live one `DELETE`, see `CONTRACTS.md` §7.2, §8.3. | default inside `RULINGS.md` R-8 | never |
+| 54 (e) | Pending writes of its Attempts | Resolve `mismatched` without `confirmedValue`, before the `phase.deleted`, see §4.12. | default | as item 54 |
+| 54 (f) | Checks and flags of its Attempts | Stay in the store, served again when an `attemptId` returns; the Phase's checks read answers `404 phase-not-found` meanwhile, see `CONTRACTS.md` §2.10, §7.1. | default | as item 54 |
+| 54 (g) | Which Standings go | Those whose scope names the Phase: its `phase`, `heat` and `classification` standings, a `pair` keyed by it or naming it as the first run, whole class and every category, the set `scope.replaced` covers. A surviving second run's `pair` standing is published again from its first entry once a first run is named. See `CONTRACTS.md` §4 INV-7. | default | as item 54 |
+| 54 (h) | Pairing after a removal | A first run that named the removed Phase is derived again in the unit; a second run that named it presents `siblingPhaseId: null`. The core never presents a sibling naming a Phase it removed and has not created again (n): such a stated sibling is retained and presents `null`, at later statements too, until then; the rule is the core's, and the parser tracks no removal. A second run naming a Phase never held stays as 49 (b), (d) have it. Each Phase whose pairing changed is sent as `phase.updated` after the `phase.deleted`, in one unit, see §4.12. | default | as item 54 |
+| 54 (i) | Its classification rows and kept `decidedIn` | Go with the Phase, see §4.12. | default | as item 54 |
+| 54 (j) | A returning Phase | A new Phase, created whole by the ordinary rule, its `date` the snapshot's, its Attempts `run` 1 with none of the removed ones' result state, their checks and flags served again, see `CONTRACTS.md` §4 INV-7. | default | as item 54 |
+| 54 (k) | `xml-schedule-emptied` | Raised as `xml-table-emptied` is: once per emptying, under the guard, re-armed by a schedule statement that names a race, see §4.12. | default inside `RULINGS.md` R-8 | as item 54 |
+| 54 (l) | A removal inside a re-baseline | The same guard, counting every `tcp` delivery that named the Phase. An event re-baseline sends each `phase.deleted` before its `scope.replaced`; a Phase re-baseline whose read removes its own Phase sends the `phase.deleted`, no `scope.replaced`, and answers `200` with `attempts: 0`, see `CONTRACTS.md` §7.1. | default | as item 54 |
+| 54 (m) | A race the read's own tables still carry | Not removed by that read: the removal is decided over the whole read, and a scope snapshot of the race with at least one row carries it, schedule row or not; a later read that carries neither removes it. A table with no rows carries nothing. | default, nothing recorded | the code follows it under #392 |
+| 54 (n) | What "created again" means | Created as clients see it: at the first observation that states its class, when its `phase.updated` goes out. A classless observation of the removed id creates nothing for a client, so a second run's stated sibling keeps presenting `null` until the creating message is sent; the second run's `phase.updated` follows it in the same unit. | default, nothing recorded | the code follows it under #392 |
