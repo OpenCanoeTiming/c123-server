@@ -10,7 +10,7 @@ C123 Server — smart middleware layer between Canoe123 and web clients for cano
 
 ## Rebuild 2026/27 — read first
 
-- **Design (normative):** c123-server `main`, `docs/arch/` — start at `README.md` (reading order, implementation sequence); then `CONTRACTS.md`, `DECISIONS/ADR-*`, `TEST-ARCHITECTURE.md`. Point to it, never restate it. Defaults taken without the maintainer go to `DECISIONS/LOG.md`.
+- **Design (normative):** c123-server `main`, `docs/arch/` — start at `README.md` (reading order, implementation sequence); then `CONTRACTS.md`, `DECISIONS/ADR-*`, `TEST-ARCHITECTURE.md`. Point to it, never restate it. A default for a case nobody recorded gets no rule; a maintainer ruling is one row in `docs/arch/RULINGS.md`.
 - **Legacy line:** venues run tag `legacy-2026`; branch `legacy/2026` takes `fix:` commits only. `main` is the rebuild, in place: replaced code is deleted, never kept beside the new.
 - **Releases:** rebuild releases are 0.x and reach no venue; `Release-As: 1.0.0` only when M6 Release 1.0 closes.
 - **Order:** server → scoreboard → penalty-check → live-mini is the implementation order only. Everything, the new live included, is ready for the Jarní slalom (M6), its first real use: no shadow run, the legacy line is the fallback.
@@ -80,7 +80,7 @@ Port 27123 is mnemonic (C-1-2-3) and IANA unassigned.
 2. **Design system mandatory** — use `@opencanoetiming/timing-design-system` for all UI, no inline styles for things the design system covers
 3. **Cross-platform** — Windows primary, but must run on Linux/macOS
 4. **Ingest per the design** — TCP push and the XML snapshot (a complete statement of a race; absence retracts), UDP for discovery only, CIS not consumed (ARCHITECTURE §3, ADR-011, ADR-015). c123-server's domain layer is the only interpreter of upstream data (ADR-002).
-5. **docs/arch changes** — `CLIENT-OBLIGATIONS.md` changes in the same PR as the sections it cites; `scripts/check-obligations.js` fails the PR otherwise. Label `obligations-unchanged` when no obligation is affected. Decisions taken without the maintainer go to `docs/arch/DECISIONS/LOG.md`.
+5. **docs/arch changes** — `CLIENT-OBLIGATIONS.md` changes in the same PR as the sections it cites; `scripts/check-obligations.js` fails the PR otherwise. Label `obligations-unchanged` when no obligation is affected. A default for a case nobody recorded gets no rule; a maintainer ruling is one row in `docs/arch/RULINGS.md`.
 
 ---
 

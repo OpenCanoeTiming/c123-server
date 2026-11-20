@@ -56,9 +56,10 @@ and a first-run row wiped in place (the recorded jury re-run).
 needed, not a target. **c123-server runs 115 of them, live-mini-server 24** (§1, "Which vectors each
 component runs"); 18 run in both suites.
 
-**Since then** the file has changed with the contract rounds from 14 on and with #314;
-`DECISIONS/LOG.md` says what each ruled and which vectors it added or reshaped. No round changed
-what an existing vector asserts except where its row says so. Round C part 2 changed one:
+**Since then** the file has changed with the contract rounds from 14 on and with #314; the former
+decision log, in git under the tag `contract-archive-2026-11`, says what each ruled and which
+vectors it added or reshaped. No round changed what an existing vector asserts except where that
+log says so. Round C part 2 changed one:
 `inv2c-first-read-unknown-age-refused`, in its last step, by the maintainer's decision that an
 absent XML row retracts. It also added four vectors for that rule (§2, "Expected red"). Round C
 part 4 changed `standing-age-category-assembled` by the maintainer's category-rank decision of
@@ -207,18 +208,17 @@ Each vector has:
   on-site precondition, a standing no earlier than its Phase, holds without a `classId` element
   (`standing-not-resent-on-running-tick`, `classification-emptied-keeps-last-standing` and the
   live `standing.updated` counts stay as written). And `standing-not-resent-on-running-tick` has
-  its `pair` standing from its first snapshot (`CONTRACTS.md` §5 step 1; `DECISIONS/LOG.md`,
-  round 22). A deployable's merge reads no id for any of the three (`CONTRACTS.md` §2.3, §2.4;
+  its `pair` standing from its first snapshot (`CONTRACTS.md` §5 step 1).
+  A deployable's merge reads no id for any of the three (`CONTRACTS.md` §2.3, §2.4;
   the one read of an id is the TCP parser's fallback for `format`, `DERIVATIONS.md` §2.1): with a
   `pair` nothing has stated, its `pair` standing waits. The server's adapter states the class,
-  `format` and `pair` (#287; `DECISIONS/LOG.md`, 2026-11-15). The server's core reads no class
+  `format` and `pair` (#287). The server's core reads no class
   and no sibling from a Phase's id and builds no id, and a Phase whose `pair` nothing has
   stated has no `pair` standing. One read of an id is left in that core: the token, at a
   Phase's creation, for `format` and what follows from the format (`stage`, `kind`,
   `scoringKind`, `heats`, and the run's role where the core reads rows by it). A TCP `Results`
   message states no `format` today, so on site that read is live. It stays until the read
-  moves to the TCP parser, where `DERIVATIONS.md` §2.1 puts it (#377, a follow-up of #287;
-  `DECISIONS/LOG.md`, 2026-11-16). A parser states
+  moves to the TCP parser, where `DERIVATIONS.md` §2.1 puts it (#377, a follow-up of #287). A parser states
   `pair` with the format, `siblingPhaseId: null` until the schedule names the first run, and that
   stated `null` makes the `pair` standing wait. The Entry is that Attempt's; where no element sets
   the Attempt's `entry` pointer, every Entry field in the vector is one Entry's. Neither needs a

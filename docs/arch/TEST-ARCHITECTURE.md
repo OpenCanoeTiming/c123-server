@@ -694,8 +694,8 @@ a stale mark presented over a running athlete after a re-run (`DERIVATIONS.md` Â
 review R16): with the stale-mark rule removed from a core, the step logs of the DNF re-run fixtures
 change and the checker reports nothing. That defect is caught by the vector
 `rerun-stale-mark-not-presented` and by the re-run data gate's own assertions
-(`scripts/__tests__/rerun-paths.test.ts`); no property clause is added for it (accepted,
-`DECISIONS/LOG.md` 2026-11-11). A property that a
+(`scripts/__tests__/rerun-paths.test.ts`); no property clause is added for it (accepted by
+the maintainer, 2026-11-11). A property that a
 correct replay cannot satisfy is a finding against the contract, not against the replay: it is
 reported to the design authority, never relaxed in the checker.
 

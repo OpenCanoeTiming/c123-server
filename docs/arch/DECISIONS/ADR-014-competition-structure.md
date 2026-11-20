@@ -118,7 +118,7 @@ on real `NHT` data or with the maintainer (`DERIVATIONS.md` §10 item 31).
 
 The previous revision kept `NHT1`/`NHT2` as a pair combining as *best*, by the maintainer's
 decision of 2026-11-11, with the evidence class E4. The maintainer has replaced that decision
-(2026-11-12; `DECISIONS/LOG.md`): there is no NHT combination. Upstream's two-run total and
+(2026-11-12; `RULINGS.md` R-19): there is no NHT combination. Upstream's two-run total and
 better-run path takes `BR2`, `HT2`, `EL2` and `TR2` and excludes `NHT2`; `NHT2` is ranked as its own
 run, and `NHT1` only qualifies its runners and seeds `NHT2`'s start list (upstream behaviour).
 
