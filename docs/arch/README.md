@@ -20,7 +20,7 @@ is intended to become permanent documentation.
 | `DECISIONS/` | Seventeen ADRs, `ADR-001` through `ADR-017`. `ADR-004` and `ADR-008` are superseded by `ADR-011` and `ADR-012`; their original text is kept. `ADR-017` records what the M0 spike changed |
 | `RULINGS.md` | The maintainer's rulings on the contract, one row each, stated as rules, with the sections that apply them. The former decision log, with the defaults and the ruling history of every contract round, is in git under the tag `contract-archive-2026-11` |
 | `TEST-ARCHITECTURE.md` | Four test tiers, the fixture format, and the clock-control requirement that makes presentation-layer timing assertable |
-| `DERIVATIONS.md` | For every value `CONTRACTS.md` asserts: the exact upstream source field, transformation, conditionality, and resulting envelope. §9 lists every upstream field deliberately *not* modelled, and why; §10 lists open technical questions |
+| `DERIVATIONS.md` | For every value `CONTRACTS.md` asserts: the exact upstream source field, transformation, conditionality, and resulting envelope. §9 lists every upstream field deliberately *not* modelled, and why; §10 is the table of cases left to a default, the questions answered and the few still open, each with what would reopen it |
 | `schemas/` | JSON Schema for the two wire shapes reused everywhere — the observation envelope and the error response — and for a fixture's admission block |
 | `CONFORMANCE-VECTORS.md` + `vectors/tier1-conformance.json` | The tier-1 hand-authored conformance vectors `TEST-ARCHITECTURE.md` §3.1 calls for — format, coverage map, and what could not be written |
 | `CLIENT-OBLIGATIONS.md` | Derived checklist of everything the design requires of each deployable other than the server, each line citing its source; the definition of done for a client's migration. `scripts/check-obligations.js` keeps it in step (see ground rules) |
@@ -90,7 +90,7 @@ reader can see the whole set at once.
 
 | Question | Where |
 |---|---|
-| Open technical questions from the reverse pass: the terminal reset, the layout letters `D`/`E`, other classification tokens, further upstream pairings, the base class of a sub-class, per-gate marks in Kayak Cross, the timing of a re-run's row clearing, the residual XML takeover window, and late-finish outliers. | `DERIVATIONS.md` §10 |
+| Cases left to a default, and the technical questions still open, each with what would reopen it. | `DERIVATIONS.md` §10 |
 | Every upstream field deliberately not modelled, and why. | `DERIVATIONS.md` §9 |
 | Whether `recordings-cli.js`'s versioning composes with the second axis a domain-state fixture needs. | `TEST-ARCHITECTURE.md` §10 |
 | Whether re-implementing the tier-3 harness driver in three client repos is cheaper than the mock-server porting it replaces, or relocates the same cost. | `TEST-ARCHITECTURE.md` §10 |
@@ -125,10 +125,11 @@ reader can see the whole set at once.
   `RULINGS.md`.** A clause that applies a ruling names its row, and a rule that took several
   rulings is restated as one rule with its examples, never as layered amendments. The ruling
   history of the contract rounds is in git under the tag `contract-archive-2026-11`.
-- **A core/checker disagreement that moves no client obligation gets a default and a
-  `DERIVATIONS.md` §10 item, not a round** (maintainer, 2026-11-11). The design authority states the
-  default as the §10 item, and the core and the gate-2 checker follow
-  it; a round is kept for a disagreement that moves what a client must do.
+- **A core/checker disagreement that moves no client obligation gets one row in
+  `DERIVATIONS.md` §10, and only when a recording or a known operator action shows the case**;
+  the core and the gate-2 checker follow the row. A case nobody recorded gets no rule: it is
+  recovered by re-baseline, restart or reload. A round is kept for a disagreement that moves what
+  a client must do.
 
 ## Implementation sequence
 
