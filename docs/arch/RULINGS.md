@@ -21,7 +21,7 @@ A row is cited by its id, R-n.
 | R-5 | 2026-11-12 | `xml-table-emptied` and a store file set aside at load reach the admin log only, with no wire diagnostic: the Canoe123 operator watches the admin UI. | CONTRACTS §2.10; DERIVATIONS §10 items 26 and 33 |
 | R-6 | 2026-11-12 | "A competitor removed upstream (deleted, moved or re-bibbed) has their Attempt REMOVED", when an admitted XML snapshot no longer carries it under the content-age guard. A moved competitor appears as a new Attempt in the other Phase. | ADR-015 Revision 6; CONTRACTS §2.6, §4 INV-7, §7.2 (`attempt.deleted` on site), §8.3 (`DELETE` to live); DERIVATIONS §4.12, §10 item 38 |
 | R-7 | 2026-11-12 | "The data belongs to the bib." An Attempt is removed only when its bib leaves the race; a re-bib or swap that leaves the bib in the race keeps the Attempt and re-points its `entry`. Checks and flags stay keyed by the Attempt (Phase and bib) and are served whenever it exists, whoever the competitor is. | ADR-015 Revision 7; CONTRACTS §2.6, §2.10, §4 INV-7; DERIVATIONS §10 item 38 |
-| R-8 | 2026-11-16 | A race that leaves Canoe123's schedule has its Phase removed (`phase.deleted` for clients, `DELETE` on live), only from an admitted XML snapshot under the content-age guard. An empty table is not a removal. | ADR-015 Revision 9; CONTRACTS §2.4, §4 INV-7, §7.2, §8.3, §8.4; DERIVATIONS §4.12, §10 item 54 |
+| R-8 | 2026-11-16 | A race that leaves Canoe123's schedule has its Phase removed, only from an admitted XML snapshot under the content-age guard. An empty table is not a removal. | ADR-015 Revision 9; CONTRACTS §2.4, §4 INV-7, §7.2 (`phase.deleted` on site), §8.3 (`DELETE` to live), §8.4 (`phase.deleted` on the public stream); DERIVATIONS §4.12, §10 item 54 |
 
 ## Re-runs and restarts
 

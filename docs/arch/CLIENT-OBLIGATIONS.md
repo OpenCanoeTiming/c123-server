@@ -30,9 +30,6 @@ are the lines below.
 - [ ] In Kayak Cross, never join data across Phases by bib: a competitor across Phases by `entryId`, a run within a Phase by its Attempt (`phaseId`, `bib`), a classification row by its `entryId`. A round's bibs may be renumbered from the time trial or equal to it, and without its `t` a classification bib can repeat. This is the bib principle ("the bib is the key of a run's data", 2026-11-12) with each Cross round its own Phase (CONTRACTS §1.3, §2.5, §2.6; DERIVATIONS §4.10).
 - [ ] Keep `null` distinct from an absent key and from `0`; never coerce `null` to `0` or `""` (CONTRACTS §1.2, §1.3; ARCHITECTURE §5).
 - [ ] Branch on `error.code` only; never parse `error.message`; read `error.details` only on the three codes that define it, in the shape that code fixes: `[{field, issue}]` on `validation-failed`, `{ reason }` on `write-not-possible` and `source-unavailable`; expect the key absent on every other code (CONTRACTS §1.4).
-- [ ] Pin a specific domain-state fixture set by id and version in a committed reference; never a floating "latest" (TEST-ARCHITECTURE §6).
-- [ ] Consume only fixtures whose `admitted.status` is `admitted`, which `schemas/fixture-admitted.schema.json` allows only with gate 1 and gate 2 true, a window spanning whole races checked against published results with no mismatch, and a `human-checked-<date> by <name>` line certifying the fixture; read `evidence.gate2.exercised` for the properties the window evaluated zero times, for which the fixture is no evidence (TEST-ARCHITECTURE §3.2, §4, §6; ADR-017).
-- [ ] Fail, loudly, on a `domainLayerVersion.contract` mismatch between a fixture and the consumer; re-pin deliberately instead of warning; a `generator` change is re-admitted upstream, never re-pinned here (TEST-ARCHITECTURE §4, §6).
 - [ ] Keep tier-4 smoke tests few; they prove only that the wiring connects (TEST-ARCHITECTURE §3.4).
 
 ### Rendering clients — c123-scoreboard, c123-penalty-check, live-mini-client
@@ -130,9 +127,7 @@ are the lines below.
 
 **Tests**
 - [ ] Give every display-lifetime rule a tier-3 test that advances a fake `Clock` (TEST-ARCHITECTURE §5).
-- [ ] Feed tier-3 tests domain-state fixtures, from tier 2 or synthetic, never recordings or raw Canoe123 traffic (TEST-ARCHITECTURE §3.3).
 - [ ] Drive the tier-3 harness as specified: initialise from the fixture's `kind: "hydration"` step as the handshake would, clock at a stated non-zero offset from its `observedAt`; per step, advance the clock by the gap between steps and apply the delta as the transport would; assert after steps and after advancing the clock with no new step, at deadline + the stated tick period (TEST-ARCHITECTURE §3.3, §4, §5).
-- [ ] Write threshold cases as hand-authored `source.kind: "synthetic"` fixtures with a `reason`, in the same format (TEST-ARCHITECTURE §3.3, §4).
 - [ ] Own the assertions and thresholds in the client's repository; share only the fixture format (TEST-ARCHITECTURE §3.3).
 - [ ] Retire bespoke mock-WebSocket servers and fixture loaders; do not port penalty-check's mock server into live-mini (TEST-ARCHITECTURE §9).
 - [ ] Write no tier-1 tests: a rendering client implements no merge rule (TEST-ARCHITECTURE §3.1).
@@ -303,7 +298,6 @@ are the lines below.
 **Tests**
 - [ ] Run, through a thin adapter into its own merge function, the 24 tier-1 vectors CONFORMANCE-VECTORS §1 lists for the live tier, applying each vector's ingest units as §1 defines them, one ingest request being one unit, resolving each field name and `scope` to the Attempt, its Entry or its Phase as §1 defines ("Scope of a field"), matching `expect` as §1 defines (a `not-yet` or `unavailable` envelope whole, a `known` one as a subset), and asserting that count: `INV-1` except the two scope-snapshot ones, `INV-3`, `trichotomy`, `INV-4`, `INV-5`, `INV-6`, `under-review`, `phase-status-transition`, `live-ingest`, the two `operator-correction-*` vectors, and `standing-assembly` except the three anomaly vectors (CONFORMANCE-VECTORS §1, §2; CONTRACTS §1.6; TEST-ARCHITECTURE §3.1).
 - [ ] Add tier-1 time-window vectors for calendar `status`: just under, exactly at and just over 5 minutes (TEST-ARCHITECTURE §3.1).
-- [ ] Replay each admitted domain-state fixture's deltas as the §8.3 pushes they correspond to, check that values read back over the public reads match, and run the deltas-only gate-2 properties (those marked **D**) on the resulting public stream (TEST-ARCHITECTURE §3.2, §7).
 - [ ] Verify tenant isolation with the store's own integration tests: no leakage between two keys with equal local ids, no cross-event access, `403` for a revoked key, `404` for an unknown `eventId` (TEST-ARCHITECTURE §3.5; CONFORMANCE-VECTORS §3).
 
 ---
@@ -332,152 +326,27 @@ are the lines below.
 
 ## Gaps and conflicts
 
-The three found at 0c199af were resolved into obligations above: the stale tick is measured from
-the client's own receipt (rendering clients), the live-tier vector subset is listed by name
-(live-mini-server), and classification rows have an ingest shape (live-mini-server,
-live-mini-client).
-
 Open since 2026-11-05 (round 13), returned to the maintainer: no §8.3 push carries `Event.name`,
 `Event.details` or a Course's `layout`, `slots` and `captions`, yet §8.4 serves `Event` and `Course`
 whole. Until settled, live-mini-server has no stated source for those fields (CONTRACTS §8.3, §8.4).
 
-Open since 2026-11-05 (round 14) and answered by the maintainer on 2026-11-12 (round C part 4;
-RULINGS R-6, R-7): when the on-site bridge sends `DELETE /ingest/v2/attempts/{phaseId}/{bib}`.
-An Attempt is removed when its bib leaves the race upstream (a competitor deleted, moved, or
-given a bib the race does not otherwise hold), at the first admitted XML snapshot in which no row
-carries the bib (round C part 5: the bib is the key of a run's data); on site that is `attempt.deleted`, and the bridge sends
-`DELETE` for it (CONTRACTS §4, §7.2, §8.3). The duties above moved with it: every rendering client
-removes an Attempt on `attempt.deleted`, on site as on live, and penalty-check drops the Attempt's
-checks and flags from view. live-mini-server's `DELETE` duty is unchanged; it now has a trigger.
+---
 
-Round C part 3 (2026-11-12) ruled or ratified the questions the M1 reviews had
-left open. It changed cited sections and moved no obligation above:
-- a `StandingEntry.behindSeconds` is never negative; where it would be, it is `null`, a value a
-  client already renders (CONTRACTS §5);
-- after a retraction an Attempt that had left the course with a start and no finish observed
-  returns to `left-without-finish`, a status a client already renders (CONTRACTS §3.2);
-- a penalty write whose durable record cannot be stored is still answered `202` and pushed; a
-  client sees an ordinary pending write (CONTRACTS §7.3);
-- a store file that fails validation is set aside and the server starts with an empty store, so
-  checks and flags read as never made; nothing new is on the wire (CONTRACTS §2.10).
+## Parked: needs machinery that is not built
 
-Put to the maintainer by that round and answered on 2026-11-12 (round C part 4), each moving the
-duties above: an age-category Standing lists its unplaced entries after the placed ones, and
-entries tied on class rank carry consecutive category ranks, as Canoe123 numbers them
-(CONTRACTS §5).
+These obligations need the fixture capture, admission and catalogue that are not built (TEST-ARCHITECTURE §3.2, §6); they return to their sections above when that machinery exists.
 
-Round C part 4 (2026-11-12; RULINGS R-5, R-19) wrote the maintainer's answers of that day. Those
-that changed a cited section and moved no obligation above:
-- `NHT1` and `NHT2` are single runs, `pair: null`; a client takes structure from `Phase.pair` as
-  before (CONTRACTS §2.4).
-- a store file set aside at load is reported in the admin log only, and `xml-table-emptied` stays
-  ingest-only: nothing reaches a client (CONTRACTS §2.10, §4).
+### From Common — All four deployables
 
-Round C part 5 (2026-11-12; RULINGS R-7) wrote the maintainer's #349 answer, "The data
-belongs to the bib". It changed cited sections and moved no obligation above:
-- an Attempt is removed only when its bib leaves the race; a re-bib or swap that leaves the bib in
-  the race keeps the Attempt and re-points its `entry`, which arrives as `attempt.updated` and is
-  applied by the existing pointer duty (CONTRACTS §2.6, §4);
-- checks and flags stay the bib's: a re-pointed `entry` keeps them, and a recreated Attempt serves
-  them again whoever the competitor is, which penalty-check's existing duties already cover
-  (CONTRACTS §2.10).
+- [ ] Pin a specific domain-state fixture set by id and version in a committed reference; never a floating "latest" (TEST-ARCHITECTURE §6).
+- [ ] Consume only fixtures whose `admitted.status` is `admitted`, which `schemas/fixture-admitted.schema.json` allows only with gate 1 and gate 2 true, a window spanning whole races checked against published results with no mismatch, and a `human-checked-<date> by <name>` line certifying the fixture; read `evidence.gate2.exercised` for the properties the window evaluated zero times, for which the fixture is no evidence (TEST-ARCHITECTURE §3.2, §4, §6; ADR-017).
+- [ ] Fail, loudly, on a `domainLayerVersion.contract` mismatch between a fixture and the consumer; re-pin deliberately instead of warning; a `generator` change is re-admitted upstream, never re-pinned here (TEST-ARCHITECTURE §4, §6).
 
-M2 P3b (2026-11-15) took defaults on the questions round C had left open and
-on the write and leave rules its code needed. It changed cited sections and moved no obligation
-above:
-- a same-key retry that arrives after the server lost its keys across a restart (a failed or
-  invalid store) is answered as a new request: `202` for a write, `201` for a flag, or a
-  refusal; a client handles it as the first response it already handles (CONTRACTS §1.5);
-- no penalty write is refused for a missing run generation; the refusals a client handles are
-  §7.3's, unchanged (CONTRACTS §7.3);
-- a Kayak Cross time-trial athlete removed before a finish stays `on-course` with the last
-  `running` value until the mark arrives, which can take minutes (another athlete's push, or
-  the rotation); a client freezes that clock as stale by its existing duty (CONTRACTS §2.6)
-  (replaced by M2 P3c, 2026-11-16: the time trial now follows slalom, below);
-- a first run's `pair.siblingPhaseId` names only a second run that names it back, and is `null`
-  otherwise; a client takes structure from `Phase.pair` as before (CONTRACTS §2.4);
-- `xml-table-emptied` is raised under the content-age guard; it stays in the admin log and
-  reaches no client (CONTRACTS §4; ADR-015).
+### From Common — Rendering clients, Tests
 
-The review of #287's code (PR #376, 2026-11-16) took one more default on
-pairing. It changed cited sections and moved no obligation above:
-- the server derives a first run's `pair.siblingPhaseId` from the second runs of the first
-  run's class, and a Phase whose race has left the schedule stays as last stated (that half
-  replaced by M2 P3c, 2026-11-16: such a Phase is removed, below); a client
-  reads `Phase.pair` as before, and the sibling may be `null` (DERIVATIONS §2.1).
+- [ ] Feed tier-3 tests domain-state fixtures, from tier 2 or synthetic, never recordings or raw Canoe123 traffic (TEST-ARCHITECTURE §3.3).
+- [ ] Write threshold cases as hand-authored `source.kind: "synthetic"` fixtures with a `reason`, in the same format (TEST-ARCHITECTURE §3.3, §4).
 
-#345's code (2026-11-16) took one default on the write path. It changed a
-cited section and moved no obligation above:
-- several writes may be pending on one Attempt; `gates` then presents every pending write's
-  requested cell at once, and each write resolves on its own `WriteRequest`; a client renders
-  `gates` as served and tracks each write as before (CONTRACTS §4).
+### From live-mini-server, Tests
 
-The review of that code (PR #378, 2026-11-16) reworded one line above, with no duty moved in
-substance: the optimistic-write line now says that a write whose value the field already
-presents arrives as `write.updated` alone. A client that renders `gates` as served and tracks
-writes by `WriteRequest` already behaves so; one that waited for a `gates` push per write would
-not. The PR is therefore not labelled `obligations-unchanged`.
-
-The review of #318's code (PR #379, 2026-11-16) took one default on the
-on-course stream. It changed cited sections and moved no obligation above:
-- a stream finish withdrawn after upstream's `Completed` no longer keeps the run closed, so the
-  next finish's time and penalties are inferred afresh; a client shows `outcome` and
-  `provisional` as served (DERIVATIONS §4.1).
-
-M2 P3c (2026-11-16; RULINGS R-23) wrote the maintainer's answer of that day on the Kayak
-Cross time trial ("yes, as recommended"). It moved the duties above:
-- a Cross time-trial athlete who leaves upstream's on-course list without a finish is
-  `left-without-finish` (`not-started` if never started), as in slalom, and the mark follows at
-  the next save; a rendering client renders that status in a time-trial Phase too, and the
-  scoreboard shows "off course" at once instead of a frozen clock. A Cross heat is unchanged:
-  it stays `on-course` until its order arrives (CONTRACTS §2.6, §3.2, §7.1; DERIVATIONS §4.1).
-
-The same text took defaults that changed cited sections and moved no obligation above:
-- a classification entry that the latest admitted save leaves out reads `decidedIn: null` on a
-  later TCP build until a save states it; a re-baseline keeps classification rows; a client
-  shows `decidedIn` as served (CONTRACTS §4; DERIVATIONS §4.10);
-- the category-rank check reads first-run and single-run rows only, and the measured rule
-  stands with 0 mismatches; category ranks are served as before (CONTRACTS §5).
-
-M2 P3c also wrote the maintainer's answer of 2026-11-16 on a race that leaves upstream's schedule
-("yes, as recommended"; `DECISIONS/ADR-015` Revision 9; RULINGS R-8). It moved the duties above: a Phase whose
-race an admitted save no longer schedules is removed with its Attempts and Standings, sent as
-`phase.deleted` on site and on the public stream, and the bridge sends
-`DELETE /ingest/v2/phases/{phaseId}` to live; every rendering client removes the Phase with what
-it holds, penalty-check drops the Attempts' checks and flags from view, and live-mini-server
-implements the Phase `DELETE` and emits `phase.deleted` (CONTRACTS §2.4, §4, §7.2, §8.3, §8.4).
-It also closes the gap the review of #287's code left above: a deleted second run no longer goes
-on naming the first run.
-
-#305's code (PR #383, 2026-11-16) took one default on the leave rule. It changed a
-cited section and moved no obligation above:
-- a start or finish the stream has withdrawn before the Attempt leaves counts as not observed, so
-  a leave from `at-start` after a deleted start gives `not-started`; a client renders the status
-  as served (CONTRACTS §2.6, §3.2; DERIVATIONS §4.1).
-
-#382's code (PR #390, 2026-11-16) took one default on pairing after a removal.
-It changed a cited section and moved no obligation above:
-- a second run whose stated sibling is a removed Phase keeps presenting `siblingPhaseId: null`
-  until that Phase is created again; a client reads `Phase.pair` as before (DERIVATIONS §10).
-
-The review of #382's code (PR #390, 2026-11-16) took two defaults on the Phase
-removal. They changed a cited section and moved no obligation above:
-- a read that still carries rows of a race its schedule omits does not remove the Phase, and a
-  removed first run counts as back only once its `phase.updated` reaches a client; clients apply
-  `phase.deleted` and `phase.updated` as before (DERIVATIONS §10).
-
-#271's code (PR #388, 2026-11-16) took one default on the category check. It
-changed a cited section and moved no obligation above:
-- the category-rank check compares only while the class standing presents the snapshot's class
-  order, so no transient anomaly follows a save that lags a TCP push; anomalies are admin-only and
-  ranks are served as before (CONTRACTS §5).
-
-#377's code (PR #389, 2026-11-16) took one default on pairing. It changed a
-cited section and moved no obligation above:
-- a Phase with neither `format` nor `pair` stated that a second run names is that pair's first
-  run; no client meets it, since every Phase reaches a client with its `format` (DERIVATIONS §10).
-
-The P3c fold-in (2026-11-16) aligned wording and moved no obligation above: the retraction's
-fallback to `left-without-finish` is drawn at either leave element, `oncourse-left` or
-`oncourse-empty`, as the core already does, and the Phase removal's full conditions are
-deferred to one place; a client renders what is served (CONTRACTS §2.4; TEST-ARCHITECTURE §3.2).
+- [ ] Replay each admitted domain-state fixture's deltas as the §8.3 pushes they correspond to, check that values read back over the public reads match, and run the deltas-only gate-2 properties (those marked **D**) on the resulting public stream (TEST-ARCHITECTURE §3.2, §7).
