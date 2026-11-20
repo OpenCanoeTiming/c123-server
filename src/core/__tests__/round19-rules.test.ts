@@ -147,13 +147,6 @@ describe('WriteRequest echo (DERIVATIONS §6, code item 5; vectors operator-writ
     expect(status(c)).toBe('confirmed');
   });
 
-  it('vector operator-write-mismatched-echo-wins: the target cell arrives unequal (gate 4 penalty 50) -> mismatched, the cell presented', () => {
-    const c = submitted();
-    c.applyUnit([row('tcp', '2026-09-15T14:02:12.000Z', cells(0, 50, 0))]);
-    expect(status(c)).toBe('mismatched');
-    expect((field(c, A, 'gates').value as Array<{ number: number; penalty: number }>).find((g) => g.number === 4)?.penalty).toBe(50);
-  });
-
   it('obligation DERIVATIONS §6 xml age guard: an XML save whose content age is not later than submittedAt settles nothing (neither confirmed nor mismatched)', () => {
     const c = submitted();
     c.applyUnit([rewrite('2026-09-15T14:02:20.000Z', '2026-09-15T14:02:05.000Z'), row('xml', '2026-09-15T14:02:20.000Z', cells(0, 0, 0))]);

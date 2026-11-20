@@ -67,7 +67,7 @@ describe('round 29 / INV-2 rule 1: a late-bound row that changes a cell (CONTRAC
     expect(early.observedAt, 'early binding: the changing row\'s own instant').toBe(plus(T0, 7092));
     expect(late.observedAt, 'late binding: the changing row\'s own instant').toBe(plus(T0, 7092));
     expect(late.value).toEqual(early.value);
-    expect(JSON.stringify(late.value), 'the new judged value 50 at gate 6 is presented').toContain('50');
+    expect((late.value as Array<{ number: number; penalty: unknown }>).find((g) => g.number === 6), 'the new judged value 50 at gate 6 is presented').toEqual({ number: 6, penalty: 50 });
     expect(late).toEqual(early);
   });
 });
