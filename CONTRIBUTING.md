@@ -19,7 +19,7 @@ There is no rule, test or special case for a situation nobody recorded. An unkno
 |---|---|---|
 | CI | every pull request | lint, typecheck, build, tests, the Windows installer build |
 | Obligations | pull requests touching `docs/arch` | `node scripts/check-obligations.js` |
-| Gates on real recordings | `main`, by the maintainers' gate runner | `npm run gates`: data tests, a replay of seven recorded race days through an independent checker, and the final state against Canoe123's last XML. The result is the commit status `gates/recordings`. |
+| Gates on real recordings | `main`, by the maintainers' gate runner | `npm run gates`: data tests, a replay of seven recordings through an independent checker, and the final state against Canoe123's last XML. The result is the commit status `gates/recordings`. |
 
 A pull request that changes `src/core`, `src/ingest`, `scripts/replay-direct.ts` or the checker pin runs the gates on two recordings before it merges (`npm run gates -- --only cp3-cross,jarni-ne-odp`). The recordings are private; without them, ask a maintainer to run it. The checker version is pinned in [`scripts/gates/protocol-docs.ref`](scripts/gates/README.md).
 

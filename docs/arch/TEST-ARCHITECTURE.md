@@ -110,9 +110,10 @@ pass. The gate-2 checker and the gate-3 comparator are c123-protocol-docs' `tool
 and `tools/gate3/final-state.js`, **pinned by commit in `scripts/gates/protocol-docs.ref`**: the run
 stops when the protocol-docs checkout is at another commit or has changes under `tools/`, and
 `scripts/gates/README.md` says how to bump the pin. CI does not run the gates (c123-server#324).
-The output is posted as the verification record on every PR touching `src/core`, `src/ingest`,
-`scripts/replay-direct.ts` or the checker, and the maintainers' gate runner writes the result of
-its runs on `main` as the commit status `gates/recordings`.
+The maintainers' gate runner runs the gates on every new commit of `main` and writes the result
+as the commit status `gates/recordings`. A PR touching `src/core`, `src/ingest`,
+`scripts/replay-direct.ts` or the checker pin runs a partial run on two recordings before it
+merges (`--only cp3-cross,jarni-ne-odp`).
 
 **The direct-injection replay** (`scripts/replay-direct.ts`) feeds a recording's TCP and XML
 records, in recorded order, straight into the ingest boundary through the production parsers and
