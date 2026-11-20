@@ -178,4 +178,4 @@ implemented.
 - **An OpenAPI specification for §7 and §8.** Deliberately deferred as a derived artefact. If it is
   ever written it must *replace* the `CONTRACTS.md` §7/§8 tables as the normative source rather
   than sit alongside them — two sources of truth for one set of shapes is the disease this project
-  treats. `CONTRACTS.md` §1.7 carries the reasoning against writing it now.
+  treats. The reasoning against writing it now is in git under the tag `contract-archive-2026-11`.
