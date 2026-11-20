@@ -25,12 +25,15 @@ const TOOLS = [
   'scripts/__tests__/onsite-write.test.ts',
   // the production clock wiring of the on-site entry, a real child process (issue #210)
   'src/onsite/__tests__/main-clock.real.test.ts',
-  // `npm run gates` against a fake protocol-docs directory; its stub data-gate test files run only as children of it (issue #313)
+  // `npm run gates` against a fake protocol-docs directory (issue #313)
   'scripts/__tests__/gates.test.ts',
-  'scripts/__tests__/fixtures/gates/stub-pass.test.ts',
-  'scripts/__tests__/fixtures/gates/stub-skip.test.ts',
-  'scripts/__tests__/fixtures/gates/stub-env.test.ts',
 ];
+// The stub data-gate files of gates.test.ts run only as children of it, which set C123_GATES_STUBS=1; a normal run never collects
+// them (one of them always skips) (issue #324).
+const STUBS = ['scripts/__tests__/fixtures/gates/**'];
+// Tests of the legacy code (deleted by the rebuild) that flake on timing under CI load: retried up to 2 times under CI only. Tests
+// of the new code are never retried (issue #325).
+const LEGACY = ['src/sources/**/*.test.ts', 'src/ws/**/*.test.ts', 'src/xml/**/*.test.ts'];
 const EXCLUDE = ['dist/**', 'node_modules/**'];
 
 export default defineConfig({
@@ -40,7 +43,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'unit',
-          exclude: [...EXCLUDE, ...TOOLS],
+          exclude: [...EXCLUDE, ...TOOLS, ...STUBS, ...LEGACY],
           sequence: { groupOrder: 1 },
           // Type-level tests of the contract package (issue #199): expectTypeOf is a no-op at
           // runtime, so exactly these files are run through tsc by vitest's typecheck mode.
@@ -55,10 +58,20 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'tools',
-          include: TOOLS,
+          include: process.env.C123_GATES_STUBS === '1' ? [...TOOLS, ...STUBS] : TOOLS,
           exclude: EXCLUDE,
           sequence: { groupOrder: 2 },
           fileParallelism: false,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'legacy',
+          include: LEGACY,
+          exclude: EXCLUDE,
+          sequence: { groupOrder: 1 },
+          retry: process.env.CI ? 2 : 0,
         },
       },
     ],

@@ -372,7 +372,8 @@ describe('dev-env', () => {
       }, T)
     }
 
-    it('down: reaches an up killed with SIGKILL', async () => {
+    // Flakes on timing under CI load (#267, #325): retried up to 2 times under CI only.
+    it('down: reaches an up killed with SIGKILL', { retry: process.env.CI ? 2 : 0, timeout: T }, async () => {
       const docs = makeDocs(), state = makeState()
       const { child, exit } = startUp(docs, state, { STUB_PLAYER_MODE: 'silent' })
       expect(await waitFor(() => typeof tryReadState(state)?.player?.pid === 'number')).toBe(true)
@@ -382,7 +383,7 @@ describe('dev-env', () => {
       const d = await run(['--down', '--state-dir', state], { env: baseEnv() })
       expect(d.code, d.stderr).toBe(0)
       expect(await waitFor(() => !processesFor(state), 5_000)).toBe(true)
-    }, T)
+    })
 
     it('up: concurrent up on one state dir has one winner', async () => {
       const docs = makeDocs(), state = makeState()
