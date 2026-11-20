@@ -1,4 +1,4 @@
-// Real records for the leave-rule tests (#204), cut BY SCRIPT from /workspace/timing/c123-protocol-docs/recordings/.cache, never typed.
+// Real records for the leave-rule tests (#204), cut BY SCRIPT from the c123-protocol-docs recordings, never typed.
 // Every `src:"tcp"` record of a window (the cold80 and coldXt8 windows only the one Attempt's OnCourse listings and its Results row, the other rows dropped), verbatim, in file order (all message types: the leave rule is evaluated at every ingested TCP
 // message, DERIVATIONS §4.1). `observedAt` = chunk _meta.startTime + ts. Windows (recording, interval, record count, chunk, lines):
 //   stall10: 2026-04-26-cp3-cross 2026-04-26T09:18:36.000Z..2026-04-26T09:18:51.000Z: 26 tcp records, 009-0858-time-limit.jsonl line 36051..36342

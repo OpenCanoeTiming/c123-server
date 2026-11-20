@@ -31,7 +31,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const SCRIPT = path.join(ROOT, 'scripts/replay-direct.ts')
 const TSX = path.join(ROOT, 'node_modules/.bin/tsx')
-const PD = process.env.C123_PROTOCOL_DOCS ?? '/workspace/timing/c123-protocol-docs'
+const PD = process.env.C123_PROTOCOL_DOCS ?? path.join(ROOT, '..', 'c123-protocol-docs')
 const CHECKER = path.join(PD, 'tools/gate2/check.js')
 const CACHE = path.join(PD, 'recordings/.cache')
 const T = 120_000
@@ -501,7 +501,7 @@ describe('row 4: determinism', () => {
   })
 
   const cp3 = path.join(CACHE, '2026-04-26-cp3-cross')
-  // Local-only data: /workspace recordings and the checker are not in CI (skip with the reason, run locally).
+  // Local-only data: the recordings and the checker live in c123-protocol-docs, which CI does not have (skip with the reason, run locally).
   it.skipIf(!existsSync(cp3) || !existsSync(CHECKER))('real window cp3-cross 08:28:00-08:29:00Z: two replays are byte-identical and the checker accepts the log as input', () => {
     const args = ['--recording', cp3, '--from', '2026-04-26T08:28:00.000Z', '--to', '2026-04-26T08:29:00.000Z']
     const a = replay(args)
