@@ -1,81 +1,53 @@
 # Test Architecture — c123 Ecosystem
 
-Greenfield, designed from `CONTRACTS.md` and `ARCHITECTURE.md` as they now stand, not from the
-existing QA-layer spec or plan. What survives from that work is stated at the end, reached by
-designing, not by starting there. Same discipline as `CONTRACTS.md`: precise enough to implement
-against, honest about what it leaves open. This document is a contract for tests, not a test suite —
-no code, no assertions, the shape both need to exist in before either is written.
+How the rebuild is tested: what each tier proves, what exists today and what is not built. It
+states the shape tests take and the rules they follow, not the tests themselves. The reasoning
+that led here is in git under the tag `contract-archive-2026-11`.
 
 ---
 
 ## 0. How to read this document
 
-§1 states why this exists and what it must be able to prove. §2 is the one design decision
-everything else follows from — two different kinds of determinism, needing two different
-mechanisms. §3 is the four tiers. §4–§6 are the shared machinery every tier depends on: the fixture
-format, the clock requirement, and where fixtures live. §7 answers directly the question this whole
-engagement was commissioned to answer: how a test says which component is wrong. §8–§9 are the
-honest boundaries — what stays untested, and what of the existing tooling and plans this replaces,
-keeps, or requires rework.
+§2 is the split everything follows from. §3 is the four tiers; §3.2 holds the gate-2 checker's
+properties and §3.6 the checker conditions moved from `CONTRACTS.md`. §4–§6 are the fixture
+format, the clock requirement and fixture distribution. §7 says which component a failing test
+names, §8 what is deliberately not tested, §9 what exists and what is not built, §10 what is left
+open.
+
+A piece marked **Not built** names the issue that parks it. c123-protocol-docs#15, #16 and #20 and
+c123-server#336 are in the milestone "Hardening (after Jarní slalom)".
 
 ---
 
 ## 1. Why this document, and why now
 
-`CONTRACTS.md` §4 states a determinism claim in exactly these words: "given the same sequence of
-ingested messages... the resulting state is a pure function of that sequence." **Nothing in the
-ecosystem today could falsify that sentence.** It is the single most load-bearing claim in the
-primary deliverable, and until this document, it was a promise with no mechanism that could prove it
-false. §3.2 below is that mechanism.
-
-Second, independently of the domain design: each of the four deployable repositories carries its own
-open issue planning a testing approach — `c123-server#66`, `c123-scoreboard#43`,
-`c123-penalty-check#52`, `c123-live-mini#105` — and `c123-live-mini#105` contains a table, "Ecosystem
-Resources to Reuse," naming what to borrow from each of its three siblings: a mock WebSocket server
-and Playwright screenshot pattern from `c123-penalty-check`, a recording-based fixture loader from
-`c123-server`, and the replay tooling from `c123-protocol-docs`. Read plainly, this is four
-independent decisions about how to verify the same underlying fact, one layer above the four
-independent decisions about how to *interpret* it that the rest of this engagement exists to remove.
-The existing QA-layer design spec (`c123-protocol-docs/docs/specs/2026-05-13-qa-layer-design.md`)
-states its own baseline policy outright, at lines 138–143: **"Baselines are stored in each project's
-repo, not in protocol-docs... projects own the expected output."** That sentence is the duplication
-this document is written to remove, checked against the actual spec text rather than assumed.
-
-Third: of that spec's eight planned tasks, only the first two — `extract-excerpt.js` and
-`test-utils.js` — are built. `qa/excerpts/` is empty; `qa/README.md`, the seven planned scenario
-excerpts, and the verification-matrix document do not exist. Almost nothing is actually in flight.
-This is a genuinely greenfield moment, not a redesign of working infrastructure.
+`CONTRACTS.md` §4 claims that, given the same sequence of ingested messages, the resulting state is
+a pure function of that sequence. This document says how that claim and the invariants are
+checked: by hand-authored vectors (tier 1) and by replaying real recordings through the real core
+against an invariant checker and Canoe123's own results (tier 2). It is one design for all four
+deployables, in place of a test plan per repository: one interpreter in production
+(`DECISIONS/ADR-002`), and test authority from outside every implementation.
 
 ---
 
 ## 2. Two determinisms, two machines
 
-`ARCHITECTURE.md` §2 already drew the line this document builds on: the server owns any decision
-whose wrong answer is a wrong *fact*; a client owns any decision whose wrong answer is a worse
-*presentation*. Testing inherits that split exactly, because the two halves are deterministic in
-different variables:
+Testing follows `ARCHITECTURE.md` §2: the server owns any decision whose wrong answer is a wrong
+*fact*; a client owns any decision whose wrong answer is a worse *presentation*.
 
 - **The domain layer's merge state** (`c123-server`, `live-mini-server`) is a pure function of the
-  *ingest sequence* — `CONTRACTS.md` §4 INV-6 already makes this orderable independent of wall-clock
-  time. Given the same ordered inputs, it must produce the same outputs, full stop.
-- **A third category exists, found under review rather than designed in from the start: some
-  domain-layer facts are also a function of wall-clock-*now*, at read time, not only of the ingest
-  sequence.** `CONTRACTS.md` §8.4's calendar `status` is the concrete instance — `live`/`upcoming`/
-  `past` is computed from whether a push arrived within a stated 5-minute window of *now*, a
-  deliberate and still-correct design decision, but one this document's first draft's categorical
-  claim above did not leave room for. §3.1 extends to cover it, rather than leaving it untested by
-  every tier, which is exactly where it fell when only two categories were named.
+  *ingest sequence*, ordered by INV-6 independently of wall-clock time. Given the same ordered
+  inputs, it produces the same outputs.
+- **Some domain-layer facts are also a function of wall-clock *now* at read time.**
+  `CONTRACTS.md` §8.4's calendar `status` is the instance: `live`/`upcoming`/`past` depends on
+  whether a push arrived within 5 minutes of *now*. §3.1 covers it.
 - **The presentation layer** (`c123-scoreboard`, `c123-penalty-check`, `c123-live-mini`'s client) is
-  a function of *a sequence of domain states plus elapsed time*. Auto-scroll, highlight duration,
-  grace periods before eviction, the departing timeout, Kayak Cross's "shown before the next heat
-  starts" deadline — every one of these has the clock as a genuine input, not incidental detail.
-  `CONTRACTS.md` §2.6 already requires the domain layer to push a Cross assertion the instant it is
-  ingested, with no artificial delay; what a client does with the time *between* that push and
-  whatever comes next is exactly the variable this tier exists to control.
+  a function of *a sequence of domain states plus elapsed time*: auto-scroll, highlight duration,
+  grace periods before eviction, the departing timeout, how long a Kayak Cross heat stays shown.
+  The clock is an input (§3.3, §5).
 
-A test architecture that hands a client a fixed snapshot and asserts on it once can see the first
-kind of determinism and is blind to the second. Both need to be first-class or the design fails
-exactly where the maintainer warned it would.
+A test that hands a client a fixed snapshot and asserts once sees the first kind and is blind to
+the last.
 
 ---
 
@@ -83,142 +55,111 @@ exactly where the maintainer warned it would.
 
 ### 3.1 Tier 1 — Contract conformance
 
-**What it proves:** an implementation of the merge rule (`CONTRACTS.md` §4's ten invariants and the
+**What it proves:** an implementation of the merge rule (`CONTRACTS.md` §4's invariants and
 precedence rules) is correct, in isolation, with no recording and no running server.
 
-**Who this applies to:** exactly the two components that implement the merge rule —
-`c123-server` and `live-mini-server` (`ARCHITECTURE.md` §3: live-mini applies "the *same* merge
-invariants," not its own). It does not apply to any rendering client; they never merge anything.
+**Who this applies to:** exactly the two components that implement the merge rule, `c123-server`
+and `live-mini-server` (`ARCHITECTURE.md` §3: live-mini applies the same merge invariants, not its
+own). It does not apply to any rendering client; they never merge anything.
 
-**Shape:** a small set of hand-authored **test vectors**, data only, no shared runtime code (the same
-discipline `DECISIONS/ADR-002`/`ADR-003` already committed to: share types and data, never share
-logic across repository boundaries). Each vector is: an ordered list of synthetic observations
-(`source`, `observedAt`, optionally `eventTime`, `value`) for one field, and the expected presented
-envelope after they are applied in order. Every invariant gets at least one vector written directly
-from its `CONTRACTS.md` §4 clause — the INV-2c vector below is written straight from that clause's
-own prose, not from any recording:
+**Shape:** hand-authored **test vectors**, data only, with no shared runtime code (the discipline of
+`DECISIONS/ADR-002`/`ADR-003`: share types and data, never logic across repository boundaries).
+A vector is an ordered list of synthetic inputs and the expected presented state after they are
+applied in order. Every invariant has at least one vector written directly from its
+`CONTRACTS.md` clause, and none needs a recording, a running server or an upstream fact. The
+format is `CONFORMANCE-VECTORS.md` §1; the data is `vectors/tier1-conformance.json`. The vectors
+cover every invariant and every rule of INV-2, `provisional` in both upstream modes, run
+generations and §5's standing assembly.
 
-```json
-{ "id": "inv2c-older-event-refused",
-  "given": [
-    { "ingestSeq": 1, "source": "tcp", "kind": "result-row", "observedAt": "2026-09-15T10:40:00.000Z",
-      "eventTime": "2026-09-15T10:39:58.000Z", "value": { "totalSeconds": 84.0 } },
-    { "ingestSeq": 2, "event": "tcp-disconnected", "observedAt": "2026-09-15T10:41:00.000Z" },
-    { "ingestSeq": 3, "source": "xml", "kind": "result-row", "observedAt": "2026-09-15T10:41:10.000Z",
-      "eventTime": "2026-09-15T10:14:02.079Z", "value": { "totalSeconds": 88.5 } }
-  ],
-  "expect": { "value": { "totalSeconds": 84.0 }, "source": "tcp",
-              "note": "rule 2 alone would let the post-disconnect xml row win; its eventTime is older, so INV-2c refuses it" } }
-```
+**What exists.** 121 vectors (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and
+`live-mini-server` writes a thin adapter that feeds the vectors `CONFORMANCE-VECTORS.md` §1 assigns
+to it (115 and 24; 18 are in both) into its own merge function and asserts the result, so both
+satisfy the same data-defined contract without either depending on the other's code.
+`c123-server`'s adapter runs its 115 against the real core in CI on every PR
+(`src/__tests__/conformance/`), with the expected-red ledger for test-first work
+(`CONFORMANCE-VECTORS.md` §2). `live-mini-server`'s runner is part of its migration and does not
+exist yet.
 
-(Shape abbreviated here. The authoritative format is `CONFORMANCE-VECTORS.md` §1.) The vectors
-cover:
-- every invariant and every rule of INV-2;
-- `provisional` in both upstream modes;
-- run generations;
-- §5's standing assembly.
-
-The count is 121 (`CONFORMANCE-VECTORS.md` §2). Each of `c123-server` and `live-mini-server` writes
-a thin adapter that feeds the vectors `CONFORMANCE-VECTORS.md` §1 assigns to it (115 and 24; 18 are in
-both) into its own merge function and asserts the result — proving
-both satisfy the same data-defined contract without either depending on the other's code.
-
-**This is the minimum that proves the contract implementable before any server code exists.** Every
-vector is written directly from `CONTRACTS.md` prose; none needs a recording, a running server, or an
-upstream fact. It is also the fastest possible feedback loop during implementation — a merge-rule
-regression fails a millisecond-scale test, not a multi-minute replay.
-
-**A second, structurally identical class of vector: server-side time-windowed reads — §2's third
-determinism.** `CONTRACTS.md` §8.4's calendar `status` derivation (a push within the last 5 minutes
-of *now* is `live`) is not a merge decision, but it is exactly as isolable and exactly as synthetic:
-given a fixed set of recorded push timestamps and an injected "now," assert the derived `status`
-without needing a real clock, a real 5-minute wait, or any recording. This requires the *server* side
-of the same discipline §5 states for clients — `live-mini-server`'s calendar computation reads "now"
-through an injected clock, never `Date.now()` directly — extended there, not invented twice. A
-handful of vectors at and around the 5-minute boundary (just under, just over, exactly at) belong in
-this same tier, alongside the merge vectors, for the same reason: both are unit-scale, contract-
-derived, and need nothing but the contract's own prose to write.
+**Time-windowed reads: a second class of vector.** The calendar `status` is not a merge decision,
+but it is as isolable: given fixed push timestamps and an injected "now", assert the derived
+`status` just under, exactly at and just over the 5-minute boundary, with no real clock and no
+recording. `live-mini-server`'s calendar computation reads "now" through an injected `Clock` (§5),
+never `Date.now()`. These vectors belong in this tier, beside the merge vectors. None is written
+yet; they are part of `live-mini-server`'s migration.
 
 ### 3.2 Tier 2 — Replay determinism, and the correctness gate it is not a substitute for
 
-**What it proves, precisely — and what it does not.** This tier proves `CONTRACTS.md` §4's central
-claim exactly as worded: that the domain layer "is a pure function of" the ingest sequence. It proves
-*reproducibility*. It does not, by itself, prove *correctness* — a deterministic-but-wrong merge
-implementation reproduces its own wrong answer every time and passes a reproducibility check
-trivially. The first draft of this document conflated the two, describing fixture generation and
-fixture verification as one mechanism without saying what checks a captured fixture *before* it
-becomes the pinned ground truth three other repositories trust. Found under independent review, not
-designed in from the start, and worth stating exactly why it matters: today, four independent,
-separately-fallible client implementations mean a systematic misinterpretation tends to *surface* as
-visible disagreement between them — the accidental safety net behind several of `EVIDENCE.md`'s
-exhibits. A single authorial domain layer, correctly, per `ARCHITECTURE.md` §2/`DECISIONS/ADR-002`,
-removes that net. **The tension is real and is named here rather than designed around: you cannot
-have both one interpreter in production and independent cross-checking from disagreement in test.**
-The resolution is not to reintroduce a second interpreter — that would undo the reason `ADR-002` gives
-`live-mini-server` no domain logic of its own — but to source test-time authority from *outside* every
-implementation: `CONTRACTS.md` prose (tier 1) and, for real race numbers specifically, a human
-checking a fixture once against what officials actually published. Neither is "another interpreter
-that might disagree"; both are exactly the kind of authority a single-interpreter production design
-still leaves available in test.
+**What it proves, and what it does not.** Replaying a real recording through the real core proves
+*reproducibility*, not *correctness*: a deterministic but wrong merge reproduces its wrong answer
+every time. With one interpreter (`DECISIONS/ADR-002`) no second implementation can disagree, and
+none is reintroduced for tests; authority comes from outside every implementation:
+`CONTRACTS.md` prose (the gate-2 properties) and Canoe123's own results (gate 3).
 
-**Two distinct artifacts, not one:**
+**What exists: `npm run gates`** (`scripts/gates.ts`), on the seven whole recordings (nkz-19so,
+cp3-cross, jarni-ne-odp, jarni-ne-do, jarni-so-do, jarni-so-odp, nkz-20ne), in three steps:
+1. the data-gate tests (the direct-injection replay, the re-run paths, outages, and the real
+   process against the player with its write path), which fail on any skip;
+2. each recording replayed by the direct-injection path below, its step log read by the gate-2
+   checker with the recording (`--recording`);
+3. the mechanical gate 3: each replay's final presented state against the recording's last XML
+   snapshot.
 
-- **An ingest fixture** — the raw sequence of upstream messages a domain layer actually receives,
-  with their true arrival characteristics. Not a new concept: it is what `extract-excerpt.js`
-  already produces (`c123-protocol-docs/tools/extract-excerpt.js`) — a player-v3-playable slice of a
-  real recording, already checksummed. Nothing new needs building here.
-- **A domain-state fixture** — the sequence of presented values the domain layer *produces* when fed
-  an ingest fixture: the same shape as the WS/SSE delta stream `CONTRACTS.md` §7.2/§8.4 already
-  define (`{seq, type, ..., fields}`), captured to a file instead of streamed live. **This does not
-  exist today, in either tooling or concept** — confirmed directly: every existing tool (`player.js`,
-  `replay-server.js`, `test-utils.js`) operates on the *inbound* side; nothing anywhere captures what
-  `c123-server` itself emits on `/ws`. The QA spec noticed this gap and assigned it to be solved
-  separately, inside `c123-server`'s own repo (spec lines 138–143) — the duplication §1 opens with.
+Exit 0 when every step passes, 1 when a step fails (every step still runs), 2 when a prerequisite
+is missing. `--only` runs steps 2 and 3 on named recordings; such a partial run is never a gates
+pass. The gate-2 checker and the gate-3 comparator are c123-protocol-docs' `tools/gate2/check.js`
+and `tools/gate3/final-state.js`, **pinned by commit in `scripts/gates/protocol-docs.ref`**: the run
+stops when the protocol-docs checkout is at another commit or has changes under `tools/`, and
+`scripts/gates/README.md` says how to bump the pin. CI does not run the gates (c123-server#324).
+The output is posted as the verification record on every PR touching `src/core`, `src/ingest`,
+`scripts/replay-direct.ts` or the checker, and the maintainers' gate runner writes the result of
+its runs on `main` as the commit status `gates/recordings`.
 
-**The one new tool this design requires**, living alongside the others in `c123-protocol-docs`: the
-**capture tool projects the direct-injection replay onto the §4 format**. The replay emits one step per
-ingest unit (`CONTRACTS.md` §1.6) — its elements classified in `CONFORMANCE-VECTORS.md` §1's vocabulary, the §7.2 deltas
-it produced, and a state hash — and the tool folds the cold-start portion into the hydration step, then
-writes every later delta with its producing element's recorded `observedAt`. **A replay begins at the
-first record of the stream the checker reads** — the recording's or the excerpt's — and a capture
-window inside it opens with a hydration step holding the core's state at that instant; **the step
-log gate 2 reads begins where the raw stream begins, not at the hydration** — the checker's memory
-(the generation's recorded row, the carry, properties 5, 10 and 11) is built from the steps before
-the window, which the hydration's GET bodies do not hold — and the hydration step and the window
-bound the published fixture's steps and its `violations` and `exercised` counts (§4); a window is never a cold start at a later instant of a stream the checker reads from its beginning, since closure,
-content age and the carry (properties 5, 8, 11) would then be read over records the core never saw
-(9,072 such violations in one window). A cold start at a chosen instant is an excerpt cut
-there, log and raw stream alike. The result is a
-**candidate** domain-state fixture: candidate, not golden, until it passes the three gates below. A
-`/ws` capture of a player-driven server is **not** a candidate (spike S2-6): its `observedAt` values are
-the server's clock during playback, two captures differ, and gate 1 could not diff them; it is a tier-4
-smoke artefact. Measured in the spike: excerpt → replay twice → checker → projection twice → admission
-in 1 m 48 s, and the fixture alone (hydration plus deltas) reproduces the replay's final state exactly.
+**The direct-injection replay** (`scripts/replay-direct.ts`) feeds a recording's TCP and XML
+records, in recorded order, straight into the ingest boundary through the production parsers and
+merge core, one ingest unit per step, bypassing the player and the network. **The replay carries
+everything `CONTRACTS.md` §4's determinism paragraph names:** every message with its recorded
+`observedAt`, the TCP connect and disconnect events, the detection time of every XML rewrite, and
+any re-baseline, in recorded order; the domain layer reads no clock of its own while replaying.
+Without the events, INV-2 rule 2 and INV-7's write-time guard are never exercised. Where the
+recording lacks them (§9), a stated outage or re-baseline is given to the replay (`--events`; in a
+fixture, its `source.events`, each with its instant, scope and reason): the replay drops every TCP
+record inside a stated outage and plays a stated re-baseline as `CONTRACTS.md` §4's unit, the
+`rebaseline` event with the last snapshot read. **The raw stream the gate-2 checker reads omits the
+same records**, the interval taken from the log's `tcp-disconnected`/`tcp-connected` pair, so no
+property is read over records the core was told never arrived. Such a replay is evidence for
+properties 8 and 13 (`exercised`) and gate 2 judges it like any other; it is a replay with a
+declared input the recording lacked, not a synthetic fixture (§4), which carries no raw stream and
+so exercises only the **D** properties.
 
-**Gate 1 — determinism (necessary, not sufficient).** Feed the same ingest fixture into the domain
-layer twice — replaying the captured raw messages directly against the ingest boundary, not
-re-running the player against real time, so player/network jitter is removed from the question
-entirely — and diff the two resulting candidates byte for byte, `observedAt` included. **The replay
-carries everything `CONTRACTS.md` §4's determinism paragraph names:** every message with its recorded
-`observedAt`, the TCP connect and disconnect events, the detection time of every XML rewrite, and any
-re-baseline, in recorded order; the domain layer reads no clock of its own while replaying. Without
-the events, INV-2 rule 2 and INV-7's write-time guard are never exercised and gate 1 passes
-trivially. Where the recording lacks them (§9: the recorder wrote connection changes to the console,
-and no recording holds a re-baseline), a stated outage or re-baseline is declared in the fixture's
-`source` (`events`, each with its instant, scope and reason); the replay drops every TCP record
-inside a stated outage and plays a stated re-baseline as `CONTRACTS.md` §4's unit, the `rebaseline`
-event with the last snapshot read; **the raw stream the gate-2 checker reads omits the same records**,
-the interval taken from the log's `tcp-disconnected`/`tcp-connected` pair, which `source.events`
-restates, so no property is read over records the core was told never arrived (a cp3-cross outage of 139
-records otherwise raised property 8 on a snapshot inside it). Such a fixture is evidence for properties 8 and 13 (`exercised`)
-and gate 2 judges it like any other; it is a candidate with a declared input the recording lacked,
-not a synthetic fixture (§4), which carries no raw stream and so exercises only the **D** properties. A non-empty diff fails the candidate outright: a real non-determinism bug (uninitialised
-state, a race condition) that would otherwise poison every downstream tier silently. Passing proves
-only self-consistency.
+**The step log** is what gate 2 reads: a hydration line, then one step per ingest unit
+(`CONTRACTS.md` §1.6) with its elements, the §7.2 deltas the unit produced and a state hash, then an
+end line (the format is in `scripts/replay-direct.ts`'s header; the on-site process writes the same
+log). **A replay begins at the first record of the stream the checker reads** — the recording's or
+the excerpt's — **and the step log gate 2 reads begins where the raw stream begins**: the checker's
+memory (the generation's recorded row, the carry, properties 5, 10 and 11) is built from the steps
+before any point it judges. A window is never a cold start at a later instant of a stream the
+checker reads from its beginning, since closure, content age and the carry (properties 5, 8, 11)
+would then be read over records the core never saw. A cold start at a chosen instant is an excerpt
+cut there, log and raw stream alike. A step log or `/ws` capture of a player-driven process is a
+tier-4 artefact (§3.4), never a fixture candidate: its `observedAt` values are the server's clock
+during playback.
+
+**Gate 1 — determinism (necessary, not sufficient).** The same ingest input, replayed twice
+directly against the ingest boundary, gives byte-identical output, `observedAt` included. A
+non-empty diff is a real non-determinism bug (uninitialised state, a race condition) that would
+otherwise poison every later check; passing proves only self-consistency. What exists: a data-gate
+test replays a window twice and compares the logs byte for byte; `npm run gates` replays each
+recording once.
+
+**Capture and admission of fixtures.** Projecting a replay onto the §4 format, and admitting the
+result through gates 1–3 as pinned ground truth for other repositories. **Not built:**
+c123-protocol-docs#15, with the human half of gate 3 in c123-server#336. Once built, a capture
+window inside a longer replay opens with a hydration step holding the core's state at that instant,
+and that step and the window bound the fixture's steps and its `violations` and `exercised` counts.
 
 **Gate 2 — invariant conformance, checked as a property of the replay, not against a known answer.**
 
-*What the checker reads.* The admission replay, step by step. **A step is one ingest unit**
+*What the checker reads.* The replay's step log, step by step. **A step is one ingest unit**
 (`CONTRACTS.md` §1.6; `CONFORMANCE-VECTORS.md` §1: one upstream message, one event, one XML
 snapshot read — every race it carries, the rewrite event included, `DERIVATIONS.md` §0.3 — one
 re-baseline with its snapshot re-read) — its elements in ingest order, `elements`
@@ -231,9 +172,9 @@ vocabulary, which the direct-injection path emits beside each step's deltas: an 
 (`attemptId`, `source`, `kind: inference | result-row | operator | fragment`, the fields it carries,
 `run`, `observedAt`, optional `eventTime`); an **event** (`tcp-connected`, `tcp-disconnected`,
 `xml-rewrite-detected` with its `changedAfter`, `oncourse-empty`, `oncourse-left`, `rebaseline` with `scope`); a **scope
-snapshot** (`source`, `phaseId`, `mode`, `rows`); an **on-course listing** of one Attempt. The §4
-fixture is the deltas alone. So gate 2 runs once, at admission, on the replay log; the properties
-marked **D** read deltas only and can be re-run by any consumer on the published fixture.
+snapshot** (`source`, `phaseId`, `mode`, `rows`); an **on-course listing** of one Attempt. A §4
+fixture is the deltas alone. Gate 2 runs on the replay's step log; the properties marked **D** read
+deltas only and can be re-run by any consumer on deltas alone, a published fixture's included.
 
 *The properties.* Each is a check on consecutive presented states, S<sub>i−1</sub> and S<sub>i</sub>,
 and the element e<sub>i</sub> between them. "Regression" means a field's `state` going from `known`
@@ -254,8 +195,7 @@ the step index, the Attempt, the field and the property number.
    - **(c) The reject half, for every field.** An envelope on the step's own instant has a
      producer of its own `source` among the unit's elements; a `tcp` vector on an `xml` unit's
      instant is a violation. Without this clause the cases below would let through a core that
-     restamps at the step: a replay with 43 late-bound vectors restamped at the binding instant
-     once passed the checker. What an element produces, on its own instant and `source`:
+     restamps at the step. What an element produces, on its own instant and `source`:
      - *A scope snapshot* produces, for an Attempt it names or covers: the fields its row
        states; what the contract derives from them at that step, the `no-result` outcome of a
        presented mark (`CONTRACTS.md` §2.6); and the result fields INV-7 retracts. It never
@@ -344,7 +284,7 @@ the step index, the Attempt, the field and the property number.
    (property 10) or contradicts a finish (property 7); a `rebaseline` of its scope (property 13);
    and, for the stream's own `running` outcome alone, an `oncourse-left` or `oncourse-empty`
    covering the Attempt (slalom and the Kayak Cross time trial: a Kayak Cross heat's leave
-   withdraws nothing, `DERIVATIONS.md` §10 item 35; the time trial since 2026-11-16, §4.1), a listing of it with `dtStart` empty, or a listing of it with a `dtFinish` that
+   withdraws nothing, `DERIVATIONS.md` §10 item 35; the time trial, §4.1), a listing of it with `dtStart` empty, or a listing of it with a `dtFinish` that
    yields no `duration` (an empty `Time`, or a slalom listing with no `Gates`) — the stream withdrawing what it alone stated (`DERIVATIONS.md` §4.3, §4.1,
    §10 item 43; `ADR-015` Revision 4), `status` as §4.1 gives it at that element (the leave's
    `left-without-finish` or `not-started`, a table `finished` or mark standing; the listing's
@@ -434,8 +374,8 @@ the step index, the Attempt, the field and the property number.
      admitted for the whole Phase (every `tcp` observation of it or its Attempts older than
      `changedAfter`, none of its Attempts in the on-course set): in that step the Phase and its
      Attempts are gone and one `phase.deleted` names it, with no `attempt.deleted` for them; a
-     schedule that names no race removes nothing. The gate-2 checker's clause for this is owed
-     with the core change (M2 P3c).
+     schedule that names no race removes nothing. The gate-2 checker has no clause for the
+     Phase removal yet.
 6. **Precedence (INV-2 rules 1–3).** (a) Once a result field presents a `result-row` observation, it
    never afterwards presents an `inference` for the same generation, except through a contradiction
    (property 7) or after a retraction (property 5). (b) `gates` is merged cell by cell: while
@@ -448,8 +388,7 @@ the step index, the Attempt, the field and the property number.
    `null` at a results-table step — and at the listing that increments `run` the vector is the new
    generation's, named `not-yet` or the listing's own cells in that delta (property 10, `ADR-013`),
    the previous generation's row holding nothing of it, so (b) reads the generation the delta
-   presents (a checker that still held run 1's row at the increment reported 11 cells of
-   K1W_BR1_18:24: its own ordering gap, not a core finding) — upstream's own withdrawal, the stream's listing blanking a cell
+   presents — upstream's own withdrawal, the stream's listing blanking a cell
    it judged, is presented wherever no presented row of the generation holds that cell judged: the
    presented row's cell blank, or no row of the generation yet (recorded: nkz-19so K1M_BR2_19:79,
    cells 14–17 judged 25 s into the run and blank 11 s later, mid-run, no row),
@@ -676,9 +615,7 @@ the step index, the Attempt, the field and the property number.
     an `xml` snapshot against rows a `tcp` snapshot has stated, built or re-delivered equal,
     needs a `changedAfter` later than their latest `tcp` delivery, `null` never; a `tcp`
     snapshot always) replaces its rows whole, and it changes only at such a snapshot or
-    `scope.replaced`. The spike's checker
-    applied the Attempt clause to it and reported 673 violations on the Cross event result (XER), which
-    was never part of a spike window (`DECISIONS/ADR-017` Revision 4). A classification row is
+    `scope.replaced`. A classification row is
     `CONTRACTS.md` §8.3's `ClassificationRow`, flat: `rank: number | null`, a numeric `order`,
     `decidedIn: string | null`; on site it arrives in a scope snapshot of the classification Phase
     (`CONFORMANCE-VECTORS.md` §1), and a `null` `decidedIn` is relayed as `null`.
@@ -690,8 +627,7 @@ does not catch a bug that is invariant-conformant and still numerically wrong (a
 misparsed field, a wrong gate cell) — gate 3 is what catches that. Nor does it see the retained,
 non-presented observations: INV-2b's `source-disagreement` diagnostics are its only trace of them,
 and whether such a disagreement *should* have been raised is a tier-1 question. And it is blind to
-a stale mark presented over a running athlete after a re-run (`DERIVATIONS.md` §4.12, opponent
-review R16): with the stale-mark rule removed from a core, the step logs of the DNF re-run fixtures
+a stale mark presented over a running athlete after a re-run (`DERIVATIONS.md` §4.12): with the stale-mark rule removed from a core, the step logs of the DNF re-run fixtures
 change and the checker reports nothing. That defect is caught by the vector
 `rerun-stale-mark-not-presented` and by the re-run data gate's own assertions
 (`scripts/__tests__/rerun-paths.test.ts`); no property clause is added for it (accepted by
@@ -699,162 +635,123 @@ the maintainer, 2026-11-11). A property that a
 correct replay cannot satisfy is a finding against the contract, not against the replay: it is
 reported to the design authority, never relaxed in the checker.
 
-**Who writes the checker, and what it reads** (opponent review of the spike, `DECISIONS/ADR-017`
-Revision 4). The gate-2 checker is written by a different author than the merge core, from this
-section's text alone, and **mutation-tested per property**: each property must fail on a replay
-deliberately broken for it, and a property that no window exercises is not evidence until one does (in
-the spike, P10 and P13 ran zero times and P4, P7 and P8 two to four). **The fixture says which:**
+**Who writes the checker, and what it reads** (`DECISIONS/ADR-017` Revision 4). The gate-2 checker
+is written by a different author than the merge core, from this section's text alone, and
+**mutation-tested per property**: each property must fail on a replay deliberately broken for it,
+and a property that no replay exercises is not evidence until one does. **A fixture says which:**
 `evidence.gate2.exercised` records, per property, the number of steps that evaluated it
 (`schemas/fixture-admitted.schema.json`); a zero does not block admission, it tells every consumer
-that the fixture is no evidence for that property, and `violations` lists only what was evaluated. A count under properties 8 and 13 may
-rest on a stated outage or re-baseline, an input the recording lacked: the fixture's own `source.events` says so, and the count itself
-carries no mark (a default, `DERIVATIONS.md` §10 item 46 (b)). Properties that judge membership,
-element classification or attribution — 3, 6, 10, 11, 13 and 14 — **read upstream's raw stream**, not
-the ingest's own elements: a checker that trusts the `oncourse-left` the code under test emitted cannot
-see a wrong leave, and the spike's did not see a 10.7 s TCP stall empty a Kayak Cross heat's on-course
-set. At admission the checker therefore runs with the recording (`--recording`); without it only the
-properties marked **D**, and the **D** readings of 6(b) and 11, can be evaluated, and such a run admits
-nothing. A checker failure has three possible verdicts — contract conflict, implementation bug, checker
-bug — and the design authority assigns it; "the reading that makes the vectors pass" is not a verdict,
-and a spike brief must not make it one.
+that the fixture is no evidence for that property, and `violations` lists only what was evaluated.
+A count under properties 8 and 13 may rest on a stated outage or re-baseline, an input the
+recording lacked: the fixture's own `source.events` says so, and the count itself carries no mark
+(a default, `DERIVATIONS.md` §10 item 46 (b)). Properties that judge membership, element
+classification or attribution — 3, 6, 10, 11, 13 and 14 — **read upstream's raw stream**, not the
+ingest's own elements: a checker that trusts the `oncourse-left` the code under test emitted cannot
+see a wrong leave. The checker therefore runs with the recording (`--recording`); without it only
+the properties marked **D**, and the **D** readings of 6(b) and 11, can be evaluated, and such a
+run admits nothing. A checker failure has three possible verdicts — contract conflict,
+implementation bug, checker bug — and the design authority assigns it; "the reading that makes the
+vectors pass" is not a verdict.
 
-**Gate 3 — cross-checked against tier 1 where they overlap, against published results over whole
-races, and once by a person.** Where a candidate exercises a shape tier 1 already has a synthetic vector for
-(a two-run BR2 case, a Cross ordinal outcome), the candidate's result for that shape must agree with the
-vector's `expect` — contract-derived ground truth checking real data, not real data self-authorising.
-**Mechanical part, for admission:** the window **spans whole races** — every race whose Attempts the
-fixture asserts has its full on-course span inside the window — and for every finisher of those races
-`outcome`, `gates`, `pairTotal` and `placement` are compared with the **published results** (the day's
-final XML stands in for them once the human line certifies it), in `DERIVATIONS.md`'s units; a
-difference is a mismatch unless a listed, dated protest correction explains it. **The weaker candidate
-check**, for a window that cuts a race: each in-window finisher against upstream's XML at the window's
-last snapshot, every day-final difference listed as "changed after the window". It can never admit:
-placements of a cut race are then checked only against what the replay itself ingested. The spike's
-first fixture (nkz-19so 09:30–09:45) was such a window — 21 of 21 placements moved after it — while
-whole-race windows were available in the same recording (C1W_BR1_19 08:34–09:03Z, C1W_BR2_19
-10:24–10:53Z); gate 3 was redefined to fit it, and the opponent review undid that (`DECISIONS/ADR-017`
-Revision 4). **Human part:** a person certifies **the fixture**, not only the final XML: that the
-published results of the races in the window equal the fixture's final values, by signing the
-comparison report, once, at admission — `human-checked-<date> by <name>`. Not repeated per CI run, and
-not a substitute for gates 1–2, which are what makes the check repeatable afterward.
+**Gate 3 — against Canoe123's own results.**
+- **What exists: the final state against the last XML.** Step 3 of `npm run gates` compares, for
+  each recording, every Attempt's final presented state with the recording's last XML snapshot,
+  field by field, in `DERIVATIONS.md`'s units. A difference fails the step unless
+  `scripts/gates/known-differences.json` lists it. **A known difference pins its values:** each
+  entry names the recording, the Attempt, the field (and the gate for `Gates`), the two values it
+  tolerates, `xml` and `presented`, and the issue tracking it; a listed difference with other values
+  fails, and an entry that no longer differs fails as stale. A failure is triaged as a server bug, a
+  checker bug or a known upstream difference.
+- **The admission form. Not built** (c123-server#336). A window that **spans whole races** — every
+  race whose Attempts the fixture asserts has its full on-course span inside the window — compared,
+  for every finisher, on `outcome`, `gates`, `pairTotal` and `placement` with the **published
+  results** (the day's final XML stands in for them once the human line certifies it), a difference
+  being a mismatch unless a listed, dated protest correction explains it; and a person certifying
+  the fixture once, at admission, by signing the comparison report: `human-checked-<date> by
+  <name>`. A window that cuts a race can only be checked against upstream's XML at its last
+  snapshot (`against: window-end-xml`), and such a check never admits. Where a fixture exercises a
+  shape a tier-1 vector has (a two-run BR2 case, a Cross ordinal outcome), its result for that
+  shape must agree with the vector's `expect`.
 
-**Only a candidate that passes all three is published and pinned (§6).** From that point, this tier's
-job changes from admission to **regression**: a future ingest of the *same* ingest fixture is diffed
-against the *stored, admitted* domain-state fixture, not against a second fresh run — this is the
-check gate 1 alone cannot do, since two fresh runs of newly-regressed-but-still-deterministic code
-agree with each other and tell you nothing. A regression diff failing means something that was
-verified correct no longer is; it is investigated against `CONTRACTS.md` prose directly, the same way
-gate 3 was satisfied the first time.
+**Regression against an admitted fixture.** A later ingest of the same input diffed against the
+stored, admitted fixture, which two fresh runs of regressed but deterministic code cannot do.
+**Not built:** it needs admitted fixtures (c123-protocol-docs#15).
 
-**The same admitted fixture cross-checks `live-mini-server`, with one asymmetry stated plainly.**
-Because §8.3's push shape re-serialises exactly what this fixture already contains, an *admitted*
-fixture can be replayed a second time as `PUT` calls against a `live-mini-server` test instance; its
-presented values, read back over §8.4, must match. But `c123-server` generated the fixture and
-`live-mini-server` is checked against it — this pairing can only ever implicate `live-mini-server`,
-never `c123-server`, and only once the fixture has cleared gates 1–3 does that asymmetry stop being a
-problem: at that point `c123-server`'s correctness for this fixture is independently established, so a
-`live-mini-server` disagreement really does mean `live-mini-server` is wrong. A disagreement surfacing
-*during* admission, before gates 1–3 have run, proves nothing about which of the two is at fault — see
-§7.
+**Cross-check of `live-mini-server` against an admitted fixture.** The fixture's deltas replayed as
+§8.3 `PUT` calls against a `live-mini-server` test instance, the values read back over §8.4
+compared, and the **D** properties run on the public stream. The pairing can only implicate
+`live-mini-server`, and only once the fixture has cleared gates 1–3. **Not built:** it needs
+admitted fixtures (c123-protocol-docs#15).
 
-Initial fixture catalogue: the seven scenarios the existing spec already named and never built —
-`slalom-br1-normal`, `slalom-br2-finale`, `dsq-dns-mid-race`, `large-field`, `race-transition`,
-`multi-day-sunday`, `kayak-cross` — map onto this engagement's own scenarios closely enough (A, C, D,
-E respectively) to keep as the starting catalogue rather than inventing new selection criteria.
+**Fixture catalogue.** **Not built** (c123-protocol-docs#16; §6).
 
 ### 3.3 Tier 3 — Presentation rendering
 
-**What it proves:** a client, given a domain-state fixture and a controllable clock, renders what its
-own stated display-lifetime policy says it should, at every point in elapsed time — not just at the
-moment a fixture step arrives.
+**What it proves:** a client, given a sequence of domain states and a controllable clock, renders
+what its own stated display-lifetime policy says it should, at every point in elapsed time — not
+only at the moment a step arrives.
 
-**The inversion this makes possible, stated precisely:** because the domain layer already resolves
-every value before it reaches a client (`ARCHITECTURE.md` §2, zero-interpretation clients), a
-rendering test's input is a domain-state fixture — the *output* of tier 2 — never a recording, and
-never raw Canoe123 traffic. `c123-scoreboard`, `c123-penalty-check`, and `c123-live-mini`'s client
-each stop needing their own replay pipeline, their own recording-derived scenarios, or their own mock
-WebSocket server built to a bespoke shape — the exact three items `c123-live-mini#105`'s reuse table
-names as things to port between repos. They consume the one shared fixture format instead.
+**Its input is domain states, never a recording and never raw Canoe123 traffic:** the domain layer
+resolves every value before it reaches a client (`ARCHITECTURE.md` §2), so no client needs a replay
+pipeline or a mock WebSocket server of its own. The input is in the §4 format, captured from a
+replay or hand-authored to land exactly on a threshold; both feed the same harness. Captured,
+admitted fixtures and a shared set of synthetic ones are not built (§3.2; c123-protocol-docs#15,
+#20). No client has the harness yet (c123-scoreboard#151).
 
-**What is not shared, and must not be:** the *assertions*. `ARCHITECTURE.md` §2's own test —
-"could two correctly-implemented clients legitimately disagree and both be right?" — means display-
-lifetime policy is correctly different per client, per audience (a Raspberry Pi at the venue, a
-tablet, a spectator's phone). Each repository owns and tests its own thresholds (grace periods,
-highlight duration, auto-scroll pacing, the departing timeout) against the shared fixture format —
-shared infrastructure, local judgement, the same division already established for domain types versus
-domain logic.
+**What is not shared, and must not be:** the *assertions*. Display-lifetime policy is correctly
+different per client and audience (`ARCHITECTURE.md` §2: two correctly implemented clients may
+legitimately disagree). Each repository owns and tests its own thresholds (grace periods,
+highlight duration, auto-scroll pacing, the departing timeout) against the shared format.
 
-**The clock requirement — a structural requirement this tier cannot work without, stated in §5, and
-narrower than it first looks.** Checked directly against real scoreboard code under review, not
-assumed: some display-lifetime logic genuinely is `setTimeout`/`Date.now()`-based and the fake-clock
-harness reaches it as designed. Some is not, in two different ways that need two different answers —
-both stated precisely in §5, not glossed over here. And one mechanism — grace-period and stale-
-competitor eviction, the thing closest to `EVIDENCE.md`'s flicker exhibit and the closest thing this
-whole engagement has to a motivating symptom — **has no timer for a fake clock to intercept at all
-today**: it recomputes only when a new action is dispatched, never on elapsed time alone. Advancing
-the harness's clock with no new fixture entry, as step 4 below describes, asserts nothing against
-that code as it stands. This is a requirement on the *target client architecture*, not on the test —
-moved to `ARCHITECTURE.md` §2, stated there.
+**The clock requirement (§5)** is what this tier cannot work without. Frame-driven and
+compositor-driven logic need §5's two answers. A rule that recomputes only when an action is
+dispatched, as the scoreboard's grace-period and stale-competitor eviction does today, has no timer
+for a fake clock to reach; re-evaluating on a tick is a requirement on the target client
+architecture (`ARCHITECTURE.md` §2).
 
 **Harness shape:**
 
-1. Load a domain-state fixture.
-2. Initialise the client under test from the fixture's hydration step (§4): a `kind: "hydration"`
-   entry carrying the §7.1/§8.4 response bodies and their `asOfSeq`, applied exactly as the
-   subscribe-before-snapshot handshake would; set the fake clock to **a stated non-zero offset from
+1. Load the domain-state input.
+2. Initialise the client under test from its hydration step (§4): a `kind: "hydration"` entry
+   carrying the §7.1/§8.4 response bodies and their `asOfSeq`, applied exactly as the
+   subscribe-before-snapshot handshake would. Set the fake clock to **a stated non-zero offset from
    that entry's `observedAt`** (the harness names it, e.g. +37 s), never to `observedAt` itself: a
-   client that anchors any display lifetime on a payload's `observedAt` instead of its own receipt
-   time must fail here, and with the clock equal to `observedAt` it could not (spike S3-2).
-3. For each subsequent entry: advance the fake clock by the gap between its `observedAt` and the
-   previous entry's (the real recorded gap, whether that gap came from a real recording or was chosen
-   deliberately in a synthetic fixture), keeping the offset, then apply the delta exactly as the real
-   transport would deliver it.
-4. Assert on rendered output — DOM via testing-library, or the view-model a render function consumes
-   — at whatever points matter: immediately after a step, or after advancing the clock further with
-   **no new fixture entry**, to test a grace period expiring on elapsed time alone. The assertion
-   instant is the deadline plus the client's stated tick period (§5), never deadline + 1 ms.
+   client that anchors a display lifetime on a payload's `observedAt` instead of its own receipt
+   time must fail here, and with the clock equal to `observedAt` it could not.
+3. For each later entry: advance the fake clock by the gap between its `observedAt` and the
+   previous entry's, keeping the offset, then apply the delta exactly as the real transport would
+   deliver it.
+4. Assert on rendered output — the DOM via testing-library, or the view-model a render function
+   consumes — immediately after a step, or after advancing the clock further with **no new entry**,
+   to test a grace period expiring on elapsed time alone. The assertion instant is the deadline
+   plus the client's stated tick period (§5), never deadline + 1 ms.
 
-**Fixtures for this tier may be captured from a real recording (tier 2's natural output) or
-hand-authored, in the identical format, to land exactly on a threshold** — a real recording is
-unlikely to happen to finish a run at precisely 29,999ms before some eviction constant; a three-line
-synthetic fixture can, and is the right tool for that specific assertion. Both feed the same harness.
-
-**Kayak Cross's deadline, concretely:** tier 2 already asserts the *fact* half — the domain layer
-presents the operator's heat-order assertion within some small, stated latency of ingest, well before
-the next heat's own first on-course observation appears later in the same fixture. Tier 3 asserts the
-*presentation* half against that same fixture: what the scoreboard renders in the gap between the two,
-and for how long afterward — exactly the split `ARCHITECTURE.md` §6.D already argued for, now
-executable.
+**Kayak Cross's deadline:** tier 2 asserts the fact half, that the domain layer presents the
+operator's heat order when it is ingested, well before the next heat's first on-course
+observation. Tier 3 asserts the presentation half: what the scoreboard renders between the two,
+and for how long (`ARCHITECTURE.md` §6.D).
 
 ### 3.4 Tier 4 — End-to-end smoke
 
-**What it proves:** the wiring connects — a real `c123-server` process, pointed at a real (or
-player-emulated) Canoe123, actually serves a real client build over the real network path, a write
-actually round-trips *something*, a bridge push actually reaches a real `live-mini-server` instance.
+**What it proves:** the wiring connects. A real `c123-server` process, pointed at a real or
+player-emulated Canoe123, serves a real client build over the real network path, a write
+round-trips, a bridge push reaches a real `live-mini-server` instance.
 
-**What it does not prove, deliberately:** anything about domain semantics or presentation timing —
-those are tiers 1–3's job, already exercised far more cheaply. This tier is kept few and expensive on
-purpose; its only question is "does the plumbing connect," and it should stay small enough that a
-failure here almost always means transport, deployment, or version skew, never a merge-rule or
-display bug that slipped through the earlier tiers.
+**What it does not prove, deliberately:** anything about domain semantics or presentation timing;
+tiers 1–3 cover those far more cheaply. This tier is kept few and expensive on purpose, so that a
+failure here almost always means transport, deployment or version skew.
 
-**The real process against the replay** (`DECISIONS/ADR-017` item 5, Revision 7): the process runs
-on the player's clock, rate and origin given at start; the comparison strips the stamps and `source`
-on `run`, nothing else; its step log is a tier-4 artefact, gate 2 run on it with
-`--recording` at 1× only.
+**What exists: the real process against the replay** (`scripts/__tests__/onsite-process.test.ts`,
+`onsite-write.test.ts`, run in step 1 of `npm run gates`; `DECISIONS/ADR-017` item 5, Revision 7):
+the process runs on the player's clock, rate and origin given at start; the comparison strips the
+stamps and `source` on `run`, nothing else; its step log is a tier-4 artefact, gate 2 run on it
+with `--recording` at 1× only.
 
-**The one thing today's tooling cannot yet give this tier:** a realistic write-echo. Checked directly
-against prior research in this engagement — `player.js` explicitly does not emulate the write-side
-channels (`tools/player.js:904`: UDP:27334, the terminal-command channel `PenaltyCorrection` travels
-on, is "not emulated by player"). So `c123-penalty-check#52`'s explicit goal — "test the write API via
-a replay server for round-trip correctness" — cannot be fully realised by tier 4 alone today. Tier 1
-can still test the *merge* half precisely (a synthetic "submitted write, then a synthetic echo"
-vector, §3.1) without needing a real echo at all; only the realistic upstream round trip is blocked,
-and only tier 4 needed it. Recorded as a genuine tooling gap in §9, not glossed over. **Decided,
-not left open:** penalty-check's tier-4 smoke covers request → `WriteRequest{pending}` → push, and
-stops there; the echo half is tier 1's (`operator-write-*` vectors). A realistic upstream echo at tier
-4 waits for the player to emulate the terminal channel, and `c123-penalty-check#52` is met by the two
-tiers together, minus that.
+**The write echo.** `player.js` does not emulate the write-side channel a `PenaltyCorrection`
+travels on (c123-protocol-docs#19). Penalty-check's tier-4 smoke therefore covers request →
+`WriteRequest{pending}` → push, and stops there; the echo half is tier 1's (`operator-write-*`
+vectors). A realistic upstream echo at tier 4 waits for the player to emulate the channel, and
+`c123-penalty-check#52` is met by the two tiers together, minus that.
 
 ### 3.5 Outside the tiers: durable workflow state (#168) and tenant isolation
 
@@ -976,27 +873,23 @@ from the first and changes nothing presented, so it moves nothing.
 
 ## 4. The fixture format
 
-**One format, used four ways**, because it is the same thing every time — a sequence of the same
-`{seq, type, …}` deltas `CONTRACTS.md` §7.2/§8.4 define — `attempt.updated`, `attempt.deleted`,
-`phase.updated`, `phase.deleted`, `entry.updated`, `class.updated`, `course.updated`, `standing.updated`,
+**One format for a domain-state fixture and for every tier-3 input:** a sequence of the `{seq, type,
+…}` deltas `CONTRACTS.md` §7.2/§8.4 define — `attempt.updated`, `attempt.deleted`, `phase.updated`,
+`phase.deleted`, `entry.updated`, `class.updated`, `course.updated`, `standing.updated`,
 `oncourse.updated`, `scope.replaced`, `event.changed`, `write.updated`, `sources.updated`,
-`diagnostics.updated`, `check.updated`, `flag.updated`, each with the payload keys those sections give — as `CONTRACTS.md`
-§7.2/§8.4 already define, with a file-level header:
+`diagnostics.updated`, `check.updated`, `flag.updated`, each with the payload keys those sections
+give — after a hydration step, with a file-level header. A fixture is a file-based instance of
+exactly what a real client consumes live: no second data model, so the tier-3 harness is, to the
+client code under test, indistinguishable from a slow subscription. The capture that would produce
+fixtures and the catalogue that would distribute them are not built (§3.2, §6). The `admitted`
+block is fixed by `schemas/fixture-admitted.schema.json`, which the contract package ships.
 
 ```json
 { "fixtureId": "slalom-br2-finale",
   "source": { "kind": "recording", "excerpt": "2026-04-19-jarni-ne-odp#003", "sha256": "…" },
   "domainLayerVersion": { "contract": "3.0.0", "generator": "c123-server 1.0.0 (a1b2c3d)" },
-  "admitted": { "status": "admitted", "gate1": true, "gate2": true,
-                "gate3": { "mechanical": { "against": "published-results", "windowSpansWholeRaces": true,
-                                           "attempts": 41, "fields": 164, "match": 164, "mismatch": 0,
-                                           "changedAfterWindow": 0, "changedAfterWindowEqualsWindowEnd": 0,
-                                           "noFinalRow": 0, "report": { "file": "…gate3.json", "sha256": "…" } },
-                           "human": "human-checked-2026-09-16 by <name>" },
-                "evidence": { "gate1": { "stepLogSha256": ["…", "…"], "finalStateSha256": ["…", "…"],
-                                         "candidateSha256": ["…", "…"] },
-                              "gate2": { "checker": "…", "violations": {},
-                                         "exercised": { "P1": 412, "P2": 412, "…": 0 } } } },
+  "admitted": { "status": "admitted", "gate1": true, "gate2": true, "gate3": { "…": "…" },
+                "evidence": { "…": "…" } },
   "asOfSeq": 0,
   "steps": [
     { "kind": "hydration", "observedAt": "2026-09-15T10:13:50.000Z", "asOfSeq": 1040,
@@ -1011,51 +904,41 @@ from the first and changes nothing presented, so it moves nothing.
 directly from a `CONTRACTS.md` clause or an invariant, the same way tier 1's vectors are).
 `source.excerpt` is `<recording>#<chunk>` or `<recording>#<fromMs>-<toMs>` for a time window;
 `source.sha256` is the excerpt's `data.jsonl` checksum, which must not include free text such as a
-label (spike S2-3). Where the replay began before the window (§3.2), `source.input` names the stream
-replayed, `<recording>#<fromMs>-<toMs>` from the recording's first record to the window's end, with
-its own `sha256`; like `events`, prose only until the schema names it.
+label. Where the replay began before the window (§3.2), `source.input` names the stream replayed,
+`<recording>#<fromMs>-<toMs>` from the recording's first record to the window's end, with its own
+`sha256`; like `events` (§3.2), prose only until the schema names it.
 
-**`domainLayerVersion` has two axes** (`DECISIONS/ADR-017` D5). `contract` is the version of the §7/§8
-wire shapes: the server's wire-protocol `VERSION` once the new contract is implemented (it leaves
-today's 2.0.0, since every client renegotiates), and until then a `docs/arch@<commit>` ref.
-`generator` is the c123-server release and commit that produced the deltas. **A `contract` mismatch
-fails, loudly** — a warning would let a stale fixture keep passing, which is the silent-propagation
-failure §3.2's admission gates exist to prevent; a consumer that wants the older fixture re-pins
-deliberately. A `generator` change is not a consumer's concern: it requires re-admission through gates
-1–3 and a new fixture revision (§6). One identifier conflated the two and never moved when the merge
-logic did (spike S2-4).
+**`domainLayerVersion` has two axes** (`DECISIONS/ADR-017` D5). `contract` is the version of the
+§7/§8 wire shapes: the server's wire-protocol `VERSION` once the new contract is implemented (it
+leaves today's 2.0.0, since every client renegotiates), and until then a `docs/arch@<commit>` ref.
+`generator` is the c123-server release and commit that produced the deltas. **A `contract`
+mismatch fails, loudly**: a warning would let a stale fixture keep passing; a consumer that wants
+the older fixture re-pins deliberately. A `generator` change is not a consumer's concern: it
+requires re-admission through gates 1–3 and a new fixture revision (§6).
 
-**The hydration step** holds every §7.1 (or §8.4) GET body of the event at one `asOfSeq`, taken at the
-step that completes the cold-start snapshot read or, for a window inside a longer replay (§3.2), at
-the window's opening step; its `observedAt` is the recorded time of the last
-element those bodies reflect. The file-level `asOfSeq` is the counter when capture began, 0 for a cold
-replay. A delta step's `observedAt` is the recorded `observedAt` of the element that produced it
-(spike S2-1).
+**The hydration step** holds every §7.1 (or §8.4) GET body of the event at one `asOfSeq`, taken at
+the step that completes the cold-start snapshot read or, for a window inside a longer replay
+(§3.2), at the window's opening step; its `observedAt` is the recorded time of the last element
+those bodies reflect. The file-level `asOfSeq` is the counter when capture began, 0 for a cold
+replay. A delta step's `observedAt` is the recorded `observedAt` of the element that produced it.
 
-**`admitted` is what distinguishes a candidate from a golden baseline** (§3.2), and it has a schema
-that enforces it: `schemas/fixture-admitted.schema.json`. The block carries `status`, `candidate` or
+**`admitted` is what distinguishes a candidate from a golden baseline** (§3.2), and its schema
+enforces it: `schemas/fixture-admitted.schema.json`. The block carries `status`, `candidate` or
 `admitted`, and the schema's `if/then` allows `admitted` **only** with `gate1` and `gate2` true,
 `gate3.mechanical.against: "published-results"`, `windowSpansWholeRaces: true`, `mismatch` 0 and
-`gate3.human` matching `human-checked-<date> by <name>`; the `evidence` block carries the two step-log,
-final-state and candidate hashes of gate 1 and the checker's violation counts and, per property, how
-many steps evaluated it (`exercised`; §3.2). The first schema stated
-completeness only in prose, so a block with `gate2: false` and a TODO validated (opponent review R10).
-A candidate is never something a consumer pins to; only an admitted fixture is published to the
-catalogue at all (§6). Gate 2 is never relaxed to admit: a candidate waits for the contract amendment
-and the pipeline is re-run.
-
-**A fixture is a captured, file-based instance of exactly what a real client already has to consume
-live.** No second data model, no translation step between "what a test feeds a client" and "what
-production feeds a client" — the harness in §3.3 is, deliberately, indistinguishable from a real,
-slow subscription as far as the client code under test can tell.
+`gate3.human` matching `human-checked-<date> by <name>`; the `evidence` block carries the two
+step-log, final-state and candidate hashes of gate 1 and the checker's violation counts and, per
+property, how many steps evaluated it (`exercised`; §3.2). A candidate is never something a
+consumer pins to; only an admitted fixture is published (§6). Gate 2 is never relaxed to admit: a
+candidate waits for the contract amendment and the pipeline is re-run.
 
 ---
 
 ## 5. The clock requirement
 
 **Every piece of code that makes a display-lifetime decision — client-side, or the server-side
-time-windowed reads §3.1 now also covers — must read time through an injected clock, never by
-calling `Date.now()`, `setTimeout`, `setInterval`, or `requestAnimationFrame` directly.**
+time-windowed reads of §3.1 — must read time through an injected clock, never by calling
+`Date.now()`, `setTimeout`, `setInterval` or `requestAnimationFrame` directly.**
 
 ```ts
 interface Clock {
@@ -1067,261 +950,164 @@ interface Clock {
 }
 ```
 
-**`requestFrame` was missing from this document's first draft, and the omission was not cosmetic.**
-Checked against real scoreboard code under review: continuous auto-scroll and the re-render driver
-behind highlight/departing timing are `requestAnimationFrame`/`performance.now()`-based, not
-`setTimeout`-based — a `Clock` without a frame method cannot intercept them at all, and the existing
-unit test that appears to cover this only passes because the test runner's fake-timer mode happens to
-patch `requestAnimationFrame` globally, an undocumented dependency this design was silently relying
-on rather than stating. Stated now: any production `Clock` wraps the real `requestAnimationFrame`;
-any test `Clock` advances frames the same deliberate, explicit way it advances timers.
+**`requestFrame` is required:** continuous auto-scroll and the re-render driver behind highlight
+and departing timing are `requestAnimationFrame`/`performance.now()`-based, and a `Clock` without a
+frame method cannot intercept them. Any production `Clock` wraps the real `requestAnimationFrame`;
+any test `Clock` advances frames the same explicit way it advances timers.
 
 **What no `Clock`, real or fake, can reach: browser-compositor animation** — native
-`scrollTo`/`scrollIntoView({behavior:'smooth'})` and CSS `@keyframes` (the highlight pulse). These run
-outside JavaScript's clock entirely once started. Not a gap this design closes: the existing pattern
-(`prefers-reduced-motion` to disable the animation, Playwright to assert the resulting state once it
-settles) is kept as-is for exactly this category, and tier 3's fake-clock harness is not the tool for
-it.
+`scrollTo`/`scrollIntoView({behavior:'smooth'})` and CSS `@keyframes` (the highlight pulse). These
+run outside JavaScript's clock once started. They stay behind `prefers-reduced-motion`, and
+Playwright asserts the resulting state once it settles; tier 3's fake-clock harness is not the tool
+for them.
 
 A thin production implementation wraps the real globals; a thin test implementation is a virtual
-clock a test advances explicitly and deterministically — most of the stack already has one available
-(`c123-live-mini#105` already configures Vitest, which ships fake timers; the other repos'
-equivalents are no heavier to add). This is genuinely new discipline in exactly one place per
-repository — today's timing logic (`SB/context/constants.ts`, `useDeparting.ts`, `useAutoScroll.ts`,
-`useHighlight.ts`, `EventState`'s `HIGHLIGHT_DURATION_MS`/`ONCOURSE_TTL_MS`) almost certainly calls the
-real globals directly, since nothing before this needed it not to — but it is a mechanical,
-narrowly-scoped change per site, not a redesign. `c123-scoreboard#43`'s own account of its "Phase M"
-E2E suite — five failing tests, attributed to "mock-server/timing issues" — is a live example of what
-happens without this discipline: timing asserted against real elapsed time is exactly what produces
-flaky, hard-to-diagnose failures, independent of whether the feature under test is even wrong.
+clock a test advances explicitly and deterministically. In a client the sites are today's timing
+logic — in the scoreboard `context/constants.ts`, `useDeparting.ts`, `useAutoScroll.ts` and
+`useHighlight.ts` — each a mechanical, narrowly scoped change. In c123-server the XML reader and the
+on-site process already read time through the `Clock`.
 
 **When it is done (maintainer decision, c123-server#167): during each client's migration to this
 contract, not retrofitted to today's code.** The sites that most need it are the on-course reducer,
-the run-2 merger and the on-course penalty cache. Once the server interprets upstream, these are
+the run-2 merger and the on-course penalty cache; once the server interprets upstream, these are
 rewritten or deleted, so a retrofit would be thrown away. The rule is part of every client
 migration's definition of done:
 - every display-lifetime rule reads time through the `Clock`;
 - every such rule is also re-evaluated on a clock tick, and **takes effect no later than one tick
   period after its deadline**; the client states its tick period with its policy (§3.3), a period
-  above 1 s with a stated reason, and its tier-3 tests assert at deadline + that period (spike S3-1:
-  without a stated period a test cannot pick its instant, and a correct periodic client fails at
+  above 1 s with a stated reason, and its tier-3 tests assert at deadline + that period (without a
+  stated period a test cannot pick its instant, and a correct periodic client fails at
   deadline + 1 ms);
 - every such rule has a tier-3 test that advances a fake `Clock`.
 
 The fake `Clock` is not a global fake-timer patch.
 
-**On the server side, the same interface, the same discipline, a different reason: `§3.1`'s
-time-windowed reads (the live-ingest calendar's `status`) need "now" to be injectable for exactly the
-same reason a client's grace period does** — not because server-side code has a rendering loop, but
-because a test asserting "just under the 5-minute window" versus "just over it" cannot wait 5 real
-minutes, or 5 real minutes minus one millisecond, without the suite becoming unusable. `live-mini-
-server`'s calendar computation depends on this `Clock`, not on `Date.now()`, for the same reason
-`c123-scoreboard`'s eviction logic does — one requirement, stated once, applied on both sides of the
-boundary this document draws.
+**On the server side, the same interface and the same discipline:** §3.1's time-windowed reads (the
+live-ingest calendar's `status`) need "now" to be injectable, because a test of "just under the
+5-minute window" against "just over it" cannot wait 5 real minutes. `live-mini-server`'s calendar
+computation depends on this `Clock`, not on `Date.now()`.
 
 ---
 
 ## 6. Ownership and distribution
 
-**`c123-protocol-docs` owns fixture generation and the canonical store** — it already holds this role
-for recordings, and nothing about fixtures changes the shape of the job, only what gets stored.
-`recordings-cli.js`'s existing mechanism (`push <event> --release <tag>`, a git-tracked catalog
-separate from a gitignored local cache, `fetch`/`list`/`path` for consumers) is reused as-is for
-domain-state fixtures, catalogued alongside recordings rather than as a new system.
-
-**Each consuming repository pulls a specific, pinned fixture set — never a floating "latest."** A
-committed reference (a lockfile-shaped entry naming fixture id and version) is a deliberate,
-single-repo, single-line change to advance — exactly the relationship `@opencanoetiming/timing-design-
-system` already has with every repo that consumes it (`c123-server/CLAUDE.md`'s own Design System
-section), a precedent already proven in this ecosystem, not a new one being invented. **This is what
-keeps a shared fixture from becoming a five-repository coordination burden for one maintainer**: one
-place generates, four places pull on their own schedule, and a fixture regenerated after a
-`domainLayerVersion` bump does not retroactively break anyone until they choose to re-pin.
-
-`c123-server` is the only repository that *generates* new domain-state fixtures, being the sole
-on-site domain-layer implementation — but the artifact it produces is published outward, not kept as
-a private baseline the way the current spec proposes. That is the entire fix to §1's duplication: one
-authorial location, many pinned consumers, instead of four repositories each owning its own answer to
-the same question. Only an *admitted* fixture (§3.2's three gates) is ever published this way — a
-candidate that fails admission is never a coordination question for anyone downstream.
-
-A fixture has three identities, and the catalogue key carries all of them:
-`<fixtureId>@<contract>+<generator>` — the scenario, the wire shapes it conforms to, and the release
-that generated it (§4; `DECISIONS/ADR-017` D5). Fixtures are published gzipped (the spike's first was
-181 MB raw, 14.8 MB gzipped, and about 10 MB raw once standings stopped re-sending on every tick).
+**Not built** (c123-protocol-docs#16). What it is for: `c123-protocol-docs` stores admitted
+domain-state fixtures beside the recordings, through `recordings-cli.js`'s catalogue
+(`push <event> --release <tag>`, `fetch`/`list`/`path`), and `c123-server`, the only on-site domain
+layer, is the only repository that generates them. **Each consuming repository pulls a specific,
+pinned fixture set — never a floating "latest"** — through a committed reference naming fixture id
+and version, advanced deliberately, as with `@opencanoetiming/timing-design-system`. A fixture has
+three identities, and the catalogue key carries them: `<fixtureId>@<contract>+<generator>` (§4;
+`DECISIONS/ADR-017` D5). Fixtures are published gzipped, and only admitted ones (§3.2).
 
 ---
 
 ## 7. Diagnosing disagreement between two components
 
-**Answered directly, since it was the original point of the whole engagement:** each tier's input is
-the *previous* tier's already-verified output, so the tier at which a test first fails names the
-component at fault.
+Each tier's input is the previous tier's already-checked output, so the tier at which a test first
+fails names the component at fault.
 
-- Tier 1 fails → the merge rule itself, in whichever implementation failed it (`c123-server` or
-  `live-mini-server`) — wrong before a single recording is even involved. Symmetric only for the 17
-  vectors both run (`CONFORMANCE-VECTORS.md` §1), where the other implementation is a comparison; a
-  failure in a vector only one of them runs names that implementation alone.
-- A candidate domain-state fixture fails **gate 1** (§3.2, determinism) → `c123-server` specifically,
-  unambiguously — a non-determinism bug, not a wrong-answer one.
-- Gate 1 passes, **gate 2** (invariant conformance) fails → `c123-server` again, unambiguously — its
-  own output violates `CONTRACTS.md` §4's structure, checkable without reference to anything else.
-- Gate 2 passes, **gate 3** (cross-checked against tier 1 / the human numeric check) disagrees → **not
-  automatically attributable.** Either the candidate is wrong, or the tier-1 vector it's checked
-  against didn't cover this shape correctly, or the human's expectation was wrong. Adjudicated against
-  `CONTRACTS.md` prose directly — this is the one point in the whole pipeline where a person reads the
-  contract and decides, because it is the one point where the contract meets a real recording for the
-  first time. Once resolved, the fixture is admitted and this ambiguity does not recur for it.
-- **Only after admission**, a `live-mini-server` tier-2 cross-check against that fixture fails →
-  `live-mini-server`, unambiguously — `c123-server`'s correctness for this exact fixture was already
-  established at gates 1–3, so the asymmetry inherent in "one generates, one is checked against it"
-  (§3.2) stops being a problem once the generated side has independent backing.
-- An **already-admitted** fixture's regression check fails against its stored baseline → whichever
-  implementation changed since admission, investigated the same way gate 3 was resolved the first
-  time — this is what a code change breaking previously-verified behaviour looks like.
-- Tier 2 (admitted) passes for the fixture in question, a client's tier 3 fails → that client,
-  unambiguously — it received the correct domain state and rendered it wrong.
-- **All relevant tiers pass, and two deployed clients still visibly disagree:** this is the case tier
-  4 exists for, and it splits two ways. First, check whether both clients are pinned to the *same*
-  fixture/`domainLayerVersion` generation (§6) — a stale pin reproducing an already-fixed disagreement
-  is not a new bug, it is an unadvanced pin. Second, if pins match and both pass their own suites yet
-  still disagree live, the live case is not covered by any fixture yet — which is itself the finding,
-  and the fix is to capture it as a new tier-2 fixture, not to patch the symptom in one client.
-- **Two clients disagree on a presentation-layer fact — how long a finisher stays pinned, when a
-  highlight fades.** Per `ARCHITECTURE.md` §2, this is not automatically a bug at all. The question a
-  test can answer is narrower and still decisive: does each client match *its own* stated policy
-  (§3.3)? If both do, the disagreement is a legitimate, designed difference in audience, not a defect
-  — and a test suite that tried to force agreement here would be re-introducing exactly the single-
-  answer assumption `ARCHITECTURE.md` §2 argued against.
+- Tier 1 fails → the merge rule in whichever implementation failed it (`c123-server` or
+  `live-mini-server`). Symmetric only for the 18 vectors both run (`CONFORMANCE-VECTORS.md` §1),
+  where the other implementation is a comparison; a failure in a vector only one of them runs names
+  that implementation alone.
+- Gate 1 fails → `c123-server`: a non-determinism bug, not a wrong-answer one.
+- Gate 1 passes and gate 2 fails → `c123-server`'s output violates `CONTRACTS.md` §4's structure,
+  checkable without reference to anything else; the verdict is assigned as §3.2 says.
+- Gate 2 passes and gate 3 disagrees → **not automatically attributable**: the core, the
+  comparison or upstream's own data may be wrong; a person adjudicates it against `CONTRACTS.md`
+  prose.
+- A client's tier 3 fails on correct domain states → that client: it received the correct state
+  and rendered it wrong.
+- With admitted fixtures (not built, §3.2): a `live-mini-server` cross-check failure names
+  `live-mini-server`; an admitted fixture's regression failure names whichever implementation
+  changed since admission.
+- **All relevant tiers pass, and two deployed clients still visibly disagree:** first check that
+  both are on the same contract version (§4); a stale one reproducing an already-fixed disagreement
+  is not a new bug. If they match, the live case is covered by no test yet — that is the finding,
+  and the fix is a new test of it, not a patch of the symptom in one client.
+- **Two clients disagree on a presentation-layer fact** — how long a finisher stays pinned, when a
+  highlight fades. Per `ARCHITECTURE.md` §2 this is not automatically a bug. The test question is
+  whether each client matches *its own* stated policy (§3.3); if both do, the disagreement is a
+  designed difference in audience.
 
 ---
 
 ## 8. What is deliberately not tested
 
-- **Ground-truth validation against official result sheets.** Confirmed against the existing spec's
-  own stated non-goal (line ~20) and kept: whether a fixture's numbers match what officials actually
-  published is a one-time human judgement at fixture-authoring time (§4's `source.kind: "recording"`
-  provenance is what that judgement is checked against), not an automated, repeated assertion —
-  domain expertise about a specific real race is exactly the kind of question this engagement has
-  routed to the maintainer throughout, not something a test can adjudicate.
-- **Nightly or full-recording runs.** Excerpts exist precisely so CI never needs a 3.6 GB recording;
-  a full-recording pass, if ever wanted, is an operational decision for whoever runs CI, not a
-  contract requirement.
-- **Cross-client visual/pixel-identical comparison.** §7's last point is the reason: two clients are
-  not required to look alike, only to each satisfy their own stated policy.
+- **Ground-truth validation against official result sheets, as a repeated assertion.** Whether a
+  fixture's numbers match what officials published is a one-time human judgement at admission
+  (§3.2, gate 3), not an automated, repeated assertion.
+- **Whole recordings in CI.** CI replays no recording; `npm run gates` does, on demand and on the
+  maintainers' runner (§3.2), and whether CI runs it is c123-server#324.
+- **Cross-client visual or pixel-identical comparison.** Two clients are not required to look
+  alike, only each to satisfy its own stated policy (§7).
 - **Visual regression within one client, as a tier.** Screenshot suites, such as today's Playwright
   suites in `c123-scoreboard` and `c123-penalty-check`, stay with each client as its own discipline.
   They sit outside the four tiers, which neither adopt nor retire them (maintainer decision,
   c123-server#170). Tier 3 asserts behaviour on the DOM or view-model; appearance is the client's.
-- **`c123-xml-tools` and `timing-design-system`.** Out of scope here exactly as they were out of scope
-  for the architecture itself (`CONSTRAINTS.md` §1.6) — context, not subjects.
+- **`c123-xml-tools` and `timing-design-system`.** Out of scope, as for the architecture
+  (`CONSTRAINTS.md` §1.6).
 - **Capacity under load, as a tier.** The spike measured it once (`DECISIONS/ADR-017`): a live push
   peak of 12.2 pushes/s coalesced, and a finish re-ranking every slower placed row so that
   placement-only pushes are 78–94 % of Results-row pushes (~160 B each). Any later estimate starts
   from those figures, not from "one or two rows per finish"; the §8.3 store's own margin is M3's to
   measure.
-- **A migration plan for existing tests.** This document states the target shape; deciding which of
-  today's tests move first, get deleted, or run alongside the new tiers during a transition is
-  sequencing, explicitly out of scope for this engagement throughout (`CONSTRAINTS.md` §4).
+- **A migration plan for existing tests.** Which of today's tests move first, get deleted or run
+  alongside the tiers is sequencing, out of scope here (`CONSTRAINTS.md` §4).
 
 ---
 
 ## 9. What survives, what's obsoleted, what needs rework
 
-Reached by designing from `CONTRACTS.md`/`ARCHITECTURE.md` first, then checked against what actually
-exists (`c123-protocol-docs/docs/specs/2026-05-13-qa-layer-design.md`, `docs/plans/2026-05-13-qa-
-layer-implementation.md`, and the five named tools) — not the other way round.
+**Exists and is used:**
+- `player.js`, with its Control API: drives tier 4 and the dev environment. Only its TCP and XML
+  emulation matter; CIS is not consumed (`DECISIONS/ADR-011`), so its CIS emulator's two known
+  bugs block nothing.
+- `scripts/replay-direct.ts`, the gate-2 checker, the gate-3 comparator and `npm run gates` (§3.2);
+  the tier-1 adapter (§3.1); the store tests (§3.5); the on-site process against the player (§3.4).
+- `extract-excerpt.js`, for excerpts (`manifest.json`, `excerpt.json`, `data.jsonl`), and
+  `recordings-cli.js`, for recordings.
 
-**Survives, and becomes more central, not less:**
-- `player.js` — the full v3-format emulator with its Control API is exactly what tier 2's new
-  capture tool drives, and exactly what a realistic tier-4 smoke test needs. Its CIS emulation is
-  no longer needed at all (`DECISIONS/ADR-011`). Only the TCP and XML emulation matter.
-- `extract-excerpt.js` — produces the "ingest fixture" §3.2 needs, with two reworks found by the
-  spike: it writes `_meta.startTime` as an epoch offset (`1970-01-01T…`), so an absolute start needs the
-  source manifest, and it writes the free-text label into the checksummed line, so one window has one
-  checksum per label (S1-9, S2-3). Both are M2 items; the layout (`manifest.json`, `excerpt.json`,
-  `data.jsonl`) is settled.
-- `recorder.js` — writes TCP connection changes only to the console (S1-9); it must write them as
-  records, because INV-2 rule 2 and INV-7's guard are decided by them (M2).
-- `recordings-cli.js` — its push/fetch/catalog mechanism is reused as-is for fixture distribution
-  (§6), not replaced.
-- The tier-3 harness as a `DataProvider`/delta-handler driver per client — built once in the spike
-  (S3): 249 infrastructure + 94 test lines, every assertion without touching `src/`, one clock; the
-  mock-WS port it replaces (`c123-live-mini#105`) is retired.
-- The seven named scenarios from the unbuilt `qa/README.md` — a reasonable starting catalogue for
-  tier 2's fixtures, kept for their selection rationale even though the surrounding per-project
-  verification-matrix concept they were designed for does not survive.
+**Inputs the recordings lack.** The recordings hold no connection records: `recorder.js` writes TCP
+connection changes only to the console, and must write them as records, since INV-2 rule 2 and
+INV-7's guard are decided by them. A replay therefore states one `tcp-connected` at the first TCP
+record unless `--events` or the recording states its own (§3.2), and rule 2's outage path is tested
+on recordings only through a stated outage. No recording holds a re-baseline; one is stated the
+same way.
 
 **Obsoleted:**
-- The **per-project verification matrix** and the explicit "baselines live in each project's repo"
-  policy (spec lines 121–143) — the exact pattern this document replaces with one authorial location
-  and pinned consumption (§6).
-- Each repository's own bespoke mock-WebSocket/fixture-loader pattern, and the plan (visible in
-  `c123-live-mini#105`'s reuse table) to hand-port `c123-penalty-check`'s mock server into
-  `c123-live-mini` — superseded by the shared fixture format (§4) feeding tier 3's harness directly;
-  there is nothing left to port.
-- `replay-server.js` — already marked deprecated in its own repository's documentation
-  (`recordings/README.md`: "legacy... use Player v3 instead"), consistent with this design's exclusive
-  reliance on `player.js`. Confirming an existing decision, not making a new one.
+- The per-project verification matrix and the "baselines live in each project's repo" policy of the
+  earlier QA-layer spec: one authorial location replaces them (§6).
+- Each repository's own mock-WebSocket server and fixture loader, and the plan to port
+  `c123-penalty-check`'s mock server into `c123-live-mini`: tier 3's harness on the shared format
+  (§3.3, §4) replaces them, and nothing is left to port.
+- `replay-server.js`, deprecated in favour of `player.js`.
+- The QA-layer spec and plan themselves: superseded, not amended.
 
 **Needs rework, or does not yet exist:**
-- **The capture tool** (§3.2) — a projection of the direct-injection replay onto §4, plus the
-  admission step. The spike's 413-line pipeline (S2) is the prototype to rewrite in M2, not to keep.
-- **The direct-injection ingest-boundary replay path** (§3.2 gates 1/2, and the regression check) —
-  omitted from this list in the first draft, an oversight, not a judgement that it's unneeded: gates 1
-  and 2 specifically require feeding captured raw messages into `c123-server`'s ingest boundary
-  directly, bypassing the player and the network. Checked under review, not assumed: `c123-server`'s
-  own `parseXmlMessage`/`EventState.processMessage` are already free of transport I/O, so this is cheap
-  to build, not a design risk — but it does not exist yet either, and belongs on this list.
-- **`test-utils.js`** — its three functions (`findFreePort`, `startPlayer`, `waitForTcpData`) are
-  narrowly scoped to standing up a player instance and reading raw pipe-delimited TCP off it; nothing
-  in it addresses WS output capture, fixture loading, or clock control. Plausibly extended rather than
-  replaced, but the two capabilities this design actually needs from a shared utility layer —
-  capturing a domain-state fixture, and loading one into a tier-3 harness — are not there today.
-- ~~**`player.js`'s `CisEmulator` has two real bugs**~~ and ~~**INV-2b's live re-query has no test
-  path**~~. Both are **moot since the consolidated revision.** CIS is not consumed
-  (`DECISIONS/ADR-011`), and INV-2b no longer re-queries: it only surfaces a diagnostic, which tier 1
-  covers. The two emulator bugs remain real in the tool, but they block nothing this design needs.
-- **Write-echo emulation** — `player.js` explicitly does not emulate the write-side channels
-  (`tools/player.js:904`). Tier 1 covers the merge-rule half of write handling without it; a
-  realistic tier-4 round trip does not exist until this is built, and is recorded here as a gap
-  rather than assumed solved.
-- **The QA-layer spec and plan documents themselves** — encode the per-project premise §1 and this
-  section both name as obsolete. Superseding them, not amending them, is the honest description; they
-  are not wrong about the tools, only about the shape the tools should serve.
+- Capture and admission tooling (c123-protocol-docs#15; the human half of gate 3, c123-server#336),
+  the fixture catalogue with two-axis versioning in `recordings-cli.js` (c123-protocol-docs#16) and
+  synthetic fixtures (c123-protocol-docs#20): parked, "Hardening (after Jarní slalom)".
+- Write-echo emulation in `player.js` (c123-protocol-docs#19).
+- `extract-excerpt.js` writing an absolute start time instead of an epoch offset, and keeping the
+  free-text label out of the checksum (c123-protocol-docs#18).
+- The gates in CI (c123-server#324).
+- `live-mini-server`'s tier-1 runner and calendar vectors (§3.1), and each client's tier-3 harness
+  (§3.3; c123-scoreboard#151), in their migrations.
+- `test-utils.js` stands up a player and reads raw TCP off it; loading domain states into a tier-3
+  harness is not there.
 
 ---
 
 ## 10. Left open
 
-- ~~**The exact vector count and coverage for tier 1.**~~ **Resolved.** 35 vectors were written, then 84 after the consolidated revision; the estimate did undercount, as the review suspected. Coverage map and the gaps that remain are in `CONFORMANCE-VECTORS.md` §2–§3. Original text follows for the record.
-- **The exact vector count and coverage for tier 1.** §3.1 gives a target range (~25–30) and method,
-  not the vectors themselves — writing them is implementation, test-first, the same relationship
-  `CONTRACTS.md` has to the server code it precedes. Raised directly under review: the §4 ranking
-  table alone has four rows, each with a no-CIS variant, plus the tie-break and no-result cases from
-  §5 — whether 25–30 actually covers that combinatorially, or was an estimate that undercounts it, is
-  not resolved here and shouldn't be guessed at; the real count is whatever writing them honestly
-  produces.
-- ~~**Whether `recordings-cli.js`'s existing versioning is sufficient for what a domain-state fixture
-  needs.**~~ **Resolved (§4, §6; `DECISIONS/ADR-017` D5):** three identities, catalogue key
-  `<fixtureId>@<contract>+<generator>`; `recordings-cli.js` needs that key and gzip, an M2 item.
-- ~~**Whether re-implementing tier 3's harness driver in three client repos is actually cheaper than
-  the mock-WS porting it replaces.**~~ **Answered by building one (spike S3):** 249 + 94 lines, about
-  200 of them scoreboard-specific, against an estimated 165–190 lines plus a browser, a `src/` hook
-  and two clocks for the mock-WS port. The cost is relocated rather than removed, in a deterministic
-  form that can assert everything the port could not; the challenge was fair and the inversion holds.
-- ~~**INV-2b's fixture-format extension.**~~ Moot: INV-2b no longer triggers a query
-  (`DECISIONS/ADR-011`).
-- ~~**TCP connection events in fixtures.**~~ **Verified absent (spike S1-9):** the recorder logs them
-  to the console only. Until it writes them as records (M2, §9), a replay connects before the first
-  TCP message and infers nothing; rule 2's outage path is then untested on recordings.
-- **Re-baseline events in fixtures.** The operator re-baseline (`CONTRACTS.md` §4) is an event in the
-  ingest sequence. A tier-2 fixture that reproduces a recorded correction incident needs a way to
-  place one; the tier-1 `rebaseline` event is the shape. No recording contains one, because the
-  action does not exist yet.
-- Which test runner/framework each repository uses for tier 3 is that repository's own choice; this
-  document requires the clock-injection discipline (§5) and the fixture format (§4), not a specific
-  library.
-- ~~Whether `domainLayerVersion` mismatches between a fixture and a consumer should fail loudly or
-  warn.~~ **Resolved (§4): fail.**
-- CI wiring, schedule, and enforcement generally — deliberately out of scope, per `CONSTRAINTS.md` §4.
+- Which test runner each repository uses for tier 3 is its own choice; this document requires the
+  clock-injection discipline (§5) and the format (§4), not a library.
+- CI wiring and schedule of the gates: c123-server#324.
+- **Answered:** `recordings-cli.js`'s versioning needs the second axis: a fixture has three
+  identities, catalogue key `<fixtureId>@<contract>+<generator>`, with gzip (§4, §6; not built,
+  c123-protocol-docs#16).
+- **Answered:** re-implementing the tier-3 harness driver per client relocates the cost of the
+  mock-server port rather than removing it, in a deterministic form that can assert what the port
+  could not; the spike's driver took 249 infrastructure and 94 test lines.

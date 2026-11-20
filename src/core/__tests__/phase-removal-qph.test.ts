@@ -269,6 +269,7 @@ describe('#382 row 6: an empty schedule removes nothing and raises xml-schedule-
     c.applyUnit(w.read(170, 140, []));
     // A is admitted (no tcp observation of it), B is not: the count is the Phases that WOULD have been removed, the guard applied
     const raised = drain(c).filter((d) => d['kind'] === 'xml-schedule-emptied');
+    expect(raised, 'raised once: the null-age statement raises none, the admitted one raises one').toHaveLength(1);
     expect(raised.every((d) => d['count'] === 1), 'only A would have gone, B is held by the guard').toBe(true);
     const fresh = world();
     const c2: any = coreWith([]);

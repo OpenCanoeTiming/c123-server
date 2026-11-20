@@ -21,7 +21,8 @@ that hold for it, and its legal state transitions where relevant.
 - §1 defines vocabulary used everywhere else. Read it first.
 - §2–§6 are the domain model that both wire contracts are built from.
 - §7 is the on-site wire contract; §8 is the live wire contract.
-- §6 is the list of what today's sources cannot supply.
+- §6 points to the ledger of what today's sources can and cannot supply (`DERIVATIONS.md` §11.17)
+  and says how a deployment sees which sources it has.
 - §9 holds the defaults for situations no recording shows.
 - `DERIVATIONS.md` says how each value here is produced from upstream fields. Its §9 lists every
   upstream field deliberately *not* modelled, with the reason.
@@ -31,7 +32,7 @@ Derivability tags, used throughout:
 - **[D]** Derivable. Stated with its source.
 - **[A]** Derivable only approximately. The approximation is part of the value's own semantics and is
   carried in its envelope, never a silent implementation guess.
-- **[N]** Not derivable from any source available today. Collected in §6.
+- **[N]** Not derivable from any source available today. Collected in the ledger §6 points to.
 
 **Sources.** Canoe123 is read through exactly two interfaces:
 - the **TCP push** (`tcp`), which carries on-course state and event-driven result pushes;
@@ -623,7 +624,7 @@ type Entry = {
   - A team or patrol has its members resolved from upstream's member references against the
     participant records. The references are ids in the snapshot, and are never parsed.
   - A team's own registry number is synthetic, references no registry, and is not carried.
-- **External identity, per person** (`DECISIONS/ADR-006`, Revisions 1–3).
+- **External identity, per person** (`DECISIONS/ADR-006`).
   - It is read from the participant record's own registry-number elements, never from inside `Id`.
     `Id` is frozen at registration and can disagree with who is actually in the boat.
   - It is always qualified by `scheme`, because the same element holds different registries at
@@ -1312,9 +1313,9 @@ implementation must satisfy, not an algorithm.
 - **INV-1 (monotonic knowledge against omission, per run generation).** A field's `state` never
   regresses from `known` to `not-yet` or `unavailable` because a message **omits** it. Omission is:
   a non-snapshot message that does not mention the field, a source that is missing or disconnected,
-  or a scope snapshot of *another* race. Merge is per field, never whole-object. Two things are not
-  omission and do retract, explicitly and pushed: a scope snapshot's stated absence (INV-7) and a
-  new run generation (`DECISIONS/ADR-013`).
+  or a scope snapshot (defined in DERIVATIONS section 11.11) of *another* race. Merge is per field,
+  never whole-object. Two things are not omission and do retract, explicitly and pushed: a scope
+  snapshot's stated absence (INV-7) and a new run generation (`DECISIONS/ADR-013`).
 - **INV-2 (precedence).** The domain layer retains the latest observation *per source* for each field.
   The presented value is chosen as follows:
   *Server procedure for rules 1 to 3: `DERIVATIONS.md` §11.12.*

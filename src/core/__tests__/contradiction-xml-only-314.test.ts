@@ -43,34 +43,10 @@ function run() {
 const toLift = (s: ReturnType<typeof run>['steps']) => { s.xmlPre(); s.atStart(); s.started(); s.falseRow(T('09:37:48.972')); s.falseFinish(); s.contradiction(); };
 
 describe('row 2: countingRun across a contradiction and the lift (CONTRACTS §4 INV-2 rule 3, INV-2d, INV-7; nkz-19so K1M_BR2_19:67)', () => {
-  it('vector contradiction-leaves-no-tcp-marker-on-xml-only-field: the XML run-2 row presents countingRun 1 from xml, not provisional', () => {
-    const { c, steps } = run(); steps.xmlPre();
-    expect(field(c, A, 'countingRun')).toMatchObject({ state: 'known', value: 1, source: 'xml', provisional: false });
-  });
-
-  it('vector contradiction-leaves-no-tcp-marker-on-xml-only-field: the first listing carries countingRun provisional (CONTRACTS §1.2); the false TCP row does not restate it', () => {
-    const { c, steps } = run(); steps.xmlPre(); steps.atStart(); steps.started();
-    expect(field(c, A, 'countingRun')).toMatchObject({ state: 'known', value: 1, source: 'xml', provisional: true });
-    steps.falseRow(T('09:37:48.972'));
-    expect(field(c, A, 'countingRun'), 'a tcp row has no countingRun column (INV-7)').toMatchObject({ state: 'known', value: 1, source: 'xml', provisional: true });
-  });
-
-  it('vector contradiction-leaves-no-tcp-marker-on-xml-only-field: the contradiction takes countingRun, placement, pairTotal to not-yet and raises contradicted-finish', () => {
-    const { c, steps } = run(); toLift(steps);
-    for (const f of ['countingRun', 'placement', 'pairTotal']) expect(field(c, A, f), f).toEqual({ state: 'not-yet' });
-    expect(field(c, A, 'status')).toMatchObject({ state: 'known', value: 'on-course' });
-    expect(c.diagnostics()).toContainEqual(expect.objectContaining({ kind: 'contradicted-finish', attemptId: A, finishTime: FALSE_FINISH, runSeconds: 9.16 }));
-  });
-
   it('INV-2d bullet 3: the XML row carrying the contradicted finish (BetterRunNr 2) stays unpresented whole; countingRun stays not-yet, not 2, and the diagnostic stands', () => {
     const { c, steps } = run(); toLift(steps); steps.xmlFalse();
     expect(field(c, A, 'countingRun')).toEqual({ state: 'not-yet' });
     expect(diagnosticKinds(c)).toContain('contradicted-finish');
-  });
-
-  it('vector contradiction-leaves-no-tcp-marker-on-xml-only-field: the re-pushed false TCP row leaves countingRun not-yet', () => {
-    const { c, steps } = run(); toLift(steps); steps.xmlFalse(); steps.falseRow(T('09:39:05.373'));
-    expect(field(c, A, 'countingRun')).toEqual({ state: 'not-yet' });
   });
 
   it('INV-2d bullet 4 + INV-7 (countingRun outside a TCP row): the real TCP row lifts the contradiction, placement/pairTotal return from it, countingRun stays not-yet', () => {
