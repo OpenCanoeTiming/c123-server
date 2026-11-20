@@ -5,68 +5,12 @@ before any server code exists. They are also the outside authority that Tier 2's
 checks a captured fixture against. The data lives in `vectors/tier1-conformance.json`. It is
 hand-authored, with no shared runtime code (`DECISIONS/ADR-002`/`ADR-003`).
 
-**Consolidated revision, 2026-09-24.** Rebuilt against the consolidated contract.
-- **Retired:** every vector that exercised CIS. CIS is not consumed (`DECISIONS/ADR-011`).
-- **Rewritten:** the ranking-table rows became vectors for INV-2's rules. The mechanical tie-break
-  vectors became standing-assembly vectors (`DECISIONS/ADR-012`).
-- **New coverage:**
-  - reconnection after a TCP outage (R52);
-  - provisional marking in both upstream modes;
-  - re-run generations;
-  - age-category assembly;
-  - second-run marks;
-  - left the course without a finish;
-  - result marks set on upstream's silent paths;
-  - cell-wise gate merging for a second run's own penalty;
-  - under review;
-  - Cross placement.
-
-**Revision round 2** (`DECISIONS/ADR-015`) added 15 vectors for retraction, contradiction, marks over
-time, half-corrections, the re-baseline and the live tier's explicit reset.
-
-**Round 3** (`DECISIONS/ADR-016`, #168) added 5 workflow-state vectors for gate checks: only the
-contract-level rules. Durability and the flag lifecycle are ordinary store tests in `c123-server`
-(`TEST-ARCHITECTURE.md` §3.5), not vectors.
-
-**Round 4** added 3: the on-course set and its push, and two live-tier vectors (bare values wrapped,
-Attempt deletion).
-
-**Gap 21** added 2 live on-course vectors.
-
-**Gap 22** added 1: a confirmed write later changed upstream stays confirmed. **Round 6** added 1: a
-classification pushed to the live tier.
-
-**Round 7** added 1: an untimed placed row.
-
-**Round 8** (2026-10-14) rewrote the two INV-2c vectors — content age across sources, and a same-source
-earlier finish superseding — and added 1: a finisher stays in the on-course set until closure.
-
-**Round 12** (2026-10-15, `DECISIONS/ADR-017` Revision 4) removed every input finish time from TCP rows
-(14 vectors), reshaped `rerun-stale-mark-not-presented` to the usual arrival order, fixed an
-out-of-range `afterGivenIndex`, and gave `inv2-rule3-single-source-field` a second field.
-
-**Round 9** (2026-10-14, `DECISIONS/ADR-017`) fixed `rerun-stale-mark-not-presented` (its `then` mark is
-presented), dropped `finishTime` from TCP snapshot rows, gave every merge vector a `context.attemptId`,
-and added 8: TCP attribution by run time (with the result push arriving before the on-course finish,
-as recorded), the INV-2d lift, placement only when ranked, no standing re-send on a running tick, pair
-fields provisional while run 2 runs, `status` never provisional, an Attempt unstaged before its start,
-and a first-run row wiped in place (the recorded jury re-run).
-
 **121 vectors:** 107 merge vectors, 9 standing-assembly vectors and 5 workflow-state vectors. The number is what the coverage
 needed, not a target. **c123-server runs 115 of them, live-mini-server 24** (§1, "Which vectors each
 component runs"); 18 run in both suites.
 
-**Since then** the file has changed with the contract rounds from 14 on and with #314; the former
-decision log, in git under the tag `contract-archive-2026-11`, says what each ruled and which
-vectors it added or reshaped. No round changed what an existing vector asserts except where that
-log says so. Round C part 2 changed one:
-`inv2c-first-read-unknown-age-refused`, in its last step, by the maintainer's decision that an
-absent XML row retracts. It also added four vectors for that rule (§2, "Expected red"). Round C
-part 4 changed `standing-age-category-assembled` by the maintainer's category-rank decision of
-2026-11-12 and added one vector for the category's unplaced entries; it changed the four
-absent-row vectors by the removal decision of the same day (the Attempt is removed) and added
-two. §1 states the format as it
-stands and §2 lists every vector.
+§1 states the format and §2 lists every vector. How the set grew, round by round, is in git under
+the tag `contract-archive-2026-11`.
 
 ---
 
@@ -400,70 +344,16 @@ check, readable under its own `run`) is not asserted.
 | Phase status transition | `phasestatus-official-to-revised-skips-unofficial` | 1 |
 | Standing assembly (§5) | relayed order and single-run tie; combined tie with no anomaly; unplaced entries; age-category assembly; age-category unplaced entries; category-rank disagreement; order disagreement; Cross never checked; behind and flags | 9 |
 
-**Expected red.** Two vectors assert a rule the server's core does not implement yet: a category
-standing numbers as Canoe123 prints and lists its unplaced entries (`CONTRACTS.md` §5 step 4;
-maintainer, 2026-11-12). They are listed in the expected-red ledger
-(`src/__tests__/conformance/expected-red.json`; a listed id runs as an expected failure, and
-`VECTORS_STRICT=1` shows it red).
-- `standing-age-category-assembled`, an existing vector whose expected outcome changed (round C
-  part 4): entries C and D share class rank 3 and are the category's second and third placed
-  entries, so D's category rank is 3, not the shared 2.
-- `standing-age-category-unplaced-listed-after`, new (round C part 4): the category's `dns` and
-  `dnf` entries follow its placed one with `rank: null` and `order: null`, in step 3's order; the
-  other category's entries are not listed.
+**Expected red.** The ledger `src/__tests__/conformance/expected-red.json` is empty: the server's
+core passes all 115 vectors it runs. An entry would be the id of a vector that asserts a rule the
+core does not implement yet, landed before the code that passes it (test-first). A listed id runs
+as an expected failure (`it.fails`): it reads green while it fails and red once it passes, which
+forces its removal from the ledger; `VECTORS_STRICT=1` ignores the ledger, so a listed vector
+shows red.
 
-Five vectors on an absent XML row removing the Attempt (`CONTRACTS.md` §4 INV-7; maintainer,
-2026-11-11 and 2026-11-12) left the ledger with the core change (#365, PR #370, merged c5d8417):
-- `inv2c-first-read-unknown-age-refused`. Its last snapshot lists bibs 9 and 10 and not bib 11,
-  which holds a TCP result older than the snapshot's content age: bib 11's Attempt is removed,
-  one `attempt.deleted`.
-- `retraction-xml-absent-row`: a TCP result, then an XML snapshot that lists another row and has
-  a later content age. The Attempt is removed: one `attempt.deleted`, no `attempt.updated` for
-  it.
-- `retraction-xml-absent-row-guard`: the same with a content age not later than the push.
-  Nothing moves. The next rewrite removes the Attempt.
-- `retraction-xml-absent-row-then-returns`: after the removal a later snapshot carries the row
-  with a result again. A new Attempt is created, presented from `xml`, `run` 1.
-- `attempt-removed-xml-absent-start-list-row` (round C part 4): an Attempt known only from
-  a start-list row is removed when a later snapshot lacks its row.
-
-Two more vectors of these rules were never on the ledger:
-`retraction-xml-empty-table-retracts-nothing`, a TCP result and then an XML snapshot with
-`mode: 'start-list'` and `rows: []` and a later content age: nothing is retracted or removed and
-nothing is sent (the `xml-table-emptied` diagnostic goes to the admin log, which no vector
-reads); and `attempt-removed-not-while-on-course` (round C part 4), an Attempt in the on-course
-set that a later snapshot lacks: it stays, and no `attempt.deleted` is sent.
-
-Three vectors of the maintainer's Kayak Cross time-trial decision (2026-11-16: a time-trial leave
-is slalom's) are on the ledger until the core change of M2 P3c (`src/core/oncourse.ts`):
-- `cross-time-trial-left-without-finish`: a started time-trial athlete leaves with no finish and
-  is `left-without-finish`, `outcome` `not-yet` (today's core keeps `on-course`).
-- `cross-time-trial-left-without-finish-then-mark-from-xml`: the next save's `dnf` displaces it
-  while TCP is connected (INV-2 rule 2's exception).
-- `cross-time-trial-unstaged-leave-returns-to-not-started`: a staged time-trial athlete who leaves
-  before a start is `not-started` (today's core keeps `at-start`).
-
-Three vectors of the maintainer's Phase-removal decision (2026-11-16, `DECISIONS/ADR-015`
-Revision 9) are on the ledger until the core change of M2 P3c, which also teaches the harness
-adapter the `schedule` element (§1: it names its Phases for the adapter's convention, and a
-returning Phase's unit is its first). A removal is asserted through `phase.deleted` and
-`attempts`; no key lists the Phases a store holds, and the reads of a removed Phase are a core
-test's:
-- `phase-removed-when-schedule-omits-it`: a second run the next admitted save no longer
-  schedules is removed with its Attempt, one `phase.deleted` and no `attempt.deleted`, and one
-  `phase.updated` carries the first run's `pair`, derived again (its value, `siblingPhaseId`
-  `null`, is a structural field no `expect` reads as an envelope; a core test pins it).
-- `phase-removal-refused-by-guard`: a save older than TCP's push of the race removes nothing;
-  the next one removes the Phase.
-- `phase-removed-then-returns`: a removed Phase whose Attempt was in generation 2 is scheduled
-  again with a row: a new Phase, its Attempt created `run` 1 from the row (a retraction never
-  lowers `run`, so only the removal gives `1`).
-
-A fourth, `phase-kept-when-schedule-table-empty` (a save whose schedule names no race removes
-nothing), passes on today's core, which removes no Phase, and was never on the ledger.
-
-The reshape of `two-run-br1-unavailable-no-live-no-xml` (§1, `context.xml`: `'not-configured'`)
-is done (#337).
+A Phase removal is asserted through `phase.deleted` and `attempts`: no key lists the Phases a store
+holds, and the reads of a removed Phase are a core test's. No vector reads the admin log, so none
+asserts the `xml-table-emptied` diagnostic.
 
 ---
 
