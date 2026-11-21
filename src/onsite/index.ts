@@ -19,6 +19,7 @@ import { TcpSource } from '../sources/TcpSource.js';
 import type { Source, WritableSource } from '../sources/types.js';
 import { createApp, errorBody, type AttemptRoute, type OnsiteApi, type RestReply, type RebaselineOutcome, type RebaselineScope } from './app.js';
 import { openSeq, type SeqCounter } from './seq.js';
+import type { LogFile } from './log-file.js';
 import { canon, createStepLog, type StepLog } from './step-log.js';
 import { openWritesStore, WritesFileInvalidError, penaltyCorrectionCommand, type WritesStore } from './writes-store.js';
 import { checkInput, checkKeyInput, flagInput, resolutionInput, ValidationError } from './validate.js';
@@ -79,6 +80,8 @@ export interface OnsiteOptions {
   externalIdScheme?: string;
   newId?: () => string;
   stepLog?: (line: string) => void;
+  /** #395: the log file (`main.ts` opens it in the data dir). Every admin log entry, source connect and disconnect, start and stop go to it. */
+  logFile?: LogFile;
 }
 
 export interface OnsiteHandle {
@@ -106,18 +109,25 @@ const instanceOf = (text: unknown): 'main' | 'backup' | 'offline' | null => {
 export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   const { clock, fs, dataDir } = opts;
   const iso = (): string => new Date(clock.now()).toISOString();
-  const log = (what: string, e: unknown): void => { console.error(`onsite: ${what}: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`); };
+  const toFile = (text: string): void => { opts.logFile?.write(text); };
+  const log = (what: string, e: unknown): void => {
+    const text = `${what}: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`;
+    console.error(`onsite: ${text}`);
+    toFile(text);
+  };
   let dead = false;
   let stopping = false;
 
   const base = dataDir.endsWith('/') || dataDir.endsWith('\\') ? dataDir : `${dataDir}/`;
-  const adminLog = opts.adminLog ?? ((en: AdminLogEntry | IngestDiagnostic): void => {
-    if (en.kind === 'store-set-aside') console.error(`onsite: ${en.kind} store=${en.store}${en.eventId !== undefined ? ` event=${en.eventId}` : ''} file=${en.file} setAsideAs=${en.setAsideAs} reason=${en.reason}`);
-    else if (en.kind === 'store-write-failed') console.error(`onsite: ${en.kind} store=${en.store} file=${en.file} reason=${en.reason}`);
-    else if (en.kind === 'xml-table-emptied') console.error(`onsite: ${en.kind} phase=${en.phaseId} count=${en.count}`);
+  const adminLine = (en: AdminLogEntry | IngestDiagnostic): string => {
+    if (en.kind === 'store-set-aside') return `${en.kind} store=${en.store}${en.eventId !== undefined ? ` event=${en.eventId}` : ''} file=${en.file} setAsideAs=${en.setAsideAs} reason=${en.reason}`;
+    if (en.kind === 'store-write-failed') return `${en.kind} store=${en.store} file=${en.file} reason=${en.reason}`;
+    if (en.kind === 'xml-table-emptied') return `${en.kind} phase=${en.phaseId} count=${en.count}`;
     // #367: every other ingest-only kind (`unparseable-field`, `gates-absent`, ...), whatever fields it carries
-    else console.error(`onsite: ${en.kind} ${JSON.stringify(en)}`);
-  });
+    return `${en.kind} ${JSON.stringify(en)}`;
+  };
+  const sink = opts.adminLog ?? ((en: AdminLogEntry | IngestDiagnostic): void => { console.error(`onsite: ${adminLine(en)}`); });
+  const adminLog = (en: AdminLogEntry | IngestDiagnostic): void => { toFile(adminLine(en)); sink(en); };
   /** A set-aside name for `file` that nothing has in the directory: an earlier set-aside is never overwritten. */
   async function setAsideName(file: string): Promise<string> {
     const names = new Set(await fs.readdir(dataDir));
@@ -476,6 +486,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   }
   function onTcpStatus(status: string): void {
     tcpState = mapTcpState(status);
+    if (status === 'connected' || status === 'disconnected') toFile(`tcp ${status}`);
     const at = iso();
     if (status === 'connected') unit([{ ingestSeq: 0, event: 'tcp-connected', observedAt: at }]);
     else if (status === 'disconnected') {
@@ -521,6 +532,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
         unit(elements);
       },
       onStatus: (status) => {
+        if (status.state !== xmlStatus.state) toFile(`xml ${status.state}`);
         xmlStatus = status;
         background(async () => { await emit(sourcesChange()); });
       },
@@ -768,6 +780,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     event: () => event,
     core: () => core,
     sources: sourcesNow,
+    logTail: (limit) => opts.logFile?.tail(limit) ?? [],
     checksOf: (phaseId) => {
       if (store === undefined) return { checks: [], flags: [] };
       const mine = (id: string): boolean => phaseOfAttempt(id) === phaseId;
@@ -798,6 +811,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     server.listen(opts.port ?? DEFAULT_PORT, () => { server.off('error', reject); resolve(); });
   });
   port = (server.address() as { port: number }).port;
+  toFile(`start port=${port} dataDir=${dataDir}`);
 
   // ------------------------------------------------------------------------------------------------ the handle
   const closeSockets = (): void => {
@@ -823,6 +837,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     async stop() {
       if (stopping) return;
       stopping = true;
+      toFile('stop');
       haltSources();
       await tail;
       await seq.close();
