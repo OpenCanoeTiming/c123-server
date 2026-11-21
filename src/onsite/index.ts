@@ -10,6 +10,7 @@ import { createServer, type Server } from 'node:http';
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { openClients } from './clients.js';
 import { XMLValidator } from 'fast-xml-parser';
 import { createXmlReader, parseTcp, parseXmlSnapshot, type Clock, type IngestContext, type IngestElement, type XmlFs, type XmlReader, type XmlReaderStatus } from '../ingest/index.js';
 import { createContextTracker, type ContextTracker } from '../ingest/context-tracker.js';
@@ -45,7 +46,7 @@ export interface OnsiteDiscovery extends EventEmitter {
  */
 export type AdminLogEntry = {
   kind: 'store-set-aside';
-  store: 'checks' | 'writes' | 'seq' | 'event';
+  store: 'checks' | 'writes' | 'seq' | 'event' | 'clients';
   eventId?: string;
   file: string;
   setAsideAs: string;
@@ -797,8 +798,19 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     createFlag,
     resolveFlag,
   };
-  const server: Server = createServer(createApp(api));
-  const wss = new WebSocketServer({ server, path: '/ws' });
+  const clientReg = await openClients({
+    fs, dir: dataDir, now: () => clock.now(), log,
+    setAside: async (file, reason) => { const setAsideAs = await setAsideName(file); await fs.rename(file, setAsideAs); report('clients', file, setAsideAs, reason); },
+  });
+  const server: Server = createServer(createApp({ ...api, clientRoutes: clientReg.routes }));
+  // two `ws` servers with a `path` each on one HTTP server abort each other's upgrades: the paths are routed here
+  const wss = new WebSocketServer({ noServer: true });
+  server.on('upgrade', (req, socket, head) => {
+    const path = (req.url ?? '/').split('?')[0];
+    if (path === '/ws') wss.handleUpgrade(req, socket, head, (ws) => { wss.emit('connection', ws, req); });
+    else if (path === '/ws/client') clientReg.upgrade(req, socket, head);
+    else { socket.write('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'); socket.destroy(); }
+  });
   wss.on('connection', (ws) => {
     clients.add(ws);
     ws.on('close', () => { clients.delete(ws); });
@@ -818,6 +830,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     for (const c of clients) c.terminate();
     clients.clear();
     wss.close();
+    clientReg.close();
     server.close();
     server.closeAllConnections();
   };
