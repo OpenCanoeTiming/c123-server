@@ -41,7 +41,7 @@ describe('#328: /ws/client and /api/clients', () => {
     expect((await put(env, '/api/clients/scoreboard-a/config', { type: 'ledwall', displayRows: 8 })).status).toBe(200);
     const known = await openClient(env, 'scoreboard-a');
     const push = await known.until(isPush);
-    expect(push['data']).toMatchObject({ type: 'ledwall', displayRows: 8, clientId: undefined });
+    expect(push['data']).toEqual({ type: 'ledwall', displayRows: 8 });
     const unknown = await openClient(env, 'scoreboard-b');
     await unknown.barrier();
     expect(unknown.messages.filter(isPush)).toEqual([]);
