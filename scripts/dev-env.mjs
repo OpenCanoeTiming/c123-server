@@ -1,6 +1,11 @@
 #!/usr/bin/env node
-// Dev environment in one command: recording player + server on free ports.
+// Dev environment in one command: recording player + the on-site process (src/onsite/main.ts) on free ports.
 //   node scripts/dev-env.mjs --recording <id> [--speed N] [--protocol-docs <path>] [--state-dir <path>]
+//     [--event-id <id>] [--event-name <s>] [--zone <iana>] [--event-date <YYYY-MM-DD>] [--external-id-scheme <s>]
+// The on-site process gets --data-dir <state>/data (kept across --down, so a restart keeps durable state), the player's tcp port,
+// the replayed xml and --no-discovery. At --speed N other than 1 it also gets --clock-rate N: the player starts at once (--autoplay)
+// and the process starts within seconds of it, so no origin or stdin handshake is passed; the clock runs at the player's rate from
+// the process's own start. The event and parser flags are passed through unchanged (see the header of src/onsite/main.ts).
 //   node scripts/dev-env.mjs --down [--state-dir <path>]
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -30,6 +35,11 @@ function parseArgs(argv) {
     else if (a === '--speed') o.speed = next()
     else if (a === '--protocol-docs') o.protocolDocs = next()
     else if (a === '--state-dir') o.stateDir = next()
+    else if (a === '--event-id') o.eventId = next()
+    else if (a === '--event-name') o.eventName = next()
+    else if (a === '--zone') o.zone = next()
+    else if (a === '--event-date') o.eventDate = next()
+    else if (a === '--external-id-scheme') o.externalIdScheme = next()
     else fail(`unknown argument ${a}`, 2)
   }
   return o
@@ -208,7 +218,8 @@ async function up(o) {
   const stateDir = path.resolve(o.stateDir ?? path.join(ROOT, '.dev-env'))
   const stateFile = path.join(stateDir, 'state.json')
   const docs = resolveDocs(o)
-  fs.mkdirSync(path.join(stateDir, 'home'), { recursive: true })
+  const dataDir = path.join(stateDir, 'data')
+  fs.mkdirSync(dataDir, { recursive: true })
 
   const lockFile = takeLock(stateDir)
   const children = []
@@ -286,12 +297,18 @@ async function up(o) {
   ], playerLog)
   state.player = { pid: player.pid, tcpPort, controlPort }
   writeStateAtomic(stateFile, state) // early, so --down reaches a partly started env
-  const home = path.join(stateDir, 'home')
+  const passThrough = [
+    ['--event-id', o.eventId], ['--event-name', o.eventName], ['--zone', o.zone],
+    ['--event-date', o.eventDate], ['--external-id-scheme', o.externalIdScheme],
+  ].flatMap(([flag, v]) => (v === undefined ? [] : [flag, v]))
   const server = spawnDetached([
-    '--import', 'tsx', 'src/cli.ts',
-    '--host', '127.0.0.1', '--port', String(tcpPort), '--server-port', String(serverPort),
-    '--xml', xmlPath, '--no-discovery', '--no-autodetect', '--no-tray',
-  ], serverLog, { cwd: ROOT, env: { ...process.env, HOME: home, APPDATA: home } })
+    '--import', 'tsx', 'src/onsite/main.ts',
+    '--port', String(serverPort), '--data-dir', dataDir,
+    '--tcp-host', '127.0.0.1', '--tcp-port', String(tcpPort),
+    '--xml', xmlPath, '--no-discovery',
+    ...(speed === 1 ? [] : ['--clock-rate', String(speed)]),
+    ...passThrough,
+  ], serverLog, { cwd: ROOT })
 
   state.server = { pid: server.pid, port: serverPort }
   writeStateAtomic(stateFile, state)
@@ -301,7 +318,7 @@ async function up(o) {
   }
   const targets = [
     { rec: player, name: 'player', url: `http://127.0.0.1:${controlPort}/status`, ok: false },
-    { rec: server, name: 'server', url: `http://127.0.0.1:${serverPort}/api/status`, ok: false },
+    { rec: server, name: 'server', url: `http://127.0.0.1:${serverPort}/api/sources`, ok: false },
   ]
   const deadline = Date.now() + HEALTH_TIMEOUT_MS
   const checkAlive = async (what) => {
@@ -329,7 +346,8 @@ async function up(o) {
   for (const r of children) r.child.unref()
 
   console.log(`dev-env: up (recording ${o.recording}, speed ${speed})
-  server:   http://127.0.0.1:${serverPort}  (status: /api/status)
+  server:   on-site process (src/onsite/main.ts), http://127.0.0.1:${serverPort}  (health: /api/sources)
+  data dir: ${dataDir}  (kept across --down)
   ws:       ws://127.0.0.1:${serverPort}/ws
   player:   control http://127.0.0.1:${controlPort}  (tcp ${tcpPort})
   logs:     ${playerLog}

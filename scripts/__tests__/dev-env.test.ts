@@ -162,7 +162,7 @@ describe('dev-env', () => {
     expect(new Set(ports).size).toBe(3)
     for (const p of ports) expect(DEFAULT_PORTS).not.toContain(p)
     expect(await status(`http://127.0.0.1:${st.player.controlPort}/status`)).toBe(200)
-    expect(await status(`http://127.0.0.1:${st.server.port}/api/status`)).toBe(200)
+    expect(await status(`http://127.0.0.1:${st.server.port}/api/sources`)).toBe(200)
   }, T)
 
   it('up: prints ports and attach hints', async () => {
@@ -262,7 +262,7 @@ describe('dev-env', () => {
     const ports = [sa, sb].flatMap((s) => [s.player.tcpPort, s.player.controlPort, s.server.port])
     expect(new Set(ports).size).toBe(6)
     const healthy = async (s: typeof sa) =>
-      [await status(`http://127.0.0.1:${s.player.controlPort}/status`), await status(`http://127.0.0.1:${s.server.port}/api/status`)]
+      [await status(`http://127.0.0.1:${s.player.controlPort}/status`), await status(`http://127.0.0.1:${s.server.port}/api/sources`)]
     expect(await healthy(sa)).toEqual([200, 200])
     expect(await healthy(sb)).toEqual([200, 200])
     expect((await run(['--down', '--state-dir', a], { env: baseEnv() })).code).toBe(0)
@@ -278,18 +278,50 @@ describe('dev-env', () => {
     expect(r2.code).not.toBe(0)
     expect(r2.stderr.toLowerCase()).toContain('already running')
     expect(await status(`http://127.0.0.1:${st.player.controlPort}/status`)).toBe(200)
-    expect(await status(`http://127.0.0.1:${st.server.port}/api/status`)).toBe(200)
+    expect(await status(`http://127.0.0.1:${st.server.port}/api/sources`)).toBe(200)
   }, T)
 
-  it('up: server home is inside the state dir', async () => {
+  it('up: runs the on-site process on the player and the replay xml', async () => {
     const docs = makeDocs(), state = makeState()
-    const home = tmp('devenv-home-')
-    const r = await up(docs, state, [], { HOME: home })
+    const r = await up(docs, state, ['--event-id', 'ev-1', '--event-name', 'Dev', '--zone', 'Europe/Prague', '--event-date', '2026-04-26'])
     expect(r.code, r.stderr).toBe(0)
-    const log = path.join(state, 'home', '.c123-server', 'server.log')
-    for (let i = 0; i < 50 && !existsSync(log); i++) await new Promise((x) => setTimeout(x, 200))
-    expect(existsSync(log)).toBe(true)
-    expect(existsSync(path.join(home, '.c123-server'))).toBe(false)
+    const st = readState(state)
+    const argv = readFileSync(`/proc/${st.server.pid}/cmdline`, 'utf8').split('\0')
+    expect(argv.join(' ')).toContain('src/onsite/main.ts')
+    expect(argv.join(' ')).not.toContain('src/cli.ts')
+    const val = (n: string) => argv[argv.indexOf(n) + 1]
+    expect(val('--port')).toBe(String(st.server.port))
+    expect(val('--data-dir')).toBe(path.join(state, 'data'))
+    expect(val('--tcp-host')).toBe('127.0.0.1')
+    expect(val('--tcp-port')).toBe(String(st.player.tcpPort))
+    expect(val('--xml')).toBe(st.xmlPath)
+    expect(argv).toContain('--no-discovery')
+    expect(val('--event-id')).toBe('ev-1')
+    expect(val('--event-name')).toBe('Dev')
+    expect(val('--zone')).toBe('Europe/Prague')
+    expect(val('--event-date')).toBe('2026-04-26')
+    expect(argv).not.toContain('--clock-rate') // speed 1: real clock
+    const cur = await fetch(`http://127.0.0.1:${st.server.port}/api/events/current`)
+    expect(cur.status).toBe(200)
+    expect(r.stdout).toContain('on-site')
+    expect(r.stdout).toContain(path.join(state, 'data'))
+  }, T)
+
+  it('up: --speed N runs the on-site clock at the player rate', async () => {
+    const docs = makeDocs(), state = makeState()
+    const r = await up(docs, state, ['--speed', '4'])
+    expect(r.code, r.stderr).toBe(0)
+    const argv = readFileSync(`/proc/${readState(state).server.pid}/cmdline`, 'utf8').split('\0')
+    expect(argv[argv.indexOf('--clock-rate') + 1]).toBe('4')
+  }, T)
+
+  it('up: the data dir is under the state dir and survives down', async () => {
+    const docs = makeDocs(), state = makeState()
+    expect((await up(docs, state)).code).toBe(0)
+    expect(existsSync(path.join(state, 'data'))).toBe(true)
+    writeFileSync(path.join(state, 'data', 'marker'), 'x')
+    expect((await run(['--down', '--state-dir', state], { env: baseEnv() })).code).toBe(0)
+    expect(existsSync(path.join(state, 'data', 'marker'))).toBe(true)
   }, T)
 
   describe('protocol docs', () => {
@@ -354,7 +386,7 @@ describe('dev-env', () => {
       expect(r.code, r.stderr).toBe(0)
       const st = readState(state)
       expect(await status(`http://127.0.0.1:${st.player.controlPort}/status`)).toBe(200)
-      expect(await status(`http://127.0.0.1:${st.server.port}/api/status`)).toBe(200)
+      expect(await status(`http://127.0.0.1:${st.server.port}/api/sources`)).toBe(200)
       expect(isAlive(pid)).toBe(true)
     }, T)
 
