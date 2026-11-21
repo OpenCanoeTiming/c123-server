@@ -298,7 +298,7 @@ Four Kayak Cross competitors on course at once, one heat of one Phase.
 
 ### E — The multi-day event, in either file layout
 
-Saturday: the operator starts c123-server. `AppSettings` mints an `eventId` for the weekend. Each Phase
+Saturday: the operator starts c123-server. The on-site process mints an `eventId` for the weekend and keeps it in its data dir across restarts (c123-server#330). Each Phase
 gets its own `date` at first observation. Pushes go to live-mini under that `eventId`.
 
 - **One file for the whole weekend** (seen in every multi-day recording). Saturday's snapshot already
@@ -432,4 +432,5 @@ oversight.
   not domain truth. The maintainer decided they stay outside the redesign (c123-server#169). They
   keep today's mechanism, and they are fixed independently, before or after the redesign, then pinned
   by regression tests (c123-server#3, #145, c123-scoreboard#127). The contract neither carries nor
-  constrains them.
+  constrains them. The on-site process serves them on their own WebSocket path, `/ws/client`, beside
+  the contract's `/ws` (`RULINGS.md` R-26, c123-server#328).
