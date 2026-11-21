@@ -597,8 +597,8 @@ One Entry's participation in one race Phase: the unit with a lifecycle. An Attem
 first observation that names it, a start-list row included, until its bib leaves the race
 upstream: it is removed at the first admitted XML snapshot of the race in which no row carries its
 bib, as when a competitor is deleted, moved to another race or class, or given a bib the race does
-not otherwise hold (§4 INV-7; maintainer, 2026-11-12). **The bib is the key of a run's data; the
-competitor's identity under a bib may change** (maintainer, 2026-11-12): a re-bib or swap that
+not otherwise hold (§4 INV-7; `RULINGS.md` R-6, R-7). **The bib is the key of a run's data; the
+competitor's identity under a bib may change** (`RULINGS.md` R-2): a re-bib or swap that
 leaves the bib in the race keeps the Attempt and re-points its `entry` (INV-4). A retraction never
 removes an Attempt; a removal is sent as `attempt.deleted` (§7.2, §8.4).
 
@@ -653,144 +653,109 @@ type TimeToBeat = { mode: 'target' | 'delta'; seconds: number; holder?: string }
 type Placement = { rank: number; order: number }   // known only when upstream ranks the row — §5
 ```
 
-**Identity is `(phaseId, bib)`.** What is physically stable is the fact that whoever wore bib 9 went
-down the course in this race. *Who* that was is the correctable assertion `entry`: a competitor can
-turn out, even a week later, to have raced under the wrong bib.
-- The bib is this race's bib. Per-race bib issue does not disturb the key, because the key never
-  claimed stability across Phases.
+**Identity is `(phaseId, bib)`.** *Who* raced under the bib is the correctable assertion `entry`: a
+competitor can turn out, even a week later, to have raced under the wrong bib.
+- The bib is this race's bib; the key claims no stability across Phases.
 - **Nothing joins across Phases by bib.** Across Phases a competitor is its `entryId`; within a
   Phase, a run is its Attempt. In Kayak Cross each round is its own Phase, and its bibs may be
   renumbered from the time trial or equal to it (`DERIVATIONS.md` §4.10): the same bib can name two
   athletes in two rounds, and one athlete can carry two bibs. A classification row is matched by
-  its `entryId` (`DERIVATIONS.md` §4.10; `TEST-ARCHITECTURE.md` §3.2 property 15). This is the bib principle ("the bib is the key of a run's data",
-  maintainer, 2026-11-12) applied per Phase, not an exception to it.
-- Two kinds of collision cannot happen:
-  - Kayak Cross's four simultaneous competitors are the same Phase with different bibs;
-  - two classes reusing a bib number are different Phases.
+  its `entryId` (`DERIVATIONS.md` §4.10; `TEST-ARCHITECTURE.md` §3.2 property 15).
+- Kayak Cross's four simultaneous competitors are the same Phase with different bibs, and two
+  classes reusing a bib number are different Phases: neither collides.
 
 **Run generation** (`DECISIONS/ADR-013`, maintainer answer Q2). A re-run deletes the recorded result,
 and the run is raced again. Meanwhile, it looks as if the athlete never did that run.
 - *Server procedure for what increments `run`: `DERIVATIONS.md` §11.6.*
-- On increment, every run-scoped field becomes `not-yet`, and the change is pushed:
-  - `status`, `outcome`, `gates` and `splits`;
-  - `faults`, `placement`, `pairTotal` and `countingRun`;
-  - `underReview`, `qualified`, `courseOrder` and `timeToBeat`.
+- On increment, every run-scoped field becomes `not-yet`, and the change is pushed: `status`,
+  `outcome`, `gates`, `splits`, `faults`, `placement`, `pairTotal`, `countingRun`, `underReview`,
+  `qualified`, `courseOrder` and `timeToBeat`.
 - The old result is **not** shown while the re-run happens. A client that wants to say "re-run" reads
   `run > 1`.
 - *Server procedure for attributing observations to a generation: `DERIVATIONS.md` §11.7.*
 
 **Outcome, by phase of the run.**
 - **`pending`:** nothing yet.
-- **`running`:** on course. It carries upstream's own ticking running time and penalties so far.
-  It is displayed as upstream displays it, including upstream's split-hold behaviour
-  (`DERIVATIONS.md` §4.3). **A client may tick locally** between messages, adding elapsed local time
-  (through its injected clock, `TEST-ARCHITECTURE.md` §5) to the last `elapsedSeconds`, provided it
-  snaps to every new `running` value as it arrives and stops the instant `status` leaves
-  `on-course`. Upstream re-sends at least once per second, so the local tick never runs more than
-  about a second ahead of a real value. **The tick also stops when the feed goes quiet:** a client
-  ticks for at most `runningStaleAfterSeconds` (a named constant, 3 s) **past its own receipt of the
-  last `running` value, measured on its own injected clock**, then freezes the display at that value
-  and shows it as stale. It never subtracts `observedAt` from its own clock: `observedAt` is on the
-  ingesting server's clock (on live, the venue laptop's), and an offset between the two must not
-  freeze or unfreeze the tick. The question is whether the feed is quiet, and that is a fact about
-  arrivals at the client. Age is shown the same way, from receipt; `observedAt` is displayed as a
-  timestamp, not used in arithmetic against a different clock.
-  This is the same rule on both tiers: a TCP outage on site, or a quiet bridge on live. The value is
-  never cleared by time (stale over flicker), and it never runs on as if the athlete were still
-  moving. On site, `SourceStatus.tcp` says why; on live, `oncourse.updated`'s `asOf` and the
-  calendar's status do.
-- **`duration`:** a slalom run's own time, penalties and total. On a second run of a pair, this is
-  **run 2's own** figures:
-  - the time is run 2's own;
-  - the penalties are the sum of run 2's own gate cells.
-
-  Upstream's `Pen` and `Total` on a second-run result row describe the *counting* run. When run 1 is
-  better, which was 41% of recorded second runs, they are run 1's figures, so they are never used
-  for run 2. The combined result is `pairTotal`.
+- **`running`:** on course: upstream's own ticking running time and penalties so far, displayed as
+  upstream displays it, including its split hold (`DERIVATIONS.md` §4.3). **A client may tick
+  locally** between messages, adding elapsed local time (through its injected clock,
+  `TEST-ARCHITECTURE.md` §5) to the last `elapsedSeconds`, provided it snaps to every new `running`
+  value as it arrives and stops the instant `status` leaves `on-course`. **The tick also stops when
+  the feed goes quiet:** a client ticks for at most `runningStaleAfterSeconds` (a named constant,
+  3 s) **past its own receipt of the last `running` value, measured on its own injected clock**,
+  then freezes the display at that value and shows it as stale. It never subtracts `observedAt`
+  from its own clock. Age is shown the same way, from receipt; `observedAt` is displayed as a
+  timestamp, not used in arithmetic against a different clock. The rule is the same on both tiers:
+  a TCP outage on site, or a quiet bridge on live. The value is never cleared by time, and it never
+  runs on as if the athlete were still moving. On site, `SourceStatus.tcp` says why; on live,
+  `oncourse.updated`'s `asOf` and the calendar's status do.
+- **`duration`:** a slalom run's own time, penalties and total. On a second run of a pair these are
+  **run 2's own** figures: run 2's own time, and the sum of run 2's own gate cells as penalties.
+  Upstream's `Pen` and `Total` on a second-run result row describe the *counting* run, so they are
+  never used for run 2. The combined result is `pairTotal`.
   - **In a Kayak Cross time trial** (`XT`, `XT1`, `XT2`: duration-scored, `DERIVATIONS.md` §4.4),
-    `penaltySeconds` is `0` and `totalSeconds = runSeconds` by rule, on the `running` value too: Cross
-    has no time penalties, the judging is `faults` (§4.6(d)), and upstream's own rows agree
-    (`Pen 0`, `Total = Time`, 293 of 293 recorded). This is a stated constant, not an empty read as
+    `penaltySeconds` is `0` and `totalSeconds = runSeconds` by rule, on the `running` value too; the
+    judging is `faults` (`DERIVATIONS.md` §4.6(d)). This is a stated constant, not an empty read as
     zero.
 - **`ordinal`:** Cross. The athlete's order within the heat, **taken from upstream's placement, never
   from `Time`.** Athletes with faults rank after every clean finisher, whatever their finish order
   (`DECISIONS/ADR-009` addendum).
 - **`no-result`:** a result mark that removes the run from the ranking.
 - **Untimed rows.** In a duration-scored Phase, a result row that carries a placement but **no finish
-  time** is an operator-typed row, not a measured run. Recorded: junior Cross time-trial rows carrying
-  a `100.00` placeholder for everyone, replaced by rank × 1000 at the end of the day, with real ranks
-  and `Q` throughout. Such a row presents `outcome: unavailable{reason:'not-applicable'}` and its
-  `placement` as stated; its time field is never presented, on either tier. A client shows the
-  placement and no time. Decided in the domain layer so that no client detects `100.00` on its own.
-  Its `status` is `finished`: upstream ranked the row (`DERIVATIONS.md` §4.2). Untimed is read from the snapshot row (`dtFinish` empty, time and placement present) and inherited
+  time** is an operator-typed row, not a measured run. It presents
+  `outcome: unavailable{reason:'not-applicable'}` and its `placement` as stated; its time field is
+  never presented, on either tier. A client shows the placement and no time, and never detects a
+  placeholder such as `100.00` on its own. Its `status` is `finished` (`DERIVATIONS.md` §4.2).
+  Untimed is read from the snapshot row (`dtFinish` empty, time and placement present) and inherited
   by the Attempt's TCP row, which carries no finish time of its own; before the first snapshot a TCP
   row is presumed timed.
 - A client never has to cross-reference `status` to know whether a value is still
   accruing.
 
-**Left without a finish.** In slalom and in a Kayak Cross time trial (`XT`, `XT1`, `XT2`), an
-athlete can leave upstream's on-course list after a start and without a finish. `status` is then
-`left-without-finish`. This is an observed fact: upstream removed the athlete, and no finish
-exists. **The leave reads the stream's state at the leave** (`DERIVATIONS.md` §4.1): a start or
-a finish the stream has since withdrawn counts as not observed, so an Attempt last listed
-`at-start` leaves to `not-started`, one last listed `on-course` to `left-without-finish`, and a
-stream `finished` stays.
+**Left without a finish.** In slalom and in a Kayak Cross time trial (`XT`, `XT1`, `XT2`; the time
+trial follows slalom, `RULINGS.md` R-23), an Attempt that leaves upstream's on-course list after a
+start and without a finish has `status` `left-without-finish`: an observed removal, with no finish.
+**The leave reads the stream's state at the leave** (`DERIVATIONS.md` §4.1): a start or a finish
+the stream has since withdrawn counts as not observed, so an Attempt last listed `at-start` leaves
+to `not-started`, one last listed `on-course` to `left-without-finish`, and a stream `finished`
+stays.
 - **The reason is not yet known**, and `outcome` stays pending — `not-yet`, the stream's `running`
   inference withdrawn with the listing (`DERIVATIONS.md` §4.3; `{ kind: 'pending' }` is a
   Standing's `result`, §2.7). It is **never** inferred as `dnf`.
-- **Why a separate status.** Upstream enters DNF or DSQ mid-run, and DNS from the start judge's
-  terminal, on paths that push nothing on TCP (observed upstream behaviour). Of 145 recorded status
-  transitions, 45% reached TCP only on another athlete's push or by rotation: median 20–52 s, worst
-  about 600 s.
-- **Where the reason comes from.** The mark follows from the XML snapshot at the next save (§4
-  INV-2, rule 2's exception; one save cycle, 35 s at the recorded venue), or from TCP's next push of
-  the race, whichever comes first. A late DNS is acceptable: the athlete
+- **The mark** follows from the XML snapshot at the next save (§4 INV-2, rule 2's exception) or from
+  TCP's next push of the race, whichever comes first. A late DNS is acceptable: the athlete
   never reached the course.
-- **The Kayak Cross time trial follows slalom** (maintainer, 2026-11-16; `RULINGS.md` R-23):
-  athletes start one by one, as in slalom, and upstream removing one before a finish means the
-  athlete is no longer on course. So the leave rule (`DERIVATIONS.md` §4.1) gives a time-trial
-  Attempt `left-without-finish` where a start was observed and `not-started` from `at-start`, the
-  stream's `running` withdrawn with the listing, and the mark arrives as in slalom: from the next
-  save by rule 2's exception, or TCP's next push of the race.
-- **A Kayak Cross heat never uses this status:** the whole heat leaves the list together, by
-  design, before the operator asserts the order, and leaving the set changes no `status` in a heat
-  Phase (`heats: true`, §2.4; §7.1; `DERIVATIONS.md` §10 item 35).
+- **A Kayak Cross heat never uses this status:** the whole heat leaves the list together, before
+  the operator asserts the order, and leaving the set changes no `status` in a heat Phase
+  (`heats: true`, §2.4; §7.1).
 
-**Retraction** (`DECISIONS/ADR-015`; §4 INV-7). Results move. A DNS is cleared when the athlete turns
-up, a result is deleted, a finish is moved to the right bib. Upstream states such a removal only as
-absence in a complete statement of the race: a row missing from a TCP result push, or a row emptied
-in the XML snapshot. The domain layer turns that absence into an explicit retraction:
+**Retraction** (`DECISIONS/ADR-015`; §4 INV-7). A cleared DNS, a deleted result or a finish moved to
+the right bib reaches the server only as absence in a complete statement of the race: a row missing
+from a TCP result push, or a row emptied in the XML snapshot. The domain layer turns that absence
+into an explicit retraction:
 - the retracted fields become `not-yet`, and the change is pushed like any other;
 - `status` returns to what the on-course stream currently shows for the Attempt (`at-start`,
   `on-course`; where the Attempt left the list and the leave drew `left-without-finish`,
   that), else `not-started`;
-- an on-course inference is never retracted by a result push, because a race's push can precede the
-  row being written.
+- an on-course inference is never retracted by a result push.
 
-**A stale finish is contradicted by the on-course stream** (§4 INV-2d). Taking a finish away on
-upstream's on-course grid does not clear the stored result, so later pushes keep carrying it. Two
-recorded cases showed a false leader for 31 s and 71 s. The only immediate evidence is the on-course
-stream listing the bib running again, with the same start and no finish. When that happens:
-- `status` returns to `on-course`, `outcome` to `running`, and `placement` to `not-yet`;
+**A stale finish is contradicted by the on-course stream** (§4 INV-2d). When the on-course stream
+lists the bib running again, with the same start and no finish:
+- `status` returns to `on-course`, `outcome` to `running`, and `placement`, `pairTotal` and
+  `countingRun` to `not-yet`;
 - rows carrying the contradicted finish stay unpresented — matched by `dtFinish` where the row has
-  one, else by run time, since a TCP row carries no finish time — until a row carries a different
-  finish by the same comparison, a mark or a retraction, or the on-course stream shows a finish again;
-  after a lift by the on-course stream they stay unpresented;
+  one, else by run time — until a row carries a different finish by the same comparison, a mark or
+  a retraction, or the on-course stream shows a finish again; after a lift by the on-course stream
+  they stay unpresented;
 - the contradiction is surfaced as a `contradicted-finish` diagnostic (§7.1).
 
-**A mark overrides a time.** A result row can carry a mark and a time at once; a duplicate finish
-was once resolved by marking one athlete DNF while both rows kept the same finish for hours. A row
-with a mark presents `no-result`, whatever time it carries. **`no-result` is the presentation of the
-presented `status`, not a field of the row:** `outcome` is `{ kind: 'no-result', status }` exactly
-when the presented `status` is a result mark other than `non-ranked`, with that status's envelope;
-the row's time, where it has one, is retained in the `outcome` slot and presented only where the
-mark is not (a withheld stale mark, below). A mark refused for `status` — §4 rule 2's guard, INV-2c
-— therefore shows in no field (recorded nine times as a `dns` or `dnf` beside
-`not-started` or `left-without-finish`), **and nor does the rest of its row:** the guard refuses the
-observation, not one field of it, so the time such a row carries is retained with the mark and
-presented, if ever, by the next snapshot that restates it with a later content age; rule 1 does not
-reach a row whose mark rule 2's guard refused, and `left-without-finish` keeps `outcome: pending`
-(0 such presentations in seven recordings).
+**A mark overrides a time.** A result row can carry a mark and a time at once. A row with a mark
+presents `no-result`, whatever time it carries. **`no-result` is the presentation of the presented
+`status`, not a field of the row:** `outcome` is `{ kind: 'no-result', status }` exactly when the
+presented `status` is a result mark other than `non-ranked`, with that status's envelope; the row's
+time, where it has one, is retained in the `outcome` slot and presented only where the mark is not
+(a withheld stale mark, below).
+*Server procedure for a row whose mark the guard refused: `DERIVATIONS.md` §11.22.*
 
 **Duplicate finishes are surfaced, never resolved by us.** Two Attempts of one Phase presenting the
 same finish `eventTime` raise a `duplicate-finish` diagnostic. A TCP row carries no finish time and
@@ -798,51 +763,39 @@ takes part only once the snapshot supplies its `dtFinish`; two rows with the sam
 never a duplicate. The operator resolves it upstream.
 
 **Marks.**
-- `status` carries upstream's full result-mark vocabulary (`DERIVATIONS.md` §4.1).
-  - `non-ranked` raced and has a time, but is excluded from the ranking.
-  - `ral` is placed last; placement says where.
-  - `dsq-r` and `dqb` are distinct disqualifications.
+- `status` carries upstream's full result-mark vocabulary (`DERIVATIONS.md` §4.1): `non-ranked`
+  raced and has a time, but is excluded from the ranking; `ral` is placed last, and placement says
+  where; `dsq-r` and `dqb` are distinct disqualifications.
 - **In a second run of a pair, a mark describes run 2 only.** The athlete keeps a combined placement
-  from run 1. For example, one athlete was marked `dns` for run 2 and ranked 110th. `placement` and
-  `pairTotal` carry that, independently of `status`. From the Attempt's first listing in run 2,
-  staged or started, until a row of run 2 carrying its time or its mark restates them — `placement`
-  and `pairTotal` at the TCP row, `countingRun` at the XML row — the values carried over from run 1
-  are `provisional: true` (§1.2).
+  from run 1, which `placement` and `pairTotal` carry independently of `status`. From the Attempt's
+  first listing in run 2, staged or started, until a row of run 2 carrying its time or its mark
+  restates them — `placement` and `pairTotal` at the TCP row, `countingRun` at the XML row — the
+  values carried over from run 1 are `provisional: true` (§1.2).
 - *Default for a mark left over from before a re-run: §9.5.*
 - **`underReview`** is upstream's "under review" mark, shown as an asterisk on upstream's own output.
   It is first-class (maintainer answer Q7): clients show it on the scoreboard and in live results.
-  It is independent of `provisional`:
-  - `underReview` means an official is holding the result;
-  - `provisional` means judging may still move it.
+  It is independent of `provisional`: `underReview` means an official is holding the result,
+  `provisional` that judging may still move it. Both can be true at once.
 
-  Both can be true at once.
-
-**`gates` is position-correct by construction.** Upstream encodes gate penalties in two different
-string formats (`DERIVATIONS.md` §4.6). The domain layer owns gate numbering centrally, and a client
-never sees a raw string. `gates` has exactly the Phase's course gate count. Where no course is
-configured, `gates` is `unavailable{not-configured}`: upstream then fabricates a 25- or 30-gate grid
-(§2.12), and relaying it would invent gates. `outcome.penaltySeconds` still carries upstream's own
-penalty sum. **A team boat's `penalty` is the sum over its members, with `memberPenalties`
-alongside.** Judging is per member (observed upstream behaviour; the maintainer's "on paper A, B and
-C separately"): a judge enters one value per member per gate, upstream sums them, and the crew cell
-stays blank until all three are judged. TCP carries only the sums; the per-member cells reach the
-snapshot at the next save, so `memberPenalties` is absent until then and present afterwards. A
-crew cell that is not the sum of its members is upstream's own crew-level edit, presented as
-upstream states it and surfaced as a `member-sum-mismatch` diagnostic. No team race has been
-recorded; the rules rest on verified upstream behaviour and a static sample (691 judged cells, 8 such edits).
+**`gates` is position-correct by construction.** The domain layer owns gate numbering
+(`DERIVATIONS.md` §4.6), and a client never sees a raw gate string. `gates` has exactly the Phase's
+course gate count. Where no course is configured, `gates` is `unavailable{not-configured}` (§2.12),
+and `outcome.penaltySeconds` still carries upstream's own penalty sum. **A team boat's `penalty` is
+the sum over its members, with `memberPenalties` alongside.** The crew cell stays blank until all
+three members are judged. TCP carries only the sums, so `memberPenalties` is absent until the next
+XML snapshot and present afterwards. A crew cell that is not the sum of its members is upstream's
+own crew-level edit, presented as upstream states it and surfaced as a `member-sum-mismatch`
+diagnostic.
 
 **On-course facts.**
 - **`courseOrder`** is upstream's on-course position: 1 is closest to the finish.
   `/api/oncourse` is ordered by it (§7.1). It is the only way to order Kayak Cross's four
   simultaneous competitors (`DECISIONS/ADR-009` addendum).
-- **`timeToBeat`** is upstream's comparison with the leader:
-  - an unsigned **target** time on approach to a split or the finish;
-  - a signed **delta** at a split, at the finish, or at the start of a second run;
-  - `holder` is the leader's short display name, organiser data.
-
-  It is **not** a rank.
-- Upstream's on-course rank field is not used for `placement`. At the start of a second run it
-  carries the *first* run's rank.
+- **`timeToBeat`** is upstream's comparison with the leader: an unsigned **target** time on
+  approach to a split or the finish, or a signed **delta** at a split, at the finish, or at the
+  start of a second run; `holder` is the leader's short display name, organiser data. It is **not**
+  a rank.
+- Upstream's on-course rank field is not used for `placement`.
 
 *Server procedure for the finish per discipline: `DERIVATIONS.md` §11.8.*
 
@@ -1108,8 +1061,7 @@ type Course = {
 
 ### 3.1 `Phase.status`
 
-Canoe123's 14-value race status is collapsed into a closed set, once, centrally, never left to each
-client (`EVIDENCE.md` Exhibit 10).
+Canoe123's 14-value race status is collapsed into a closed set by the server, never by a client.
 
 ```ts
 type PhaseStatus =
@@ -1139,10 +1091,9 @@ type PhaseStatus =
 
 No state is final.
 
-**A client must never infer a correction from this field.** Upstream sets race status only by direct
-operator action in its own UI. Penalty corrections never touch it (observed upstream behaviour). The
-reliable signal that a Phase's results changed is ordinary field-level change: an Attempt's `outcome`,
-`gates` or `placement` presenting a newer observation.
+**A client must never infer a correction from this field:** upstream sets it only by operator
+action, and penalty corrections never touch it. A Phase's results changed when an Attempt's
+`outcome`, `gates` or `placement` presents a newer observation.
 
 ### 3.2 `Attempt.status`
 
@@ -1151,54 +1102,44 @@ reliable signal that a Phase's results changed is ordinary field-level change: a
     start-list row included, with that row's envelope (`provisional: false`): the floor every later
     status is read against, and what a retraction or an unstaging returns to. `status` is `not-yet`
     only for an Attempt no row and no listing has named.
-  - `at-start`: staged in the start gate, armed for the start impulse and not yet started. It is 8% of
-    on-course traffic in recordings.
+  - `at-start`: staged in the start gate, armed for the start impulse and not yet started.
   - `not-started → on-course` directly is legal too, when staging is not observed.
   - `not-started → finished`, when a result row states a finish for an Attempt never listed on course:
     a timed row after an outage or a cold start (`DERIVATIONS.md` §0.3, §4.1: empty mark with a time
     means `finished`), an untimed row (§2.6), or a Kayak Cross result whose heat's listing was missed
     (`DERIVATIONS.md` §4.2).
   - `at-start → not-started`, when the Attempt leaves the list with no start standing at the leave:
-    unstaged before any start (observed: a bib staged for 5 s in the next day's race, then
-    removed), or after the stream withdrew its start (recorded: cp3-cross WX1_XT_26:25;
-    `DERIVATIONS.md` §4.1).
+    unstaged before any start, or after the stream withdrew its start (`DERIVATIONS.md` §4.1).
   - `left-without-finish → at-start | on-course`, when upstream lists it again in the same
     generation; this is also what makes a false leave under `DERIVATIONS.md` §4.1's leave rule
     harmless.
   - `on-course → at-start`, when the start impulse is deleted: the listing carries no `dtStart` and
-    no clock (observed twice, `DERIVATIONS.md` §4.1); the generation's recorded start is kept, and a
-    start given again is a start correction (§2.6), not a new generation.
+    no clock (`DERIVATIONS.md` §4.1); the generation's recorded start is kept, and a start given
+    again is a start correction (§2.6), not a new generation.
   - `at-start → finished`, when the listing carries a `dtFinish` and no `dtStart`: a finish impulse
-    with no start (observed once, a Cross time trial, `DERIVATIONS.md` §4.1); the generation's
-    recorded start, if any, is kept.
+    with no start (`DERIVATIONS.md` §4.1); the generation's recorded start, if any, is kept.
 - **No-results:**
   - `not-started | at-start → dns`;
   - `on-course → dnf | dsq | dsq-r | dqb | cap | ral | other`.
-- **Left without a finish** (slalom and the Kayak Cross time trial, §2.6; never a Cross heat):
-  - `on-course → left-without-finish`, observed when the Attempt leaves upstream's on-course list
-    with a start and no finish standing at the leave (a start or finish the stream withdrew is
-    not standing, `DERIVATIONS.md` §4.1);
+- **Left without a finish** (§2.6; never a Cross heat):
+  - `on-course → left-without-finish`, when the Attempt leaves upstream's on-course list with a
+    start and no finish standing at the leave;
   - `left-without-finish → dns | dnf | dsq | dsq-r | dqb | cap | ral | other`, when the mark arrives;
   - `left-without-finish → finished`, when a finish is recorded afterwards (a manually entered
     finish).
   - `finished → at-start | on-course`, when the on-course stream withdraws a finish it alone had
     stated and no results-table row has recorded (§2.6): the next listing of the Attempt carries no
-    `dtFinish` (`DERIVATIONS.md` §4.1; slalom and the Cross time trial alike; recorded: a finish
-    impulse with no start and no time, the listing without it four minutes later). No diagnostic:
-    nothing presented came from the table. A start correction (§2.6) is no transition of its own:
-    the listing's status is this section's.
+    `dtFinish` (`DERIVATIONS.md` §4.1; slalom and the Cross time trial alike). No diagnostic. A
+    start correction (§2.6) is no transition of its own: the listing's status is this section's.
 - **Post-finish decisions and corrections:**
   - `finished → non-ranked | dsq | dsq-r | dqb | ral | other`;
   - any no-result status `→ finished`, when a mark is withdrawn.
-- **Retraction and contradiction** (`DECISIONS/ADR-015`), all routine in-race corrections:
-  - `finished → on-course`, when the on-course stream lists the Attempt with its start and no
-    finish: the finish was taken away (§4 INV-2d);
+- **Retraction and contradiction** (`DECISIONS/ADR-015`):
+  - `finished → on-course`, on a contradicted finish (§2.6; §4 INV-2d);
   - `finished | non-ranked` or any no-result status `→ not-started | at-start | on-course |
-    left-without-finish`, on a retraction (§4 INV-7): the row vanished, or a DNS was cleared; the
-    target is what the on-course stream currently shows — its latest inference for the
-    generation, so `left-without-finish` where the leave drew it (slalom and the Cross time
-    trial: a start and no finish standing at the leave, §2.6), whichever of the leave and the retracted row came first — else
-    `not-started`, as after a finisher's ordinary closure.
+    left-without-finish`, on a retraction (§2.6; §4 INV-7): the target is what the on-course stream
+    currently shows — its latest inference for the generation, so `left-without-finish` where the
+    leave drew it, whichever of the leave and the retracted row came first — else `not-started`.
 - **Re-run** (`DECISIONS/ADR-013`): `finished` or any no-result status `→ at-start | on-course`,
   **only together with a `run` increment.** This is the one transition that retracts known facts. It
   is explicit and observed, never inferred from omission.

@@ -2254,3 +2254,13 @@ every correction. It is never written in upstream's offline mode. The Kayak
 Cross heat ranking sets no such flag, so Cross heat results reached the file 1.5–10 min late in a
 recording. For Cross, TCP is the only fast source.
 Readers validate every read and retry: the write is a copy over the file, not an atomic rename.
+
+### 11.22 A row whose mark the guard refused (from CONTRACTS section 2.6)
+
+A mark refused for `status` — §4 rule 2's guard, INV-2c
+— therefore shows in no field (recorded nine times as a `dns` or `dnf` beside
+`not-started` or `left-without-finish`), **and nor does the rest of its row:** the guard refuses the
+observation, not one field of it, so the time such a row carries is retained with the mark and
+presented, if ever, by the next snapshot that restates it with a later content age; rule 1 does not
+reach a row whose mark rule 2's guard refused, and `left-without-finish` keeps `outcome: pending`
+(0 such presentations in seven recordings).
