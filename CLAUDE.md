@@ -114,7 +114,7 @@ State lives in `.dev-env/` (gitignored; override with `--state-dir`): `state.jso
 `player.tcpPort`, `player.controlPort`, `server.port` (plus pids). Each worktree has its own
 state dir and ports, so several environments run side by side.
 
-Flags: `--recording`, `--speed N` (also `--clock-rate N` for the process, whose clock runs at the player's rate from its own start; none at speed 1), `--protocol-docs`, `--state-dir`, `--down`. Passed through to the process: `--event-id`, `--event-name`, `--zone`, `--event-date`, `--external-id-scheme`. Without `--event-id` there is no current event (until the process mints one).
+Flags: `--recording`, `--speed N` (also `--clock-rate N` for the process, whose clock runs at the player's rate from its own start; none at speed 1), `--protocol-docs`, `--state-dir`, `--down`. Passed through to the process: `--event-id`, `--event-name`, `--zone`, `--event-date`, `--external-id-scheme`. Without `--event-id` the process reopens the event kept in its data dir, or mints one there on the first run (#330); `--event-name` alone names that event. Pausing or seeking the player does not stop the process's clock, so ages keep growing during a pause.
 
 ### Testing with recorded data
 
