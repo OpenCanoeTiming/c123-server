@@ -2228,3 +2228,15 @@ the stream's message terminator; whitespace inside the element is not a contract
 instance it is for, and a Backup instance ignores a command addressed to Main (observed upstream
 behaviour). The server therefore addresses each write to `SourceStatus.tcp.upstreamInstance` (§2.8),
 never to a constant.
+
+### 11.20 The ingest sequence, notifying per unit and the `seq` floor (from CONTRACTS section 1.6)
+
+Each outbound message takes the next value of the counter; an element's ingest sequence (INV-6, §4)
+is the value the counter had when it was ingested, so one element may produce many messages, each
+with its own `seq`. A core may apply observations one at a time, but it notifies per unit
+(`CONFORMANCE-VECTORS.md` §1, "Ingest units"), and a replay step is one unit
+(`TEST-ARCHITECTURE.md` §3.2). The counter's high-water mark is persisted with the same discipline as
+§2.10. On site, a mark that fails validation at load is set aside, and the counter restarts at a
+floor above any value issued in practice; on site, the guarantee carries the one residual stated in
+`DERIVATIONS.md` §10 item 33, which the maintainer accepted as a residual risk (`RULINGS.md` R-16).
+Neither relaxes anything for live-mini's counter.
