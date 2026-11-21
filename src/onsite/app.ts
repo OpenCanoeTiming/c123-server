@@ -6,6 +6,7 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { Router } from 'express';
 import type { MergeCore } from '../core/index.js';
 import { classWhole, courseWhole, onsiteEntry, onsiteEvent, phaseOfAttempt, type CurrentEvent, type J } from './wire.js';
 
@@ -34,6 +35,8 @@ export interface OnsiteApi {
   deleteCheck(a: AttemptRoute, gate: string): Promise<RestReply>;
   createFlag(a: AttemptRoute, key: string | undefined, body: unknown): Promise<RestReply>;
   resolveFlag(flagId: string, body: unknown): Promise<RestReply>;
+  /** #328 (R-26): `/api/clients*`, outside the contract; absent, the routes do not exist. */
+  clientRoutes?: Router;
 }
 export interface AttemptRoute { phaseId: string; bib: string }
 export interface RestReply { status: number; body?: J; location?: string }
@@ -149,6 +152,8 @@ export function createApp(api: OnsiteApi): express.Express {
   app.delete('/api/attempts/:phaseId/:bib/checks/:gate', handle((req) => api.deleteCheck(route(req), String(req.params['gate']))));
   app.post('/api/attempts/:phaseId/:bib/flags', handle((req) => api.createFlag(route(req), keyOf(req), req.body)));
   app.post('/api/flags/:flagId/resolution', handle((req) => api.resolveFlag(String(req.params['flagId']), req.body)));
+
+  if (api.clientRoutes !== undefined) app.use('/api', api.clientRoutes);
 
   app.get('/health', (_req, res) => { res.json({ status: 'ok' }); });
   app.use('/admin-ui', express.static(ADMIN_UI_DIR));
