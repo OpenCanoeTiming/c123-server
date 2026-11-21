@@ -7,11 +7,12 @@
  *   system time; with --clock-wait-stdin it stands at origin until one line is read on stdin)
  *
  * Without `--event-id` the process reopens the event persisted in `<data-dir>/event.json`, or mints and persists one (#330).
- * It prints `listening <port>` once HTTP accepts connections. SIGTERM and SIGINT stop it gracefully (the step log gets its `end` line) and
+ * It writes `onsite.log` in the data dir (#395) and prints `log <path>`, then `listening <port>` once HTTP accepts connections. SIGTERM and SIGINT stop it gracefully (the step log gets its `end` line) and
  * exit 0. Without `--tcp-host` the TCP host comes from Canoe123's UDP broadcast, unless `--no-discovery`.
  */
 import { appendFileSync, writeFileSync } from 'node:fs';
 import { createRealChecksFs, createRealClock, createRealXmlFs, createScaledClock } from '../adapters/real-io.js';
+import { createLogFile } from './log-file.js';
 import { UdpDiscovery } from '../sources/UdpDiscovery.js';
 import { DEFAULT_PORT, startOnsite, type OnsiteDiscovery, type OnsiteOptions } from './index.js';
 
@@ -67,9 +68,13 @@ if (scaled !== undefined && waitStdin) {
   process.stdin.on('data', onData);
 }
 
+const clock = scaled ?? createRealClock();
+const logFile = createLogFile({ dir: dataDir as string, clock });
+process.stdout.write(`log ${logFile.path}\n`);
 const opts: OnsiteOptions = {
   port: num('--port') ?? DEFAULT_PORT,
-  clock: scaled ?? createRealClock(),
+  clock,
+  logFile,
   fs: { ...createRealChecksFs(), ...createRealXmlFs() },
   dataDir: dataDir as string,
   persistEvent: true,
@@ -84,7 +89,7 @@ const opts: OnsiteOptions = {
   ...(stepLog !== undefined ? { stepLog: (line: string): void => { appendFileSync(stepLog, `${line}\n`); } } : {}),
 };
 
-const handle = await startOnsite(opts);
+const handle = await startOnsite(opts).catch((e: unknown) => { logFile.write(`start failed: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`); throw e; });
 process.stdout.write(`listening ${handle.port}\n`);
 const stop = (): void => {
   void handle.stop().then(() => { process.exit(0); }, (e: unknown) => { console.error(e); process.exit(1); });

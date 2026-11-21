@@ -26,6 +26,8 @@ export interface OnsiteApi {
   event(): CurrentEvent | undefined;
   core(): MergeCore;
   sources(): J;
+  /** #395: the last lines of the log file, oldest first. */
+  logTail(limit: number): string[];
   checksOf(phaseId: string): { checks: J[]; flags: J[] };
   rebaseline(scope: RebaselineScope): Promise<RebaselineOutcome>;
   /** §7.3, §7.4: the write routes. Each answers with the status, body and `Location` the contract names; a refusal carries the error envelope. */
@@ -118,6 +120,11 @@ export function createApp(api: OnsiteApi): express.Express {
     res.json({ asOfSeq: api.asOfSeq(), attempts: on.attemptIds.map((a) => core.presented(a)), featuredByUpstream: on.featuredByUpstream, asOf: on.asOf });
   });
   app.get('/api/sources', (_req, res) => { res.json(api.sources()); });
+  // the legacy `/api/logs` limits: default 100, at most 500
+  app.get('/api/logs', (req, res) => {
+    const n = parseInt(String(req.query['limit']), 10);
+    res.json({ lines: api.logTail(Number.isNaN(n) ? 100 : Math.min(Math.max(1, n), 500)) });
+  });
   app.get('/api/diagnostics', (_req, res) => { res.json({ asOfSeq: api.asOfSeq(), diagnostics: api.core().diagnostics() }); });
 
   app.post('/api/rebaseline', async (req: Request, res: Response, next: NextFunction) => {
