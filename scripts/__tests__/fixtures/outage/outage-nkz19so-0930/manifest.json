@@ -11,19 +11,19 @@
       "seq": 1,
       "file": "001-outage.jsonl",
       "label": "Setup",
-      "startTime": "2026-09-19T09:29:58.537Z",
-      "endTime": "2026-09-19T09:55:03.454Z",
-      "startOffset": 4,
-      "duration": 1504917,
+      "startTime": "2026-09-19T09:34:45.037Z",
+      "endTime": "2026-09-19T09:46:15.037Z",
+      "startOffset": 286504,
+      "duration": 690000,
       "races": [],
-      "messages": 9752,
+      "messages": 3402,
       "snapshots": 0,
-      "size": 61841309
+      "size": 14835337
     }
   ],
-  "totalDuration": 1504917,
-  "totalMessages": 9752,
-  "tcpStateAtStart": "unknown",
+  "totalDuration": 690000,
+  "totalMessages": 3402,
+  "tcpStateAtStart": "connected",
   "fixture": {
     "name": "outage-nkz19so-0930",
     "synthetic": true,
@@ -57,10 +57,21 @@
         "2026-11-09T14:39:46.020Z tcp-disconnected (recorder-stop)"
       ]
     },
+    "cut": {
+      "why": "a short cut around the two recorded reconnects (#399), taken from the recording by build.mjs; the offset is the one of the whole recording, so every kept record keeps the instant it had",
+      "fromTs": 286500,
+      "toTs": 976500,
+      "from": "2026-09-19T09:34:45.037Z",
+      "to": "2026-09-19T09:46:15.037Z",
+      "windowWhy": "opens 15 s before the first TCP cut (2026-09-19T09:35:00.039Z) so the core holds the start list, race configs and results of the running classes, and the first XML snapshot, before the first outage (RaceConfig and Results repeat every few seconds in the recording; the first XML snapshot at or after the start is kept); ends 60 s after the second reconnect (2026-09-19T09:45:15.017Z), the end of the last test interval. The recording's own first connect and recorder-stop disconnect lie outside, hence tcpStateAtStart connected and four recorded events.",
+      "judgedFrom": "2026-09-19T09:34:53.602Z",
+      "judgedFromWhy": "a cold start in the middle of a stream: the core has Results and OnCourse but not yet the start list of the XML, so the checker is given --window judgedFrom..to (as for the real recording B, row 5); everything before the first XML snapshot is warm-up",
+      "xmlKept": "the first snapshot at or after the start, and every snapshot from the first disconnect to 60 s after the first reconnect and from the second disconnect to the end; the others (the quiet stretch between the outages) are dropped"
+    },
     "rebase": {
       "offsetMs": -4423482567,
       "rule": "one constant offset added to every instant (chunk startTime, manifest start/end); record ts stay chunk-relative. The anchor is the first TimeOfDay record (unique content, found in nkz-19so by content), which lands on its original instant. The literal rule of #208 (first TCP data record = its original) would anchor the player seek burst, whose originals lie up to 12 s before the player start: every instant would then be ~12 s off the data's own clock and gate-2 property 1 reports false violations (observed).",
-      "firstTcpRecordInstant": "2026-09-19T09:30:00.000Z",
+      "firstTcpRecordInstant": "2026-09-19T09:34:45.064Z",
       "anchorRecord": {
         "type": "TimeOfDay",
         "data": "<Canoe123 System=\"Main\"><TimeOfDay>11:30:01</TimeOfDay></Canoe123>",
@@ -72,8 +83,10 @@
       }
     },
     "edits": [
-      "51 recorder _snapshot lines dropped",
-      "123 base64 <ReportImageLeft|Right|Footer> elements emptied in the XML snapshots' <Events> (report logos; size fields adjusted)",
+      "23 recorder _snapshot lines dropped",
+      "27 base64 <ReportImageLeft|Right|Footer> elements emptied in the XML snapshots' <Events> (report logos; size fields adjusted)",
+      "records outside the cut window dropped, record ts shifted by 286500 ms (chunk-relative)",
+      "9 XML snapshots outside the outages dropped (size)",
       "instants rebased by offsetMs",
       "manifest host/xml path neutralised, event.date 2026-09-19",
       "fixture and tcpStateAtStart added",
