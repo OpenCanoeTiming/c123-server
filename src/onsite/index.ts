@@ -44,7 +44,7 @@ export interface OnsiteDiscovery extends EventEmitter {
  */
 export type AdminLogEntry = {
   kind: 'store-set-aside';
-  store: 'checks' | 'writes' | 'seq';
+  store: 'checks' | 'writes' | 'seq' | 'event';
   eventId?: string;
   file: string;
   setAsideAs: string;
@@ -65,6 +65,12 @@ export interface OnsiteOptions {
   dataDir: string;
   eventId?: string;
   eventName?: string;
+  /**
+   * #330: the process owns its current event in `event.json` of the data dir. At boot without `eventId` it reopens the persisted one, or mints
+   * and persists a new opaque id; an `eventId` given is persisted as current; an entered name is persisted with it. Off: no persistence, and
+   * without `eventId` no event at all (the tests' default). `main.ts` always sets it.
+   */
+  persistEvent?: boolean;
   xml?: { path: string; pollSeconds?: number };
   tcp?: { source: Source } | { host?: string; port?: number; create?: (host: string, port: number) => Source };
   discovery?: OnsiteDiscovery | null;
@@ -79,7 +85,8 @@ export interface OnsiteHandle {
   port: number;
   stop(): Promise<void>;
   kill(): void;
-  startNewEvent(e: { eventId: string; name: string }): Promise<void>;
+  /** Without `eventId` a new one is minted; one given that was current before is the return to it. */
+  startNewEvent(e: { eventId?: string; name: string }): Promise<void>;
   checks: {
     putCheck(i: { attemptId: string; run: number; gate: number; valueAtCheck: number | null; checkedBy?: string }): Promise<J>;
     deleteCheck(k: { attemptId: string; run: number; gate: number }): Promise<void>;
@@ -120,6 +127,33 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     while (names.has(nameAt(n))) n++;
     return `${base}${nameAt(n)}`;
   }
+  const eventFile = `${base}event.json`;
+  /** #330: the persisted current event, or undefined when there is none; an unreadable file is set aside and reported like the stores' files. */
+  async function readEventFile(): Promise<{ eventId: string; name?: string } | undefined> {
+    let text: string;
+    try { text = await fs.readFile(eventFile); } catch (e) {
+      if ((e as { code?: string }).code === 'ENOENT') return undefined;
+      throw e;
+    }
+    try {
+      const v = JSON.parse(text) as { version?: unknown; eventId?: unknown; name?: unknown };
+      if (v === null || typeof v !== 'object' || v.version !== 1) throw new Error('not a version 1 event file');
+      if (typeof v.eventId !== 'string' || v.eventId === '') throw new Error('eventId is not a non-empty string');
+      if (v.name !== undefined && typeof v.name !== 'string') throw new Error('name is not a string');
+      return { eventId: v.eventId, ...(v.name !== undefined ? { name: v.name } : {}) };
+    } catch (e) {
+      const setAsideAs = await setAsideName(eventFile);
+      await fs.rename(eventFile, setAsideAs);
+      report('event', eventFile, setAsideAs, e instanceof Error ? e.message : String(e));
+      return undefined;
+    }
+  }
+  /** Atomic like the other stores: a temp file, then a rename. */
+  async function writeEventFile(eventId: string, name: string | undefined): Promise<void> {
+    await fs.mkdir(dataDir);
+    await fs.writeFile(`${eventFile}.tmp`, JSON.stringify({ version: 1, eventId, ...(name !== undefined ? { name } : {}) }));
+    await fs.rename(`${eventFile}.tmp`, eventFile);
+  }
   const report = (store: AdminLogEntry['store'], file: string, setAsideAs: string, reason: string, eventId?: string): void => {
     adminLog({ kind: 'store-set-aside', store, ...(eventId !== undefined ? { eventId } : {}), file, setAsideAs, reason });
   };
@@ -147,8 +181,16 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   // ------------------------------------------------------------------------------------------------ event, core, checks store
   // §10 item 40 (a): a boot flag entered non-blank is the operator naming the event; blank or absent, the name awaits the snapshot's title.
   const bootName = opts.eventName !== undefined && opts.eventName.trim() !== '' ? opts.eventName : undefined;
-  let event: CurrentEvent | undefined = opts.eventId === undefined ? undefined : {
-    eventId: opts.eventId, name: bootName ?? opts.eventId, details: { state: 'not-yet' }, nameFrom: bootName !== undefined ? 'operator' : 'snapshot',
+  let bootId = opts.eventId;
+  let enteredName = bootName;
+  if (opts.persistEvent === true) {
+    const kept = await readEventFile();
+    bootId ??= kept?.eventId ?? randomUUID();
+    if (enteredName === undefined && kept?.eventId === bootId) enteredName = kept.name;
+    await writeEventFile(bootId, enteredName);
+  }
+  let event: CurrentEvent | undefined = bootId === undefined ? undefined : {
+    eventId: bootId, name: enteredName ?? bootId, details: { state: 'not-yet' }, nameFrom: enteredName !== undefined ? 'operator' : 'snapshot',
   };
   const newCore = (): MergeCore => createMergeCore({ ...(opts.zone !== undefined ? { zone: opts.zone } : { zone: 'Europe/Prague' }), xmlConfigured: opts.xml !== undefined });
   let core = newCore();
@@ -796,14 +838,16 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     },
     startNewEvent: async (e) => {
       await enqueue(async () => {
-        if (typeof e.eventId !== 'string' || e.eventId === '' || typeof e.name !== 'string') throw new ValidationError([{ field: 'event', issue: 'needs an eventId and a name' }]);
-        if (event?.eventId === e.eventId) throw new ValidationError([{ field: 'eventId', issue: 'is the event that is already current' }]);
-        const next = await storeFor(e.eventId);
+        if ((e.eventId !== undefined && (typeof e.eventId !== 'string' || e.eventId === '')) || typeof e.name !== 'string') throw new ValidationError([{ field: 'event', issue: 'needs a name, and an eventId that is non-empty when given' }]);
+        const eventId = e.eventId ?? randomUUID();
+        if (event?.eventId === eventId) throw new ValidationError([{ field: 'eventId', issue: 'is the event that is already current' }]);
+        const next = await storeFor(eventId);
         // §10 item 40 (a): a blank or whitespace-only name counts as none entered; `name` then awaits the snapshot's title.
         const entered = e.name.trim() !== '';
-        event = { eventId: e.eventId, name: entered ? e.name : e.eventId, details: { state: 'not-yet' }, nameFrom: entered ? 'operator' : 'snapshot' };
+        if (opts.persistEvent === true) await writeEventFile(eventId, entered ? e.name : undefined);
+        event = { eventId, name: entered ? e.name : eventId, details: { state: 'not-yet' }, nameFrom: entered ? 'operator' : 'snapshot' };
         store = next;
-        wstore = await writesFor(e.eventId);
+        wstore = await writesFor(eventId);
         adopted.clear();
         core = newCore();
         tracker = newTracker();

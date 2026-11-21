@@ -21,6 +21,8 @@
  *     dataDir: string                     // where the process keeps its durable files (checks per event, the `seq` high-water mark)
  *     eventId?: string; eventName?: string   // the configured event (§2.2: asserted, never discovered). Absent: no event configured,
  *                                         // `GET /api/events/current` is `404 event-not-found`
+ *     persistEvent?: boolean              // #330: the current event lives in `event.json` of dataDir: without `eventId` the persisted one is reopened or a new opaque id minted;
+ *                                         // an `eventId` is persisted as current, with the entered name. Off (default): no file, and no `eventId` means no event. main.ts sets it
  *     xml?: { path: string; pollSeconds?: number }   // the snapshot file; absent: `xml.state` is `not-configured`
  *     tcp?: { source: Source }                        // a ready source (tests: `fakeTcp()`), or
  *         | { host?: string; port?: number; create?: (host: string, port: number) => Source }   // a host (default port 27333) to build one for;
@@ -35,7 +37,7 @@
  *     port: number                        // the bound port
  *     stop(): Promise<void>               // graceful: stops sources, flushes durable state, closes the sockets
  *     kill(): void                        // a process kill: closes sockets, writes NOTHING more, awaits nothing
- *     startNewEvent(e: { eventId: string; name: string }): Promise<void>   // the explicit "start a new event" action (Scenario E); the contract
+ *     startNewEvent(e: { eventId?: string; name: string }): Promise<void>   // #330: without eventId one is minted (and persisted when persistEvent); the explicit "start a new event" action (Scenario E); the contract
  *                                         // names no REST path for it, so the test drives it here; broadcasts `event.changed`
  *     checks: {                           // the wired checks store of the CURRENT event (#273 N2: exactly one instance per event); every write
  *                                         // is validated first, durable, then pushed as `check.updated` / `flag.updated`. #212's REST handlers call these.
