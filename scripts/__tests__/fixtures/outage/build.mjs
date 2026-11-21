@@ -16,7 +16,8 @@
  * record in nkz-19so (found by content). #208 words this as "the first TCP data record"; that record is the player's seek burst whose
  * originals precede the player start by up to 12 s, which breaks the data's own clock (see the manifest `rebase.rule`).
  *
- * Edits (everything else is byte-identical to the recording): `_snapshot` lines dropped (recorder state images, the gate does not read
+ * Edits (everything else is byte-identical to the recording): only the cut window below is kept (#399), and inside it the XML
+ * snapshots of the quiet stretch between the two outages are dropped (the manifest's `fixture.edits` and `fixture.cut` state both); `_snapshot` lines dropped (recorder state images, the gate does not read
  * them); the three base64 `<ReportImage*>` elements of every XML snapshot's `<Events>` emptied (report logos, as in rerun-paths); `_meta` and manifest instants rebased; manifest `event.date` and `host`/path fields neutralised; `fixture` object and
  * `tcpStateAtStart` added. Kept: `_event`, tcp and xml records. Published-results rule: names, clubs, ICF ids as recorded; Birthdate
  * only as year (checked below, the recording already holds YYYY-01-01).
