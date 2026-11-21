@@ -8,10 +8,11 @@
  *
  * Fixture A: `scripts/__tests__/fixtures/outage/outage-nkz19so-0930/` (manifest.json + gzipped chunk, built by `fixtures/outage/build.mjs`
  * from the synthetic recording 2026-11-09-outage-nkz19so-0930; every instant rebased by one constant offset stated in the manifest).
+ * A is a short cut (#399) around the two recorded reconnects: `manifest.fixture.cut` states the window and why it starts where it does.
  * The chunk holds the recorder's own `_event` records, so A needs no `--events` (row 1 of #208 makes replay-direct read them).
  * Fixture B: jarni-ne-do 08:55-09:10 (real recording, skipped when absent) with `fixtures/outage/jarni-ne-do-events.json`, the two
  * ~168 s TCP gaps stated at the instants of the raw gap (last record before + 1 ms; first record after).
- * Baseline for row 6: nkz-19so 09:30 to the end of A's window, no outage (skipped when absent). The checker is skipped when absent.
+ * Baseline for rows 6 and 7: nkz-19so from the start to the end of A's cut window, no outage (skipped when absent). The checker is skipped when absent.
  *
  * Test names cite the rule: `property 8`, `INV-2 rule 2`, `CONTRACTS §4`, `#208 row N` (the issue's test plan).
  */
@@ -51,6 +52,7 @@ const tmp = (): string => { const d = mkdtempSync(path.join(tmpdir(), 'outage-')
 let A: string
 const manifestA = (): { chunks: { file: string; startTime: string; endTime: string }[]; tcpStateAtStart: string; fixture: Record<string, any>; event: { date: string } } =>
   JSON.parse(readFileSync(path.join(A_DIR, 'manifest.json'), 'utf8'))
+const cutFrom = (): string => manifestA().fixture['cut']['from']
 const chunkTextA = (): string => gunzipSync(readFileSync(path.join(A_DIR, '001-outage.jsonl.gz'))).toString('utf8')
 beforeAll(() => {
   A = tmp()
@@ -188,11 +190,18 @@ describe('#208 row 2: fixture A stated', () => {
     expect(String(fx['source']['madeBy'])).toMatch(/#37/)
     expect(String(fx['source']['originalRecording'])).toBe('2026-09-19-2026-nkz-19so')
     expect(fx['source']['window']['from']).toMatch(/^2026-09-19T09:30:00/)
-    expect(Date.parse(fx['source']['window']['to'])).toBeGreaterThan(Date.parse('2026-09-19T09:50:00Z'))
+    expect(Date.parse(fx['source']['window']['to'])).toBeGreaterThan(Date.parse('2026-09-19T09:50:00Z')) // the recording the cut was taken from
+    // the cut (#399): opens before the first TCP cut (state first), ends after the second reconnect, and says why
+    expect(Date.parse(fx['cut']['from'])).toBeLessThan(Date.parse('2026-09-19T09:35:00Z'))
+    expect(Date.parse(fx['cut']['from'])).toBeGreaterThan(Date.parse('2026-09-19T09:33:00Z'))
+    expect(Date.parse(fx['cut']['to'])).toBeGreaterThan(Date.parse('2026-09-19T09:46:00Z'))
+    expect(String(fx['cut']['windowWhy'])).toMatch(/start list/)
+    expect(m.chunks[0]!.startTime).toBe(fx['cut']['from'])
+    expect(m.chunks[0]!.endTime).toBe(fx['cut']['to'])
     expect(fx['source']['cuts'].map((c: { at: string; seconds: number }) => [c.at, c.seconds])).toEqual([['2026-09-19T09:35:00.000Z', 170], ['2026-09-19T09:45:00.000Z', 15]])
     expect(typeof fx['rebase']['offsetMs']).toBe('number')
     expect(fx['rebase']['offsetMs']).toBeLessThan(0) // the wall clock of the recording is 2026-11-09, the data 2026-09-19
-    expect(['connected', 'disconnected', 'unknown']).toContain(m.tcpStateAtStart)
+    expect(m.tcpStateAtStart).toBe('connected') // the cut opens inside the first connection
     expect(m.event.date).toBe('2026-09-19')
   })
 
@@ -204,7 +213,7 @@ describe('#208 row 2: fixture A stated', () => {
     expect(JSON.parse(text.split('\n')[0] as string)._meta.startTime).toBe(m.chunks[0]!.startTime)
     const firstTcp = text.split('\n').filter((l) => l.startsWith('{"ts"') && l.includes('"src":"tcp"')).map((l) => JSON.parse(l) as { ts: number })[0]!
     expect(new Date(base + firstTcp.ts).toISOString()).toBe(m.fixture['rebase']['firstTcpRecordInstant'])
-    expect(recordedEvents().map((e) => e.event)).toEqual(['tcp-connected', 'tcp-disconnected', 'tcp-connected', 'tcp-disconnected', 'tcp-connected', 'tcp-disconnected'])
+    expect(recordedEvents().map((e) => e.event)).toEqual(['tcp-disconnected', 'tcp-connected', 'tcp-disconnected', 'tcp-connected']) // the two recorded outages; the recording's own first connect and recorder-stop lie outside the cut
     expect(text).not.toContain('"_snapshot"') // dropped, stated in manifest.fixture.edits
     expect(m.fixture['edits'].join(' ')).toMatch(/_snapshot/)
   })
@@ -222,16 +231,16 @@ describe('#208 row 2: fixture A stated', () => {
 
 describe('#208 rows 3-4: fixture A (recorded outages 09:35:00 for 170 s and 09:45:00 for 15 s)', () => {
   it('fixture A: two replays are byte-identical (CONTRACTS §4 determinism)', () => {
-    const one = path.join(tmp(), 'one.jsonl')
+    const one = replay(A) // shared with the interval guard below
     const two = path.join(tmp(), 'two.jsonl')
-    replayTo(A, [], one)
     replayTo(A, [], two)
     expect(sha(two)).toBe(sha(one))
     expect(finalHash(two)).toBe(finalHash(one))
   }, T)
 
   it.skipIf(!haveChecker)('fixture A: gate-2 checker reports 0 violations, property 8 exercised (an outage makes no re-baseline: P13 not claimed)', () => {
-    const g = gate2(replay(A), A)
+    const cut = manifestA().fixture['cut'] // a cold start mid-stream: judged from the first XML snapshot (cut.judgedFromWhy), as B is
+    const g = gate2(replay(A), A, `${cut['judgedFrom']},${cut['to']}`)
     expect(g.violations.length, shown(g)).toBe(0)
     expect(g.exit).toBe(0)
     expect(g.exercised['8'], 'property 8 exercised').toBeGreaterThan(0)
@@ -241,8 +250,8 @@ describe('#208 rows 3-4: fixture A (recorded outages 09:35:00 for 170 s and 09:4
     const base = Date.parse(manifestA().chunks[0]!.startTime)
     const recs = chunkTextA().split('\n').filter((l) => l.startsWith('{"ts"')).map((l) => JSON.parse(l) as { ts: number; src?: string; type?: string; _event?: { event: string } })
     const connects = recs.filter((r) => r._event?.event === 'tcp-connected')
-    expect(connects).toHaveLength(3)
-    for (const c of connects.slice(1)) { // the first connect is the player start (its seek burst), not a reconnect
+    expect(connects).toHaveLength(2) // both are reconnects: the player's own first connect (its seek burst) lies before the cut
+    for (const c of connects) {
       const after = recs.filter((r) => r.src === 'tcp' && r.ts >= c.ts).slice(0, 2).map((r) => r.type)
       expect(after, `reconnect at ${new Date(base + c.ts).toISOString()}`).toEqual(['RaceConfig', 'Schedule'])
     }
@@ -300,10 +309,10 @@ function endAttempts(file: string): Map<string, EndAttempt> {
 }
 
 describe('#208 row 6: re-hydration', () => {
-  it.skipIf(!haveNkz)('fixture A: end state equals the no-outage replay of the same window (nkz-19so from 09:30, rebased instants aside)', () => {
+  it.skipIf(!haveNkz)('fixture A: end state equals the no-outage replay of the same window (nkz-19so from the cut start, rebased instants aside)', () => {
     const to = manifestA().chunks[0]!.endTime
     const withOutage = endAttempts(replay(A))
-    const baseline = endAttempts(replay(NKZ, ['--from', '2026-09-19T09:30:00Z', '--to', to]))
+    const baseline = endAttempts(replay(NKZ, ['--from', cutFrom(), '--to', to]))
     const diffs: string[] = []
     for (const id of new Set([...withOutage.keys(), ...baseline.keys()])) {
       const a = withOutage.get(id)
@@ -326,7 +335,7 @@ describe('#208 row 7: no flicker on reconnect', () => {
   it.skipIf(!haveNkz)('A and B: no flicker across each reconnect that the no-outage replay of the same interval lacks (INV-1 status monotonic, CONTRACTS §3.2; amended #208 row 7)', () => {
     const found: string[] = []
     const aEnd = manifestA().chunks[0]!.endTime
-    found.push(...listed('A', outageOnly(replay(A), replay(NKZ, ['--from', '2026-09-19T09:30:00Z', '--to', aEnd]), intervals(recordedEvents()))))
+    found.push(...listed('A', outageOnly(replay(A), replay(NKZ, ['--from', cutFrom(), '--to', aEnd]), intervals(recordedEvents()))))
     if (haveJarni) {
       const iv = intervals(statedB().map((e) => ({ event: e.event, at: Date.parse(e.observedAt) })))
       found.push(...listed('B', outageOnly(replay(JARNI, ['--to', B_TO, '--events', B_EVENTS]), replay(JARNI, ['--to', B_TO]), iv)))
