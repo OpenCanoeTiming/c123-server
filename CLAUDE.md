@@ -105,14 +105,16 @@ Rebuild work is test-first: tier-1 vectors (`docs/arch/vectors/tier1-conformance
 ### Dev environment (one command)
 
 `npm run dev:env -- --recording <id> [--speed N]` installs dependencies if needed, fetches the
-recording (cached), starts `player.js` and the server on free ports (detached, own `HOME`), and
-prints the ports and how to attach. Stop with `npm run dev:env -- --down`. Needs
+recording (cached), starts `player.js` and the on-site process (`src/onsite/main.ts`) on free ports (detached), and
+prints the ports, the data dir and how to attach. Stop with `npm run dev:env -- --down`. Needs
 `c123-protocol-docs` (`--protocol-docs`, `C123_PROTOCOL_DOCS`, or beside the main checkout).
 
 State lives in `.dev-env/` (gitignored; override with `--state-dir`): `state.json`, `player.log`,
-`server.log`, `replay.xml`, `home/`. Read ports from `.dev-env/state.json`:
+`server.log`, `replay.xml`, `data/` (the process's `--data-dir`, kept across `--down` so a restart keeps durable state). Read ports from `.dev-env/state.json`:
 `player.tcpPort`, `player.controlPort`, `server.port` (plus pids). Each worktree has its own
 state dir and ports, so several environments run side by side.
+
+Flags: `--recording`, `--speed N` (also `--clock-rate N` for the process, whose clock runs at the player's rate from its own start; none at speed 1), `--protocol-docs`, `--state-dir`, `--down`. Passed through to the process: `--event-id`, `--event-name`, `--zone`, `--event-date`, `--external-id-scheme`. Without `--event-id` the process reopens the event kept in its data dir, or mints one there on the first run (#330); `--event-name` alone names that event. Pausing or seeking the player does not stop the process's clock, so ages keep growing during a pause.
 
 ### Testing with recorded data
 
