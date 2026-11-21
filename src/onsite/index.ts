@@ -45,7 +45,7 @@ export interface OnsiteDiscovery extends EventEmitter {
  */
 export type AdminLogEntry = {
   kind: 'store-set-aside';
-  store: 'checks' | 'writes' | 'seq' | 'event';
+  store: 'checks' | 'writes' | 'seq' | 'event' | 'clients';
   eventId?: string;
   file: string;
   setAsideAs: string;
@@ -785,12 +785,15 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     createFlag,
     resolveFlag,
   };
-  const clientReg = await openClients({ fs, dir: dataDir, now: () => clock.now(), log });
+  const clientReg = await openClients({
+    fs, dir: dataDir, now: () => clock.now(), log,
+    setAside: async (file, reason) => { const setAsideAs = await setAsideName(file); await fs.rename(file, setAsideAs); report('clients', file, setAsideAs, reason); },
+  });
   const server: Server = createServer(createApp({ ...api, clientRoutes: clientReg.routes }));
   // two `ws` servers with a `path` each on one HTTP server abort each other's upgrades: the paths are routed here
   const wss = new WebSocketServer({ noServer: true });
   server.on('upgrade', (req, socket, head) => {
-    const path = new URL(req.url ?? '/', 'http://x').pathname;
+    const path = (req.url ?? '/').split('?')[0];
     if (path === '/ws') wss.handleUpgrade(req, socket, head, (ws) => { wss.emit('connection', ws, req); });
     else if (path === '/ws/client') clientReg.upgrade(req, socket, head);
     else { socket.write('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'); socket.destroy(); }

@@ -42,7 +42,7 @@ export interface ClientRegistry {
   close(): void;
 }
 
-export async function openClients(opts: { fs: ChecksFs; dir: string; now: () => number; log?: (what: string, e: unknown) => void }): Promise<ClientRegistry> {
+export async function openClients(opts: { fs: ChecksFs; dir: string; now: () => number; log?: (what: string, e: unknown) => void; setAside: (file: string, reason: string) => Promise<void> }): Promise<ClientRegistry> {
   const { fs, dir, now } = opts;
   const log = opts.log ?? ((): void => undefined);
   const base = dir.endsWith('/') || dir.endsWith('\\') ? dir : `${dir}/`;
@@ -50,15 +50,18 @@ export async function openClients(opts: { fs: ChecksFs; dir: string; now: () => 
   const tmp = `${target}.tmp`;
   await fs.mkdir(dir);
   const records = new Map<string, Record_>();
-  try {
-    const raw = JSON.parse(await fs.readFile(target)) as { version?: unknown; clients?: unknown };
-    if (raw.version !== 1 || typeof raw.clients !== 'object' || raw.clients === null) throw new Error('not a version 1 clients file');
-    for (const [k, v] of Object.entries(raw.clients)) records.set(k, v as Record_);
-  } catch (e) {
-    if ((e as { code?: string }).code !== 'ENOENT') {
-      // unreadable content: set it aside and start empty; the operator sets the clients up again
-      log('clients file unusable, set aside', e);
-      await fs.rename(target, `${target}.invalid`).catch(() => undefined);
+  let text: string | undefined;
+  try { text = await fs.readFile(target); } catch (e) {
+    if ((e as { code?: string }).code !== 'ENOENT') throw e;
+  }
+  if (text !== undefined) {
+    try {
+      const raw = JSON.parse(text) as { version?: unknown; clients?: unknown };
+      if (raw === null || typeof raw !== 'object' || raw.version !== 1 || typeof raw.clients !== 'object' || raw.clients === null) throw new Error('not a version 1 clients file');
+      for (const [k, v] of Object.entries(raw.clients)) records.set(k, v as Record_);
+    } catch (e) {
+      // not parseable or not the right shape: set aside and start empty; the operator sets the clients up again
+      await opts.setAside(target, e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -97,7 +100,7 @@ export async function openClients(opts: { fs: ChecksFs; dir: string; now: () => 
   };
 
   wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
-    const explicit = new URL(req.url ?? '/', 'http://x').searchParams.get('clientId') || undefined;
+    const explicit = new URLSearchParams((req.url ?? '/').split('?')[1] ?? '').get('clientId') || undefined;
     const ip = normalizeIp(req.socket.remoteAddress ?? 'unknown');
     const s: Session = { id: `client-${++counter}`, ws, key: explicit ?? ip, ip, explicit: explicit !== undefined, state: null };
     sessions.add(s);
