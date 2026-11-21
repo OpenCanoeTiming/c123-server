@@ -2301,7 +2301,7 @@ reach a row whose mark rule 2's guard refused, and `left-without-finish` keeps `
 ### 11.24 INV-7: the content-age guard on XML retractions (from CONTRACTS section 4)
 
 - **XML retractions are guarded by content age (INV-2c),** a present row's and an absent row's
-  alike, and an absent row's removal by the Attempt-wide form above. The snapshot lags TCP by up to a save cycle, so a snapshot written before a result push
+  alike, and an absent row's removal by the Attempt-wide form of `CONTRACTS.md` §9.8. The snapshot lags TCP by up to a save cycle, so a snapshot written before a result push
   must not undo it. An XML retraction, and the mark exception of rule 2, apply to a `tcp`
   observation only when the snapshot's content age — its `changedAfter`, INV-2c — is later than
   that observation's content age (its latest delivery's `observedAt`, INV-2c). A first read,
@@ -2327,7 +2327,7 @@ another order, so nothing is compared and an anomaly recorded earlier is withdra
 snapshot that restates the presented order is compared. The snapshot's `CatRnk` is read with no
 content-age guard: it is an `xml`-only check input, never presented, and the order condition is what
 keeps a stale file from raising anything. The check reads placed entries only: an unplaced row's
-`CatRnk` is a list position, not a rank (bib 64 above carries `CatRnk` 9). It reads only rows whose
+`CatRnk` is a list position, not a rank (bib 64 in `CONTRACTS.md` §5 step 4's example carries `CatRnk` 9). It reads only rows whose
 `CatId` is set: on a second-run row with an empty `CatId`, `TotalCatRnk` repeats the class rank and
 is not a category rank (observed in up to 196,621 row-instances per recording). **It reads first-run
 and single-run rows only** (a default, `DERIVATIONS.md` §10 item 53 (c)): a second-run Phase's
@@ -2338,8 +2338,8 @@ recording's last snapshot), so a second-run Phase's category ranks are not check
 ### 11.27 The order anomaly check (from CONTRACTS section 5, step 7)
 
 **Anomaly check, the one mechanical comparison** (`order-disagreement`). It applies in a
-duration-scored `phase` or `pair` standing, among placed entries with a numeric ranked value (step
-6) and no no-result mark. An anomaly is recorded when an entry is ordered ahead of another whose
+duration-scored `phase` or `pair` standing, among placed entries with a numeric ranked value
+(`CONTRACTS.md` §5 step 6) and no no-result mark. An anomaly is recorded when an entry is ordered ahead of another whose
 ranked value is strictly smaller. Ties are never flagged, because upstream breaks them legitimately:
 a combined tie by the run that did not count, and a single-run tie by its own order field. Cross
 scopes are never checked.
