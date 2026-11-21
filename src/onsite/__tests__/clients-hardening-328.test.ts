@@ -18,11 +18,11 @@ const raw = (port: number, target: string): Promise<string> => new Promise((res)
 });
 
 describe('#328 review: upgrade routing and the clients file', () => {
-  it('a malformed absolute-form request target on an upgrade gets a 400 or a closed socket and the process keeps answering', async () => {
+  it('a malformed absolute-form request target on an upgrade gets a 400 and the process keeps answering', async () => {
     const env = await boot({ startAt: ODP.startAt });
     for (const path of ['/ws', '/ws/client']) {
       const reply = await raw(env.h.port, `http://[x${path}`);
-      expect(reply === '' || reply.startsWith('HTTP/1.1 400')).toBe(true);
+      expect(reply.startsWith('HTTP/1.1 400'), `reply to ${path}: ${JSON.stringify(reply.slice(0, 40))}`).toBe(true);
     }
     expect((await get(env, '/api/clients')).status).toBe(200);
     expect((await get(env, '/api/sources')).status).toBe(200);
