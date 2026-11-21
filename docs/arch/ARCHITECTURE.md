@@ -432,4 +432,5 @@ oversight.
   not domain truth. The maintainer decided they stay outside the redesign (c123-server#169). They
   keep today's mechanism, and they are fixed independently, before or after the redesign, then pinned
   by regression tests (c123-server#3, #145, c123-scoreboard#127). The contract neither carries nor
-  constrains them.
+  constrains them. The on-site process serves them on their own WebSocket path, `/ws/client`, beside
+  the contract's `/ws` (`RULINGS.md` R-26, c123-server#328).
