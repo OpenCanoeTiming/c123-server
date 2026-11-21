@@ -841,6 +841,12 @@ states it as it states the class (`CONFORMANCE-VECTORS.md` §1, a convention of 
 standing waits for its Phase (§5 step 1); a vector's Phase has its class by convention from its
 first observation (`CONFORMANCE-VECTORS.md` §1), so nothing waits there.
 
+#### 3.6.5 A tier-1 vector's `confirmedValue` (from CONTRACTS section 7.3)
+
+A tier-1 vector's `writeRequest.confirmedValue` is the merge
+port's cell vector, the harness shape of `CONFORMANCE-VECTORS.md` §1, which this serialisation maps to
+the target cell.
+
 ---
 
 ## 4. The fixture format
