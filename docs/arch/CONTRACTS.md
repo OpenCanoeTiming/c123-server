@@ -665,7 +665,7 @@ competitor can turn out, even a week later, to have raced under the wrong bib.
   classes reusing a bib number are different Phases: neither collides.
 
 **Run generation** (`DECISIONS/ADR-013`, maintainer answer Q2). A re-run deletes the recorded result,
-and the run is raced again.
+and the run is raced again. Meanwhile, it looks as if the athlete never did that run.
 - *Server procedure for what increments `run`: `DERIVATIONS.md` §11.6.*
 - On increment, every run-scoped field becomes `not-yet`, and the change is pushed: `status`,
   `outcome`, `gates`, `splits`, `faults`, `placement`, `pairTotal`, `countingRun`, `underReview`,
