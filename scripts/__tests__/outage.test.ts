@@ -239,7 +239,8 @@ describe('#208 rows 3-4: fixture A (recorded outages 09:35:00 for 170 s and 09:4
   }, T)
 
   it.skipIf(!haveChecker)('fixture A: gate-2 checker reports 0 violations, property 8 exercised (an outage makes no re-baseline: P13 not claimed)', () => {
-    const g = gate2(replay(A), A)
+    const cut = manifestA().fixture['cut'] // a cold start mid-stream: judged from the first XML snapshot (cut.judgedFromWhy), as B is
+    const g = gate2(replay(A), A, `${cut['judgedFrom']},${cut['to']}`)
     expect(g.violations.length, shown(g)).toBe(0)
     expect(g.exit).toBe(0)
     expect(g.exercised['8'], 'property 8 exercised').toBeGreaterThan(0)
