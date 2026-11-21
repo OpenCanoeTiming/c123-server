@@ -515,9 +515,9 @@ never recomputed: upstream rebuilds it only when the operator presses "calculate
 later correction in a contributing Phase reaches it only then. **`Standing.asOf` tells a client how
 old it is** (§5): the ingest time of the latest snapshot that changed its rows, which a client
 compares with the `asOf` of the contributing Phases' standings to see the lag. **A Kayak Cross class may have no classification at
-all**, or an `XER` whose table holds no rows (`RULINGS.md` R-22). No classification Standing is
-published then (§5 step 1): the class has no overall result, and its Cross results are its race
-Phases' own standings, the time trial's included.
+all**, or an `XER` whose table holds no rows. No classification Standing is published then (§5
+step 1): the class has no overall result, and its Cross results are its race Phases' own
+standings, the time trial's included (`RULINGS.md` R-22).
 
 **A Phase exists until its race leaves upstream's schedule** (`RULINGS.md` R-8). It is removed at
 the first admitted XML snapshot whose schedule no longer names its race: deleted upstream, or rebuilt
