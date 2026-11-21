@@ -1387,13 +1387,12 @@ spectator-facing banner (maintainer answer A1).
 
 ## 7. On-site contract — c123-server ↔ scoreboard / penalty-check
 
-This contract serves clients that exist to display *this* timing system (`DECISIONS/ADR-007`). It uses
+This contract serves clients that display *this* timing system (`DECISIONS/ADR-007`). It uses
 Canoe123-native tokens directly: `format`, and `phaseId` equal to `RaceId`. **There is no
 authentication:** the venue LAN is trusted (`CONSTRAINTS.md` §1.2).
 
 **Tier-specific serialisation.** `Person.birthDate` is replaced by `birthYear: number | null`, and
-`Event` is served without `organiserId`, since the organiser is not modelled on-site (§2.1, §2.2).
-Every other shape is exactly §2's.
+`Event` is served without `organiserId` (§2.1, §2.2). Every other shape is exactly §2's.
 
 ```ts
 type OnsitePerson = Omit<Person, 'birthDate'> & { birthYear: number | null }   // null: neither a birth date nor a year entered upstream (DERIVATIONS `birthDate`)
@@ -1407,16 +1406,16 @@ Every response except `/api/sources` carries `asOfSeq: number` (§1.6) at the to
 
 | Method & path | 200 body | Error |
 |---|---|---|
-| `GET /api/events/current` | `{ asOfSeq, event: OnsiteEvent, classes: Class[], courses: Course[], pendingPhaseIds: string[] }`: `pendingPhaseIds` the `phaseId`s observed whose class is not yet known (§1.6), usually empty; a client hydrates their Attempts as it does a listed Phase's | `404 event-not-found` |
+| `GET /api/events/current` | `{ asOfSeq, event: OnsiteEvent, classes: Class[], courses: Course[], pendingPhaseIds: string[] }`: `pendingPhaseIds` the `phaseId`s observed whose class is not yet known (§1.6); a client hydrates their Attempts as it does a listed Phase's | `404 event-not-found` |
 | `GET /api/classes/{classId}/phases` | `{ asOfSeq, phases: Phase[] }` | `404 class-not-found` |
 | `GET /api/classes/{classId}/entries` | `{ asOfSeq, entries: OnsiteEntry[] }` | `404 class-not-found` |
 | `GET /api/phases/{phaseId}/attempts` | `{ asOfSeq, attempts: Attempt[] }`: every Attempt of the `phaseId`, a Phase whose class is not yet known included (§1.6) | `404 phase-not-found`: a `phaseId` the server does not hold, never observed or removed (§2.4) |
 | `GET /api/classes/{classId}/standings` | `{ asOfSeq, standings: Standing[] }`: every published scope of §5 (step 1: from its first entry), for the whole class and per age category | `404 class-not-found` |
-| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null, asOf: Timestamp \| null }`: **every Attempt upstream currently lists on its on-course list**, across every running Phase, whatever its `status`: `at-start`, `on-course`, and, between a finish and upstream's closure of the run — upstream's auto-complete setting, measured over seven recordings and 1,995 closures: about 20 s at six of seven venues (medians 18.9–19.9 s; 54–73 % of closures in [18, 20) s), about 47 s at one (medians 47 s, p90 57 s), a minority of manual closes under 5 s (12.6 % and 34.9 % on two days) and a long tail to 126–781 s. **No client may assume a fixed value.** Meanwhile the Attempt is listed as `finished` or a mark. The set is upstream's list; `status` says where each Attempt is. `asOf` is the ingest time of the unit at which the set last changed — membership, order or `featuredByUpstream`: a listing, `oncourse-empty`, or the TCP message at which a leave was derived (`DERIVATIONS.md` §4.1) — `null` before any; a listing that changes nothing moves it no more than a running tick moves a Standing's (§5), so this response and the last `oncourse.updated` agree (§1.6); an unchanged set reads as old as its last change, and liveness is §7.2's heartbeat, never `asOf`. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural by construction; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8). Kept current by `oncourse.updated` (§7.2) | — |
+| `GET /api/oncourse` | `{ asOfSeq, attempts: Attempt[], featuredByUpstream: string \| null, asOf: Timestamp \| null }`: **every Attempt upstream currently lists on its on-course list**, across every running Phase, whatever its `status` (`at-start`, `on-course`, `finished` or a mark; membership below). `asOf` is the ingest time of the unit at which the set last changed — membership, order or `featuredByUpstream`: a listing, `oncourse-empty`, or the TCP message at which a leave was derived (`DERIVATIONS.md` §4.1) — `null` before any; a listing that changes nothing does not move it, so this response and the last `oncourse.updated` agree (§1.6); liveness is §7.2's heartbeat, never `asOf`. **Ordered by `courseOrder` ascending**; Attempts without one come last, by `startOrder`. Plural; an empty array is valid. `featuredByUpstream` is the `attemptId` Canoe123 itself currently features on its TV output, or `null` (`DERIVATIONS.md` §4.8). Kept current by `oncourse.updated` (§7.2) | — |
 | `GET /api/phases/{phaseId}/checks` | `{ asOfSeq, checks: GateCheck[], flags: GateFlag[] }`: every check and flag of the Phase's existing Attempts, all run generations, `status` derived at serialisation (§2.10) | `404 phase-not-found`: a `phaseId` the server does not hold, as the attempts row |
 | `GET /api/sources` | `SourceStatus`, unwrapped | — |
-| `GET /api/diagnostics` | `{ asOfSeq, diagnostics: Diagnostic[] }`: every current diagnostic of the six kinds in §4 (source disagreement, contradicted finish, duplicate finish, stale mark, member-sum mismatch, unparseable cell). Admin audience only | — |
-| `POST /api/rebaseline` | body `{ "scope": { "kind": "phase", "phaseId": string } \| { "kind": "event" } }`. `200 { asOfSeq, scope, snapshotWrittenAt, snapshotDetectedAt, attempts: number }`: the operator re-baseline (§4). `snapshotWrittenAt` is the snapshot file's modification time as the filesystem reports it, `snapshotDetectedAt` the ingest time of the re-baseline's own read of the file (§4 step 2: a read with its own ingest sequence, so not `xml.lastRewriteDetectedAt`, which may predate it when the file changed since the last poll, `DERIVATIONS.md` §0.3); both are present on `200`, since the action fails without a readable snapshot. `attempts` counts the Attempts of the scope after the re-baseline: `0` where the read removed the scope's Phase (§2.4), which then sends `phase.deleted` and no `scope.replaced`. Admin audience only; safe to repeat | `404 phase-not-found`; `409 source-unavailable` with `details.reason` (§1.4) |
+| `GET /api/diagnostics` | `{ asOfSeq, diagnostics: Diagnostic[] }`: every current diagnostic, of the six kinds of §4's `Diagnostic`. Admin audience only | — |
+| `POST /api/rebaseline` | body `{ "scope": { "kind": "phase", "phaseId": string } \| { "kind": "event" } }`. `200 { asOfSeq, scope, snapshotWrittenAt, snapshotDetectedAt, attempts: number }`: the operator re-baseline (§4). `snapshotWrittenAt` is the snapshot file's modification time as the filesystem reports it, `snapshotDetectedAt` the ingest time of the re-baseline's own read of the file (§4 step 2), not `xml.lastRewriteDetectedAt`; both are present on `200`. `attempts` counts the Attempts of the scope after the re-baseline: `0` where the read removed the scope's Phase (§2.4), which then sends `phase.deleted` and no `scope.replaced`. Admin audience only; safe to repeat | `404 phase-not-found`; `409 source-unavailable` with `details.reason` (§1.4) |
 
 The `200` bodies, normatively (the table is the reading version):
 
@@ -1437,27 +1436,23 @@ type RebaselineResponse = { asOfSeq: number; scope: RebaselineScope; snapshotWri
 ```
 
 **Which competitor to feature** is a presentation decision (`ARCHITECTURE.md` §2). The default the
-maintainer named is the athlete next to pass the finish: the first Attempt in this list.
-`featuredByUpstream` is offered as an optional alternative, never as the default.
+maintainer named is the first Attempt in this list, the athlete next to pass the finish;
+`featuredByUpstream` is an optional alternative, never the default.
 
-Membership of the on-course set is tracked from the on-course stream, and the set is upstream's
-list.
+Membership of the on-course set is tracked from the on-course stream; the set is upstream's list.
 - An Attempt enters the set when upstream first lists it.
-- An Attempt leaves the set only when upstream stops listing it — at closure, upstream's
-  auto-complete delay after a finish (a venue setting: typically about 20 s, 47 s at one venue, under
-  5 s when the operator closes by hand); when the
-  operator removes it; when a heat leaves — or on upstream's explicit "course empty"
-  message. **A finish does not remove it.** Upstream keeps a finisher listed until closure, and so
-  does this set, with `status: finished` or a mark. The `oncourse.updated` that drops the Attempt is
-  therefore the closure signal that §7.3's write rule and INV-2's `gates` exception rely on. How long
-  a finisher stays *displayed* is the client's policy (`ARCHITECTURE.md` §2), never read from the
-  set.
+- An Attempt leaves the set only when upstream stops listing it: at closure, upstream's
+  auto-complete delay after a finish (a venue setting, typically about 20 s; **no client may assume
+  a fixed value**); when the operator removes it; when a heat leaves; or on upstream's explicit
+  "course empty" message. **A finish does not remove it:** a finisher stays listed, with `status:
+  finished` or a mark, until closure. The `oncourse.updated` that drops the Attempt is the closure
+  signal of §7.3's write rule and INV-2's `gates` exception. How long a finisher stays *displayed* is
+  the client's policy (`ARCHITECTURE.md` §2), never read from the set.
 - **In slalom and in a Kayak Cross time trial**, an Attempt that leaves the set with no finish
-  recorded becomes `left-without-finish` (§2.6; the time trial by the maintainer's decision of
-  2026-11-16). It is never inferred as DNF.
-- **In a Kayak Cross heat**, leaving the set never changes `status`. A heat leaves together, before
-  the operator has asserted the order, and so stays `on-course` until that assertion arrives through
-  its result row (`DERIVATIONS.md` §4.1, §4.2).
+  recorded becomes `left-without-finish` (§2.6; `RULINGS.md` R-23). It is never inferred as DNF.
+- **In a Kayak Cross heat**, leaving the set never changes `status`: a heat leaves together, before
+  the operator has asserted the order, and stays `on-course` until that assertion arrives through its
+  result row (`DERIVATIONS.md` §4.1, §4.2).
 
 ### 7.2 Live updates (WebSocket `/ws`, delta)
 
@@ -1470,81 +1465,66 @@ Every message carries `seq` (§1.6).
   a Phase's format-derived fields); no later message restates identity.
 - `standing.updated`, `course.updated`, `write.updated` and `sources.updated` carry the whole resource,
   under `standing`, `course`, `write` and `sources`.
-  `standing.updated` is sent only when the standing's serialised form changed (§5 step 1), never for a
+  `standing.updated` is sent only when the standing's serialised form changed (§2.7), never for a
   running athlete's ticks.
 - **Liveness.** `sources.updated` is re-sent at least every `heartbeatSeconds` (a named server
   constant, 10 s) even when `SourceStatus` is unchanged: it is the stream's heartbeat, and the one
-  message exempt from INV-5's no-op rule, because what it carries is that the connection and the server
-  are alive. A client that receives nothing for two heartbeat intervals treats the connection as dead:
-  it marks everything it shows as stale — it never clears it, stale over flicker — and repeats §1.6's
-  handshake. Without this an `at-start` or `finished` ghost on a half-open connection, or on a stalled
-  upstream, would stand indefinitely with no cue (`DECISIONS/ADR-017` Revision 4).
+  message exempt from INV-5's no-op rule. A client that receives nothing for two heartbeat intervals
+  treats the connection as dead: it marks everything it shows as stale, never clears it, and repeats
+  §1.6's handshake.
 - **`check.updated`** carries `{ attemptId, run, gate, check: GateCheck | null }`, whole; `null` means
   the check was removed. It is sent on every check write and **whenever a check's derived `status`
   changes** because the presented gate penalty changed (§2.10). **`flag.updated`** carries the whole
-  `GateFlag` under `flag`. In the unit that creates an Attempt whose checks or flags the store
-  already holds (one returning after its removal, or created again by a restarted process), one
-  `check.updated` per check and one `flag.updated` per flag of it follow its `attempt.updated`:
-  what its reads now serve (§2.10). Neither is ever sent on the live tier (§8.4).
+  `GateFlag` under `flag`. Neither is ever sent on the live tier (§8.4). *Default for an Attempt
+  created over checks and flags the store already holds: §9.12.*
 - **A retraction** (§4 INV-7) or a contradiction (INV-2d) is sent as `attempt.updated` with explicit
   `not-yet` values, never by omission.
-- **`attempt.deleted`** carries `{ attemptId }`: upstream removed the Attempt (§2.6, §4 INV-7), and
-  the client removes it and its standing entries. It is the only message for that Attempt in its
-  unit; the unit's `write.updated` of a pending write of it (resolved `mismatched`) precedes it and
-  the `standing.updated` of each Standing that held it follows it. It sends no `check.updated`: a
-  client drops the Attempt's checks and flags with it, and the store keeps them (§2.10). The
-  shape is §8.4's (maintainer, 2026-11-12; an additive message). A removal in a re-baseline's
-  unit is sent the same way, before the unit's `scope.replaced`, which then does not carry the
-  Attempt: every removal reaches a client as `attempt.deleted` (`DERIVATIONS.md` §10 item 38 (l)).
+- **`attempt.deleted`** carries `{ attemptId }`: upstream removed the Attempt (§2.6, §4 INV-7;
+  `RULINGS.md` R-6), and the client removes it and its standing entries. It is the only message for
+  that Attempt in its unit; the unit's `write.updated` of a pending write of it (resolved
+  `mismatched`) precedes it and the `standing.updated` of each Standing that held it follows it. No
+  `check.updated` is sent: a client drops the Attempt's checks and flags with it, and the store keeps
+  them (§2.10). The shape is §8.4's. A removal in a re-baseline's unit is sent the same way, before
+  the unit's `scope.replaced`, which then does not carry the Attempt.
 - **`phase.deleted`** carries `{ phaseId }`: upstream's schedule no longer names the race (§2.4,
-  §4 INV-7; maintainer, 2026-11-16). The client removes the Phase, every Attempt whose `phaseId`
-  it is, and every Standing whose scope names it (`phase`, `heat`, `classification`, a `pair` on
-  either side; whole class and every age category); the Class, Entries and Courses stay. It is
-  the only message for the Phase, its Attempts and those Standings in its unit: the unit's
-  `write.updated` of each pending write of its Attempts (resolved `mismatched`) precedes it, and
-  no `attempt.deleted`, `standing.updated` or `check.updated` is sent for what it removes; a
-  client drops the Attempts' checks and flags with them, and the store keeps them (§2.10). The
-  `phase.updated` of each Phase whose `pair.siblingPhaseId` named it follows it in the same unit:
-  a first run's derived again, a second run's `null`; no message in between names the removed
-  Phase. In a re-baseline's unit it
-  precedes `scope.replaced`, which then carries nothing of the removed Phase. A later
-  `phase.updated` for the same `phaseId` creates a new Phase, whole. The shape follows
-  `attempt.deleted`'s.
+  §4 INV-7; `RULINGS.md` R-8). The client removes the Phase, every Attempt whose `phaseId` it is, and
+  every Standing whose scope names it (`phase`, `heat`, `classification`, a `pair` on either side;
+  whole class and every age category); the Class, Entries and Courses stay. It is the only message
+  for the Phase, its Attempts and those Standings in its unit: the unit's `write.updated` of each
+  pending write of its Attempts (resolved `mismatched`) precedes it, and no `attempt.deleted`,
+  `standing.updated` or `check.updated` is sent for what it removes; a client drops the Attempts'
+  checks and flags with them, and the store keeps them (§2.10). The `phase.updated` of each Phase
+  whose `pair.siblingPhaseId` named it follows it in the same unit (a first run's derived again, a
+  second run's `null`); no message in between names the removed Phase. In a re-baseline's unit it
+  precedes `scope.replaced`, which then carries nothing of the removed Phase. A later `phase.updated`
+  for the same `phaseId` creates a new Phase, whole. The shape follows `attempt.deleted`'s.
 - **`oncourse.updated`** carries the whole on-course set: `{ attemptIds: string[], featuredByUpstream:
-  string | null, asOf: Timestamp }`, `attemptIds` in `courseOrder` (§7.1), `asOf` the ingest time of
-  the unit at which the set last changed, as §7.1 defines it, so it equals what `/api/oncourse`
-  serves. It is sent whenever membership, order or the
-  featured competitor changes. A finish changes `status`, not membership: it arrives as an
-  `attempt.updated`, and the Attempt leaves the set at upstream's closure, typically about 20 s later
-  (a venue setting, §7.1), which is
-  the `oncourse.updated` §7.3's retry waits for. The Attempts themselves arrive by `attempt.updated`;
-  this message is what keeps the set current, including in a Kayak Cross heat, where leaving the set
-  changes no `status`.
+  string | null, asOf: Timestamp }`, `attemptIds` in `courseOrder` and `asOf` the ingest time of the
+  unit at which the set last changed (§7.1), so it equals what `/api/oncourse` serves. It is sent
+  whenever membership, order or the featured competitor changes. The Attempts themselves arrive by
+  `attempt.updated`; a finish is an `attempt.updated` and changes no membership (§7.1).
 - **`diagnostics.updated`** carries the whole current `Diagnostic[]` under `diagnostics` whenever it
   changes. Admin audience only; a scoreboard ignores it.
-- **`event.changed`** carries the whole `Event`. It is sent when the current event changes: on the
-  explicit "start a new event" action (`ARCHITECTURE.md` Scenario E; the action is the admin UI's
-  own, not a §7 path, §2.2), or when a client connects while
-  an event is configured. It is also sent, with the same `eventId`, when the presented `Event`
-  changes during a session: its `details` (§2.2) or its `name`, which follows the snapshot's
-  title unless the operator entered one (§2.2). A snapshot restating the presented `Event` sends nothing: the presented `Event` has not
-  changed (for `details`, an `Observed` value, that is INV-5; `name` is a plain string). On a *different*
-  `eventId` than the one the client holds, the client discards everything and re-hydrates (§1.6);
-  on the `eventId` it holds, the client replaces the held `Event` whole, with no re-hydration.
-  Maintainer, 2026-11-14.
+- **`event.changed`** carries the whole `Event`. It is sent when the current event changes, on the
+  explicit "start a new event" action (`ARCHITECTURE.md` Scenario E; an admin UI action, not a §7
+  path, §2.2), or when a client connects while an event is configured. It is also sent, with the
+  same `eventId`, when the presented `Event`'s `details` (§2.2) or `name` changes during a session;
+  `name` follows the snapshot's title unless the operator entered one (§2.2). A snapshot restating
+  the presented `Event` sends nothing (for `details`, an `Observed` value, by INV-5). On a
+  *different* `eventId` than the one the client holds, the client discards everything and
+  re-hydrates (§1.6); on the `eventId` it holds, the client replaces the held `Event` whole, with no
+  re-hydration (`RULINGS.md` R-25).
 - **`scope.replaced`** carries, after a re-baseline (§4), **every Attempt of the scope and every
   Standing whose scope names one of its Phases** (phase, pair on either side, heat, classification;
-  whole class and every age category). For `{ kind: 'event' }` that is every Attempt and every Standing
-  of the event. It never carries Phases, Entries, Classes or Courses: a re-baseline discards result
-  fields only, and those entities are unchanged. A client applies it as a **replace**: Attempts and
-  Standings of that scope absent from the message are removed. It is never merged. **A Standing
-  whose own Attempts give no entry after the rebuild is not carried** — its own Attempts being those
-  §5 names for its scope: the Phase's, the second Phase's for a `pair` (step 2, so a `pair` Standing
-  on the first Phase's re-baseline is fed by Attempts the message does not carry), the heat's, and
-  for an age category the entries of that category, placed or not (step 4) — judged on the state after the
-  message's Attempts are applied: the rebuilt state is a fresh one, and a Standing is published from
-  its first entry (§5 step 1), so the client's replace removes one it held and `standing.updated`
-  creates it again when an entry returns, whole as always.
+  whole class and every age category); for `{ kind: 'event' }`, every Attempt and every Standing of
+  the event. It never carries Phases, Entries, Classes or Courses. A client applies it as a
+  **replace**, never a merge: Attempts and Standings of that scope absent from the message are
+  removed. **A Standing whose own Attempts give no entry after the rebuild is not carried** — its own
+  Attempts being those §5 names for its scope: the Phase's, the second Phase's for a `pair` (step 2,
+  so a `pair` Standing on the first Phase's re-baseline is fed by Attempts the message does not
+  carry), the heat's, and for an age category the entries of that category, placed or not (step 4) —
+  judged on the state after the message's Attempts are applied. The client's replace removes such a
+  Standing it held, and `standing.updated` creates it again, whole, when an entry returns.
 
 The message set, normatively; `type` is the discriminant and every message carries `seq`:
 
@@ -1600,18 +1580,13 @@ Clients **must** follow §1.6's subscribe-before-snapshot sequence.
 
 **There is one write: a gate penalty on a closed run.** It requires an `Idempotency-Key` (§1.5), may
 target a closed Phase (§2.9), targets the Attempt's run generation current at submission, and is
-accepted only once the Attempt has left upstream's on-course list (below). "Closed" here, and in
-`reason: 'run-not-closed'`, is that test alone — the Attempt has left the on-course set (§7.1), the
-write's own precondition — and is narrower than `DERIVATIONS.md` §4.4's closure of a run, which
-`Completed` reaches while the Attempt is still listed.
+accepted only once the Attempt has left the on-course set (§7.1). "Closed" here, and in
+`reason: 'run-not-closed'`, is that test alone, narrower than `DERIVATIONS.md` §4.4's closure of a
+run, which `Completed` reaches while the Attempt is still listed.
 
 **There is no status write.** No inbound command can set or clear a result mark (DNS, DNF, DSQ, CAP)
-on a closed run (observed upstream behaviour, 2026-09-25): upstream's only status command targets an
-on-course *slot* by position, ignores the bib, and does different things depending on where the
-athlete is. On course and finished, it stores the mark and pushes; on course and unfinished, it
-stores it silently; closed or never started, there is no slot, and re-staging the athlete lands on
-the wrong race or wipes the run's times. Clearing a mark is possible only in the operator's grid.
-Since penalty-check writes only closed runs, marks are set and cleared by the operator in Canoe123.
+on a closed run. Every result mark is relayed (§2.6) and none is writable here: marks are set and
+cleared by the operator in Canoe123. *Upstream's status command: `DERIVATIONS.md` §11.30.*
 
 | Method & path | Body | First response | Retry (same key) | Error |
 |---|---|---|---|---|
@@ -1622,74 +1597,54 @@ Since penalty-check writes only closed runs, marks are set and cleared by the op
 type PenaltyWriteRequest = { gate: number; value: 0 | 2 | 50 }
 ```
 
-**Penalty-check writes only finished runs** (maintainer, 2026-09-25, binding). It never writes for an
-athlete on course. So the only upstream write command in this contract is the **correction
-command**, which carries the race id and edits the stored row; upstream's on-course scoring
-command, and its back-fill of earlier blank gates, are outside the contract entirely.
+**Penalty-check writes only finished runs, never for an athlete on course** (maintainer, 2026-09-25,
+binding). The only upstream write command in this contract is the **correction command**, which
+carries the race id and edits the stored row; upstream's on-course scoring command, and its
+back-fill of earlier blank gates, are outside the contract.
 
-**The window after the finish, decided: refuse, never hold.** Between a finish and closure — typically
-about 20 s, a venue setting (§7.1) — until
-closure, the athlete is still on upstream's on-course list, and upstream rewrites the stored row from
-the on-course state at the next save and always at closure. A correction sent then is confirmed by
-echo and silently lost (`EVIDENCE.md` Exhibit 14 is today's code doing exactly that). The server
-therefore **refuses** a write while the Attempt is still in the on-course set (§7.1, which is
-upstream's list and keeps a finisher as `finished` until closure): `409 write-not-possible`,
+**The window after the finish: refuse, never hold.** Between a finish and closure the Attempt is
+still in the on-course set (§7.1), and the server **refuses** a write: `409 write-not-possible`,
 `reason: 'run-not-closed'`. The tablet says so and retries once the Attempt has left the set
-(`oncourse.updated`, §7.2). Holding the write server-side and sending it at
-closure was rejected: it needs a queued state, and it goes wrong quietly when the run is retracted
-or re-run meanwhile. A refusal is loud, and the wait is seconds.
+(`oncourse.updated`, §7.2). The server never holds a write to send it at closure.
 
 **Retrying after `409 run-not-closed`.** A `409` creates no `WriteRequest` and binds no
 `Idempotency-Key`, so the retry may reuse the key or take a new one; either is one correction. The
-trigger is the first `oncourse.updated` (§7.2) whose `attemptIds` no longer contain the Attempt — the
-closure, not the finish, since a finisher stays listed as `finished` until upstream closes the run. A
-tablet may also simply disable the write while the Attempt is listed, which is the same rule applied
-before the request.
+trigger is the first `oncourse.updated` (§7.2) whose `attemptIds` no longer contain the Attempt: the
+closure, not the finish (§7.1). A tablet may also disable the write while the Attempt is listed.
 
-**The key first, then the order of refusal, then the send.** A request
-whose `Idempotency-Key` is already bound — to a `WriteRequest`, or to a write in flight — is
-answered from it before any refusal: `200` with the `WriteRequest`, whatever its status (§1.5), or,
-while the first request's socket write is still pending, its outcome once known. A missing header
-stays `400`. For a new key the refusals are checked most permanent first, so the tablet learns what
-will not change: `404 attempt-not-found`; `409 cross`, then `team-boat`; `400 validation-failed`,
-the header and body before the course; `409 run-not-closed`; `409 upstream-disconnected` — no
-instance to address the envelope to: `SourceStatus.tcp.state` not `connected`, or `connected` with
-`upstreamInstance` `null` or `'offline'` (§2.8), or the command's socket write failed. No refusal
-exists for a missing generation: an Attempt presents `run` from the observation that creates it
-(§2.6; `TEST-ARCHITECTURE.md` §3.2 property 10; `DECISIONS/ADR-013`, "it starts at 1"), so every
-Attempt a write can name has a target generation, and `validation-failed` is
-for the header, the body and the course alone (`DERIVATIONS.md` §10 item 44 (b)).
+**The key first, then the order of refusal, then the send.** A request whose `Idempotency-Key` is
+already bound — to a `WriteRequest`, or to a write in flight — is answered from it before any
+refusal: `200` with the `WriteRequest`, whatever its status (§1.5), or, while the first request's
+socket write is still pending, its outcome once known. A missing header stays `400`. For a new key
+the refusals are checked most permanent first: `404 attempt-not-found`; `409 cross`, then
+`team-boat`; `400 validation-failed`, the header and body before the course; `409 run-not-closed`;
+`409 upstream-disconnected` — no instance to address the envelope to: `SourceStatus.tcp.state` not
+`connected`, or `connected` with `upstreamInstance` `null` or `'offline'` (§2.8), or the command's
+socket write failed. No refusal exists for a missing generation (an Attempt presents `run` from the
+observation that creates it, §2.6): `validation-failed` is for the header, the body and the course
+alone.
 
 *Server procedure for sending the write, and the command's format: `DERIVATIONS.md` §11.18.*
 
-**Kayak Cross: no penalty writes and no checks.** Cross judging cells are fault marks entered by the
-Cross judges, not penalty seconds (`DERIVATIONS.md` §4.6(d)), and upstream's correction command sets
-penalty seconds, so a write would be meaningless. A penalty write, or a check, on an Attempt of a
+**Kayak Cross: no penalty writes and no checks.** A penalty write, or a check, on an Attempt of a
 Cross Phase is refused: `409 write-not-possible`, `reason: 'cross'`. Penalty-check is read-only for
-Cross (`faults`, `placement`, `underReview`), except that a **flag** may still be raised: a review
-request is workflow, and a Cross judge may want one.
+Cross (`faults`, `placement`, `underReview`), except that a **flag** may still be raised.
 
-**Team boats: the operator corrects them in Canoe123, never the tablet** (maintainer, binding).
+**Team boats: the operator corrects them in Canoe123, never the tablet** (maintainer, binding). A
+penalty write for a team-boat Attempt is refused: `409 write-not-possible`, `reason: 'team-boat'`.
 The tablet knows a team boat from `Entry.isTeam` (§2.5) and hides or disables the write up front;
-the `409` is the backstop, not the interface.
-Upstream's correction command replaces the crew sum and leaves the member cells stale, and the
-maintainer wants no crew-sum correction from the tablet. A penalty write for a team-boat Attempt is
-refused: `409 write-not-possible`, `reason: 'team-boat'`. The read side is unchanged: per-member
-cells from the snapshot, and `member-sum-mismatch` when the crew cell is not their sum (§2.6).
+the `409` is the backstop. The read side is unchanged: per-member cells from the snapshot, and
+`member-sum-mismatch` when the crew cell is not their sum (§2.6). *Upstream's correction command on
+a team boat: `DERIVATIONS.md` §11.31.*
 
 **All writes go through the server.** Penalty-check keeps no direct terminal channel. The operator's
 "reset scoring terminals" action in Canoe123 resets only the hardware judge terminals on their own
-port and never touches the TCP command receiver these writes use (observed upstream behaviour; 22
-recorded episodes), so nothing here needs to react to it. In operating practice (maintainer,
-2026-09-25) it is used mainly between categories, to clear the judges' tablets of the previous
-entries so they stay readable.
+port and never touches the TCP command receiver these writes use; nothing here reacts to it.
 
 *Server procedure for addressing each write to the connected instance: `DERIVATIONS.md` §11.19.*
 
-Every result mark is relayed (§2.6) and none is writable here.
-
-**The confirmation lifecycle over the wire** (§2.9, `DECISIONS/ADR-010`). These are snapshots of the
-same `WriteRequest` over time:
+**The confirmation lifecycle over the wire** (§2.9, `DECISIONS/ADR-010`): snapshots of one
+`WriteRequest` over time.
 
 ```json
 { "writeId": "w-8f3a", "target": { "phaseId": "K1M_BR1_6", "bib": "9", "run": 1, "field": "gate-penalty" },
@@ -1700,11 +1655,9 @@ same `WriteRequest` over time:
 { ..., "status": "superseded" }
 ```
 
-No field ever encodes a timeout or a deadline. On the wire `requestedValue` and `confirmedValue` are
-`{ gate, value }`, the target cell, as the example shows (§2.9 leaves them `unknown` because the live
-tier's §8.5 assertion has its own shape); a tier-1 vector's `writeRequest.confirmedValue` is the merge
-port's cell vector, the harness shape of `CONFORMANCE-VECTORS.md` §1, which this serialisation maps to
-the target cell.
+No field ever encodes a timeout or a deadline. On the wire `requestedValue` and `confirmedValue`
+(`unknown` in §2.9) are `{ gate, value }`, the target cell. *Checker condition for a tier-1 vector's
+`confirmedValue`: `TEST-ARCHITECTURE.md` §3.6.5.*
 
 ### 7.4 Gate checks and flags (REST)
 
@@ -1715,7 +1668,7 @@ targets the Attempt's current generation.
 | Method & path | Body | Response | Error |
 |---|---|---|---|
 | `PUT /api/attempts/{phaseId}/{bib}/checks/{gate}` | `{ "checkedBy"?: string }` | `200 GateCheck`: the check for the current generation, `valueAtCheck` set to the presented penalty at this moment, `status: 'verified'`. Repeating it replaces the snapshot, which is how a judge re-verifies after a correction | `404 attempt-not-found`; `400 validation-failed` (`gate` outside the Phase's course, or the course not configured); `409 write-not-possible`, `reason: 'cross'` on a Cross Attempt (§7.3) |
-| `DELETE /api/attempts/{phaseId}/{bib}/checks/{gate}` | — | `204`, whether or not a check existed; `check.updated` with `check: null` only where one did (nothing changed, nothing pushed, §1.6) | `404 attempt-not-found` |
+| `DELETE /api/attempts/{phaseId}/{bib}/checks/{gate}` | — | `204`, whether or not a check existed; `check.updated` with `check: null` only where one did (§1.6) | `404 attempt-not-found` |
 | `POST /api/attempts/{phaseId}/{bib}/flags` | `{ "gate": number, "comment": string, "suggestedValue"?: number, "createdBy"?: string }`, with `Idempotency-Key` (§1.5) | `201 GateFlag`, open; a retry with the same key `200`, the same flag (§1.5) | `404 attempt-not-found`; `400 validation-failed` |
 | `POST /api/flags/{flagId}/resolution` | `{ "note"?: string, "resolvedBy"?: string }` | `200 GateFlag`, resolved. Repeating it on a resolved flag returns `200` unchanged | `404 flag-not-found`; `404 attempt-not-found` while the flag's Attempt does not exist (§2.10) |
 
@@ -2196,3 +2149,10 @@ the course's count (§2.6).
   means the snapshot states no `details`: what is presented stays, `not-yet` before any, and an
   unparseable one raises the parser's ingest-only `unparseable-field` (`DERIVATIONS.md` §0.5;
   default, never recorded: every recorded snapshot carries both). M2 P2 ruling, 2026-11-14.
+
+### 9.12 Checks and flags of an Attempt created again (from section 7.2)
+
+- In the unit that creates an Attempt whose checks or flags the store
+  already holds (one returning after its removal, or created again by a restarted process), one
+  `check.updated` per check and one `flag.updated` per flag of it follow its `attempt.updated`:
+  what its reads now serve (§2.10).

@@ -2361,3 +2361,16 @@ later (a first read after `setPath` re-delivering a value the XML already stated
 `changedAfter`, so a standing `source-disagreement` neither clears nor re-raises), and advances to
 the re-delivery's where that is later: the age only rises, which clears no standing disagreement,
 and a retained candidate restated by a later rewrite is settled by INV-2c, not by this rule.
+
+### 11.30 Upstream's status command (from CONTRACTS section 7.3)
+
+Upstream's only status command targets an
+on-course *slot* by position, ignores the bib, and does different things depending on where the
+athlete is. On course and finished, it stores the mark and pushes; on course and unfinished, it
+stores it silently; closed or never started, there is no slot, and re-staging the athlete lands on
+the wrong race or wipes the run's times. Clearing a mark is possible only in the operator's grid.
+
+### 11.31 Upstream's correction command on a team boat (from CONTRACTS section 7.3)
+
+Upstream's correction command replaces the crew sum and leaves the member cells stale, and the
+maintainer wants no crew-sum correction from the tablet.
