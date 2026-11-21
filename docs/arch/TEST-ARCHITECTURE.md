@@ -870,13 +870,6 @@ from the first and changes nothing presented, so it moves nothing.
   Otherwise the snapshot is ignored for that field, and the next snapshot settles it. A guard on
   our own clock, not an ordering rule; INV-6 still orders the merge.
 
-#### 3.6.4 A change of `provisional` alone and `observedAt` (from CONTRACTS section 1.2)
-
-**A change of `provisional` alone moves no `observedAt`:** a closure or a course binding is no new
-observation of the value, so the envelope is pushed with the flag changed and its instant
-unchanged — also where the element that closes the run is a row restating the value already
-presented (INV-5).
-
 ---
 
 ## 4. The fixture format

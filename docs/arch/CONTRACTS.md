@@ -112,15 +112,16 @@ A field's envelope holds the single value the domain layer currently *presents* 
   fact even while its outcome may move (`DERIVATIONS.md` §4.1).
 
   `provisional` answers "might this still move", `confidence` "how was this produced". A client
-  needs both and must not conflate them.
+  needs both and must not conflate them. **A change of `provisional` alone moves no `observedAt`:**
+  a closure or a course binding is no new observation of the value, so the envelope is pushed with
+  the flag changed and its instant unchanged — also where the element that closes the run is a row
+  restating the value already presented (INV-5).
 
 *Checker condition for condition 1 in full, the gates vector's envelope: `TEST-ARCHITECTURE.md` §3.6.1.*
 
 *Server procedure for condition 2 in full, the judging clause: `DERIVATIONS.md` §11.1.*
 
 *Server procedure for condition 3 in full, the second-run carry: `DERIVATIONS.md` §11.2.*
-
-*Checker condition for a change of `provisional` alone and `observedAt`: `TEST-ARCHITECTURE.md` §3.6.4.*
 
 **Wire encoding.** `state` is a JSON string discriminant, present on every envelope.
 - A `known` envelope always carries `value`, `observedAt`, `source`, `confidence` and `provisional`,
@@ -340,7 +341,7 @@ client removes the Phase, every Attempt of it and every Standing whose scope nam
 `attempt.updated` for the same `attemptId`, or `phase.updated` for the same `phaseId`, creates a
 new one, whole, as above.
 
-Both on-site client applications and the public spectator client implement this; §7 and §8.4 each
+Both on-site client applications and the public spectator client are required to implement this; §7 and §8.4 each
 restate only the connection-specific detail, not this sequence.
 
 ### 1.7 Machine-readable schemas — scoped narrowly, deliberately
