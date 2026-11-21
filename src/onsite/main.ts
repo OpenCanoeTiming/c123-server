@@ -70,6 +70,7 @@ if (scaled !== undefined && waitStdin) {
 
 const clock = scaled ?? createRealClock();
 const logFile = createLogFile({ dir: dataDir as string, clock });
+process.stdout.write(`log ${logFile.path}\n`);
 const opts: OnsiteOptions = {
   port: num('--port') ?? DEFAULT_PORT,
   clock,
@@ -88,8 +89,7 @@ const opts: OnsiteOptions = {
   ...(stepLog !== undefined ? { stepLog: (line: string): void => { appendFileSync(stepLog, `${line}\n`); } } : {}),
 };
 
-const handle = await startOnsite(opts);
-process.stdout.write(`log ${logFile.path}\n`);
+const handle = await startOnsite(opts).catch((e: unknown) => { logFile.write(`start failed: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`); throw e; });
 process.stdout.write(`listening ${handle.port}\n`);
 const stop = (): void => {
   void handle.stop().then(() => { process.exit(0); }, (e: unknown) => { console.error(e); process.exit(1); });
