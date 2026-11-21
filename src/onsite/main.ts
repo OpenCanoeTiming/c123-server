@@ -1,11 +1,12 @@
 /**
  * Entry of the on-site process (`npm run onsite`): real clock, real filesystem, real TCP source and UDP discovery behind `startOnsite`.
  *
- *   --port <n> --data-dir <dir> --event-id <id> [--event-name <s>] --tcp-host <h> [--tcp-port <n>] --xml <path> [--xml-poll-seconds <s>]
+ *   --port <n> --data-dir <dir> [--event-id <id>] [--event-name <s>] --tcp-host <h> [--tcp-port <n>] --xml <path> [--xml-poll-seconds <s>]
  *   [--zone <iana>] [--event-date <YYYY-MM-DD>] [--external-id-scheme <s>] [--step-log <file>] [--no-discovery]
  *   [--clock-rate <n>] [--clock-origin <iso>] [--clock-wait-stdin]   (the process's clock: rate seconds per wall second from origin; default 1 and the
  *   system time; with --clock-wait-stdin it stands at origin until one line is read on stdin)
  *
+ * Without `--event-id` the process reopens the event persisted in `<data-dir>/event.json`, or mints and persists one (#330).
  * It prints `listening <port>` once HTTP accepts connections. SIGTERM and SIGINT stop it gracefully (the step log gets its `end` line) and
  * exit 0. Without `--tcp-host` the TCP host comes from Canoe123's UDP broadcast, unless `--no-discovery`.
  */
@@ -15,7 +16,7 @@ import { UdpDiscovery } from '../sources/UdpDiscovery.js';
 import { DEFAULT_PORT, startOnsite, type OnsiteDiscovery, type OnsiteOptions } from './index.js';
 
 const FLAGS = new Set(['--port', '--data-dir', '--event-id', '--event-name', '--tcp-host', '--tcp-port', '--xml', '--xml-poll-seconds', '--zone', '--event-date', '--external-id-scheme', '--step-log', '--clock-rate', '--clock-origin']);
-const USAGE = 'usage: npm run onsite -- --data-dir <dir> [--port <n>] [--event-id <id> [--event-name <s>]] [--tcp-host <h> [--tcp-port <n>]] [--xml <path> [--xml-poll-seconds <s>]] [--zone <iana>] [--event-date <YYYY-MM-DD>] [--external-id-scheme <s>] [--step-log <file>] [--no-discovery] [--clock-rate <n>] [--clock-origin <iso>] [--clock-wait-stdin]\n';
+const USAGE = 'usage: npm run onsite -- --data-dir <dir> [--port <n>] [--event-id <id>] [--event-name <s>] [--tcp-host <h> [--tcp-port <n>]] [--xml <path> [--xml-poll-seconds <s>]] [--zone <iana>] [--event-date <YYYY-MM-DD>] [--external-id-scheme <s>] [--step-log <file>] [--no-discovery] [--clock-rate <n>] [--clock-origin <iso>] [--clock-wait-stdin]\n';
 
 function fail(message: string): never {
   process.stderr.write(`${message}\n${USAGE}`);
@@ -71,7 +72,9 @@ const opts: OnsiteOptions = {
   clock: scaled ?? createRealClock(),
   fs: { ...createRealChecksFs(), ...createRealXmlFs() },
   dataDir: dataDir as string,
-  ...(text('--event-id') !== undefined ? { eventId: text('--event-id') as string, ...(text('--event-name') !== undefined ? { eventName: text('--event-name') as string } : {}) } : {}),
+  persistEvent: true,
+  ...(text('--event-id') !== undefined ? { eventId: text('--event-id') as string } : {}),
+  ...(text('--event-name') !== undefined ? { eventName: text('--event-name') as string } : {}),
   ...(xmlPath !== undefined ? { xml: { path: xmlPath, ...(num('--xml-poll-seconds') !== undefined ? { pollSeconds: num('--xml-poll-seconds') as number } : {}) } } : {}),
   tcp: { ...(tcpHost !== undefined ? { host: tcpHost } : {}), ...(num('--tcp-port') !== undefined ? { port: num('--tcp-port') as number } : {}) },
   discovery: discover && tcpHost === undefined ? (new UdpDiscovery() as unknown as OnsiteDiscovery) : null,
