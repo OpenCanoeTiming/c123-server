@@ -171,7 +171,7 @@ are the lines below.
 - [ ] Do not expose the re-baseline on a venue board (CONTRACTS §4).
 - [ ] Drop an Attempt named by `attempt.deleted` from every start list, result list and on-course view the board holds; a removed Attempt is never in the on-course set when the message arrives (CONTRACTS §7.2, §9.8).
 - [ ] Drop a Phase named by `phase.deleted`, with its Attempts and Standings, from every race selector, start list, result list and on-course view the board holds; none of its Attempts is in the on-course set when the message arrives (CONTRACTS §2.4, §7.2, §9.10).
-- [ ] Keep client configuration and remote control (ConfigPush, `clientId`, per-IP records) on today's mechanism, outside the contract, pinned by regression tests (ARCHITECTURE §8).
+- [ ] Keep client configuration and remote control (ConfigPush, `clientId`, per-IP records) on today's mechanism, outside the contract, pinned by regression tests; take it from its own WebSocket `/ws/client`, not from `/ws` (ARCHITECTURE §8).
 
 ---
 
