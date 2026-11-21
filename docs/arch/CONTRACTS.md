@@ -1151,68 +1151,51 @@ reverts its status.
 
 ## 4. Merge and time invariants
 
-These are the contract's answer to `EVIDENCE.md` Exhibit 1. They are invariants a merge
-implementation must satisfy, not an algorithm.
+Invariants a merge implementation must satisfy, not an algorithm. A **scope snapshot** is a
+complete statement of one race's results table. Exactly two messages are scope snapshots: a TCP
+result push, for the race it names, and an XML snapshot, for every race in it.
 
 *Server procedure, the four kinds of observation: `DERIVATIONS.md` §11.11.*
 
 - **INV-1 (monotonic knowledge against omission, per run generation).** A field's `state` never
   regresses from `known` to `not-yet` or `unavailable` because a message **omits** it. Omission is:
   a non-snapshot message that does not mention the field, a source that is missing or disconnected,
-  or a scope snapshot (defined in DERIVATIONS section 11.11) of *another* race. Merge is per field,
-  never whole-object. Two things are not omission and do retract, explicitly and pushed: a scope
-  snapshot's stated absence (INV-7) and a new run generation (`DECISIONS/ADR-013`).
+  or a scope snapshot of *another* race. Merge is per field, never whole-object. Two things are not
+  omission and do retract, explicitly and pushed: a scope snapshot's stated absence (INV-7) and a
+  new run generation (`DECISIONS/ADR-013`).
 - **INV-2 (precedence).** The domain layer retains the latest observation *per source* for each field.
   The presented value is chosen as follows:
   *Server procedure for rules 1 to 3: `DERIVATIONS.md` §11.12.*
 
   4. **`operator-write` sits outside rules 1–3.**
-     - **`provisional: true`** is an optimistic write awaiting one specific echo (§2.9). It is
-       presented the instant it is submitted. The very next results-table observation of that field,
-       for that run generation, supersedes it. **An echo is an observation that changes its source's
-       retained value of the field or states the requested value;** a re-delivery of what the source
-       already held is none (INV-5), so a rotation, or a row re-pushed for another field's sake,
-       leaves the write `pending`. From `xml` it must also pass INV-2c's guard against the write's
-       `submittedAt`, or a save written before the correction would resolve it `mismatched`. The
-       comparison is the target gate's cell (`DERIVATIONS.md` §6). **A retraction (INV-7) is such an
-       observation of every field it retracts:** it changes its source's retained value, so it
-       displaces the write's presentation and an assertion alike, and resolves a pending write
-       `mismatched` with no `confirmedValue` — upstream's table holds no result where one was
-       requested (kept by the maintainer, 2026-11-11, to be revisited in M4; `RULINGS.md` R-13).
-       A removal of the Attempt (INV-7, an absent XML row) resolves it the same way, in the
-       removal's unit and before it.
-       **The presented value under this rule is a whole
-       `gates` vector:** the vector presented from rules 1–3 with the target cell replaced by the
-       requested one, `source: operator-write` on the envelope (`gates` keeps the course's count,
-       §2.6; the vectors' one-cell `gates` are one-gate courses). Where no vector is `known` at
-       submission, the base is the course's gates with every cell `null` (a default: a write is
-       refused without a course, §7.3, so the count is always known).
+     - **`provisional: true`** is an optimistic write awaiting one specific echo (§2.9), presented
+       the instant it is submitted. The next results-table observation of that field, for that run
+       generation, supersedes it. **An echo is an observation that changes its source's retained
+       value of the field or states the requested value;** a re-delivery of what the source already
+       held is none (INV-5), so a rotation, or a row re-pushed for another field's sake, leaves the
+       write `pending`. From `xml` it must also pass INV-2c's guard against the write's
+       `submittedAt`. The comparison is the target gate's cell (`DERIVATIONS.md` §6). **A retraction
+       (INV-7) is such an observation of every field it retracts:** it displaces the write's
+       presentation and an assertion alike, and resolves a pending write `mismatched` with no
+       `confirmedValue` (`RULINGS.md` R-13). A removal of the Attempt (INV-7, an absent XML row)
+       resolves it the same way, in the removal's unit and before it.
+       **The presented value under this rule is a whole `gates` vector:** the vector presented from
+       rules 1–3 with the target cell replaced by the requested one, `source: operator-write` on the
+       envelope (`gates` keeps the course's count, §2.6; the vectors' one-cell `gates` are one-gate
+       courses). Where no vector is `known` at submission, the base is the course's gates with every
+       cell `null` (a default; a write is refused without a course, §7.3).
        *Default for several writes pending on one Attempt: §9.7.*
-     - **`provisional: false`** is an assertion with no echo expected. Examples are a direct
-       correction against the cloud store after the on-site session ended (§8.5). A later assertion of the same kind supersedes it. So does a
-       results-table observation that **changes** its own source's retained value after the
-       assertion: genuinely new upstream information. A re-delivery of the value that source already
+     - **`provisional: false`** is an assertion with no echo expected, such as a direct correction
+       against the cloud store after the on-site session ended (§8.5). It is superseded by a later
+       assertion of the same kind, or by a results-table observation that **changes** its own
+       source's retained value after the assertion. A re-delivery of the value that source already
        held never displaces an assertion (INV-5).
-- **INV-2b (disagreement is surfaced, never silently adopted).** A retained, non-presented observation
-  can disagree with the presented one after both have settled: neither is provisional, and the
-  snapshot's content age (INV-2c) is later than the `tcp` observation it disagrees with; without the
-  second condition every save in the seconds after a push would raise and clear a disagreement. The
-  comparison is made at every step that ingests either source's observation of the field, a
-  re-delivery included, since INV-5 advances the content age and can be what first meets the second
-  condition; an INV-5 re-delivery — a rotation, a connect burst, a re-read file — clears none, so a
-  standing disagreement stands until a value changes. Such
-  a disagreement is surfaced as an
-  admin diagnostic, `source-disagreement`, served by
-  `GET /api/diagnostics` (§7.1), the same audience as `SourceStatus`. Five further diagnostic kinds
-  live there: `contradicted-finish` (INV-2d), `duplicate-finish` (§2.6), `stale-mark` (§2.6, a mark
-  carried over a re-run), `member-sum-mismatch` (§2.6) and `unparseable-cell` (§1.3). Their shapes
-  are the `Diagnostic` block below, after INV-6. All six are
-  admin-facing, served by `GET /api/diagnostics` and pushed as `diagnostics.updated` (§7.2), never on
-  the live tier, and never rendered by a scoreboard. It never changes the presented
-  value by itself. There is no
-  re-query: no on-demand source remains (`DECISIONS/ADR-011`), and neither remaining source can hold
-  a correction back.
-- **INV-2c (content age across sources).** *Checker condition: `TEST-ARCHITECTURE.md` §3.6.2.*
+- **INV-2b (disagreement is surfaced, never silently adopted).** A retained, non-presented
+  observation that disagrees with the presented one after both have settled is surfaced as the
+  admin diagnostic `source-disagreement` (the `Diagnostic` block below). It never changes the
+  presented value by itself. There is no re-query.
+  *Checker condition for when it is raised and cleared: `TEST-ARCHITECTURE.md` §3.6.4.*
+- **INV-2c (content age across sources).** *Server procedure: `DERIVATIONS.md` §11.23.*
 - **INV-2d (the on-course stream contradicts a stale finish).** *Server procedure: `DERIVATIONS.md` §11.13.*
 - **INV-7 (a scope snapshot's stated absence is a retraction).** For an Attempt whose presented
   result fields came from results-table observations, a scope snapshot of its race that states no
@@ -1224,10 +1207,9 @@ implementation must satisfy, not an algorithm.
   - *Default for a race absent from the schedule, the Phase's removal: §9.10.*
   - **Never retracted:** an on-course inference, `entry`, `bib`, `startOrder`, `heat`, `startLane`,
     `run`, or a field whose Attempt was never present in a results-table observation.
-  - *Checker condition for the content-age guard on XML retractions: `TEST-ARCHITECTURE.md` §3.6.3.*
+  - *Server procedure for the content-age guard on XML retractions: `DERIVATIONS.md` §11.24.*
   - A retraction is an explicit observation with its own ingest sequence, pushed as `not-yet`
-    values. It is the routine case of a cleared DNS, a deleted result, or a finish moved to the
-    right bib.
+    values: a cleared DNS, a deleted result, or a finish moved to the right bib.
 - **INV-3 (`unavailable` is asserted, never defaulted).** `unavailable{reason}` is set only by an
   explicit determination that the fact cannot be supplied, or does not apply. It is never the default
   for "this message did not include the field".
@@ -1239,28 +1221,25 @@ implementation must satisfy, not an algorithm.
   from the same source for the same run generation, is a no-op for what is presented and triggers no
   client-visible notification where that value is already presented from that source. **The
   re-delivery is still an observation in its own right:** it takes its own ingest sequence and, on
-  `tcp`, continuity since its own ingestion (rule 2: a push is upstream's table at the moment of
-  sending), so a value TCP re-sends after a reconnect — the connect burst, a rotation — regains
-  precedence over an `xml` value that displaced it during the outage; that is an envelope change and
-  is pushed, and the envelope presented is the re-delivery's, `observedAt` included (where the value
-  is already presented from that source nothing of the retained envelope changes). The retained
-  observation's content age (INV-2c) is kept
-  where the re-delivery's is `null` or not later (a first read after `setPath` re-delivering a
-  value the XML already stated keeps that value's `changedAfter`, so a standing
-  `source-disagreement` neither clears nor re-raises), and advances to the re-delivery's where that
-  is later: the age only rises, which clears no standing disagreement, and a retained candidate
-  restated by a later rewrite is settled by INV-2c, not by this rule. `Phase.date` is assigned
-  once and is never re-derived.
+  `tcp`, continuity since its own ingestion (rule 2), so a value TCP re-sends after a reconnect —
+  the connect burst, a rotation — regains precedence over an `xml` value that displaced it during
+  the outage; that is an envelope change and is pushed, with the re-delivery's envelope,
+  `observedAt` included (where the value is already presented from that source nothing of the
+  retained envelope changes). `Phase.date` is assigned once and is never re-derived.
+  *Checker condition for the content age a re-delivery keeps or advances:
+  `TEST-ARCHITECTURE.md` §3.6.5.*
 - **INV-6 (ordering is a monotonic ingest sequence, never the wall clock).** Every "later" or "newer"
   above is defined over an internal, strictly increasing sequence, assigned at the ingest boundary
   together with `observedAt` (for an XML unit `observedAt` is its detection, `DERIVATIONS.md` §0.3,
-  and its sequence its apply, so the two need not run together). It is never defined by
-  comparing `observedAt` values. A clock jump
-  cannot reorder a merge decision. The sequence is exposed on the wire only as `seq` (§1.6), for
-  reconciliation.
+  and its sequence its apply, so the two need not run together), never by comparing `observedAt`
+  values. A clock jump cannot reorder a merge decision. The sequence is exposed on the wire only as
+  `seq` (§1.6).
 
-**Diagnostics** (INV-2b). The six kinds, each with the fields the rule that raises it records. A
-diagnostic carries no envelope of its own: it is a derived admin fact, not an observation.
+**Diagnostics** (INV-2b). The six kinds, each with the fields the rule that raises it records.
+All six are admin-facing: served by `GET /api/diagnostics` (§7.1), the same audience as
+`SourceStatus`, and pushed as `diagnostics.updated` (§7.2); never on the live tier, and never
+rendered by a scoreboard. A diagnostic carries no envelope of its own: it is a derived admin fact,
+not an observation.
 
 ```ts
 type Diagnostic =
@@ -1272,45 +1251,37 @@ type Diagnostic =
   | { kind: 'unparseable-cell'; attemptId: string; source: 'tcp' | 'xml'; slot: number; text: string }           // §1.3: slot = Course.slots[].slot
 ```
 
-**The operator re-baseline** (`DECISIONS/ADR-015`; §7.1). What no message will ever clear, the
-operator can: a stale row upstream keeps sending, or a half-correction that never completed. The
-re-baseline, per Phase or per Event:
+**The operator re-baseline** (`DECISIONS/ADR-015`; §7.1) clears what no message will: a stale row
+upstream keeps sending, or a half-correction that never completed. The re-baseline, per Phase or
+per Event:
 1. discards every retained upstream observation (`tcp` and `xml`), every contradiction record and
    every diagnostic for the scope's result fields: `status` marks, `outcome`, `gates`, `splits`,
    `faults`, `placement`, `pairTotal`, `countingRun`, `underReview`, `qualified`. Identities,
    `entry`, `bib`, `startOrder`, `heat`, `startLane`, `run`, every gate check and flag (§2.10) and
    every `WriteRequest` survive; a pending write stays pending, and a check's `status` is recomputed.
-   A classification Phase's rows (§2.4) are no Attempt's fields and survive too, with the
-   `decidedIn` kept for them: step 2's read replaces them as any snapshot does, under INV-2c's
-   guard (`DERIVATIONS.md` §4.10, §10 item 52 (b));
+   A classification Phase's rows (§2.4) survive too, with their `decidedIn`: step 2's read replaces
+   them as any snapshot does, under INV-2c's guard (`DERIVATIONS.md` §4.10, §10 item 52 (b));
 2. reads the current XML snapshot, validated, and ingests it as a scope snapshot with a fresh ingest
-   sequence — a unit like the reader's, its `changedAfter` by the same definition
-   (`DERIVATIONS.md` §0.3): the time of the last **successful** stat — the reader's polls and reads,
-   or this read's own retry stats — that showed a signature other than the one this read returns,
-   `null` when none (never "the last poll's", which after a run of failed polls dates the read too
-   late and lets a pending write resolve against an older save, INV-2 rule 4) — met by nothing
-   step 1 discarded. An absent row's removal (INV-7) still counts every `tcp` delivery that named
-   the Attempt: step 1 discards a row's result values, not its identity and lifecycle `status`
-   observations, which state that the bib was in the race at that delivery (`DERIVATIONS.md` §10
-   item 38 (l)). If no valid snapshot can be read, the
-   action fails with `409 source-unavailable` and changes nothing: the read precedes step 1, and
-   steps 1 and 2 reach the core as one ingest unit, the `rebaseline` event followed by the snapshot's
-   elements, so the discard and the rebuild are one step and `scope.replaced` goes with it;
-3. lets the on-course stream and the next TCP push of each race in scope refill the `tcp` slots.
-   Under rule 2 the `xml` observation is presented until then, because the `tcp` slots are empty;
+   sequence. *Server procedure for its content age: `DERIVATIONS.md` §11.25.* An absent row's
+   removal (INV-7) still counts every `tcp` delivery that named the Attempt: step 1 discards a row's
+   result values, not its identity and lifecycle `status` observations (`DERIVATIONS.md` §10
+   item 38 (l)). If no valid snapshot can be read, the action fails with `409 source-unavailable`
+   and changes nothing: the read precedes step 1, and steps 1 and 2 reach the core as one ingest
+   unit, the `rebaseline` event followed by the snapshot's elements, so the discard and the rebuild
+   are one step and `scope.replaced` goes with it;
+3. lets the on-course stream and the next TCP push of each race in scope refill the `tcp` slots;
+   until then the `xml` observation is presented (rule 2);
 4. pushes the whole scope to every on-site client as `scope.replaced` (§7.2), and to live as a Phase
    replace (§8.3).
 
-The re-baseline is an event in the ingest sequence, so replay stays deterministic. It asserts no
-value of its own: every presented value still carries `tcp` or `xml`. It is as correct as the
-snapshot it reads, and that snapshot can capture half a correction; the response reports the
-snapshot's write time, and the action is safe to repeat once the correction is complete.
+The re-baseline is an event in the ingest sequence. It asserts no value of its own: every presented
+value still carries `tcp` or `xml`. Its snapshot can capture half a correction; the response reports
+the snapshot's write time, and the action is safe to repeat once the correction is complete.
 
 The re-baseline is an admin action only; venue boards do not expose it. While a half-correction
-stands, clients present what upstream states, with no hiding and no marking. A duplicate finish is
-an admin diagnostic only. The upstream operator's own remedy is to force an XML save in Canoe123
-after the correction. The file watch picks up the new snapshot within one poll interval, and it
-applies as a scope snapshot under INV-7.
+stands, clients present what upstream states, with no hiding and no marking. The upstream
+operator's own remedy is to force an XML save in Canoe123 after the correction; the file watch picks
+up the new snapshot within one poll interval, and it applies as a scope snapshot under INV-7.
 
 *Server procedure for determinism: `DERIVATIONS.md` §11.16.*
 
@@ -1319,7 +1290,7 @@ applies as a scope snapshot under INV-7.
 ## 5. Standing assembly
 
 Standings **relay** Canoe123's own order and rank. They are assembled identically on both tiers, and
-no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
+no tier ranks (`DECISIONS/ADR-012`).
 
 1. **Scopes.** Each class publishes:
    - one `phase` standing per race Phase;
@@ -1332,33 +1303,29 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
 
    `standingKey = "<scope.kind>:<phaseId>[:<heat>]/<ageCategoryId | 'all'>"`, with `phaseId` being the
    second Phase for a pair. **A `pair` standing exists once the second Phase's `pair.siblingPhaseId`
-   is known** (§2.4): its scope names both Phases. Until the schedule names the first run (a TCP-first
-   cold start), the combined placement is on the Attempts and in the second Phase's `phase` standing
-   only; the `pair` standing's first publication follows the resolution. Known means stated on the
-   Phase: a parser states `pair` with the `format`, `siblingPhaseId: null` until the schedule names
-   the first run (`DERIVATIONS.md` §2.1), and the `pair` standing waits. Nothing here reads an
-   id: the first run is found by class and format (§2.4). The conformance vectors, whose Phases
-   no element describes, get a `pair` from their harness, which states it as it states the class
-   (`CONFORMANCE-VECTORS.md` §1, a convention of that file alone).
+   is known**, that is stated on the Phase (§2.4): its scope names both Phases. Until the schedule
+   names the first run (a TCP-first cold start), `siblingPhaseId` is `null` (`DERIVATIONS.md` §2.1)
+   and the combined placement is on the Attempts and in the second Phase's `phase` standing only.
+   *Checker condition for the conformance vectors' `pair` and class: `TEST-ARCHITECTURE.md` §3.6.6.*
    **`asOf`** is the ingest time of the latest observation that changed the standing as serialised;
    for a classification, the latest scope snapshot that changed its rows (§2.4,
    `DERIVATIONS.md` §4.10), not a snapshot re-sending the same rows and not an emptied table, which
-   leaves the Standing as last built (maintainer, 2026-11-06). **A standing is first published at
-   its first entry:** before one, its key is known and nothing is sent, and §7.1's hydration lists
-   it only once it has been published — a standing emptied afterwards (a retraction, a re-run) stays
+   leaves the Standing as last built (`RULINGS.md` R-3). **A standing is first published at its
+   first entry:** before one, its key is known and nothing is sent, and §7.1's hydration lists it
+   only once it has been published. A standing emptied afterwards (a retraction, a re-run) stays
    published, empty, its emptying being a change. **On site, no earlier than
    its Phase:** a Phase exists once its class is known (§1.6) and the standing's `classId` is the
    Phase's (§2.7), so a standing whose first entry is a running athlete at a TCP cold start waits for
    the race's `Results` message or the snapshot (§1.6's window), and within that unit the Phase's
-   creating message precedes its standing's; a vector's Phase has its class by convention from its
-   first observation (`CONFORMANCE-VECTORS.md` §1), so nothing waits there.
-   **A standing is pushed only when its serialised form changes:** an entry added or removed, or an entry's `rank`, `order`, `result`,
-   `pairTotalSeconds`, `behindSeconds`, `provisional`, `underReview` or `decidedIn`, or `anomalies`.
+   creating message precedes its standing's.
+   **A standing is pushed only when its serialised form changes** (§2.7): an entry added or
+   removed, or an entry's `rank`, `order`, `result`, `pairTotalSeconds`, `behindSeconds`,
+   `provisional`, `underReview` or `decidedIn`, or `anomalies`.
 2. **Whole-class entries.**
-   - Each Attempt of the Phase with a `known` `placement` is an entry; `placement` is `known` only
-     when upstream ranks the row (§2.6). It gets that `placement`'s `rank` and `order`. An untimed
-     row's entry (§2.6: `outcome` is `unavailable{not-applicable}`) has `result: null` and
-     `behindSeconds: null`; a client shows its placement and no time.
+   - Each Attempt of the Phase with a `known` `placement` (upstream ranks the row, §2.6) is an
+     entry, with that `placement`'s `rank` and `order`. An untimed row's entry (§2.6: `outcome` is
+     `unavailable{not-applicable}`) has `result: null` and `behindSeconds: null`; a client shows its
+     placement and no time.
    - Entries sort by `order`.
    - In a heat Phase's `phase` standing, entries sort by `(heat, order)`, as upstream does.
    - For a `pair`, the Attempts are the second Phase's. Their placement is already the combined one,
@@ -1373,74 +1340,38 @@ no tier ranks (`DECISIONS/ADR-012`, superseding `ADR-008`).
    ordered by `status`, in the declaration order of `AttemptStatus` (§2.6), then by `bib`, compared
    numerically where both bibs are integers and as strings otherwise. This order is deterministic and
    carries no ranking meaning.
-   - There is **no server-computed display rank**. Upstream places a finisher a median 0.14–0.41 s
-     after the finish impulse (`DECISIONS/ADR-011`). A computed rank shown for half a second, then
-     replaced wherever it differs, would be flicker.
+   - There is **no server-computed display rank**.
    - Relayed marks keep upstream's placement. A `ral` athlete is placed last. A second-run `dns` keeps
      the combined placement from run 1.
-4. **Age-category entries** (maintainer answer Q3; `DECISIONS/ADR-014`; maintainer,
-   2026-11-12). Take the whole-class standing's entries whose Entry has this `ageCategoryId`,
-   placed and unplaced, in the class standing's order. Then:
+4. **Age-category entries** (maintainer answer Q3; `DECISIONS/ADR-014`; `RULINGS.md` R-1, R-20).
+   Take the whole-class standing's entries whose Entry has this `ageCategoryId`, placed and
+   unplaced, in the class standing's order. Then:
    - a placed entry's `order` is its position among the category's placed entries, and its
      `rank` equals its `order`: Canoe123's own category numbering, which numbers entries tied on
      class rank consecutively, in class order;
    - an unplaced entry (step 3) has `rank: null` and `order: null` and is listed after every
      placed one, in step 3's order, as on a printed result list.
 
-   *Example* (recorded: jarni-ne-odp C1M_BR1_19, category ZM). Bibs 53 and 54 share class rank 43
-   and are the category's fifth and sixth placed entries: category ranks 5 and 6, as upstream's
-   own `CatRnk`. Bib 64, `DNF`, has no class rank: it follows the placed entries with `rank: null`.
-   The rule follows what Canoe123 prints (`README.md`, ground rules), and it makes category
-   standings available at class-rank latency: upstream's own category ranks reach only the
-   snapshot, a median of ~20 s after the finish. Measured on the seven recordings (2,032
-   distinct snapshots; `DERIVATIONS.md` §10 item 53): the rule reproduces upstream's `CatRnk` on
-   every placed row with a `CatId` of a first-run or single-run Phase, 493,763 row-instances in
-   43 races (39 `BR1`, 4 Cross `XT`), 0 mismatches, the recorded class tie above included in
-   every snapshot; upstream numbers no tie in that domain shared. When the snapshot's category rank of a placed entry
-   arrives and differs from the assembled one, a `category-rank-disagreement` anomaly is
-   recorded and the assembled rank stays presented; since the numbering is upstream's, such a
-   difference is a defect of the assembly, never a difference the contract accepts. **The
-   comparison is made only while the whole-class standing presents the snapshot's class
-   order** (a default, `DERIVATIONS.md` §10 item 53 (e)): its placed entries are exactly the
-   race's placed rows of the latest snapshot, each with the `rank` and `order` that row states.
-   While a newer TCP push has moved the class order and the snapshot has not caught up, the
-   snapshot's category ranks describe another order, so nothing is compared and an anomaly
-   recorded earlier is withdrawn; the next snapshot that restates the presented order is
-   compared. The snapshot's `CatRnk` is read with no content-age guard: it is an `xml`-only
-   check input, never presented, and the order condition is what keeps a stale file from
-   raising anything. The check
-   reads placed entries only: an unplaced row's `CatRnk` is a list position, not a rank (bib 64
-   above carries `CatRnk` 9). It reads only rows whose `CatId` is set: on a second-run row with
-   an empty `CatId`, `TotalCatRnk` repeats the class rank and is not a category rank (observed in
-   up to 196,621 row-instances per recording). **It reads first-run and single-run rows only**
-   (a default, `DERIVATIONS.md` §10 item 53 (c)): a second-run Phase's standings carry the
-   combined placement, its row's `CatRnk` ranks run 2 alone, and upstream fills its combined
-   `TotalCatRnk` late (459 distinct row facts behind the rule mid-race, 0 of 1,882 in each
-   recording's last snapshot), so a second-run Phase's category ranks are not checked.
-5. **`provisional` and `underReview`** are copied from the entry's own Attempt. They are `true` if any
-   of `outcome`, `placement` or `pairTotal` is provisional.
+   *Example.* Bibs 53 and 54 share class rank 43 and are the category's fifth and sixth placed
+   entries: category ranks 5 and 6. Bib 64, `DNF`, has no class rank: it follows the placed entries
+   with `rank: null`.
+
+   When the snapshot's category rank of a placed entry arrives and differs from the assembled one,
+   a `category-rank-disagreement` anomaly is recorded and the assembled rank stays presented.
+   *Server procedure for when the comparison is made: `DERIVATIONS.md` §11.26.*
+5. **`provisional`** is `true` if any of the entry's Attempt's `outcome`, `placement` or
+   `pairTotal` is provisional (§1.2). **`underReview`** is copied from the Attempt's `underReview`.
 6. **`behindSeconds`** is the entry's ranked value minus the first-ordered entry's, for duration
-   scopes. **The ranked value is the value the entry's placement is based on:** `pairTotal` for an
-   entry of a second-run Phase, in its `phase` standing and in the `pair` standing alike (its placement
-   is the combined one, step 2, `DERIVATIONS.md` §4.7), and `result.totalSeconds` otherwise. It is
-   `null` otherwise, and `null` for entries without a numeric ranked value: an unplaced entry
-   (step 3), whose time no placement is based on, and an untimed row's entry (step 2), in a
-   second-run Phase too. **It is never negative:** where the entry's value is smaller than the
-   first-ordered entry's it is `null`. A Kayak Cross time trial is ordered by its judging before
-   its time, and upstream leaves its own gap blank there (recorded: cp3-cross MX1_XT_26 bib 48
-   at 08:05:56.796Z, placed fourth with 66.70 behind a leader's 66.74, one cell not yet
-   judged).
-   Compared on `result`, a
-   second-run Phase's `phase` standing sets a combined order against run 2's own times: negative
-   `behindSeconds`, and 118–285 false step-7 anomalies per recording, every one of them there.
-7. **Anomaly check, the one mechanical comparison** (`order-disagreement`). It applies in a
-   duration-scored `phase` or `pair` standing, among placed entries with a numeric ranked value
-   (step 6) and no no-result mark. An anomaly is recorded when an entry is ordered ahead of another
-   whose ranked value is strictly smaller. Ties are never flagged, because upstream breaks them legitimately: a combined tie
-   by the run that did not count, and a single-run tie by its own order field. Cross scopes are never
-   checked. Anomalies go to the admin audience only. They never reorder anything. **The live tier
-   assembles standings without step 7 and without step 4's check**: it has no results-table
-   observations to compare against, and it serves no anomalies (§2.7, §8.4).
+   scopes, and `null` otherwise. **The ranked value is the value the entry's placement is based
+   on:** `pairTotal` for an entry of a second-run Phase, in its `phase` standing and in the `pair`
+   standing alike (its placement is the combined one, step 2, `DERIVATIONS.md` §4.7), and
+   `result.totalSeconds` otherwise. `behindSeconds` is `null` for entries without a numeric ranked
+   value: an unplaced entry (step 3) and an untimed row's entry (step 2), in a second-run Phase too.
+   **It is never negative:** where the entry's value is smaller than the first-ordered entry's it
+   is `null`.
+7. **Anomaly check** (`order-disagreement`). *Server procedure: `DERIVATIONS.md` §11.27.*
+   Anomalies go to the admin audience only and never reorder anything. **The live tier assembles
+   standings without step 7 and without step 4's check**, and serves no anomalies (§2.7, §8.4).
 
 ---
 
