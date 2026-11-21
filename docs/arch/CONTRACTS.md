@@ -49,16 +49,14 @@ CIS is not consumed (`DECISIONS/ADR-011`).
 
 Every entity below has an identity field. Two rules apply to all of them:
 
-**On-site, identity may be derived from Canoe123.** Canoe123 is the only on-site upstream, by fixed
-topology (`CONSTRAINTS.md` §1.1). Nothing is lost by letting on-site identity lean on it.
+**On-site, identity may be derived from Canoe123,** the only on-site upstream by fixed topology
+(`CONSTRAINTS.md` §1.1).
 
 **In the live/ingest contract, identity is opaque and provenance-neutral.** A field like `entryId`
-or `eventId` is a stable string the contract can key on. The contract does not know or care whether
-it was minted by the on-site bridge (true today) or issued by a future central registry (possible
-later). The full argument and its cost are in `DECISIONS/ADR-006`. The resulting rule, stated
-wherever it bites: never derive the *meaning* of a live-contract identity field from how it was
-produced. On-site identifiers taken from Canoe123 (`Id`, `RaceId`) are used verbatim and never
-parsed.
+or `eventId` is a stable string the contract keys on, whether the on-site bridge minted it (true
+today) or a future central registry issues it (`DECISIONS/ADR-006`). Never derive the *meaning* of a
+live-contract identity field from how it was produced. On-site identifiers taken from Canoe123
+(`Id`, `RaceId`) are used verbatim and never parsed.
 
 ### 1.2 The observation envelope
 
@@ -77,59 +75,44 @@ type UnavailableReason = 'not-configured' | 'source-unreachable' | 'not-applicab
 type Timestamp = string   // ISO-8601 with an explicit offset or Z
 ```
 
-A field's envelope, as delivered, holds the single value the domain layer currently *presents* for
-it. §4 defines how that value is chosen. It is not simply whichever observation arrived last.
-
-The fields, precisely:
+A field's envelope holds the single value the domain layer currently *presents* for it, chosen by
+§4, not simply the observation that arrived last.
 
 - **`observedAt`.** When *our own ingest boundary* captured the observation: the moment a TCP message
-  or an XML snapshot is received and parsed, never at outbound serialisation. This is the direct fix
-  for `EVIDENCE.md` Exhibit 1. It is used for display and staleness only. Merge ordering uses the
-  ingest sequence instead (INV-6).
+  or an XML snapshot is received and parsed, never at outbound serialisation. It is for display and
+  staleness only; merge ordering uses the ingest sequence (INV-6).
 - **`eventTime`.** Present only when Canoe123 gives a real event time for the fact: a start or finish
-  time. Upstream sends every event time as a bare time of day on
-  Canoe123's own timing clock, with no date and no zone. `eventTime` is built by
-  `DERIVATIONS.md` §0.2's rule: the owning Phase's `date`, plus that time of day, plus the venue's
-  configured zone. It is expressed on Canoe123's clock and never shifted to the server's clock.
-  Canoe123's clock is the official time, and this contract never compares `eventTime` with
-  `observedAt`. The gate-judging stamps upstream calls `GateTimes` are **not** event times
-  (`DERIVATIONS.md` §9).
+  time. Upstream sends it as a bare time of day on Canoe123's timing clock; `eventTime` is the owning
+  Phase's `date`, plus that time of day, plus the venue's configured zone (`DERIVATIONS.md` §0.2).
+  It stays on Canoe123's clock, the official time, and is never shifted to the server's clock or
+  compared with `observedAt`. The gate-judging stamps upstream calls `GateTimes` are **not** event
+  times (`DERIVATIONS.md` §9).
 - **`source`.** The upstream channel that produced this observation.
-- **`confidence`.** Two values only:
-  - `authoritative`: the source states the fact directly. Examples are a result-table row, a finish
-    time, an operator's entry.
+- **`confidence`.** Two values only, never a numeric score, so that no client chooses its own
+  threshold:
+  - `authoritative`: the source states the fact directly, as a result-table row, a finish time or an
+    operator's entry does.
   - `inferred`: the domain layer derived the value from evidence of the fact rather than from an
-    assertion of it. Examples are a total computed from on-course time plus gate penalties before any
-    result row exists, and a finish recognised from the on-course stream.
-
-  It is deliberately not a numeric score. A numeric score would invite each client to choose its own
-  threshold, which is exactly the kind of domain decision this design removes from clients.
-- **`provisional`.** `true` while **the value may still move**. That is the case while any of these
-  four conditions holds; the first three are stated in full below the list of fields, each as a
-  rule with its examples.
+    assertion of it, such as a total computed from on-course time plus gate penalties before any
+    result row exists, or a finish recognised from the on-course stream.
+- **`provisional`.** `true` while **the value may still move**, that is while any of these four
+  conditions holds; the first three are stated in full where the pointers below lead.
   1. **An inference.** It is an on-course inference not yet superseded by a results-table
      observation of the same run.
   2. **Judging open.** It is a result whose judging is incomplete — a presented gate cell is still
      blank (§4 rule 1 merges the cells) — or whose completeness cannot be judged yet because no
-     course is bound, and whose run is not yet closed. Closed is `DERIVATIONS.md` §4.4's one
-     definition, stated there alone.
+     course is bound, and whose run is not yet closed. Closed is defined in `DERIVATIONS.md` §4.4
+     alone.
   3. **Carried from run 1.** It is a second run's `placement`, `pairTotal` or `countingRun`
      carried over from run 1, from the Attempt's first on-course listing in run 2 until a row of
      run 2 restates that field.
   4. **A write awaiting its echo.** It is an optimistic write still awaiting its echo (§2.9).
 
   Otherwise it is `false`. **`status` is never provisional:** that the run started or finished is a
-  fact even while its outcome may move (`DERIVATIONS.md` §4.1). This marks the state honestly in
-  either mode of Canoe123's "ranking with incomplete penalties" setting:
-  - **setting on:** the first result push can precede the last gate's judgement, and the value stays
-    provisional until judging completes;
-  - **setting off:** the first push already follows the last gate.
+  fact even while its outcome may move (`DERIVATIONS.md` §4.1).
 
-  `provisional` answers "might this still move". `confidence` answers "how was this produced". A
-  client needs both and must not conflate them. **A change of `provisional` alone moves no
-  `observedAt`:** a closure or a course binding is no new observation of the value, so the
-  envelope is pushed with the flag changed and its instant unchanged — also where the element
-  that closes the run is a row restating the value already presented (INV-5).
+  `provisional` answers "might this still move", `confidence` "how was this produced". A client
+  needs both and must not conflate them.
 
 *Checker condition for condition 1 in full, the gates vector's envelope: `TEST-ARCHITECTURE.md` §3.6.1.*
 
@@ -137,15 +120,16 @@ The fields, precisely:
 
 *Server procedure for condition 3 in full, the second-run carry: `DERIVATIONS.md` §11.2.*
 
+*Checker condition for a change of `provisional` alone and `observedAt`: `TEST-ARCHITECTURE.md` §3.6.4.*
+
 **Wire encoding.** `state` is a JSON string discriminant, present on every envelope.
 - A `known` envelope always carries `value`, `observedAt`, `source`, `confidence` and `provisional`,
   never `null`. It carries `eventTime` **only when applicable. Otherwise the key is omitted entirely,
   never sent as `null`.**
 - `not-yet` carries no other key. `unavailable` carries only `reason`.
 
-The omission rule is deliberate. A decoder may treat a missing `eventTime` and an explicit `null` the
-same way. An encoder must never emit the `null`: `null` is a real, meaningful value elsewhere in this
-contract (`Gate.penalty`, §2.6). This is the direct fix for `EVIDENCE.md` Exhibit 5.
+A decoder may treat a missing `eventTime` and an explicit `null` alike. An encoder must never emit
+the `null`: `null` is a real, meaningful value elsewhere in this contract (`Gate.penalty`, §2.6).
 
 ```json
 { "state": "known", "value": 82.36, "observedAt": "2026-09-15T10:14:02.083Z",
@@ -158,15 +142,15 @@ contract (`Gate.penalty`, §2.6). This is the direct fix for `EVIDENCE.md` Exhib
 ```
 
 `reason` is a closed set, never free text:
-- `'not-configured'`: the source that would carry this is not set up. For example, no XML path is
-  configured, or no course is defined for the Phase.
+- `'not-configured'`: the source that would carry this is not set up, such as no XML path
+  configured or no course defined for the Phase.
 - `'source-unreachable'`: the source is configured but not answering right now. The on-site
   process gives this reason for no field today (`DERIVATIONS.md` §4.5).
-- `'not-applicable'`: the fact does not exist for this entity, permanently and by its nature. For
-  example, no `eventBib` exists where bibs are issued per race (§2.5), and a heat number does not
-  apply to a race without heats. A member with no registry identity is `externalId: null` inside a
-  `known` `members` value (§2.5), not an envelope: the Entry field is the wrapped unit, and nothing
-  inside a `value` is wrapped again.
+- `'not-applicable'`: the fact does not exist for this entity, permanently and by its nature, such
+  as `eventBib` where bibs are issued per race (§2.5), or a heat number in a race without heats. A
+  member with no registry identity is `externalId: null` inside a `known` `members` value (§2.5),
+  not an envelope: the Entry field is the wrapped unit, and nothing inside a `value` is wrapped
+  again.
 
 **How a client renders `unavailable`.** By default all three reasons render alike, as "not known",
 exactly as `not-yet` does; the reason is for the admin UI and diagnostics, and no client renders a
@@ -179,54 +163,50 @@ with no special-casing at the envelope level.
 
 **The trichotomy**, *unknown* / *not yet* / *zero*:
 
-- **`not-yet`.** The fact does not exist yet. Examples: an `Attempt`'s result fields before its
-  start (its `status` is `not-started`, §3.2); the run-scoped fields of a new run generation (§2.6).
-- **`unavailable { reason }`.** Nothing configured can supply the fact, or it does not apply. This
-  state is reserved for exactly that. It is **never** used because the latest message simply did not
-  mention the field (INV-1, INV-3).
-- **`known { value: 0 }`.** A real, asserted zero. It is structurally distinct from both of the
-  above, which is the fix for `EVIDENCE.md` Exhibit 5.
+- **`not-yet`.** The fact does not exist yet, such as an `Attempt`'s result fields before its start
+  (its `status` is `not-started`, §3.2), or the run-scoped fields of a new run generation (§2.6).
+- **`unavailable { reason }`.** Reserved for a fact that nothing configured can supply or that does
+  not apply. It is **never** used because the latest message simply did not mention the field
+  (INV-1, INV-3).
+- **`known { value: 0 }`.** A real, asserted zero, structurally distinct from both of the above.
 
 ### 1.3 Units and encodings
 
-- **Durations** are in **seconds**, decimal. Upstream units differ by interface. TCP sends formatted
-  seconds. The XML snapshot sends integer milliseconds for times and totals, and integer seconds for
-  penalties. The domain layer normalises at ingest, once (`DERIVATIONS.md` §0.1).
+- **Durations** are in **seconds**, decimal. The domain layer normalises upstream's units once, at
+  ingest (`DERIVATIONS.md` §0.1).
 - **Dates** are `YYYY-MM-DD`. **Timestamps** are full ISO-8601 with an explicit offset or `Z`.
-- **Bibs** are strings, trimmed of upstream's padding before they are used anywhere. Result-table bibs
-  arrive padded to four characters (`DERIVATIONS.md` §0.1). A classification row's bib (`XER`,
-  `SLER`, `WWER`) is relayed as Canoe123 writes it, trimmed, with its inner padding collapsed to one
-  space: the maintainer decided the `XER` bib (2026-11-15), and `SLER` and `WWER` follow because
-  every classification row's bib is read by one rule (`DERIVATIONS.md` §4.10). A Kayak Cross row
-  ranked from the time trial keeps its prefix and reads `t 13` where Canoe123 writes `t   13`. Without the `t` the number can repeat within one
-  classification (`DERIVATIONS.md` §4.10). A bib never joins data across Phases: across Phases a
-  competitor is its `entryId` (§2.6).
+- **Bibs** are strings, trimmed of upstream's padding before they are used anywhere
+  (`DERIVATIONS.md` §0.1). A classification row's bib (`XER`, `SLER`, `WWER`) is relayed as
+  Canoe123 writes it, trimmed, with its inner padding collapsed to one space (`RULINGS.md` R-21 for
+  `XER`; `SLER` and `WWER` follow because one rule reads every classification row's bib,
+  `DERIVATIONS.md` §4.10). A Kayak Cross row ranked from the time trial keeps its prefix and reads
+  `t 13` where Canoe123 writes `t   13`: without the `t` the number can repeat within one
+  classification. A bib never joins data across Phases: across Phases a competitor is its `entryId`
+  (§2.6).
 - **Gate penalties** are an integer number of seconds, or `null` for not yet judged or passed. `null`
   is never coerced to `0`. A single boat's value is `0`, `2` or `50`. A team's value is the sum over
-  its members (§2.6), so 4, 52, 100 and 150 occur. Upstream's gate cells are also free text in the
-  operator's grid: a recorded row carried a note in place of a value. A cell that is not an integer
-  parses as `null` and raises an `unparseable-cell` diagnostic (`DERIVATIONS.md` §4.6(b)).
+  its members (§2.6), so 4, 52, 100 and 150 occur. A gate cell that is not an integer (upstream's
+  cells are free text in the operator's grid) parses as `null` and raises an `unparseable-cell`
+  diagnostic (`DERIVATIONS.md` §4.6(b)).
 - **No field carries natural-language text describing domain state.** Status, format, round and
-  discipline are closed or opaque identifiers. A human-readable label is a client-side lookup, in
-  whatever language the client chooses. This generalises the fix for `EVIDENCE.md` Exhibit 8.
-  **Organiser-authored text is different.** An event title, a class name or a race title is data the
-  organiser typed, like a competitor's name. It is carried verbatim and never generated by the domain
-  layer. Canoe123's own localised labels, such as round subtitles and warnings, are not carried
+  discipline are closed or opaque identifiers; a human-readable label is a client-side lookup, in
+  whatever language the client chooses. **Organiser-authored text** (an event title, a class name, a
+  race title, like a competitor's name) is carried verbatim and never generated by the domain layer.
+  Canoe123's own localised labels, such as round subtitles and warnings, are not carried
   (`DERIVATIONS.md` §9).
 
 ### 1.4 Errors
 
-One envelope, shared by §7 and §8, so a bridge or client author handles rejection once, not per
-endpoint:
+One envelope, shared by §7 and §8:
 
 ```json
 { "error": { "code": "phase-not-found", "message": "no Phase K1M_ST_BR3_6 in this event" } }
 ```
 
-**`code` is the contract; `message` is not.** `code` is a closed, kebab-case identifier — a test
-asserts against it, and it cannot change without a breaking-change bump. `message` is for logs and a
-human reading them; it may be reworded at any time without that being a breaking change, and no
-client may parse it. Codes used anywhere in §7 or §8, each with the HTTP status it always carries:
+**`code` is the contract; `message` is not.** `code` is a closed, kebab-case identifier that cannot
+change without a breaking-change bump. `message` is for logs and a human reading them; it may be
+reworded at any time without a breaking change, and no client may parse it. Codes used anywhere in
+§7 or §8, each with the HTTP status it always carries:
 
 | `code` | HTTP status | Where |
 |---|---|---|
@@ -265,70 +245,66 @@ type ErrorEnvelope = { error:
 }
 ```
 
-§7 has no `unauthorized`/`forbidden` — the on-site network is trusted (`CONSTRAINTS.md` §1.2, venue
-LAN), and no operation in §7 requires a credential, matching today's precedent.
+§7 has no `unauthorized`/`forbidden`: the on-site network is trusted (`CONSTRAINTS.md` §1.2, venue
+LAN), and no operation in §7 requires a credential.
 
 ### 1.5 Idempotency
 
-**`PUT` (§8.3) is idempotent by construction, per INV-5 — no header, no special casing.** Retrying an
-identical body any number of times is always safe: the domain layer retains it per source and merges
-it by §4's precedence rules regardless of how many times the same observation arrives. A retried `PUT`
-returns `200` with the current resolved resource every time, whether the body was new, a duplicate,
-or superseded by something else in the interim — a client never needs to distinguish these cases to
-know the retry was safe.
+**`PUT` (§8.3) is idempotent by construction, per INV-5, with no header.** Retrying an identical body
+any number of times is always safe. A retried `PUT` returns `200` with the current resolved resource
+every time, whether the body was new, a duplicate, or superseded in the interim; a client never needs
+to tell these cases apart.
 
-**`POST` (§7 writes) is not naturally idempotent — each call means "submit a new correction" — so it
-requires a client-supplied `Idempotency-Key` header,** an opaque string the client generates once per
-correction attempt (a UUID is sufficient). The server retains the mapping from key to the
-`WriteRequest` it produced for at least 24 hours. A retry with the **same** key returns `200` with
-that same `WriteRequest`, whatever its current `status`, and never submits a second command upstream.
-A **different** key is always a new correction, even against the same field — a judge revising their
-own just-submitted correction is a second legitimate `WriteRequest`, not a retry, and gets its own.
-The key maps — of writes and of flags (§7.4) — and every `WriteRequest` are **the writes store**:
-one durable unit per event, written whole, apart from §2.10's checks and flags. It is durable
-with §2.10's discipline: a same-key retry "never submits a second command upstream" (above), and `pending`
-"persists until an echo … is ingested" (§2.9), neither of which a restart may undo — a key forgotten
-at a restart would let the retry send a second command or raise a second flag, and a forgotten
-`pending` write would be settled by nothing. The map may be dropped after the 24 hours, a later retry
-being a new correction. A durable `WriteRequest` carries `target.run`, and the generation itself
-is not persisted: a restart during a re-run is an accepted risk, the operator resolving a pending
-correction by hand (`DERIVATIONS.md` §10 item 25; maintainer, 2026-11-10). A missing header is
-`400 validation-failed`, `details: [{ field: 'Idempotency-Key', issue: 'missing' }]`.
+**`POST` (§7 writes) means "submit a new correction", so it requires a client-supplied
+`Idempotency-Key` header,** an opaque string the client generates once per correction attempt (a
+UUID is sufficient). The server retains the mapping from key to the `WriteRequest` it produced for
+at least 24 hours. A retry with the **same** key returns `200` with that same `WriteRequest`,
+whatever its current `status`, and never submits a second command upstream. A **different** key is
+always a new correction, even against the same field: a judge revising their own just-submitted
+correction makes a second legitimate `WriteRequest`.
+
+The key maps, of writes and of flags (§7.4), and every `WriteRequest` are **the writes store**: one
+durable unit per event, written whole, apart from §2.10's checks and flags, and durable with §2.10's
+discipline. A restart undoes neither guarantee: a same-key retry never submits a second command or
+raises a second flag, and a `pending` write persists until its echo is ingested (§2.9). The map may
+be dropped after the 24 hours, a later retry being a new correction. A durable `WriteRequest`
+carries `target.run`, and the generation itself is not persisted: a restart during a re-run is an
+accepted risk, the operator resolving a pending correction by hand (`RULINGS.md` R-10). A missing
+header is `400 validation-failed`, `details: [{ field: 'Idempotency-Key', issue: 'missing' }]`.
 
 *Default for the two cases that leave a key in memory only, or lose it: §9.1.*
 
 ### 1.6 Snapshot and subscription ordering
 
 **`seq` is one counter per server.** Every push-capable stream (§7's WebSocket, §8.4's public feed)
-stamps each outbound message with `seq`. Each outbound message takes the next value of the counter;
-an element's ingest sequence (INV-6, §4) is the value the counter had when it was ingested, so one
-element may produce many messages, each with its own `seq`. **The unit of ingest is one upstream
-message:** one TCP message, one XML snapshot, one operator write, one connection event, one
-re-baseline with the snapshot it re-reads (§4); on the live tier, one §8.3 request. Every observation that unit yields is merged before
-anything is emitted, and then at most one message per changed resource is sent: §7.2's
-`attempt.updated` carries every field that unit changed, never one message per field. A core may
-apply observations one at a time, but it notifies per unit (`CONFORMANCE-VECTORS.md` §1, "Ingest
-units"), and a replay step is one unit (`TEST-ARCHITECTURE.md` §3.2). **The one message without `seq` is
-§8.4's `heartbeat`:** it carries `asOfSeq` instead, since it carries no state; a client neither buffers
-nor applies it, and steps 2 and 4 below concern only messages that carry `seq`. On site the heartbeat is
-`sources.updated`, which does carry `seq` (§7.2). It is the same number on every connection and in every `asOfSeq` a REST response
-carries, because all of them read one counter. It is strictly increasing, and it **never regresses
-across a server restart**: the counter's high-water mark is persisted with the same discipline as
-§2.10. On site, a mark that fails validation at load is set aside, and the counter restarts at a
-floor above any value issued in practice; on site, the guarantee carries the one residual stated in
-`DERIVATIONS.md` §10 item 33, which the maintainer accepted as a residual risk (2026-11-14). Neither
-relaxes anything for live-mini's counter. `seq` only lets a client tell whether it has already incorporated a given change, the way a
-log offset would. It carries no ranking or authority information; precedence among sources is
-settled in the domain layer (§4) before anything reaches the wire. live-mini-server keeps its own
-counter with the same rules.
+stamps each outbound message with `seq`, and each outbound message takes the next value of the
+counter. It is the same number on every connection and in every `asOfSeq` a REST response carries.
+It is strictly increasing and **never regresses across a server restart**: its high-water mark is
+persisted with §2.10's discipline (on site, one accepted residual, `RULINGS.md` R-16).
+live-mini-server keeps its own counter with the same rules, and the on-site residual does not apply
+to it. `seq` only lets a client tell whether it has already incorporated a given change, the way a
+log offset would; it carries no ranking or authority information, precedence among sources being
+settled in the domain layer (§4) before anything reaches the wire.
+
+**The one message without `seq` is §8.4's `heartbeat`:** it carries `asOfSeq` instead, since it
+carries no state; a client neither buffers nor applies it, and steps 2 and 4 below concern only
+messages that carry `seq`. On site the heartbeat is `sources.updated`, which does carry `seq` (§7.2).
+
+**The unit of ingest is one upstream message:** one TCP message, one XML snapshot, one operator
+write, one connection event, one re-baseline with the snapshot it re-reads (§4); on the live tier,
+one §8.3 request. Every observation a unit yields is merged before anything is emitted, and then at
+most one message per changed resource is sent: §7.2's `attempt.updated` carries every field that
+unit changed, never one message per field.
+
+*Server procedure for the ingest sequence, notifying per unit and the `seq` floor: `DERIVATIONS.md` §11.20.*
 
 **Every message is idempotent to apply.** A message carries state, never an increment: a field's
 envelope, a whole resource, or a scope replace. Applying a message whose content is already
-reflected changes nothing. This is what makes the rules below safe.
+reflected changes nothing.
 
-**The handshake**: a snapshot fetched over REST and a subscription
-opened afterward leaves a gap. So every hydration/snapshot response carries a top-level
-`asOfSeq: number`, and the required sequence is:
+**The handshake.** A snapshot fetched over REST and a subscription opened afterward leave a gap, so
+every hydration/snapshot response carries a top-level `asOfSeq: number`, and the required sequence
+is:
 
 1. Open the stream connection first.
 2. Buffer every message received, by `seq`, without applying it yet.
@@ -339,21 +315,20 @@ opened afterward leaves a gap. So every hydration/snapshot response carries a to
 5. Apply every subsequent message as it arrives, in `seq` order.
 
 **Reconnection.** A stream does not replay and has no resume-from-`seq`. After any reconnection, on
-either tier, the client repeats steps 1–5 in full for every resource it holds. Because `seq` never
-regresses, a client may use its last applied `seq` for one thing only: to discard, after re-hydration,
-any message it has already applied.
+either tier, the client repeats steps 1–5 in full for every resource it holds. A client may use its
+last applied `seq` for one thing only: to discard, after re-hydration, any message it has already
+applied.
 
 **Creation over the push.** A `*.updated` message for an id the client does not hold creates the
 entity. The first message for a new id carries the whole resource, with every `Observed` field that
-is not yet known as `not-yet`; later messages for it are partial. A client therefore never needs to
-re-hydrate to learn of a new Attempt, Entry, Phase, Class or Course. **A Phase is created at the
-first observation that states its `classId`** (`DERIVATIONS.md` §2.1: TCP's `OnCourse` and `Schedule`
-carry no class, `Results` and the snapshot do): an on-course listing creates the Attempt, whose
-`phaseId` names the Phase, and not yet the Phase. Hydration stays complete meanwhile:
-`/api/events/current` names every such `phaseId` in `pendingPhaseIds`, and a hydrating client requests
+is not yet known as `not-yet`; later messages for it are partial. A client never needs to re-hydrate
+to learn of a new Attempt, Entry, Phase, Class or Course. **A Phase is created at the first
+observation that states its `classId`:** an on-course listing creates the Attempt, whose `phaseId`
+names the Phase, and not yet the Phase. Hydration stays complete meanwhile: `/api/events/current`
+names every such `phaseId` in `pendingPhaseIds`, and a hydrating client requests
 `/api/phases/{phaseId}/attempts` for each as it does for a listed Phase, so an Attempt that left the
-course before the client connected is held too and its later partial messages apply (accepted by
-the maintainer, 2026-11-10; `RULINGS.md` R-24). The window lasts about one poll with the snapshot configured, and without it until the race's
+course before the client connected is held too and its later partial messages apply (`RULINGS.md`
+R-24). The window lasts about one poll with the snapshot configured, and without it until the race's
 `Results` message — its first push or its turn in the rotation (§4 INV-2). `/api/classes/{classId}/phases`
 lists created Phases only; a client renders what such an Attempt carries until its Phase arrives,
 whole, `classId` included.
@@ -365,19 +340,17 @@ client removes the Phase, every Attempt of it and every Standing whose scope nam
 `attempt.updated` for the same `attemptId`, or `phase.updated` for the same `phaseId`, creates a
 new one, whole, as above.
 
-Both on-site client applications and the public spectator client are required to implement this; §7
-and §8.4 each restate only the connection-specific detail, not this sequence.
+Both on-site client applications and the public spectator client implement this; §7 and §8.4 each
+restate only the connection-specific detail, not this sequence.
 
 ### 1.7 Machine-readable schemas — scoped narrowly, deliberately
 
 `docs/arch/schemas/observed.schema.json`, `error.schema.json` and `fixture-admitted.schema.json` (the
 fixture admission block of `TEST-ARCHITECTURE.md` §4: a machine-checked gate, not a wire shape) are
-real JSON Schema, not illustration — every envelope and every error response in §7 and §8 validates against one of them.
-Each compiles under a strict JSON Schema 2020-12 validator (Ajv `strict: true`, which is how the contract
-package's tests load them); a schema that needs strictness relaxed is a defect in the schema.
-They exist because these two shapes appear in nearly every response either contract sends, so a
-single machine-checkable definition of each is worth more than the same prose repeated at every use
-site staying in sync by discipline alone.
+real JSON Schema, not illustration: every envelope and every error response in §7 and §8 validates
+against one of them. Each compiles under a strict JSON Schema 2020-12 validator (Ajv `strict: true`,
+which is how the contract package's tests load them); a schema that needs strictness relaxed is a
+defect in the schema.
 
 ---
 
