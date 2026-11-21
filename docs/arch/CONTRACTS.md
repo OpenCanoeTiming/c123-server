@@ -370,8 +370,8 @@ Standing — assembled per scope (phase, pair, heat, classification) × (whole c
 
 ### 2.1 Organiser
 
-The cloud-tier tenant boundary (`CONSTRAINTS.md` §1.7). It is not modelled on-site at all: an on-site
-deployment is single-tenant by fixed topology.
+The cloud-tier tenant boundary (`CONSTRAINTS.md` §1.7). It is not modelled on site: an on-site
+deployment is single-tenant.
 
 ```ts
 type Organiser = { organiserId: string; name: string }
@@ -397,47 +397,34 @@ type EventDetails = {
 ```
 
 **Event identity is asserted, never discovered.** The on-site bridge mints `eventId` and persists it
-across days (Scenario E, `ARCHITECTURE.md`). A future central registry could issue it instead
-(`DECISIONS/ADR-006`).
+across days (Scenario E, `ARCHITECTURE.md`).
 
 - **The event title** is the name the operator entered, at boot or in the "start a new event"
-  action, and the snapshot's title never displaces it; where the operator entered none (an empty or
-  whitespace-only name counts as none), it is the snapshot's own title and follows it as it changes
-  (`DERIVATIONS.md` §10 item 40). It is organiser-authored text (§1.3).
+  action; the snapshot's title never displaces it. Where the operator entered none (an empty or
+  whitespace-only name counts as none), it is the snapshot's own title and follows it as it changes.
 - **`details`** is the snapshot's `Events` table: `SubTitle`, `Location` as `venue`, `Facility`, and
-  the date parts of `StartDate` and `EndDate`; `not-yet` until the snapshot states it, and the XML
-  parser's element to emit (E1, the XML layout). The date part is the `YYYY-MM-DD` as written
-  before the time part, with no zone conversion: the file writes a time of day and an offset
-  (recorded `2026-04-25T00:00:00+02:00`), and converting would move the day the organiser entered.
-  The date part is the first ten characters; one that is not a calendar date (`2026-13-45`,
-  `2026-02-29`, `2026-4-25T…`) is unparseable, and what follows it is not read (`DERIVATIONS.md`
-  §10 item 40).
-  An empty or whitespace-only `SubTitle`, `Location` or `Facility` leaves its optional field absent
-  (recorded `<SubTitle />`, `<Location />`). A missing or unparseable `StartDate` or `EndDate`
-  means the snapshot states no `details`: what is presented stays, `not-yet` before any, and an
-  unparseable one raises the parser's ingest-only `unparseable-field` (`DERIVATIONS.md` §0.5;
-  default, never recorded: every recorded snapshot carries both). M2 P2 ruling, 2026-11-14.
-- **Upstream's own event id** in the snapshot is **not** exposed. It is an input to the operational
-  check "is this still the same Canoe123 event" (`ARCHITECTURE.md` Scenario E), never an identity.
+  the date parts of `StartDate` and `EndDate`; `not-yet` until the snapshot states it. The date part
+  is the `YYYY-MM-DD` as written before the time part, with no zone conversion (the file writes a
+  time of day and an offset). An empty or whitespace-only `SubTitle`, `Location` or `Facility`
+  leaves its optional field absent.
+  *Default for a date part that is not a calendar date, and for a missing or unparseable date: §9.11.*
+- **Upstream's own event id** in the snapshot is **not** exposed and is never an identity.
 
-**Both file layouts must work.** An organiser may keep one Canoe123 file per race day, or one file for
-a whole multi-day event. The snapshot of a multi-day file carries the event's date range and dated
-races for every day. It carries the next day's start lists the evening before. Nothing in this
-contract assumes either layout.
+**Both file layouts work,** one Canoe123 file per race day or one for a whole multi-day event;
+nothing in this contract assumes either.
 
-- **Day grouping** comes from each Phase's own `date` (§2.4), never from `details.startDate`/`endDate`.
-  Those are operator-entered, and one recorded event's range was off by a day.
+- **Day grouping** comes from each Phase's own `date` (§2.4), never from `details.startDate`/`endDate`,
+  which are operator-entered and fallible.
 
 **Invariant:** `eventId`, once minted, never changes and is never reused for a different competition.
-Starting a genuinely new competition on the same laptop is a deliberate operator action, never
-inferred from a changed source. Returning to an earlier event is not reuse — the same competition
-under its own id: its §2.10 store reopens as left, `event.changed` carries it and clients re-hydrate
-(§7.2). The action and the return are the admin UI's own, not §7 paths; whether the UI offers the
-return is the maintainer's.
+Starting a new competition on the same laptop is a deliberate operator action, never inferred from a
+changed source. Returning to an earlier event is not reuse: its §2.10 store reopens as left,
+`event.changed` carries it and clients re-hydrate (§7.2). The action and the return are the admin
+UI's own, not §7 paths; whether the UI offers the return is the maintainer's.
 
 ### 2.3 Class
 
-A class of boat and competitor, such as K1M or C1W. It is exactly one Canoe123 class.
+Exactly one Canoe123 class, such as K1M or C1W.
 
 ```ts
 type Class = {
@@ -451,25 +438,22 @@ type Class = {
 type AgeCategory = { ageCategoryId: string; name: string }   // Canoe123 CatId and its name
 ```
 
-- **`classId` is read from Canoe123's class field, never from a `RaceId` prefix.** Upstream builds
-  a `RaceId` from the class id (`K1M_ST_BR1_6` for class `K1M_ST`, `K1M-ZS_BR1_25` for `K1M-ZS`,
-  `MX1J_XT_26_JUN` for `MX1J`), but it rebuilds it only while the race has not started. After an
-  operator renames a class or moves a race, a started race keeps its old prefix while the class
-  field follows the change (`DERIVATIONS.md` §1). The same holds for finding a Phase's other run
-  (§2.4): no part of a `RaceId` is read for it.
-- **Canoe123 lists pseudo-classes, which are never Classes.** One means "not assigned". The race
-  staged with the literal id `<unassigned>` is likewise never a Phase (`DERIVATIONS.md` §0.3).
-- **`discipline`** is exposed explicitly, because two structurally different things hang off it: the
-  `Outcome` variant (§2.6), and the finish strategy (`DECISIONS/ADR-009`).
+- **`classId` is read from Canoe123's class field, never from a `RaceId` prefix:** a started race
+  keeps its old prefix after an operator renames a class or moves a race, while the class field
+  follows (`DERIVATIONS.md` §1). No part of a `RaceId` is read to find a Phase's other run (§2.4)
+  either.
+- **Canoe123's pseudo-classes, such as "not assigned", are never Classes.** The race staged with the
+  literal id `<unassigned>` is never a Phase (`DERIVATIONS.md` §0.3).
+- **`discipline`** decides the `Outcome` variant (§2.6) and the finish strategy
+  (`DECISIONS/ADR-009`).
 
-**Age categories are relayed, never computed** (`DECISIONS/ADR-014`). At national events every class
-contains age categories. Canoe123 assigns each entry to one, from its own year-based rule. The rule is
-federation matter and is not ours to apply. Age-category standings are official results and
-first-class: they are shown *alongside* the class standing, not instead of it (§5).
+**Age categories are relayed, never computed** (`DECISIONS/ADR-014`): Canoe123 assigns each entry to
+one. Age-category standings are official results, shown *alongside* the class standing, not instead
+of it (§5).
 
 ### 2.4 Phase
 
-One Canoe123 race: exactly one `RaceId`. A Phase is a run, a round, or a classification.
+One Canoe123 race, exactly one `RaceId`: a run, a round, or a classification.
 
 ```ts
 type Phase = {
@@ -492,21 +476,19 @@ type PairRole = { role: 'first' | 'second'; siblingPhaseId: string | null; combi
                                     // siblingPhaseId null until the schedule names the other run — DERIVATIONS §2.1
 ```
 
-**`format` is open** (maintainer answer Q6; `DECISIONS/ADR-014`). Every format Canoe123 supports is
-representable, even where live results do not implement it yet. The known tokens map to structural
-properties as follows. All of this is E1, from the upstream format vocabulary and upstream's own
-pairing and combination behaviour.
+**`format` is open** (maintainer answer Q6; `DECISIONS/ADR-014`): every format Canoe123 supports is
+representable, even where live results do not implement it yet.
 
 *Server procedure, the table from a format token to `kind`, `pair`, `scoringKind` and `heats`: `DERIVATIONS.md` §11.3.*
 
-**Pairing** (maintainer, 2026-11-11; `RULINGS.md` R-18).
+**Pairing** (`RULINGS.md` R-18).
 - *Server procedure for how a second run names its first: `DERIVATIONS.md` §11.4.*
 - *Default for a tie between several Phases that match: §9.2.*
 - *Server procedure for reading no `RaceId` in pairing, and for `combination`: `DERIVATIONS.md` §11.5.*
 - *Default for `NHT1` and `NHT2`: §9.3.*
 - `role` and `combination` come from the token alone; `siblingPhaseId` is `null` until the schedule
-  names the other run — until a Phase with that class and format is known (a TCP-first cold start,
-  `DERIVATIONS.md` §2.1). A second-run Phase reads its rows as a second run from its first row,
+  names the other run, that is until a Phase with that class and format is known (a TCP-first cold
+  start, `DERIVATIONS.md` §2.1). A second-run Phase reads its rows as a second run from its first row,
   sibling resolved or not (`DERIVATIONS.md` §4.4).
 - *Default for the two further pairings, a super-final and a final after a semi-final: §9.4.*
 
@@ -515,49 +497,42 @@ type Stage = 'run' | 'time-trial' | 'heats' | 'quarter-final' | 'semi-final' | '
            | 'super-final' | 'classification'
 ```
 
-**`stage` says where in a progression the Phase sits.** It is structural, not a vendor token, so it
-travels to the live tier too (§8.3): without it, a Cross semi-final and a Cross final are identical
-there (both heats, both ordinal), and only an organiser-typed title could tell them apart. From the
+**`stage` says where in a progression the Phase sits.** It is structural, not a vendor token, and
+travels to the live tier (§8.3), where it alone tells a Cross semi-final from a Cross final. From the
 format: `BR1`/`BR2`, `HT*`, `EL*`, `TR*`, `SR*`, `TS1`/`TS2` → `run`; `XT`, `XT1`, `XT2` →
 `time-trial`; `X8` → `heats`; `X4`, `QF` → `quarter-final`; `XS`, `SF`, `SFB` → `semi-final`; `XF`,
 `FI`, `FIB`, `TSF`, `TFI`, `SPF` → `final`; `SUF` → `super-final`; every `*ER` → `classification`;
 an unknown token → `run`.
 
-**Labelling a format** is a client-side lookup keyed on the token (§1.3). For a token the client does
-not know, it shows the token itself, verbatim, together with what the structural fields say (`stage`,
-run 1 or 2 of a pair, heats, classification). It never invents a name, and never fails to render.
+**Labelling a format** is a client-side lookup keyed on the token (§1.3). An unknown token is shown
+verbatim, with what the structural fields say (`stage`, run 1 or 2 of a pair, heats,
+classification); a client never invents a name and never fails to render.
 
-**`XER`, `SLER` and `WWER` are classifications, not rounds** ("ER" = event result, confirmed by the
-maintainer). Their rows are upstream's synthetic event result, assembled from the final, then the
-semi-final, then the heats, and used for points. Each row says which round decided that athlete's
-place. A classification Phase holds no Attempts; it feeds a `classification` Standing (§2.7).
-**Staleness, stated:** upstream rebuilds a classification only when the operator presses "calculate
-event result", so a later correction in a contributing Phase does not reach it until then. The
-classification is relayed as upstream last built it, never recomputed by us. **`Standing.asOf` is
-what tells a client how old it is** (§5): for a classification it is the ingest time of the latest
-snapshot that changed its rows, which happens when the operator recalculates, so a client compares it with the
-`asOf` of the contributing Phases' standings to see that it lags them. `RXER` is a title for which upstream calculates nothing: a classification Phase
-that never holds rows. **A Kayak Cross class may have no classification at all**, or an `XER` whose
-table holds no rows: the operator need never press "calculate event result" (`DERIVATIONS.md`
-§4.10). No classification Standing is published then (§5 step 1): the class has no overall result,
-and its Cross results are its race Phases' own standings, the time trial's included.
+**`XER`, `SLER` and `WWER` are classifications, not rounds.** Their rows are upstream's event result; each row says which round decided that athlete's place.
+A classification Phase holds
+no Attempts; it feeds a `classification` Standing (§2.7). It is relayed as upstream last built it,
+never recomputed: upstream rebuilds it only when the operator presses "calculate event result", so a
+later correction in a contributing Phase reaches it only then. **`Standing.asOf` tells a client how
+old it is** (§5): the ingest time of the latest snapshot that changed its rows, which a client
+compares with the `asOf` of the contributing Phases' standings to see the lag. **A Kayak Cross class may have no classification at
+all**, or an `XER` whose table holds no rows. No classification Standing is published then (§5
+step 1): the class has no overall result, and its Cross results are its race Phases' own
+standings, the time trial's included (`RULINGS.md` R-22).
 
-**A Phase exists until its race leaves upstream's schedule** (maintainer, 2026-11-16;
-`DECISIONS/ADR-015` Revision 9). It is removed at the first admitted XML snapshot whose schedule
-no longer names its race: deleted upstream, or rebuilt under another `RaceId` after a class rename
-(§4 INV-7). Only a Phase an XML schedule has named is removed, a snapshot whose schedule names no
-race removes nothing, and the content-age guard covers the whole Phase (the conditions in full,
-the read's own tables included: `DERIVATIONS.md` §10 item 54). The removal takes the
-Phase's Attempts, its classification rows and every Standing whose scope names it, and is sent as
-one `phase.deleted` (§7.2) and to live as `DELETE` (§8.3). A first run whose sibling was removed
-names another second run or `null`, and a second run whose first run was removed names `null`
-until a first run is named; a race that returns is a new Phase, created whole. The Class
-and its Entries stay. `cancelled` (§3.1) is a race that stays scheduled, not a removal.
+**A Phase exists until its race leaves upstream's schedule** (`RULINGS.md` R-8). It is removed at
+the first admitted XML snapshot whose schedule no longer names its race: deleted upstream, or rebuilt
+under another `RaceId` after a class rename (§4 INV-7). Only a Phase an XML schedule has named is
+removed, a snapshot whose schedule names no race removes nothing, and the content-age guard covers
+the whole Phase (the conditions in full, the read's own tables included: `DERIVATIONS.md` §10 item
+54). The removal takes the Phase's Attempts, its classification rows and every Standing whose scope
+names it, and is sent as one `phase.deleted` (§7.2) and to live as `DELETE` (§8.3). A first run
+whose sibling was removed names another second run or `null`, and a second run whose first run was
+removed names `null` until a first run is named; a race that returns is a new Phase, created whole.
+The Class and its Entries stay. `cancelled` (§3.1) is a race that stays scheduled, not a removal.
 
-**`date` is assigned once and never changes**, even if a correction to the Phase's results is pushed a
-week later. That is what keeps multi-day grouping correct under late correction. Before the snapshot
-is read it is inferred from the Phase's first observation and is replaced by the snapshot's date
-exactly once (`DERIVATIONS.md` §2.1); the snapshot's value never changes.
+**`date` is assigned once and never changes**, even under a correction pushed a week later. Before
+the snapshot is read it is inferred from the Phase's first observation, and it is replaced by the
+snapshot's date exactly once (`DERIVATIONS.md` §2.1).
 
 ### 2.5 Entry
 
@@ -586,50 +561,35 @@ type Entry = {
 }
 ```
 
-- **`entryId` is opaque, full stop.** It is never parsed for class, category or crew.
-  - It is stable only within one event. The same athlete can have a different `Id` at an event that
-    splits classes differently.
-  - It identifies a competitor within this event, never a person. Cross-event identity is each
-    member's `externalId`.
-- **Members.**
-  - A single boat has one member.
-  - A two-person crew has two. The second member's names, birth date and registry number come from
-    the participant record's own second-member fields.
-  - A team or patrol has its members resolved from upstream's member references against the
-    participant records. The references are ids in the snapshot, and are never parsed.
-  - A team's own registry number is synthetic, references no registry, and is not carried.
-- **External identity, per person** (`DECISIONS/ADR-006`).
-  - It is read from the participant record's own registry-number elements, never from inside `Id`.
-    `Id` is frozen at registration and can disagree with who is actually in the boat.
-  - It is always qualified by `scheme`, because the same element holds different registries at
-    different events. A Czech national race fills it with national registry numbers, while a foreign
-    entrant may carry an ICF code.
-  - Which registry a value belongs to is **[N]** from Canoe123's data. The operator of the bridge
-    asserts it from configuration (§6).
-  - A person with no registry identity at all has `externalId: null`. This applies to forerunners,
-    placeholders, and unregistered or foreign entrants. Such a person is an ordinary participant, fully
-    renderable in seeding order, never a degraded one. On the wire the `null` sits inside the `known`
-    `members` value, on site and on live alike (§8.3): `members` is the wrapped unit, and there is no
-    per-member envelope (§1.2).
-- **Birth date** (maintainer answer Q4). The on-site contract (§7) carries only the **birth year**:
-  no venue consumer needs the day, and the year is what places an athlete in an age category. The
-  live ingest contract (§8.3) carries the birth date as entered, often `YYYY-01-01` with only the year
-  meaningful. The live store keeps it; whether and how it is published is the per-event
+- **`entryId` is opaque**, never parsed for class, category or crew. It identifies a competitor
+  within one event only, never a person: the same athlete can have a different `Id` at another event.
+  Cross-event identity is each member's `externalId`.
+- **Members.** A single boat has one member. A two-person crew has two; the second member's names,
+  birth date and registry number come from the participant record's own second-member fields. A team
+  or patrol has its members resolved from upstream's member references (ids in the snapshot, never
+  parsed) against the participant records. A team's own registry number is synthetic and not
+  carried.
+- **External identity, per person,** is read from the participant record's own registry-number
+  elements, never from inside `Id`, and always qualified by `scheme`. Which registry a value belongs
+  to is **[N]**; the bridge operator asserts it from configuration (§6). A person with no registry
+  identity (a forerunner, a placeholder, an unregistered or foreign entrant) has `externalId: null`
+  and is an ordinary participant, fully renderable in seeding order, never a degraded one. The
+  `null` sits inside the `known` `members` value on site and on live alike (§8.3); there is no
+  per-member envelope (§1.2).
+- **Birth date** (maintainer answer Q4). The on-site contract (§7) carries only the **birth year**.
+  The live ingest contract (§8.3) carries the birth date as entered, often `YYYY-01-01` with only the
+  year meaningful; the live store keeps it, and whether and how it is published is the per-event
   `birthDatePublication` setting of §8.4, default year only.
-- **Nation.** Upstream's nation code, relayed as a string. At events where the competing units are
-  regions, organisers legitimately fill it with regional codes. At national events, a foreign
-  entrant's country may appear only inside the club name. A client must not assume `nation` is always
-  a country, for example by rendering it as a flag.
-- **Club and nation suppression.** Upstream's on-course stream blanks club or nation according to the
-  event's club-usage setting. The results stream and the snapshot do not. `club` and `nation` are
-  therefore derived from the snapshot and results rows only (`DERIVATIONS.md` §3).
-- **Bibs.**
-  - `eventBib` is present only where the event issues bibs event-wide. Where bibs are issued per race,
-    it is `unavailable{not-applicable}`: in one recorded Cross event every competitor who reached
-    the heats raced them under a new bib (32 of 32). A Kayak Cross round's bibs may also equal the
-    time-trial bibs; neither is guaranteed (`DERIVATIONS.md` §4.10).
-  - The bib that identifies a run is always `Attempt.bib` (§2.6). The competitor across the
-    Phases of a class is `entryId`, never a bib.
+- **Nation** is upstream's nation code, relayed as a string. Organisers may fill it with regional
+  codes, and a foreign entrant's country may appear only inside the club name. A client must not
+  assume `nation` is a country, for example by rendering it as a flag.
+- **`club` and `nation` are derived from the snapshot and results rows only**, never from the
+  on-course stream, which blanks them according to the event's club-usage setting
+  (`DERIVATIONS.md` §3).
+- **Bibs.** `eventBib` is present only where the event issues bibs event-wide; where bibs are issued
+  per race it is `unavailable{not-applicable}`. A Kayak Cross round's bibs may be new or equal the
+  time-trial bibs; neither is guaranteed (`DERIVATIONS.md` §4.10). The bib that identifies a run is
+  always `Attempt.bib` (§2.6); the competitor across the Phases of a class is `entryId`, never a bib.
 
 ### 2.6 Attempt
 
@@ -888,8 +848,8 @@ recorded; the rules rest on verified upstream behaviour and a static sample (691
 
 ### 2.7 Standing
 
-Assembled, not primary state, and never ranked by us (`DECISIONS/ADR-012`). §5 specifies the
-assembly precisely.
+Assembled, not primary state, and never ranked by us (`DECISIONS/ADR-012`); §5 specifies the
+assembly.
 
 ```ts
 type Standing = {
@@ -923,17 +883,16 @@ type Anomaly =
   | { kind: 'category-rank-disagreement'; entryId: string; assembled: number; upstream: number }
 ```
 
-`anomalies` is an on-site diagnostic. It is served and pushed in §7 (the admin UI reads it; a
-scoreboard ignores it) and **never in §8.4**: the public `Standing` is serialised without the field.
+`anomalies` is an on-site diagnostic, served and pushed in §7 for the admin UI (a scoreboard ignores
+it) and **never in §8.4**: the public `Standing` is serialised without the field.
 
 **A standing is pushed only when its serialised form changes** (§5 step 1; INV-5 applied to a whole
 resource). A running athlete's ticks never reach a standing: `result` is `{ kind: 'pending' }` while
-the Attempt is on course, and the live time is an on-course fact read from the Attempt and the
-on-course set. Measured before this rule, one 25-minute window re-sent its standings 37,168 times.
+the Attempt is on course, and the live time is read from the Attempt and the on-course set.
 
 ### 2.8 Source status
 
-Diagnostic and admin-facing only. Per maintainer answer A1, a missing source must not nag.
+Diagnostic and admin-facing only; a missing source must not nag (maintainer answer A1).
 
 ```ts
 type SourceStatus = {
@@ -949,39 +908,28 @@ type ConnState = 'connected' | 'reconnecting' | 'unreachable'
 
 *Server procedure for the bridge's delivery to live: `DERIVATIONS.md` §11.9.*
 
-**`upstreamInstance`** reports which Canoe123 instance the TCP feed comes from. Every upstream message
-states it. Switching to a backup instance is the timekeeper's manual work: the server is re-pointed by
-hand (maintainer answer Q8). Automatic failover is **out of scope**. The field exists only so the
-admin UI can show which instance is live.
+**`upstreamInstance`** is the Canoe123 instance the TCP feed comes from, as every upstream message
+states it. Switching to a backup instance is the timekeeper's manual work, the server re-pointed by
+hand (maintainer answer Q8); automatic failover is **out of scope**.
 
 **`xml.lastRewriteDetectedAt`** is the first detection of the change last read whole; a change still
-under retry, or abandoned, is not reported until it is read whole, so the field always dates the
-last snapshot the reader delivered (the re-baseline's own read is reported on its response, §7.1). **`xml.state`:** `connected` when the last poll found the file and it was
-either unchanged since the last whole read or read whole (a fresh change still under retry counts);
-`reconnecting` when the last poll failed, fewer than five in a row — the file missing, unreadable,
-or failing validation with a stat unchanged since its detection (a wrong root, a save upstream never
-completed); `unreachable` from the fifth consecutive failure. A well-formed file whose root closes but
-that names no race is a valid read that states nothing: `connected`, `lastRewriteDetectedAt`
-advances, nothing presented changes. The file is
-written on a timer whose interval is a venue setting (65 s by default; 35 s at the recorded NKZ), and
-only when upstream has flagged a change: an operator edit, an import, or a slalom rank change. A
-penalty correction flags one only when a rank moves, when the race has a marked row (DNS, DNF, DSQ,
-CAP, RAL, DQB), or when it was typed in the results grid; a quiet post-race correction can therefore
-stay out of the file while TCP carries it. That window is transient: at the end of racing the file
-is always saved, automatically or manually (maintainer, 2026-09-25), so the final snapshot carries
-every correction. It is never written in upstream's offline mode. The Kayak
-Cross heat ranking sets no such flag, so Cross heat results reached the file 1.5–10 min late in a
-recording. For Cross, TCP is the only fast source.
-Readers validate every read and retry: the write is a copy over the file, not an atomic rename.
+under retry, or abandoned, is not reported until it is read whole, so the field dates the last
+snapshot the reader delivered (the re-baseline's own read is reported on its response, §7.1).
+**`xml.state`** is `connected` when the last poll found the file either unchanged since the last
+whole read or read it whole (a fresh change still under retry counts); `reconnecting` when the last
+poll failed, fewer than five in a row: the file missing, unreadable, or failing validation with a
+stat unchanged since its detection (a wrong root, a save upstream never completed); `unreachable`
+from the fifth consecutive failure. A well-formed file whose root closes but that names no race is a
+valid read that states nothing: `connected`, `lastRewriteDetectedAt` advances, nothing presented
+changes.
+
+*Server procedure for when upstream writes the file and how it is read: `DERIVATIONS.md` §11.21.*
 
 **`timingClockOffsetSeconds`** is the offset of Canoe123's timing clock from the server clock,
-measured from upstream's once-a-second time-of-day message. It is a diagnostic only. Nothing is ever
-corrected by it (§1.2 `eventTime`).
+measured from upstream's once-a-second time-of-day message: a diagnostic only, never used to correct
+anything (§1.2 `eventTime`).
 
 ### 2.9 Write request
-
-The contract's answer to Scenario B and to maintainer answer A6: there is no timeout policy
-(`DECISIONS/ADR-010`).
 
 ```ts
 type WriteRequest = {
@@ -995,40 +943,35 @@ type WriteRequest = {
 }
 ```
 
-- **`pending` persists until an echo of the same field, for the same run generation, is ingested.**
-  - If the echo matches, the status is `confirmed`.
-  - If it differs, the status is `mismatched`.
-  - If the targeted generation is replaced by a re-run first, the status is `superseded`
-    (`DECISIONS/ADR-013`).
-- No state is reached by the passage of time alone. A client may compute "pending for N s" from
-  `submittedAt`.
+- **`pending` persists until an echo of the same field, for the same run generation, is ingested:**
+  `confirmed` if the echo matches, `mismatched` if it differs, `superseded` if a re-run replaces the
+  targeted generation first (`DECISIONS/ADR-013`).
+- No state is reached by the passage of time alone.
 
-**A tablet renders only what the server pushes.** The optimistic value is the server's: the domain
-layer applies it in the same step as it creates the `WriteRequest` and pushes both (§7.2), so a
-client never shows a value of its own before that push. Where the field already presents that
-value from an earlier pending write, the `WriteRequest` is pushed alone (§4 rule 4). It shows the write as `pending`, distinctly,
-from the `WriteRequest`. **A lost echo counts as a failed write** (maintainer answer A6): a write that
-stays `pending` is never shown as settled, is never cleared by the client on its own, and is resolved
-with the user: re-submitted, or checked against Canoe123 by hand. The contract sets no duration after
-which this happens; the client shows how long the write has been pending, from `submittedAt`.
+**A tablet renders only what the server pushes.** The domain layer applies the optimistic value in
+the same step as it creates the `WriteRequest` and pushes both (§7.2); a client never shows a value
+of its own before that push. Where the field already presents that value from an earlier pending
+write, the `WriteRequest` is pushed alone (§4 rule 4). The client shows the write as `pending`,
+distinctly, from the `WriteRequest`. **A lost echo counts as a failed write** (maintainer answer
+A6): a write that stays `pending` is never shown as settled, is never cleared by the client on its
+own, and is resolved with the user: re-submitted, or checked against Canoe123 by hand. No duration
+triggers this; the client shows how long the write has been pending, from `submittedAt`.
 
-**`confirmed` describes the echo, not permanence.** A confirmed write can be changed later by a
-judge, an operator, or upstream's own closure of the run: that is an ordinary later observation of
-the field, visible on the field, and the `WriteRequest` stays `confirmed`. The one such reversal
-that is not a person's decision, upstream's save from the on-course state overwriting a correction
-made while the athlete was still on course, is prevented by §7.3 refusing every write until the run
-is closed, not surfaced afterwards.
+**`confirmed` describes the echo, not permanence.** A later change by a judge, an operator, or
+upstream's own closure of the run is an ordinary later observation, visible on the field, and the
+`WriteRequest` stays `confirmed`. Upstream's save from the on-course state overwriting a correction
+made while the athlete was on course is prevented by §7.3 refusing every write until the run is
+closed, not surfaced afterwards.
 
-**Writes may target a closed Phase** (maintainer answer A2). Canoe123's correction command carries an
-explicit race id and works after completion. The contract only requires that closed-phase writes are
-accepted and tracked identically to current-phase ones.
+**Writes may target a closed Phase** (maintainer answer A2) and are accepted and tracked identically
+to current-phase ones.
 
 ### 2.10 Durable workflow state: gate checks and flags
 
 Penalty-check's own bookkeeping (`DECISIONS/ADR-016`): whether a judge has compared a displayed
 penalty against the paper protocol, and the review requests judges raise on a gate. Neither is a
-sport-domain fact; a wrong value here is a worse workflow, never a wrong result. Both are stored on
-the server so every tablet shares them, and neither ever crosses to the live tier.
+sport-domain fact. Both are stored on the server, shared by every tablet, and never cross to the
+live tier.
 
 ```ts
 type GateCheck = {
@@ -1052,7 +995,7 @@ type GateFlag = {
 **Keyed on the domain's own identity plus the run generation.** `attemptId` is `(phaseId, bib)`;
 `run` is the Attempt's generation at the moment the check or flag was made.
 
-**Staleness is derived, by the server, every time it is served or pushed.** A check's `status` is
+**Staleness is derived by the server every time it is served or pushed.** A check's `status` is
 `verified` when `valueAtCheck` equals the presented value of `Attempt.gates[gate].penalty` for that
 Attempt and generation, and `stale` otherwise, where:
 - `null` and `0` are distinct: a check made while the gate was unjudged is `stale` once it is judged
@@ -1065,37 +1008,32 @@ Attempt and generation, and `stale` otherwise, where:
 A gate's display state is then a lookup, the same on every tablet: `flagged` if an open flag exists,
 else the check's `status` if a check exists, else `plain`.
 
-**Interplay with the rest of the contract:**
-- **Run generation** (`DECISIONS/ADR-013`): a new generation starts with no checks and no open flags.
-  The old generation's remain readable under their own `run`. A judge's check of an earlier run is
-  never carried to a re-run.
-- **Retraction and contradiction** (`DECISIONS/ADR-015`): a check is never deleted by either. The
-  presented penalty becomes `null`, and the check's `status` follows: `stale` if it was made against
-  a value, still `verified` if it was made against `null`.
-- **A result moved to another bib** leaves the check with the bib it was made on. The paper protocol
-  is per bib as raced; the receiving bib has no check. Re-pointing `entry` (INV-4) does not move a
-  check either: it belongs to the Attempt, Phase and bib, not the person (maintainer, 2026-11-12:
-  "The data belongs to the bib"). A re-bib or swap that leaves a bib in the race keeps its Attempt
-  (§2.6), so the bib's checks and flags stay served under it, for whichever competitor the bib
-  now carries.
+**With the rest of the contract:**
+- **Run generation** (`DECISIONS/ADR-013`): a new generation starts with no checks and no open flags;
+  the old generation's remain readable under their own `run`.
+- **Retraction and contradiction** (`DECISIONS/ADR-015`) never delete a check; its `status` follows
+  the presented `null`.
+- **A result moved to another bib** leaves the check with the bib it was made on; the receiving bib
+  has no check. Re-pointing `entry` (INV-4) does not move a check either: it belongs to the Attempt,
+  Phase and bib, not the person (`RULINGS.md` R-7). A re-bib or swap that leaves a bib in the race
+  keeps its Attempt (§2.6), so the bib's checks and flags stay served under it, for whichever
+  competitor the bib now carries.
 - *Default for the checks and flags of an Attempt removed upstream: §9.6.*
 - **The re-baseline** (§4) keeps every check and flag and recomputes `status` against the rebuilt
   values.
-- **A late correction** (a protest 30 minutes on) changes the presented penalty; every check on that
-  gate becomes `stale` and is pushed as such (§7.2). This is the case the snapshot exists for.
+- **A late correction** changes the presented penalty; every check on that gate becomes `stale` and
+  is pushed as such (§7.2).
 
-**The store is keyed by `eventId`** (§2.2), the identity the bridge asserts. Starting a new event,
-an explicit admin action, opens a new, empty store; the previous event's file stays on disk and is
-never merged. A change of XML file, of race day, or of upstream's own event id inside one event
-changes nothing here. This retires the 0.5 schedule-overlap heuristic of `EVIDENCE.md` Exhibit 7:
-identity is asserted, so nothing is left to guess.
+**The store is keyed by `eventId`** (§2.2). Starting a new event, an explicit admin action, opens a
+new, empty store; the previous event's file stays on disk and is never merged. A change of XML file,
+of race day, or of upstream's own event id inside one event changes nothing here.
 
 *Server procedure for the durability of checks and flags: `DERIVATIONS.md` §11.10.*
 
 ### 2.11 Worked example: the envelope through a finish
 
-Take `Attempt` `K1M_BR2_6:9`, a second run that beats the first. The event runs Canoe123 with ranking
-on incomplete penalties (values illustrative).
+`Attempt` `K1M_BR2_6:9`, a second run that beats the first, with ranking on incomplete penalties
+(values illustrative).
 
 ```ts
 // t+0.0s — on-course finish-time transition. Our computation from on-course time + gates so far.
@@ -1125,7 +1063,7 @@ placement: { value:{ rank:4, order:4 }, provisional:false, … }
 
 ### 2.12 Course (#165)
 
-A course layout. It is referenced by Phases, not owned by one: several races run on one course.
+A course layout, referenced by Phases, not owned by one: several races run on one course.
 
 ```ts
 type Course = {
@@ -1140,36 +1078,29 @@ type Course = {
 }
 ```
 
-**The layout string is the single truth.** Everything else is derived from it (`DERIVATIONS.md`
+**The layout string is the single truth**; everything else is derived from it (`DERIVATIONS.md`
 §2.3):
 - **Gates:** `N` is a downstream gate and `R` an upstream gate.
 - **`S` marks a sector boundary**, not a split.
-- **`I` marks a split (intermediate) timing point**, not a sector. Upstream reports separately whether
-  splits are armed; an unarmed split yields no split times.
+- **`I` marks a split (intermediate) timing point**, not a sector. An unarmed split (upstream reports
+  arming separately) yields no split times.
 
-- **Gate count comes from the layout. Upstream's transmitted gate count is ignored.** The stream
-  fabricates a 25- or 30-gate course, silently and lastingly, when no layout is configured.
+- **Gate count comes from the layout. Upstream's transmitted gate count is ignored.**
 - A Phase whose course has an empty layout has `Course.gates` as `unavailable{not-configured}`, and so
   does its Attempts' `gates` (§2.6).
 - **Only the snapshot carries course numbers.** TCP describes only the currently selected course,
-  without its number and without naming a race: the selected course need not be any running Phase's
-  (recorded: the next day's course selected while today's results still rotated). **The core finds
-  it by its gate string:** every Course whose `layout` with the `S` markers removed equals it
-  (recorded: every string in all seven recordings equals a stripped layout of its snapshot); a
-  string matching no snapshot course refreshes nothing. **The refresh is scoped:** it refreshes
-  `captions`, which only TCP sends; `gates`, `slots` and `splitsAfterGate` are equal by construction,
-  and `layout` and `sectorEndsAfterGate` are the snapshot's alone and are never derived from TCP
-  (`DERIVATIONS.md` §2.3).
+  without its number and without naming a race; it need not be any running Phase's course. The core
+  finds it by its gate string and refreshes only its `captions`, which only TCP sends; `layout` and
+  `sectorEndsAfterGate` are the snapshot's alone and are never derived from TCP (the match:
+  `DERIVATIONS.md` §2.3).
 - **`sectorEndsAfterGate` is strictly increasing.** A sector that ends after a non-gate slot (the
   Cross roll zone) ends after the last gate before it, and an end equal to its predecessor is not
   repeated; the slot itself is in `slots`.
-- **`D` is the Kayak Cross start ramp and `E` the roll zone** (observed upstream behaviour;
-  recorded layout `DNNRNNNER` with captions `ST,1,2,3,4,5,6,RZ,7`). Each is a **judging slot**: it
-  counts in upstream's transmitted gate count and in the width of every gate string, and it carries a
-  judging cell (the start-ramp slot carried a real time in 67 of 72 recorded runs), but neither
-  advances the gate number. `Course.slots` lists every slot in layout order with its kind and, for a
-  gate, its number; `Course.gates` lists gates only. Gate strings are parsed per slot
-  (`DERIVATIONS.md` §4.6).
+- **`D` is the Kayak Cross start ramp and `E` the roll zone.** Each is a **judging slot**: it counts
+  in upstream's transmitted gate count and in the width of every gate string, and it carries a
+  judging cell, but neither advances the gate number. `Course.slots` lists every slot in layout
+  order with its kind and, for a gate, its number; `Course.gates` lists gates only. Gate strings are
+  parsed per slot (`DERIVATIONS.md` §4.6).
 
 ---
 
@@ -2383,3 +2314,13 @@ the course's count (§2.6).
   schedules `K1M_BR1_6` alone: one `phase.deleted` for `K1M_BR2_6`, then a `phase.updated`
   for `K1M_BR1_6` whose `pair.siblingPhaseId` is `null`. Had the first run been deleted
   instead, the `phase.updated` would be `K1M_BR2_6`'s, its sibling `null`.
+
+### 9.11 An unparseable or missing event date (from section 2.2)
+
+- The date part is the first ten characters; one that is not a calendar date (`2026-13-45`,
+  `2026-02-29`, `2026-4-25T…`) is unparseable, and what follows it is not read (`DERIVATIONS.md`
+  §10 item 40).
+  A missing or unparseable `StartDate` or `EndDate`
+  means the snapshot states no `details`: what is presented stays, `not-yet` before any, and an
+  unparseable one raises the parser's ingest-only `unparseable-field` (`DERIVATIONS.md` §0.5;
+  default, never recorded: every recorded snapshot carries both). M2 P2 ruling, 2026-11-14.
