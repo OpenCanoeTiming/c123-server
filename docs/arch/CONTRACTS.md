@@ -1194,7 +1194,7 @@ result push, for the race it names, and an XML snapshot, for every race in it.
   observation that disagrees with the presented one after both have settled is surfaced as the
   admin diagnostic `source-disagreement` (the `Diagnostic` block below). It never changes the
   presented value by itself. There is no re-query.
-  *Checker condition for when it is raised and cleared: `TEST-ARCHITECTURE.md` §3.6.4.*
+  *Server procedure for when it is raised and cleared: `DERIVATIONS.md` §11.28.*
 - **INV-2c (content age across sources).** *Server procedure: `DERIVATIONS.md` §11.23.*
 - **INV-2d (the on-course stream contradicts a stale finish).** *Server procedure: `DERIVATIONS.md` §11.13.*
 - **INV-7 (a scope snapshot's stated absence is a retraction).** For an Attempt whose presented
@@ -1226,8 +1226,8 @@ result push, for the race it names, and an XML snapshot, for every race in it.
   the outage; that is an envelope change and is pushed, with the re-delivery's envelope,
   `observedAt` included (where the value is already presented from that source nothing of the
   retained envelope changes). `Phase.date` is assigned once and is never re-derived.
-  *Checker condition for the content age a re-delivery keeps or advances:
-  `TEST-ARCHITECTURE.md` §3.6.5.*
+  *Server procedure for the content age a re-delivery keeps or advances:
+  `DERIVATIONS.md` §11.29.*
 - **INV-6 (ordering is a monotonic ingest sequence, never the wall clock).** Every "later" or "newer"
   above is defined over an internal, strictly increasing sequence, assigned at the ingest boundary
   together with `observedAt` (for an XML unit `observedAt` is its detection, `DERIVATIONS.md` §0.3,
@@ -1306,7 +1306,7 @@ no tier ranks (`DECISIONS/ADR-012`).
    is known**, that is stated on the Phase (§2.4): its scope names both Phases. Until the schedule
    names the first run (a TCP-first cold start), `siblingPhaseId` is `null` (`DERIVATIONS.md` §2.1)
    and the combined placement is on the Attempts and in the second Phase's `phase` standing only.
-   *Checker condition for the conformance vectors' `pair` and class: `TEST-ARCHITECTURE.md` §3.6.6.*
+   *Checker condition for the conformance vectors' `pair` and class: `TEST-ARCHITECTURE.md` §3.6.4.*
    **`asOf`** is the ingest time of the latest observation that changed the standing as serialised;
    for a classification, the latest scope snapshot that changed its rows (§2.4,
    `DERIVATIONS.md` §4.10), not a snapshot re-sending the same rows and not an emptied table, which

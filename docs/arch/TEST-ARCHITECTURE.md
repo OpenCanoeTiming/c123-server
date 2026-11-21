@@ -834,25 +834,7 @@ from the first and changes nothing presented, so it moves nothing.
 
 *Applied by the server at runtime: moved to `DERIVATIONS.md` §11.24.*
 
-#### 3.6.4 INV-2b: raising and clearing a disagreement (from CONTRACTS section 4)
-
-A retained, non-presented observation can disagree with the presented one after both have settled:
-neither is provisional, and the snapshot's content age (INV-2c) is later than the `tcp` observation
-it disagrees with; without the second condition every save in the seconds after a push would raise
-and clear a disagreement. The comparison is made at every step that ingests either source's
-observation of the field, a re-delivery included, since INV-5 advances the content age and can be
-what first meets the second condition; an INV-5 re-delivery — a rotation, a connect burst, a re-read
-file — clears none, so a standing disagreement stands until a value changes.
-
-#### 3.6.5 INV-5: the content age a re-delivery keeps or advances (from CONTRACTS section 4)
-
-The retained observation's content age (INV-2c) is kept where the re-delivery's is `null` or not
-later (a first read after `setPath` re-delivering a value the XML already stated keeps that value's
-`changedAfter`, so a standing `source-disagreement` neither clears nor re-raises), and advances to
-the re-delivery's where that is later: the age only rises, which clears no standing disagreement,
-and a retained candidate restated by a later rewrite is settled by INV-2c, not by this rule.
-
-#### 3.6.6 The conformance vectors' `pair` and class (from CONTRACTS section 5, step 1)
+#### 3.6.4 The conformance vectors' `pair` and class (from CONTRACTS section 5, step 1)
 
 The conformance vectors, whose Phases no element describes, get a `pair` from their harness, which
 states it as it states the class (`CONFORMANCE-VECTORS.md` §1, a convention of that file alone). A
