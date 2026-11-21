@@ -5,7 +5,7 @@
  */
 import { afterAll, describe, expect, it } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -47,5 +47,21 @@ describe('production clock wiring (CONTRACTS §1.6, TEST-ARCHITECTURE §5)', () 
     expect(Math.abs(stamped - Date.now())).toBeLessThan(15_000);
     expect(stamped).toBeGreaterThan(before - 15_000);
     expect(new Date(stamped).getUTCFullYear()).toBe(new Date().getUTCFullYear());
+  }, 120_000);
+
+  it('issue #395: main.ts prints the log file path at start, inside the data dir', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'onsite-logpath-'));
+    dirs.push(dir);
+    const proc = spawn(process.execPath, ['--import', 'tsx', join(root, 'src/onsite/main.ts'), '--port', '0', '--data-dir', dir, '--event-id', 'ev-logpath', '--no-discovery'],
+      { cwd: root, stdio: ['ignore', 'pipe', 'inherit'] });
+    kids.push(proc);
+    const out = await new Promise<string>((res, rej) => {
+      let buf = '';
+      const t = setTimeout(() => { rej(new Error('no `listening <port>` line')); }, 60_000);
+      proc.stdout!.on('data', (d: Buffer) => { buf += d.toString(); if (/listening \d+/.test(buf)) { clearTimeout(t); res(buf); } });
+      proc.on('exit', (c) => { clearTimeout(t); rej(new Error(`exited ${String(c)}`)); });
+    });
+    expect(out).toContain(`log ${join(dir, 'onsite.log')}\n`);
+    expect(readFileSync(join(dir, 'onsite.log'), 'utf8')).toMatch(/ start\b/);
   }, 120_000);
 });

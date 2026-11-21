@@ -6,6 +6,7 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { Router } from 'express';
 import type { MergeCore } from '../core/index.js';
 import { classWhole, courseWhole, onsiteEntry, onsiteEvent, phaseOfAttempt, type CurrentEvent, type J } from './wire.js';
 
@@ -25,6 +26,8 @@ export interface OnsiteApi {
   event(): CurrentEvent | undefined;
   core(): MergeCore;
   sources(): J;
+  /** #395: the last lines of the log file, oldest first. */
+  logTail(limit: number): string[];
   checksOf(phaseId: string): { checks: J[]; flags: J[] };
   rebaseline(scope: RebaselineScope): Promise<RebaselineOutcome>;
   /** §7.3, §7.4: the write routes. Each answers with the status, body and `Location` the contract names; a refusal carries the error envelope. */
@@ -34,6 +37,8 @@ export interface OnsiteApi {
   deleteCheck(a: AttemptRoute, gate: string): Promise<RestReply>;
   createFlag(a: AttemptRoute, key: string | undefined, body: unknown): Promise<RestReply>;
   resolveFlag(flagId: string, body: unknown): Promise<RestReply>;
+  /** #328 (R-26): `/api/clients*`, outside the contract; absent, the routes do not exist. */
+  clientRoutes?: Router;
 }
 export interface AttemptRoute { phaseId: string; bib: string }
 export interface RestReply { status: number; body?: J; location?: string }
@@ -115,6 +120,11 @@ export function createApp(api: OnsiteApi): express.Express {
     res.json({ asOfSeq: api.asOfSeq(), attempts: on.attemptIds.map((a) => core.presented(a)), featuredByUpstream: on.featuredByUpstream, asOf: on.asOf });
   });
   app.get('/api/sources', (_req, res) => { res.json(api.sources()); });
+  // the legacy `/api/logs` limits: default 100, at most 500
+  app.get('/api/logs', (req, res) => {
+    const n = parseInt(String(req.query['limit']), 10);
+    res.json({ lines: api.logTail(Number.isNaN(n) ? 100 : Math.min(Math.max(1, n), 500)) });
+  });
   app.get('/api/diagnostics', (_req, res) => { res.json({ asOfSeq: api.asOfSeq(), diagnostics: api.core().diagnostics() }); });
 
   app.post('/api/rebaseline', async (req: Request, res: Response, next: NextFunction) => {
@@ -149,6 +159,8 @@ export function createApp(api: OnsiteApi): express.Express {
   app.delete('/api/attempts/:phaseId/:bib/checks/:gate', handle((req) => api.deleteCheck(route(req), String(req.params['gate']))));
   app.post('/api/attempts/:phaseId/:bib/flags', handle((req) => api.createFlag(route(req), keyOf(req), req.body)));
   app.post('/api/flags/:flagId/resolution', handle((req) => api.resolveFlag(String(req.params['flagId']), req.body)));
+
+  if (api.clientRoutes !== undefined) app.use('/api', api.clientRoutes);
 
   app.get('/health', (_req, res) => { res.json({ status: 'ok' }); });
   app.use('/admin-ui', express.static(ADMIN_UI_DIR));
