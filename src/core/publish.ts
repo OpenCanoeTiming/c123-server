@@ -169,7 +169,7 @@ export function replacedStandings(s: CoreState, scope: { kind?: string; phaseId?
     if (fmtFor(s, id).pair?.role !== 'first') continue;
     for (const second of [...(naming.get(id) ?? [])].sort()) phases.add(second);
   }
-  // §7.2: on a Phase scope, only the Standings whose scope names that Phase; a second run added above keeps its own `phase` Standings (#333)
+  // §7.2: on a Phase scope, only the Standings whose scope names that Phase; a second run added above contributes its `pair` Standings only; its `phase` Standings are not carried and stay in the sent bookkeeping (#333)
   const own = scope.kind === 'event' ? undefined : scope.phaseId;
   const names = (st: Standing | undefined): boolean => {
     if (own === undefined || st === undefined) return true;
