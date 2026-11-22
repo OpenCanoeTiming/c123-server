@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { createRealChecksFs, createRealXmlFs } from '../../adapters/real-io.js';
 import { startOnsite, type OnsiteHandle, type OnsiteOptions } from '../index.js';
 import { createLogFile } from '../log-file.js';
-import { fakeTcp, flush, virtualClock } from './onsite-harness.js';
+import { XML_PATH, fakeOnsiteFs, fakeTcp, flush, virtualClock } from './onsite-harness.js';
 
 const dirs: string[] = [];
 const handles: OnsiteHandle[] = [];
@@ -84,5 +84,24 @@ describe('log file (#395)', () => {
     await h.stop();
     handles.length = 0;
     expect(logFile.tail(1)[0]).toMatch(/ stop$/);
+  });
+  it('issue #198: torn and abandoned XML reads go to the file with their running totals; GET /api/logs returns them', async () => {
+    const dir = await tmp();
+    const clock = virtualClock(START);
+    const fs = fakeOnsiteFs();
+    fs.put(XML_PATH, '<Canoe123 System="Main"><Schedule><Phase', START - 1000); // a copy caught mid-write, and it stays so
+    const logFile = createLogFile({ dir, clock });
+    const opts = {
+      port: 0, clock, fs: fs.fs, dataDir: dir, eventId: 'ev-torn', eventName: 'Torn', xml: { path: XML_PATH, pollSeconds: 5 },
+      tcp: { source: fakeTcp() }, discovery: null, zone: 'Europe/Prague', externalIdScheme: 'on-site', logFile,
+    } as unknown as OnsiteOptions;
+    const h = await startOnsite(opts);
+    handles.push(h);
+    await clock.advance(10_000);
+    const body = (await (await fetch(`http://127.0.0.1:${h.port}/api/logs?limit=100`)).json()) as { lines: string[] };
+    const text = body.lines.join('\n');
+    expect(text).toMatch(/ xml torn read \(4 so far\)$/m);
+    expect(text).toMatch(/ xml read abandoned after retries \(1 so far\)$/m);
+    expect(logFile.tail(100).join('\n')).toBe(text);
   });
 });
