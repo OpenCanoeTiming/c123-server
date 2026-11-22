@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import type { Router } from 'express';
 import type { MergeCore } from '../core/index.js';
 import { classWhole, courseWhole, onsiteEntry, onsiteEvent, phaseOfAttempt, type CurrentEvent, type J } from './wire.js';
+import { ValidationError } from './validate.js';
 
 const ADMIN_UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'admin-ui');
 /** The wire-protocol version the legacy `/api/discover` reports; clients that probe for the server know it. */
@@ -37,6 +38,8 @@ export interface OnsiteApi {
   deleteCheck(a: AttemptRoute, gate: string): Promise<RestReply>;
   createFlag(a: AttemptRoute, key: string | undefined, body: unknown): Promise<RestReply>;
   resolveFlag(flagId: string, body: unknown): Promise<RestReply>;
+  /** #331: the admin action "start a new event"; throws ValidationError on bad input. Resolves with the new event as served. */
+  startNewEvent(e: { eventId?: string; name: string }): Promise<J>;
   /** #328 (R-26): `/api/clients*`, outside the contract; absent, the routes do not exist. */
   clientRoutes?: Router;
 }
@@ -136,6 +139,18 @@ export function createApp(api: OnsiteApi): express.Express {
       else if (r.status === 404) res.status(404).json(errorBody(r.code, `no Phase ${(scope as { phaseId?: string }).phaseId ?? ''} in this event`));
       else res.status(409).json(errorBody(r.code, `the XML snapshot is ${r.reason}`, { reason: r.reason }));
     } catch (e) { next(e); }
+  });
+
+  // #331: outside the §7 contract, like `/api/clients`: the one deliberate admin action that starts a new event
+  app.post('/api/admin/events', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const b = (typeof req.body === 'object' && req.body !== null ? req.body : {}) as { name?: unknown; eventId?: unknown };
+      const event = await api.startNewEvent({ name: b.name as string, ...(b.eventId !== undefined ? { eventId: b.eventId as string } : {}) });
+      res.status(201).json({ event });
+    } catch (e) {
+      if (e instanceof ValidationError) res.status(400).json(errorBody('validation-failed', 'cannot start a new event', e.details));
+      else next(e);
+    }
   });
 
   // ---- §7.3, §7.4: writes, checks and flags

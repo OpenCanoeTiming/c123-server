@@ -155,7 +155,31 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   arm(cx);
 
   // ------------------------------------------------------------------------------------------------ HTTP and /ws
-  const closeSockets = await startHttp(cx, createRest(cx));
+  const startNewEvent = async (e: { eventId?: string; name: string }): Promise<void> => {
+    await enqueue(cx, async () => {
+      if ((e.eventId !== undefined && (typeof e.eventId !== 'string' || e.eventId === '')) || typeof e.name !== 'string') throw new ValidationError([{ field: 'event', issue: 'needs a name, and an eventId that is non-empty when given' }]);
+      const eventId = e.eventId ?? randomUUID();
+      if (cx.event?.eventId === eventId) throw new ValidationError([{ field: 'eventId', issue: 'is the event that is already current' }]);
+      const next = await storeFor(cx, eventId);
+      // §10 item 40 (a): a blank or whitespace-only name counts as none entered; `name` then awaits the snapshot's title.
+      const entered = e.name.trim() !== '';
+      if (opts.persistEvent === true) await writeEventFile(cx, eventId, entered ? e.name : undefined);
+      cx.event = { eventId, name: entered ? e.name : eventId, details: { state: 'not-yet' }, nameFrom: entered ? 'operator' : 'snapshot' };
+      cx.store = next;
+      cx.wstore = await writesFor(cx, eventId);
+      cx.adopted.clear();
+      cx.core = newCore(opts);
+      cx.tracker = newTracker(opts);
+      cx.classesSent.clear();
+      cx.liveAttempts = new Set();
+      seedCheckStatuses(cx, next);
+      cx.stepLog?.reset();
+      cx.reader.stop();
+      startReader(cx, onUnit);
+      await emit(cx, [{ type: 'event.changed', event: onsiteEvent(cx.event) }]);
+    });
+  };
+  const closeSockets = await startHttp(cx, createRest(cx), startNewEvent);
 
   // ------------------------------------------------------------------------------------------------ the handle
   const haltSources = (): void => {
@@ -184,30 +208,7 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
       haltSources();
       closeSockets();
     },
-    startNewEvent: async (e) => {
-      await enqueue(cx, async () => {
-        if ((e.eventId !== undefined && (typeof e.eventId !== 'string' || e.eventId === '')) || typeof e.name !== 'string') throw new ValidationError([{ field: 'event', issue: 'needs a name, and an eventId that is non-empty when given' }]);
-        const eventId = e.eventId ?? randomUUID();
-        if (cx.event?.eventId === eventId) throw new ValidationError([{ field: 'eventId', issue: 'is the event that is already current' }]);
-        const next = await storeFor(cx, eventId);
-        // §10 item 40 (a): a blank or whitespace-only name counts as none entered; `name` then awaits the snapshot's title.
-        const entered = e.name.trim() !== '';
-        if (opts.persistEvent === true) await writeEventFile(cx, eventId, entered ? e.name : undefined);
-        cx.event = { eventId, name: entered ? e.name : eventId, details: { state: 'not-yet' }, nameFrom: entered ? 'operator' : 'snapshot' };
-        cx.store = next;
-        cx.wstore = await writesFor(cx, eventId);
-        cx.adopted.clear();
-        cx.core = newCore(opts);
-        cx.tracker = newTracker(opts);
-        cx.classesSent.clear();
-        cx.liveAttempts = new Set();
-        seedCheckStatuses(cx, next);
-        cx.stepLog?.reset();
-        cx.reader.stop();
-        startReader(cx, onUnit);
-        await emit(cx, [{ type: 'event.changed', event: onsiteEvent(cx.event) }]);
-      });
-    },
+    startNewEvent,
     checks: {
       putCheck: async (input) => (await enqueue(cx, () => doPutCheck(cx, input))) as J,
       deleteCheck: async (key) => { await enqueue(cx, () => doDeleteCheck(cx, key)); },

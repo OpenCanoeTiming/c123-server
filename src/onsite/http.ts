@@ -6,14 +6,14 @@ import { createServer, type Server } from 'node:http';
 import { WebSocketServer } from 'ws';
 import { openClients } from './clients.js';
 import { createApp, type OnsiteApi } from './app.js';
-import { onsiteEvent, phaseOfAttempt, type J } from './wire.js';
+import { onsiteEvent, phaseOfAttempt, type CurrentEvent, type J } from './wire.js';
 import { background, DEFAULT_PORT, emit, type OnsiteContext } from './context.js';
 import { ofExisting, withStatus } from './event-state.js';
 import { rebaseline } from './rebaseline.js';
 import type { RestHandlers } from './rest.js';
 import { sourcesNow } from './sources.js';
 
-export async function startHttp(cx: OnsiteContext, rest: RestHandlers): Promise<() => void> {
+export async function startHttp(cx: OnsiteContext, rest: RestHandlers, startNewEvent: (e: { eventId?: string; name: string }) => Promise<void>): Promise<() => void> {
   const { opts, fs, dataDir, clock } = cx;
   const api: OnsiteApi = {
     port: () => cx.port,
@@ -38,6 +38,7 @@ export async function startHttp(cx: OnsiteContext, rest: RestHandlers): Promise<
     deleteCheck: rest.deleteCheck,
     createFlag: rest.createFlag,
     resolveFlag: rest.resolveFlag,
+    startNewEvent: async (e) => { await startNewEvent(e); return onsiteEvent(cx.event as CurrentEvent); },
   };
   const clientReg = await openClients({
     fs, dir: dataDir, now: () => clock.now(), log: cx.log,
