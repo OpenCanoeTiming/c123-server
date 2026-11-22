@@ -169,18 +169,28 @@ export function replacedStandings(s: CoreState, scope: { kind?: string; phaseId?
     if (fmtFor(s, id).pair?.role !== 'first') continue;
     for (const second of [...(naming.get(id) ?? [])].sort()) phases.add(second);
   }
+  // §7.2: on a Phase scope, only the Standings whose scope names that Phase; a second run added above contributes its `pair` Standings only; its `phase` Standings are not carried and stay in the sent bookkeeping (#333)
+  const own = scope.kind === 'event' ? undefined : scope.phaseId;
+  const names = (st: Standing | undefined): boolean => {
+    if (own === undefined || st === undefined) return true;
+    const sc = st.scope as { phaseId?: string; firstPhaseId?: string; secondPhaseId?: string };
+    return sc.phaseId === own || sc.firstPhaseId === own || sc.secondPhaseId === own;
+  };
   const out: Standing[] = [];
   for (const phaseId of phases) {
     const before = new Map<string, Standing>();
-    for (const key of s.standingKeys.get(phaseId) ?? []) {
+    const keys = s.standingKeys.get(phaseId);
+    for (const key of [...(keys ?? [])]) {
       const held = s.standingsHeld.get(key);
+      if (!names(held)) continue;
       if (held !== undefined) before.set(key, held);
       s.standingsSent.delete(key);
       s.standingsHeld.delete(key);
+      keys?.delete(key);
     }
-    s.standingKeys.delete(phaseId);
+    if (keys !== undefined && keys.size === 0) s.standingKeys.delete(phaseId);
     for (const assembled of ofPhase(s, phaseId, s.unitAt)) {
-      if (assembled.entries.length === 0) continue;
+      if (assembled.entries.length === 0 || !names(assembled)) continue;
       // §5 step 1: `asOf` moves only with a change; a Standing the re-baseline leaves as it was keeps the last change's
       const prior = before.get(assembled.standingKey);
       const st = prior !== undefined && textOf(prior) === textOf(assembled) ? { ...assembled, asOf: prior.asOf } : assembled;

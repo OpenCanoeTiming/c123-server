@@ -351,3 +351,44 @@ describe('#208 row 7: no flicker on reconnect', () => {
     inside.forEach((n) => expect(n).toBeGreaterThan(100))
   }, T)
 })
+
+// ---------------------------------------------------------------------------------------------------------------------
+describe('#333: fixture A with one per-Phase re-baseline on each side of a pair and one per-Event re-baseline', () => {
+  // CONTRACTS §4 (the re-baseline unit), §7.2 (`scope.replaced`: a Phase scope carries that Phase's Attempts and the Standings naming it);
+  // TEST-ARCHITECTURE §3.2 property 13. The pair is K1M_BR1_19 / K1M_BR2_19: the second run is stated while K1M_BR2_19:67 is on course with
+  // a contradicted finish, then the first run, then the Event. All three lie inside the judged window and outside the two recorded outages.
+  const SECOND_AT = '2026-09-19T09:39:00.000Z'
+  const FIRST_AT = '2026-09-19T09:40:30.000Z'
+  const EVENT_AT = '2026-09-19T09:42:00.000Z'
+  const stated = [
+    { event: 'rebaseline', observedAt: SECOND_AT, scope: { kind: 'phase', phaseId: 'K1M_BR2_19' } },
+    { event: 'rebaseline', observedAt: FIRST_AT, scope: { kind: 'phase', phaseId: 'K1M_BR1_19' } },
+    { event: 'rebaseline', observedAt: EVENT_AT, scope: { kind: 'event' } },
+  ]
+  const withRebaselines = (): string => {
+    const file = path.join(tmp(), 'rebaselines.json')
+    writeFileSync(file, JSON.stringify(stated))
+    return replay(A, ['--events', file])
+  }
+
+  it('the replay carries the three re-baselines, each with its own scope.replaced', () => {
+    const found: string[] = []
+    for (const s of steps(withRebaselines())) {
+      const e = s.elements[0] as { event?: string; scope?: unknown } | undefined
+      if (e?.event !== 'rebaseline') continue
+      const replaced = s.deltas.filter((d) => d.type === 'scope.replaced') as unknown as { scope: unknown }[]
+      expect(replaced.map((d) => d.scope)).toEqual([e.scope])
+      found.push(String(s.elements[0]?.observedAt))
+    }
+    expect(found).toEqual([SECOND_AT, FIRST_AT, EVENT_AT])
+  }, T)
+
+  it.skipIf(!haveChecker)('gate-2 checker reports 0 violations, property 13 exercised', () => {
+    const cut = manifestA().fixture['cut']
+    expect(Date.parse(SECOND_AT)).toBeGreaterThan(Date.parse(cut['judgedFrom']))
+    const g = gate2(withRebaselines(), A, `${cut['judgedFrom']},${cut['to']}`)
+    expect(g.violations.length, shown(g)).toBe(0)
+    expect(g.exit).toBe(0)
+    expect(g.exercised['13'], 'property 13 exercised').toBeGreaterThan(0)
+  }, T)
+})
