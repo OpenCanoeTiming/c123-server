@@ -117,10 +117,18 @@ describe('#287 row 12: the core reads the stated sibling only (CONTRACTS §2.4, 
         rebase(30, 'K1M_BR1_19'),
       ], { classIdsFromIds: false });
 
-    it('control (item 48: the second run names the first run, so the first run\'s derived sibling is that second run): the re-baseline re-sends both Phases\' standings', () => {
+    it('control (item 48: the second run names the first run, so the first run\'s derived sibling is that second run): the re-baseline re-sends the first run\'s standing and the pair standing', () => {
       const keys = replacedKeys(stream('K1M_BR2_19', 'K1M_BR2_19', 'K1M', 'K1M_BR1_19'));
       expect(keys).toContain('phase:K1M_BR1_19/all');
-      expect(keys).toContain('phase:K1M_BR2_19/all');
+      expect(keys).toContain('pair:K1M_BR2_19/all');
+    });
+
+    it('#333, CONTRACTS §7.2 "every Standing whose scope names one of its Phases": a first-run re-baseline does not carry the second run\'s phase standing (fixture A, K1M_BR1_19 at 09:39:00, carried 7)', () => {
+      const c = stream('K1M_BR2_19', 'K1M_BR2_19', 'K1M', 'K1M_BR1_19');
+      expect(keyed(c, 'phase:K1M_BR2_19/all').length, 'precondition: the second run has a phase standing').toBeGreaterThan(0);
+      const keys = replacedKeys(c);
+      expect(keys.filter((k) => k.startsWith('phase:K1M_BR2_19/'))).toEqual([]);
+      expect(keys).toContain('pair:K1M_BR2_19/all');
     });
 
     it('a first run stating sibling null: the re-baseline re-sends its own standing only, though a Phase with the conventional second-run id exists', () => {
