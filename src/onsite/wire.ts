@@ -8,19 +8,28 @@ export type J = Record<string, unknown>;
  * (#368 CQ1, DERIVATIONS §10 item 40 (a)) is internal, never served: `'operator'` once a non-blank name was entered
  * (the boot flag or "start a new event"), so the snapshot's own title never displaces it; `'snapshot'` otherwise.
  */
-export interface CurrentEvent { eventId: string; name: string; details: Observed<EventDetails>; nameFrom: 'operator' | 'snapshot' }
+export interface CurrentEvent {
+  eventId: string;
+  name: string;
+  details: Observed<EventDetails>;
+  nameFrom: 'operator' | 'snapshot';
+}
 
 /** `OnsiteEvent`. */
 export const onsiteEvent = (e: CurrentEvent): J => ({ eventId: e.eventId, name: e.name, details: e.details });
 
 /** DERIVATIONS `birthDate`: the year of the date as entered, `null` where there is none. */
-const birthYear = (birthDate: unknown): number | null => (typeof birthDate === 'string' && /^\d{4}/.test(birthDate) ? Number(birthDate.slice(0, 4)) : null);
+const birthYear = (birthDate: unknown): number | null =>
+  typeof birthDate === 'string' && /^\d{4}/.test(birthDate) ? Number(birthDate.slice(0, 4)) : null;
 
 /** `members: Observed<Person[]>` to `Observed<OnsitePerson[]>`. */
 function onsiteMembers(members: unknown): unknown {
   const m = members as { state?: string; value?: unknown } | undefined;
   if (m?.state !== 'known' || !Array.isArray(m.value)) return members;
-  return { ...m, value: (m.value as J[]).map(({ birthDate, ...person }) => ({ ...person, birthYear: birthYear(birthDate) })) };
+  return {
+    ...m,
+    value: (m.value as J[]).map(({ birthDate, ...person }) => ({ ...person, birthYear: birthYear(birthDate) })),
+  };
 }
 
 export function onsiteEntry(entry: J): J {
@@ -58,16 +67,20 @@ export function toWire(m: Message, eventId: string, classesSent: Set<string>): J
   const rest: J & { type: string } = { ...m };
   delete rest['seq']; // the core's own stamp: the process stamps from its one counter
   switch (rest.type) {
-    case 'entry.updated': return { ...rest, fields: onsiteEntry(rest['fields'] as J) };
+    case 'entry.updated':
+      return { ...rest, fields: onsiteEntry(rest['fields'] as J) };
     case 'class.updated': {
       const id = rest['classId'] as string;
       if (classesSent.has(id)) return rest;
       classesSent.add(id);
       return { ...rest, fields: { ...(rest['fields'] as J), eventId } };
     }
-    case 'course.updated': return { ...rest, course: courseWhole(rest['course'] as J, eventId) };
-    case 'write.updated': return { ...rest, write: onsiteWrite(rest['write'] as J) };
-    default: return rest;
+    case 'course.updated':
+      return { ...rest, course: courseWhole(rest['course'] as J, eventId) };
+    case 'write.updated':
+      return { ...rest, write: onsiteWrite(rest['write'] as J) };
+    default:
+      return rest;
   }
 }
 

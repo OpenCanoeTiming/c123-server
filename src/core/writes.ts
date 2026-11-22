@@ -12,13 +12,20 @@ export function submitWrite(s: CoreState, a: AttemptState, el: Element, field: s
   // the TCP source's retained target cell at submission (DERIVATIONS §6): a resumed write brings it from its stored record, absent there none;
   // a slot that is not `known` retains no cell
   const gate = Array.isArray(el['value']) ? (el['value'] as Gate[])[0]?.number : undefined;
-  const retainedCell = resumed ? retainedOf(el['retainedCell']) : fs.tcp?.state === 'known' ? { penalty: cellOf(fs.tcp.value, gate) } : null;
+  const retainedCell = resumed
+    ? retainedOf(el['retainedCell'])
+    : fs.tcp?.state === 'known'
+      ? { penalty: cellOf(fs.tcp.value, gate) }
+      : null;
   // a resumed write keeps its stored generation; one the Attempt has passed is superseded, with no optimistic value (§6, §10 item 44 (c))
   const run = resumed && typeof el['run'] === 'number' ? el['run'] : a.gen.n;
   const superseded = run < a.gen.n;
-  const slot = (value: unknown): Slot => slotOf(s, el, 'operator-write', 'operator', value, seq, {
-    confidence: 'authoritative', provisional: !assertion, ...(el['confidence'] === 'inferred' ? { confidence: 'inferred' as const } : {}),
-  });
+  const slot = (value: unknown): Slot =>
+    slotOf(s, el, 'operator-write', 'operator', value, seq, {
+      confidence: 'authoritative',
+      provisional: !assertion,
+      ...(el['confidence'] === 'inferred' ? { confidence: 'inferred' as const } : {}),
+    });
   if (assertion) {
     // of two operator observations the later-ingested is presented (item 50 (f)); pending writes are still judged beneath it
     retain(fs, 'operator', slot((field === 'gates' ? overlay(s, a, el['value'] as Gate[]) : undefined) ?? el['value']));
@@ -29,7 +36,11 @@ export function submitWrite(s: CoreState, a: AttemptState, el: Element, field: s
     // the caller names the write when it has an id of its own (a durable one, or a re-adopted one); the counter's is unique within one core only
     writeId: typeof el['writeId'] === 'string' ? el['writeId'] : `write-${seq}`,
     target: { phaseId: a.phaseId, bib: a.bib, run, field: 'gate-penalty' as const },
-    requestedValue: el['value'], submittedAt: el.observedAt, status: superseded ? 'superseded' as const : 'pending' as const, attempt: a, fieldName: field,
+    requestedValue: el['value'],
+    submittedAt: el.observedAt,
+    status: superseded ? ('superseded' as const) : ('pending' as const),
+    attempt: a,
+    fieldName: field,
     retainedCell,
   };
   s.writes.push(w);
@@ -60,16 +71,25 @@ export function settleWrites(s: CoreState, at: string): void {
   const touched = new Map<AttemptState, Set<string>>();
   for (const w of s.writes) {
     if (s.attempts.get(w.attempt.id) !== w.attempt) continue; // a removed Attempt presents nothing more
-    if (w.status === 'pending' || s.dirtyWrites.has(w)) touched.set(w.attempt, (touched.get(w.attempt) ?? new Set()).add(w.fieldName));
+    if (w.status === 'pending' || s.dirtyWrites.has(w))
+      touched.set(w.attempt, (touched.get(w.attempt) ?? new Set()).add(w.fieldName));
   }
-  const by = { observedAt: at, at: Date.parse(at), seq: s.counter, epoch: s.epoch, confidence: 'authoritative' } as Slot;
-  for (const [a, fields] of touched) for (const field of fields) refreshOperator(s, a, fieldSlots(a.slots, field), field, by);
+  const by = {
+    observedAt: at,
+    at: Date.parse(at),
+    seq: s.counter,
+    epoch: s.epoch,
+    confidence: 'authoritative',
+  } as Slot;
+  for (const [a, fields] of touched)
+    for (const field of fields) refreshOperator(s, a, fieldSlots(a.slots, field), field, by);
 }
 
 /** The pending writes of the Attempt's field, in the order sent. */
 const pendingOf = (s: CoreState, a: AttemptState, field: string): WriteState[] =>
   s.writes.filter((x) => x.attempt === a && x.fieldName === field && x.status === 'pending');
-const targetOf = (w: WriteState): Gate | undefined => (Array.isArray(w.requestedValue) ? (w.requestedValue as Gate[])[0] : undefined);
+const targetOf = (w: WriteState): Gate | undefined =>
+  Array.isArray(w.requestedValue) ? (w.requestedValue as Gate[])[0] : undefined;
 
 /**
  * CONTRACTS §4 INV-2 rule 4, DERIVATIONS §10 item 50: a whole `gates` vector, the one presented from rules 1-3 as it stands with every given
@@ -79,7 +99,12 @@ const targetOf = (w: WriteState): Gate | undefined => (Array.isArray(w.requested
 function overlay(s: CoreState, a: AttemptState, cells: Gate[]): Gate[] | undefined {
   const shown = presentGates(a, true);
   const slots = boundSlots(s, a.phaseId);
-  const base = shown?.state === 'known' && Array.isArray(shown.value) ? (shown.value as Gate[]) : slots !== undefined ? gatesFromCells([], slots) : undefined;
+  const base =
+    shown?.state === 'known' && Array.isArray(shown.value)
+      ? (shown.value as Gate[])
+      : slots !== undefined
+        ? gatesFromCells([], slots)
+        : undefined;
   if (base === undefined) return undefined;
   const byGate = new Map<number, Gate>();
   for (const c of cells) if (base.some((b) => b.number === c.number)) byGate.set(c.number, c);
@@ -97,7 +122,8 @@ function refreshOperator(s: CoreState, a: AttemptState, fs: FieldSlots, field: s
   if (op !== undefined && op.provisional !== true) return;
   const pending = pendingOf(s, a, field);
   const cells = pending.map(targetOf).filter((c): c is Gate => c !== undefined);
-  const value = pending.length === 0 ? undefined : field === 'gates' ? overlay(s, a, cells) : pending.at(-1)!.requestedValue;
+  const value =
+    pending.length === 0 ? undefined : field === 'gates' ? overlay(s, a, cells) : pending.at(-1)!.requestedValue;
   if (value === undefined) {
     if (op !== undefined) {
       delete fs.operator;
@@ -108,20 +134,28 @@ function refreshOperator(s: CoreState, a: AttemptState, fs: FieldSlots, field: s
   if (op !== undefined && JSON.stringify(op.value) === JSON.stringify(value)) return;
   fs.operator = {
     ...(op ?? { source: 'operator-write', kind: 'operator', confidence: by.confidence, epoch: by.epoch, age: by.at }),
-    state: 'known', value, provisional: true, observedAt: by.observedAt, at: by.at, seq: by.seq,
+    state: 'known',
+    value,
+    provisional: true,
+    observedAt: by.observedAt,
+    at: by.at,
+    seq: by.seq,
   } as Slot;
   s.dirtyAttempts.add(a);
 }
 
 const retainedOf = (v: unknown): WriteState['retainedCell'] =>
-  typeof v === 'object' && v !== null && 'penalty' in v ? { penalty: (v as { penalty: Gate['penalty'] }).penalty } : null;
+  typeof v === 'object' && v !== null && 'penalty' in v
+    ? { penalty: (v as { penalty: Gate['penalty'] }).penalty }
+    : null;
 
 /** The target gate's cell of a `gates` value (DERIVATIONS §6); absent from the value, `null`. */
 const cellOf = (value: unknown, gate: number | undefined): Gate['penalty'] =>
   Array.isArray(value) ? ((value as Gate[]).find((c) => c.number === gate)?.penalty ?? null) : null;
 
 /** An `xml` observation is an echo only with content written after the write's submission (§6). */
-const tooOld = (w: WriteState, slot: Slot): boolean => slot.source === 'xml' && (slot.age === null || slot.age <= Date.parse(w.submittedAt));
+const tooOld = (w: WriteState, slot: Slot): boolean =>
+  slot.source === 'xml' && (slot.age === null || slot.age <= Date.parse(w.submittedAt));
 
 const resolve = (s: CoreState, w: WriteState, status: 'confirmed' | 'mismatched', slot: Slot): void => {
   w.status = status;
@@ -139,7 +173,15 @@ const resolve = (s: CoreState, w: WriteState, status: 'confirmed' | 'mismatched'
  * states its value, else `mismatched`; (3) otherwise nothing. After a step that resolved one, the writes left on the cell retain the delivered
  * value. A pending write is judged whether or not its value is presented; an assertion falls only to a value its source changed.
  */
-export function resolveEcho(s: CoreState, a: AttemptState, fs: FieldSlots, field: string, slot: Slot, prior: Slot | undefined, changed: boolean): void {
+export function resolveEcho(
+  s: CoreState,
+  a: AttemptState,
+  fs: FieldSlots,
+  field: string,
+  slot: Slot,
+  prior: Slot | undefined,
+  changed: boolean,
+): void {
   const op = fs.operator;
   if (op !== undefined && op.provisional !== true && changed) delete fs.operator;
   const byGate = new Map<number | undefined, WriteState[]>();
@@ -153,7 +195,12 @@ export function resolveEcho(s: CoreState, a: AttemptState, fs: FieldSlots, field
     const head = queue[0]!;
     // a re-delivery of the cell is no echo (§6, ADR-010's lost echo); a prior that is not `known` retains no cell, and a TCP source with
     // none in this lifetime compares with the value the write recorded as retained, none retained making any delivery a change
-    const before = prior?.state === 'known' ? cellOf(prior.value, gate) : slot.source === 'tcp' && head.retainedCell != null ? head.retainedCell.penalty : undefined;
+    const before =
+      prior?.state === 'known'
+        ? cellOf(prior.value, gate)
+        : slot.source === 'tcp' && head.retainedCell != null
+          ? head.retainedCell.penalty
+          : undefined;
     // a value a resolution moved in is the earlier write's echo arriving again, from either source (item 50 (g))
     const again = head.retainedMoved === true && head.retainedCell !== null && cell === head.retainedCell.penalty;
     let left: WriteState[];
@@ -164,7 +211,9 @@ export function resolveEcho(s: CoreState, a: AttemptState, fs: FieldSlots, field
       left = queue.slice(i);
     } else {
       let last = -1;
-      queue.forEach((w, i) => { if (i > 0 && states(w)) last = i; });
+      queue.forEach((w, i) => {
+        if (i > 0 && states(w)) last = i;
+      });
       if (last < 0) continue;
       for (const w of queue.slice(0, last + 1)) resolve(s, w, states(w) ? 'confirmed' : 'mismatched', slot);
       left = queue.slice(last + 1);
@@ -180,7 +229,13 @@ export function resolveEcho(s: CoreState, a: AttemptState, fs: FieldSlots, field
 }
 
 /** CQ5: a retraction displaces the operator slot of a field it retracts; every pending write resolves with no value to confirm (rule 4). */
-export function displaceOperator(s: CoreState, a: AttemptState, fs: FieldSlots, field: string, observedAt: string): void {
+export function displaceOperator(
+  s: CoreState,
+  a: AttemptState,
+  fs: FieldSlots,
+  field: string,
+  observedAt: string,
+): void {
   delete fs.operator;
   for (const w of pendingOf(s, a, field)) {
     w.status = 'mismatched';
@@ -189,4 +244,10 @@ export function displaceOperator(s: CoreState, a: AttemptState, fs: FieldSlots, 
   }
 }
 
-export const wireWrite = ({ attempt: _attempt, fieldName: _field, retainedCell: _retained, retainedMoved: _moved, ...wire }: CoreState['writes'][number]): unknown => wire;
+export const wireWrite = ({
+  attempt: _attempt,
+  fieldName: _field,
+  retainedCell: _retained,
+  retainedMoved: _moved,
+  ...wire
+}: CoreState['writes'][number]): unknown => wire;

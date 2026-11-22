@@ -12,7 +12,18 @@ import { inRelayedOrder } from './standing.js';
 import type { ClassificationRow, CoreState, Element, ResourceState, Source } from './types.js';
 
 /** Fields that are not `Observed` on the wire (§2.3, §2.4). */
-const PLAIN: ReadonlySet<string> = new Set(['classId', 'format', 'kind', 'scoringKind', 'pair', 'heats', 'stage', 'date', 'code', 'discipline']);
+const PLAIN: ReadonlySet<string> = new Set([
+  'classId',
+  'format',
+  'kind',
+  'scoringKind',
+  'pair',
+  'heats',
+  'stage',
+  'date',
+  'code',
+  'discipline',
+]);
 
 const PHASE_FIELDS = ['courseId', 'scheduledStart', 'programmeOrder', 'title', 'status'];
 const ENTRY_FIELDS = ['displayName', 'members', 'club', 'nation', 'ageCategoryId', 'eventBib', 'isTeam'];
@@ -37,7 +48,14 @@ function observeFormat(r: ResourceState, value: unknown, source: Source): boolea
 }
 
 /** One field of a Phase, Entry, Class or Course. Returns whether anything presented may have changed. */
-export function observeResource(s: CoreState, r: ResourceState, el: Element, field: string, source: Source, seq: number): boolean {
+export function observeResource(
+  s: CoreState,
+  r: ResourceState,
+  el: Element,
+  field: string,
+  source: Source,
+  seq: number,
+): boolean {
   if (field === 'format') return observeFormat(r, el['value'], source);
   if ((FROM_FORMAT as readonly string[]).includes(field) && r.formatSource !== undefined) return false; // decided by the stated format
   if (PLAIN.has(field)) {
@@ -47,13 +65,29 @@ export function observeResource(s: CoreState, r: ResourceState, el: Element, fie
     }
     const value = el['value'];
     const cur = r.plain.get(field) as { siblingPhaseId?: unknown } | undefined;
-    if (field === 'pair' && (value as { siblingPhaseId?: unknown } | null)?.siblingPhaseId === null && cur?.siblingPhaseId) return false; // the schedule named it: a cold TCP guess never unnames it
+    if (
+      field === 'pair' &&
+      (value as { siblingPhaseId?: unknown } | null)?.siblingPhaseId === null &&
+      cur?.siblingPhaseId
+    )
+      return false; // the schedule named it: a cold TCP guess never unnames it
     if (JSON.stringify(cur) === JSON.stringify(value)) return false;
     r.plain.set(field, value);
     return true;
   }
-  const stated = el['state'] === 'unavailable' || el['state'] === 'not-yet' ? { state: el['state'], reason: el['reason'] } : el['value'];
-  const slot = slotOf(s, el, source, 'row', stated, seq, el['confidence'] === 'inferred' ? { confidence: 'inferred' } : {});
+  const stated =
+    el['state'] === 'unavailable' || el['state'] === 'not-yet'
+      ? { state: el['state'], reason: el['reason'] }
+      : el['value'];
+  const slot = slotOf(
+    s,
+    el,
+    source,
+    'row',
+    stated,
+    seq,
+    el['confidence'] === 'inferred' ? { confidence: 'inferred' } : {},
+  );
   const fs = fieldSlots(r.fields, field);
   const shown = present(fs);
   return retain(fs, source, slot) || present(fs) !== shown;
@@ -64,19 +98,28 @@ export function observeResource(s: CoreState, r: ResourceState, el: Element, fie
  * takes its `captions`, and nothing else; a string matching none refreshes nothing. A fabricated one decides nothing (§4.6).
  */
 export function refreshCourses(s: CoreState, el: Element, seq: number): void {
-  const { gateString, captions, splitsArmed, fabricated } = el['courseRefresh'] as { gateString: string; captions: string[]; splitsArmed: boolean | null; fabricated: boolean };
+  const { gateString, captions, splitsArmed, fabricated } = el['courseRefresh'] as {
+    gateString: string;
+    captions: string[];
+    splitsArmed: boolean | null;
+    fabricated: boolean;
+  };
   if (fabricated) return;
   if (splitsArmed !== null) s.splitsArmed = splitsArmed;
   for (const course of s.courses.values()) {
     const layout = course.fields.get('layout')?.xml;
     if (layout?.state !== 'known' || String(layout.value).replaceAll('S', '') !== gateString) continue;
-    if (retain(fieldSlots(course.fields, 'captions'), 'tcp', slotOf(s, el, 'tcp', 'row', captions, seq))) s.dirtyResources.add(dirtyHandle('course', course));
+    if (retain(fieldSlots(course.fields, 'captions'), 'tcp', slotOf(s, el, 'tcp', 'row', captions, seq)))
+      s.dirtyResources.add(dirtyHandle('course', course));
   }
 }
 
 const handles = new WeakMap<ResourceState, { type: 'entry' | 'class' | 'course'; resource: ResourceState }>();
 /** The dirty set holds one handle per resource. */
-export function dirtyHandle(type: 'entry' | 'class' | 'course', r: ResourceState): { type: 'entry' | 'class' | 'course'; resource: ResourceState } {
+export function dirtyHandle(
+  type: 'entry' | 'class' | 'course',
+  r: ResourceState,
+): { type: 'entry' | 'class' | 'course'; resource: ResourceState } {
   let h = handles.get(r);
   if (h === undefined) {
     h = { type, resource: r };
@@ -85,8 +128,13 @@ export function dirtyHandle(type: 'entry' | 'class' | 'course', r: ResourceState
   return h;
 }
 
-export function viewResource(r: ResourceState, kind: 'phase' | 'entry' | 'class' | 'course', s?: CoreState): Record<string, unknown> {
-  const names = kind === 'phase' ? PHASE_FIELDS : kind === 'entry' ? ENTRY_FIELDS : kind === 'class' ? CLASS_FIELDS : COURSE_FIELDS;
+export function viewResource(
+  r: ResourceState,
+  kind: 'phase' | 'entry' | 'class' | 'course',
+  s?: CoreState,
+): Record<string, unknown> {
+  const names =
+    kind === 'phase' ? PHASE_FIELDS : kind === 'entry' ? ENTRY_FIELDS : kind === 'class' ? CLASS_FIELDS : COURSE_FIELDS;
   const key = kind === 'phase' ? 'phaseId' : kind === 'entry' ? 'entryId' : kind === 'class' ? 'classId' : 'courseId';
   const out: Record<string, unknown> = { [key]: r.id };
   for (const [k, v] of r.plain) out[k] = v;
@@ -94,11 +142,18 @@ export function viewResource(r: ResourceState, kind: 'phase' | 'entry' | 'class'
   const pair = r.plain.get('pair') as { role?: string; siblingPhaseId?: string | null } | null | undefined;
   if (kind === 'phase' && pair?.role === 'first') out['pair'] = { ...pair, siblingPhaseId: r.derivedSibling ?? null };
   // a stated sibling naming a Phase removed and not created again is retained and presents null (DERIVATIONS §10 item 54 (h))
-  else if (kind === 'phase' && pair?.role === 'second' && typeof pair.siblingPhaseId === 'string' && s?.removedIds.has(pair.siblingPhaseId) === true) out['pair'] = { ...pair, siblingPhaseId: null };
+  else if (
+    kind === 'phase' &&
+    pair?.role === 'second' &&
+    typeof pair.siblingPhaseId === 'string' &&
+    s?.removedIds.has(pair.siblingPhaseId) === true
+  )
+    out['pair'] = { ...pair, siblingPhaseId: null };
   // DERIVATIONS §10 item 49 (d): neither `format` nor `pair` stated, named by a second run: that pair's first run; nothing else follows until a format is stated
   if (kind === 'phase' && s !== undefined && !r.plain.has('pair') && !r.plain.has('format')) {
     const named = fmtFor(s, r.id).pair;
-    if (named?.role === 'first') out['pair'] = { role: 'first', siblingPhaseId: r.derivedSibling ?? null, combination: named.combination };
+    if (named?.role === 'first')
+      out['pair'] = { role: 'first', siblingPhaseId: r.derivedSibling ?? null, combination: named.combination };
   }
   for (const f of new Set([...names, ...r.fields.keys()])) out[f] = envelope(present(r.fields.get(f)), false);
   return out;
@@ -108,7 +163,13 @@ export function viewResource(r: ResourceState, kind: 'phase' | 'entry' | 'class'
  * §4.10: replaced whole, whichever source, under INV-2c's guard alone; a refused snapshot moves nothing, `decidedIn` included. A table
  * with no rows, from either source, moves nothing either (maintainer, 2026-11-06): the last built Standing stays, `asOf` showing its age.
  */
-export function applyClassification(s: CoreState, phaseId: string, source: Source, el: Element, rows: ClassificationRow[]): void {
+export function applyClassification(
+  s: CoreState,
+  phaseId: string,
+  source: Source,
+  el: Element,
+  rows: ClassificationRow[],
+): void {
   if (rows.length === 0) return;
   const cur = s.classifications.get(phaseId);
   const at = Date.parse(el.observedAt);
@@ -121,14 +182,23 @@ export function applyClassification(s: CoreState, phaseId: string, source: Sourc
     }
   }
   // item 52 (a): an admitted xml snapshot carrying rows replaces the kept `decidedIn` whole; it is not merged across snapshots
-  const decided = source === 'xml' ? new Map(rows.map((r) => [r.entryId, r.decidedIn] as const)) : new Map(cur?.xmlDecided ?? []);
-  const next = rows.map((r) => (source === 'tcp' && r.decidedIn === null ? { ...r, decidedIn: decided.get(r.entryId) ?? null } : r));
+  const decided =
+    source === 'xml' ? new Map(rows.map((r) => [r.entryId, r.decidedIn] as const)) : new Map(cur?.xmlDecided ?? []);
+  const next = rows.map((r) =>
+    source === 'tcp' && r.decidedIn === null ? { ...r, decidedIn: decided.get(r.entryId) ?? null } : r,
+  );
   // TCP re-sends the same rows on rotation: those move nothing, `asOf` included; the delivery still dates what the guard compares
   if (cur !== undefined && JSON.stringify(inRelayedOrder(cur.rows)) === JSON.stringify(inRelayedOrder(next))) {
     if (source === 'tcp') cur.tcpAt = at;
     cur.xmlDecided = decided;
     return;
   }
-  s.classifications.set(phaseId, { rows: next, asOf: el.observedAt, builtBy: source, ...(source === 'tcp' ? { tcpAt: at } : {}), xmlDecided: decided });
+  s.classifications.set(phaseId, {
+    rows: next,
+    asOf: el.observedAt,
+    builtBy: source,
+    ...(source === 'tcp' ? { tcpAt: at } : {}),
+    xmlDecided: decided,
+  });
   s.dirtyScopes.add(phaseId);
 }

@@ -28,7 +28,14 @@ export function noteFacts(s: CoreState, a: AttemptState, view: Record<string, un
     bib: a.bib,
     status: String(known('status')?.value ?? 'not-started'),
     placement: placement === undefined ? null : { rank: placement.rank, order: placement.order },
-    result: o === undefined ? (outcome?.state === 'unavailable' ? null : { kind: 'pending' }) : o.kind === 'running' ? { kind: 'pending' } : (o as StandingFacts['result']),
+    result:
+      o === undefined
+        ? outcome?.state === 'unavailable'
+          ? null
+          : { kind: 'pending' }
+        : o.kind === 'running'
+          ? { kind: 'pending' }
+          : (o as StandingFacts['result']),
     pairTotal: typeof pairTotal === 'number' ? pairTotal : null,
     provisional: ['outcome', 'placement', 'pairTotal'].some((f) => known(f)?.provisional === true),
     underReview: known('underReview')?.value === true,
@@ -51,7 +58,8 @@ const categoryOf = (s: CoreState, entryId: string): string | null => {
 };
 
 /** §5 step 2-3: placed Attempts, and unplaced ones that show a result or a mark; start-list rows and athletes on course are not entries. */
-const isEntry = (f: StandingFacts): boolean => f.placement !== null || (f.result !== null && f.result.kind !== 'pending') || isMark(f.status);
+const isEntry = (f: StandingFacts): boolean =>
+  f.placement !== null || (f.result !== null && f.result.kind !== 'pending') || isMark(f.status);
 
 const keyOf = (kind: string, phaseId: string, heat: number | undefined, category: string | null): string =>
   `${kind}:${phaseId}${heat === undefined ? '' : `:${heat}`}/${category ?? 'all'}`;
@@ -66,7 +74,9 @@ function snapshotCategoryRanks(attempts: AttemptState[]): Record<string, number>
   const placedOf = (a: AttemptState) => (a.facts !== undefined && isEntry(a.facts) ? a.facts.placement : null);
   if (!attempts.every((a) => same(a.snapshotRow?.placement ?? null, placedOf(a)))) return undefined;
   const ranks: Record<string, number> = {};
-  for (const a of attempts) if (a.facts !== undefined && a.snapshotRow?.categoryRank !== undefined) ranks[a.facts.entryId] = a.snapshotRow.categoryRank;
+  for (const a of attempts)
+    if (a.facts !== undefined && a.snapshotRow?.categoryRank !== undefined)
+      ranks[a.facts.entryId] = a.snapshotRow.categoryRank;
   return Object.keys(ranks).length > 0 ? ranks : undefined;
 }
 
@@ -86,31 +96,70 @@ function ofPhase(s: CoreState, phaseId: string, asOf: string): Standing[] {
   if (fmt.kind === 'classification') {
     const rows = s.classifications.get(phaseId);
     if (rows === undefined) return out;
-    const entries: EntryInput[] = rows.rows.map((r) => ({ entryId: r.entryId, bib: r.bib, placement: { rank: r.rank, order: r.order }, decidedIn: r.decidedIn }));
+    const entries: EntryInput[] = rows.rows.map((r) => ({
+      entryId: r.entryId,
+      bib: r.bib,
+      placement: { rank: r.rank, order: r.order },
+      decidedIn: r.decidedIn,
+    }));
     const scope = { kind: 'classification', phaseId } as const;
     const { standing, anomalies } = assembleStanding({ entries }, scope);
-    add({ standingKey: keyOf('classification', phaseId, undefined, null), classId, scope, ageCategoryId: null, asOf: rows.asOf, entries: standing, anomalies });
+    add({
+      standingKey: keyOf('classification', phaseId, undefined, null),
+      classId,
+      scope,
+      ageCategoryId: null,
+      asOf: rows.asOf,
+      entries: standing,
+      anomalies,
+    });
     return out;
   }
 
   const attempts = [...(s.phases.get(phaseId)?.attempts ?? [])];
   const facts = attempts.flatMap((a) => (a.facts !== undefined && isEntry(a.facts) ? [a.facts] : []));
   const inputs: EntryInput[] = facts.map(({ snapshotRow: _, ...f }) => ({
-    ...f, ageCategoryId: categoryOf(s, f.entryId),
+    ...f,
+    ageCategoryId: categoryOf(s, f.entryId),
   }));
   const upstreamCategoryRanks = snapshotCategoryRanks(attempts);
   const duration = fmt.scoringKind === 'duration';
   const scoped = (kind: 'phase' | 'pair', scope: Standing['scope']): void => {
-    const common = { entries: inputs, durationScored: duration, cross: fmt.cross, combined: fmt.pair?.role === 'second', ...(upstreamCategoryRanks !== undefined ? { upstreamCategoryRanks } : {}) };
+    const common = {
+      entries: inputs,
+      durationScored: duration,
+      cross: fmt.cross,
+      combined: fmt.pair?.role === 'second',
+      ...(upstreamCategoryRanks !== undefined ? { upstreamCategoryRanks } : {}),
+    };
     const whole = assembleStanding(common, scope);
-    add({ standingKey: keyOf(kind, phaseId, undefined, null), classId, scope, ageCategoryId: null, entries: whole.standing, anomalies: whole.anomalies });
+    add({
+      standingKey: keyOf(kind, phaseId, undefined, null),
+      classId,
+      scope,
+      ageCategoryId: null,
+      entries: whole.standing,
+      anomalies: whole.anomalies,
+    });
     if (!duration) return;
-    const categories = new Set(inputs.flatMap((e) => (e.placement !== null && e.ageCategoryId !== null && e.ageCategoryId !== undefined ? [e.ageCategoryId] : [])));
+    const categories = new Set(
+      inputs.flatMap((e) =>
+        e.placement !== null && e.ageCategoryId !== null && e.ageCategoryId !== undefined ? [e.ageCategoryId] : [],
+      ),
+    );
     const prefix = `${kind}:${phaseId}/`;
-    for (const key of s.standingKeys.get(phaseId) ?? []) if (key.startsWith(prefix) && !key.endsWith('/all')) categories.add(key.slice(prefix.length));
+    for (const key of s.standingKeys.get(phaseId) ?? [])
+      if (key.startsWith(prefix) && !key.endsWith('/all')) categories.add(key.slice(prefix.length));
     for (const category of [...categories].sort()) {
       const part = assembleStanding({ ...common, ageCategoryId: category }, scope);
-      add({ standingKey: keyOf(kind, phaseId, undefined, category), classId, scope, ageCategoryId: category, entries: part.standing, anomalies: part.anomalies });
+      add({
+        standingKey: keyOf(kind, phaseId, undefined, category),
+        classId,
+        scope,
+        ageCategoryId: category,
+        entries: part.standing,
+        anomalies: part.anomalies,
+      });
     }
   };
   scoped('phase', { kind: 'phase', phaseId });
@@ -129,8 +178,18 @@ function ofPhase(s: CoreState, phaseId: string, asOf: string): Standing[] {
     }
     for (const heat of [...heats].sort((a, b) => a - b)) {
       const scope = { kind: 'heat', phaseId, heat } as const;
-      const part = assembleStanding({ entries: inputs.filter((e) => e.heat === heat), durationScored: false, cross: fmt.cross }, scope);
-      add({ standingKey: keyOf('heat', phaseId, heat, null), classId, scope, ageCategoryId: null, entries: part.standing, anomalies: part.anomalies });
+      const part = assembleStanding(
+        { entries: inputs.filter((e) => e.heat === heat), durationScored: false, cross: fmt.cross },
+        scope,
+      );
+      add({
+        standingKey: keyOf('heat', phaseId, heat, null),
+        classId,
+        scope,
+        ageCategoryId: null,
+        entries: part.standing,
+        anomalies: part.anomalies,
+      });
     }
   }
   return out;
@@ -162,7 +221,10 @@ export function changedStandings(s: CoreState): Standing[] {
 
 /** `scope.replaced`: every Standing whose scope names a Phase of the re-baseline's scope, sent whole and recorded as sent. */
 export function replacedStandings(s: CoreState, scope: { kind?: string; phaseId?: string }): Standing[] {
-  const phases = scope.kind === 'event' ? new Set([...s.phases.keys(), ...s.classifications.keys()]) : new Set(scope.phaseId === undefined ? [] : [scope.phaseId]);
+  const phases =
+    scope.kind === 'event'
+      ? new Set([...s.phases.keys(), ...s.classifications.keys()])
+      : new Set(scope.phaseId === undefined ? [] : [scope.phaseId]);
   // §7.2: every Standing whose scope names one of the scope's Phases, `pair` on either side: the pair standings of every second run naming it
   const naming = namingSecondRuns(s, false);
   for (const id of [...phases]) {
@@ -193,7 +255,8 @@ export function replacedStandings(s: CoreState, scope: { kind?: string; phaseId?
       if (assembled.entries.length === 0 || !names(assembled)) continue;
       // §5 step 1: `asOf` moves only with a change; a Standing the re-baseline leaves as it was keeps the last change's
       const prior = before.get(assembled.standingKey);
-      const st = prior !== undefined && textOf(prior) === textOf(assembled) ? { ...assembled, asOf: prior.asOf } : assembled;
+      const st =
+        prior !== undefined && textOf(prior) === textOf(assembled) ? { ...assembled, asOf: prior.asOf } : assembled;
       remember(s, phaseId, st);
       out.push(st);
     }

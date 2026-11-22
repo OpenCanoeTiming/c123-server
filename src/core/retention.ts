@@ -21,27 +21,46 @@ export function fieldSlots(map: Map<string, FieldSlots>, field: string): FieldSl
 
 /** A value's identity: envelope states carried on a row (`{state:'unavailable',reason}`) are states, `null` is `not-yet`. */
 export function slotOf(
-  s: CoreState, el: Element, source: Source | 'operator-write', kind: Slot['kind'], value: unknown, seq: number,
+  s: CoreState,
+  el: Element,
+  source: Source | 'operator-write',
+  kind: Slot['kind'],
+  value: unknown,
+  seq: number,
   extra: Partial<Slot> = {},
 ): Slot {
   const at = Date.parse(el.observedAt);
   const age = source === 'xml' ? (s.rewrite?.changedAfter ?? null) : at;
   const base = {
-    source, kind, confidence: extra.confidence ?? 'authoritative', observedAt: el.observedAt, at, seq, epoch: s.epoch, age, ...extra,
+    source,
+    kind,
+    confidence: extra.confidence ?? 'authoritative',
+    observedAt: el.observedAt,
+    at,
+    seq,
+    epoch: s.epoch,
+    age,
+    ...extra,
   } as const;
   if (value === null || value === undefined) return { ...base, state: 'not-yet' };
   if (typeof value === 'object' && 'state' in value) {
     const st = (value as { state: unknown }).state;
-    if (st === 'unavailable') return { ...base, state: 'unavailable', reason: String((value as { reason?: unknown }).reason) };
+    if (st === 'unavailable')
+      return { ...base, state: 'unavailable', reason: String((value as { reason?: unknown }).reason) };
     if (st === 'not-yet') return { ...base, state: 'not-yet' };
   }
   return { ...base, state: 'known', value };
 }
 
 const same = (a: Slot, b: Slot): boolean =>
-  a.state === b.state && a.reason === b.reason && a.eventTime === b.eventTime && a.marker === b.marker && JSON.stringify(a.value) === JSON.stringify(b.value);
+  a.state === b.state &&
+  a.reason === b.reason &&
+  a.eventTime === b.eventTime &&
+  a.marker === b.marker &&
+  JSON.stringify(a.value) === JSON.stringify(b.value);
 
-export const laterAge = (a: number | null, b: number | null): number | null => (b !== null && (a === null || b > a) ? b : a);
+export const laterAge = (a: number | null, b: number | null): number | null =>
+  b !== null && (a === null || b > a) ? b : a;
 
 /**
  * INV-5 and rule 2. An observation re-delivered equal to what its source holds is one in its own right where that changes what is
@@ -61,7 +80,8 @@ export function retain(fs: FieldSlots, channel: Channel, slot: Slot, statusView?
   const age = laterAge(cur.age, slot.age);
   const other = channel === 'tcp' ? fs.xml : channel === 'xml' ? fs.tcp : statusView !== undefined ? fs.xml : undefined;
   // `status`: the rival is rule 2's whole `tcp` view, the stream included, so a refused row re-delivered and admitted is the re-delivery's
-  const displaced = statusView !== undefined && channel !== 'operator' ? view(fs) !== cur : other !== undefined && view(fs) === other;
+  const displaced =
+    statusView !== undefined && channel !== 'operator' ? view(fs) !== cur : other !== undefined && view(fs) === other;
   if (displaced) {
     fs[channel] = { ...slot, age };
     return false;
@@ -75,7 +95,18 @@ export function retain(fs: FieldSlots, channel: Channel, slot: Slot, statusView?
 
 /** The fields a new generation clears (CONTRACTS §2.6). */
 export const RUN_SCOPED = [
-  'status', 'outcome', 'gates', 'splits', 'faults', 'placement', 'pairTotal', 'countingRun', 'underReview', 'qualified', 'courseOrder', 'timeToBeat',
+  'status',
+  'outcome',
+  'gates',
+  'splits',
+  'faults',
+  'placement',
+  'pairTotal',
+  'countingRun',
+  'underReview',
+  'qualified',
+  'courseOrder',
+  'timeToBeat',
 ] as const;
 
 export function forgetRunScoped(a: AttemptState): void {

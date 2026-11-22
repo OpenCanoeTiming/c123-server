@@ -19,7 +19,16 @@ const NOT_CONFIGURED = { state: 'unavailable', reason: 'not-configured' } as con
 export const CARRIED = ['placement', 'pairTotal', 'countingRun'] as const;
 
 /** Retains one row value and settles rule 4 against it. */
-function put(s: CoreState, a: AttemptState, source: Source, el: Element, field: string, value: unknown, seq: number, extra: Partial<Slot> = {}): void {
+function put(
+  s: CoreState,
+  a: AttemptState,
+  source: Source,
+  el: Element,
+  field: string,
+  value: unknown,
+  seq: number,
+  extra: Partial<Slot> = {},
+): void {
   const fs = fieldSlots(a.slots, field);
   const view = field === 'status' ? presentStatus : present;
   const slot = slotOf(s, el, source, 'row', value, seq, extra);
@@ -58,7 +67,13 @@ function restatesMerged(a: AttemptState, held: Held, cells: Cells, slot: Slot): 
 }
 
 /** Cells with no course in the parser's `ctx`: gates or faults once a course is bound, else retained until one is (§0.5). */
-export function putCells(s: CoreState, a: AttemptState, channel: 'tcp' | 'xml' | 'inference', cells: Cells, slot: Slot): void {
+export function putCells(
+  s: CoreState,
+  a: AttemptState,
+  channel: 'tcp' | 'xml' | 'inference',
+  cells: Cells,
+  slot: Slot,
+): void {
   const fmt = fmtFor(s, a.phaseId);
   const field = fmt.cross ? 'faults' : 'gates';
   const slots = boundSlots(s, a.phaseId);
@@ -71,16 +86,23 @@ export function putCells(s: CoreState, a: AttemptState, channel: 'tcp' | 'xml' |
     // by the other source as on a bound course (rule 2, INV-2c; never by comparing cells), it is one in its own right, `at` included
     const rival = channel === 'tcp' ? a.cells.xml : channel === 'xml' ? a.cells.tcp : undefined;
     const displaced = (): boolean =>
-      rival !== undefined && (channel === 'tcp' ? choose(held!.slot, rival.slot) : choose(rival.slot, held!.slot)) === rival.slot;
+      rival !== undefined &&
+      (channel === 'tcp' ? choose(held!.slot, rival.slot) : choose(rival.slot, held!.slot)) === rival.slot;
     const kept = (): Slot =>
-      displaced() ? { ...slot, age: laterAge(held!.slot.age, slot.age) } : { ...held!.slot, seq: slot.seq, epoch: slot.epoch, age: laterAge(held!.slot.age, slot.age) };
+      displaced()
+        ? { ...slot, age: laterAge(held!.slot.age, slot.age) }
+        : { ...held!.slot, seq: slot.seq, epoch: slot.epoch, age: laterAge(held!.slot.age, slot.age) };
     if (!same || JSON.stringify(held.cells) !== JSON.stringify(cells)) {
-      a.cells[channel] = same && channel !== 'inference' && restatesMerged(a, held, cells, slot) ? { cells, slot: kept() } : { cells, slot };
+      a.cells[channel] =
+        same && channel !== 'inference' && restatesMerged(a, held, cells, slot)
+          ? { cells, slot: kept() }
+          : { cells, slot };
     } else {
       held.slot = kept();
     }
     if (courseUnavailable(s, a.phaseId)) {
-      if (retain(fieldSlots(a.slots, field), channel, { ...slot, state: 'unavailable', reason: NOT_CONFIGURED.reason })) s.dirtyAttempts.add(a);
+      if (retain(fieldSlots(a.slots, field), channel, { ...slot, state: 'unavailable', reason: NOT_CONFIGURED.reason }))
+        s.dirtyAttempts.add(a);
     }
     return;
   }
@@ -118,7 +140,8 @@ export function floorStatus(s: CoreState, a: AttemptState, source: Source, el: E
 /** §1.2: a run-2 row with no time and no mark restates run 1's values, and past the Attempt's first listing they stay carried, unless this run's row restated them. */
 function keepCarried(s: CoreState, a: AttemptState, row: Row): void {
   if (!a.gen.started || fmtFor(s, a.phaseId).pair?.role !== 'second') return;
-  for (const f of CARRIED) if (f in row && !a.gen.restated.has(f) && present(a.slots.get(f))?.state === 'known') a.carried.add(f);
+  for (const f of CARRIED)
+    if (f in row && !a.gen.restated.has(f) && present(a.slots.get(f))?.state === 'known') a.carried.add(f);
 }
 
 /** The row fields a paired second-run row states with no time of its own: `placement` and `pairTotal` follow the row (INV-7). */
@@ -136,11 +159,20 @@ function presentedFinish(a: AttemptState, source: Source): Partial<Slot> {
   return { observedAt: shown.observedAt, ...(shown.eventTime !== undefined ? { eventTime: shown.eventTime } : {}) };
 }
 
-function writeRow(s: CoreState, a: AttemptState, source: Source, el: Element, row: Row, stale: boolean, seq: number): void {
+function writeRow(
+  s: CoreState,
+  a: AttemptState,
+  source: Source,
+  el: Element,
+  row: Row,
+  stale: boolean,
+  seq: number,
+): void {
   const fmt = fmtFor(s, a.phaseId);
   const mark = stale ? undefined : markOf(row);
   const time = timeOf(row);
-  const extra: Partial<Slot> = 'judgingComplete' in row ? { judgingComplete: row['judgingComplete'] as boolean | null } : {};
+  const extra: Partial<Slot> =
+    'judgingComplete' in row ? { judgingComplete: row['judgingComplete'] as boolean | null } : {};
   const placed = row['placement'] !== null && row['placement'] !== undefined;
   // §4.11: judged against the table before this row, recorded only once the guard admits it (a refused mark records nothing)
   const records = recordsGeneration(a, mark, time, markRefusedByGuard(fieldSlots(a.slots, 'status')));
@@ -149,23 +181,30 @@ function writeRow(s: CoreState, a: AttemptState, source: Source, el: Element, ro
   if (row['untimed'] === true) {
     a.untimed = a.gen.finish === undefined;
     const tcp = a.slots.get('outcome')?.tcp;
-    if (a.untimed && tcp?.state === 'known') put(s, a, 'tcp', { ingestSeq: 0, observedAt: tcp.observedAt }, 'outcome', NOT_APPLICABLE, tcp.seq);
+    if (a.untimed && tcp?.state === 'known')
+      put(s, a, 'tcp', { ingestSeq: 0, observedAt: tcp.observedAt }, 'outcome', NOT_APPLICABLE, tcp.seq);
   } else if (source === 'xml' && time !== undefined) a.untimed = false;
 
   let outcome: unknown = row['outcome'];
   if (a.untimed && outcome !== undefined) outcome = NOT_APPLICABLE;
-  else if (outcome === undefined && fmt.heats && placed) outcome = { kind: 'ordinal', order: (row['placement'] as { order: number }).order };
+  else if (outcome === undefined && fmt.heats && placed)
+    outcome = { kind: 'ordinal', order: (row['placement'] as { order: number }).order };
 
   const ranOrPlaced = time !== undefined || (fmt.heats && placed) || row['status'] === 'finished' || a.untimed;
   const status = mark ?? (ranOrPlaced ? 'finished' : undefined);
-  if (status !== undefined) put(s, a, source, el, 'status', status, seq, status === 'finished' ? presentedFinish(a, source) : {});
+  if (status !== undefined)
+    put(s, a, source, el, 'status', status, seq, status === 'finished' ? presentedFinish(a, source) : {});
   // §2.6: rule 2's guard refuses the observation, not one field of it; the next snapshot that restates the row presents it
   if (source === 'xml' && mark !== undefined && markRefusedByGuard(fieldSlots(a.slots, 'status'))) {
     keepAsHistory(a, source, row);
     return;
   }
   if (records) a.gen.recorded = true;
-  if (outcome !== undefined) put(s, a, source, el, 'outcome', outcome, seq, { ...extra, ...(row['finishTime'] !== undefined ? { eventTime: row['finishTime'] as string } : {}) });
+  if (outcome !== undefined)
+    put(s, a, source, el, 'outcome', outcome, seq, {
+      ...extra,
+      ...(row['finishTime'] !== undefined ? { eventTime: row['finishTime'] as string } : {}),
+    });
   if ('cells' in row) putCells(s, a, source, row['cells'] as Cells, slotOf(s, el, source, 'row', [], seq, extra));
   for (const f of ['gates', 'faults', 'splits']) if (row[f] !== undefined) put(s, a, source, el, f, row[f], seq, extra);
   for (const f of ['placement', 'pairTotal', 'countingRun']) if (f in row) put(s, a, source, el, f, row[f], seq, extra);
@@ -211,7 +250,14 @@ export function applyRow(s: CoreState, a: AttemptState, source: Source, el: Elem
     return;
   }
   if (verdict === 'pending' && (mark === undefined || stale)) {
-    a.pending.push({ row, source, observedAt: el.observedAt, seq, epoch: s.epoch, age: source === 'xml' ? (s.rewrite?.changedAfter ?? null) : Date.parse(el.observedAt) });
+    a.pending.push({
+      row,
+      source,
+      observedAt: el.observedAt,
+      seq,
+      epoch: s.epoch,
+      age: source === 'xml' ? (s.rewrite?.changedAfter ?? null) : Date.parse(el.observedAt),
+    });
     return;
   }
   writeRow(s, a, source, el, row, stale, seq);

@@ -5,13 +5,23 @@ import type { CourseSlot, IngestContext, IngestElement } from './types.js';
 // ---------------------------------------------------------------- reading the document
 
 const tcpParser = new XMLParser({
-  ignoreAttributes: false, attributeNamePrefix: '@', parseAttributeValue: false, parseTagValue: false,
-  trimValues: false, ignoreDeclaration: true, isArray: (n) => n === 'Row' || n === 'Result' || n === 'Race',
+  ignoreAttributes: false,
+  attributeNamePrefix: '@',
+  parseAttributeValue: false,
+  parseTagValue: false,
+  trimValues: false,
+  ignoreDeclaration: true,
+  isArray: (n) => n === 'Row' || n === 'Result' || n === 'Race',
 });
 const XML_TABLES = new Set(['Events', 'Classes', 'Categories', 'Schedule', 'CourseData', 'Participants', 'Results']);
 const xmlParser = new XMLParser({
-  ignoreAttributes: false, attributeNamePrefix: '@', parseAttributeValue: false, parseTagValue: false,
-  trimValues: false, ignoreDeclaration: true, isArray: (n) => XML_TABLES.has(n),
+  ignoreAttributes: false,
+  attributeNamePrefix: '@',
+  parseAttributeValue: false,
+  parseTagValue: false,
+  trimValues: false,
+  ignoreDeclaration: true,
+  isArray: (n) => XML_TABLES.has(n),
 });
 
 export type Node = Record<string, unknown>;
@@ -77,13 +87,27 @@ function offsetMs(zone: string, t: number): number {
   let f = formatters.get(zone);
   if (f === undefined) {
     f = new Intl.DateTimeFormat('en-US', {
-      timeZone: zone, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric',
+      timeZone: zone,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
     });
     formatters.set(zone, f);
   }
   const p: Record<string, number> = {};
   for (const part of f.formatToParts(new Date(t))) if (part.type !== 'literal') p[part.type] = Number(part.value);
-  const wall = Date.UTC(p['year'] ?? 0, (p['month'] ?? 1) - 1, p['day'] ?? 1, p['hour'] ?? 0, p['minute'] ?? 0, p['second'] ?? 0);
+  const wall = Date.UTC(
+    p['year'] ?? 0,
+    (p['month'] ?? 1) - 1,
+    p['day'] ?? 1,
+    p['hour'] ?? 0,
+    p['minute'] ?? 0,
+    p['second'] ?? 0,
+  );
   return wall - Math.floor(t / 1000) * 1000;
 }
 
@@ -122,7 +146,15 @@ export function zonedInstant(date: string | undefined, tod: string, zone: string
   const d = DATE.exec(date);
   const t = TOD.exec(tod.trim());
   if (d === null || t === null) return undefined;
-  const local = Date.UTC(Number(d[1]), Number(d[2]) - 1, Number(d[3]), Number(t[1]), Number(t[2]), Number(t[3]), Number((t[4] ?? '').padEnd(3, '0') || 0));
+  const local = Date.UTC(
+    Number(d[1]),
+    Number(d[2]) - 1,
+    Number(d[3]),
+    Number(t[1]),
+    Number(t[2]),
+    Number(t[3]),
+    Number((t[4] ?? '').padEnd(3, '0') || 0),
+  );
   try {
     const guess = local - offsetMs(zone, local);
     return new Date(local - offsetMs(zone, guess)).toISOString();
@@ -135,7 +167,12 @@ export function zonedInstant(date: string | undefined, tod: string, zone: string
 export function zonedDate(instant: string, zone: string | undefined): string | undefined {
   if (zone === undefined || zone === '') return undefined;
   try {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(instant));
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: zone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date(instant));
   } catch {
     return undefined;
   }
@@ -160,11 +197,32 @@ export interface Fmt {
 const TABLE = new Map<string, Fmt>();
 function def(tokens: string[], stage: Stage, o: Partial<Fmt> = {}): void {
   for (const token of tokens) {
-    TABLE.set(token, { token, known: true, stage, kind: 'race', scoringKind: 'duration', heats: false, pair: null, cross: false, progression: false, ...o });
+    TABLE.set(token, {
+      token,
+      known: true,
+      stage,
+      kind: 'race',
+      scoringKind: 'duration',
+      heats: false,
+      pair: null,
+      cross: false,
+      progression: false,
+      ...o,
+    });
   }
 }
-const pair = (role: 'first' | 'second', combination: 'best' | 'sum', ...siblings: string[]) => ({ role, combination, siblings });
-for (const [a, combination] of [['BR', 'best'], ['HT', 'best'], ['EL', 'best'], ['TR', 'best'], ['SR', 'sum']] as const) {
+const pair = (role: 'first' | 'second', combination: 'best' | 'sum', ...siblings: string[]) => ({
+  role,
+  combination,
+  siblings,
+});
+for (const [a, combination] of [
+  ['BR', 'best'],
+  ['HT', 'best'],
+  ['EL', 'best'],
+  ['TR', 'best'],
+  ['SR', 'sum'],
+] as const) {
   def([`${a}1`], 'run', { pair: pair('first', combination, `${a}2`) });
   def([`${a}2`], 'run', { pair: pair('second', combination, `${a}1`) });
 }
@@ -185,7 +243,17 @@ def(['XER', 'RXER'], 'classification', { kind: 'classification', scoringKind: 'o
 def(['SLER', 'WWER'], 'classification', { kind: 'classification', scoringKind: 'ordinal' });
 
 export const fmtOf = (token: string): Fmt =>
-  TABLE.get(token) ?? { token, known: false, stage: 'run', kind: 'race', scoringKind: 'duration', heats: false, pair: null, cross: false, progression: false };
+  TABLE.get(token) ?? {
+    token,
+    known: false,
+    stage: 'run',
+    kind: 'race',
+    scoringKind: 'duration',
+    heats: false,
+    pair: null,
+    cross: false,
+    progression: false,
+  };
 
 /**
  * `RaceId` is `<class>_<format token>_<day number>[_<attribute>]`. The token is the part before the day number
@@ -201,21 +269,41 @@ export function splitRaceId(raceId: string): { classKey: string; token: string; 
 
 export const UNASSIGNED = '<unassigned>';
 /** §0.4: the pseudo-class `NA` takes its Schedule rows, Phases and result rows with it; the class is the `RaceId`'s first part. */
-export const isNaRace = (raceId: string, classId = ''): boolean => classId === 'NA' || splitRaceId(raceId).classKey === 'NA';
+export const isNaRace = (raceId: string, classId = ''): boolean =>
+  classId === 'NA' || splitRaceId(raceId).classKey === 'NA';
 
 /** §4.10: one classification row. `decidedIn` is the XML `RecordType` verbatim, null where the source carries none (TCP). A row without a `RankOrder` is reported, not guessed. */
-export function classificationRow(u: Unit, where: string, f: { entryId: string; bib: string; rank: string; order: string; decidedIn: string }): ClassificationRow | undefined {
+export function classificationRow(
+  u: Unit,
+  where: string,
+  f: { entryId: string; bib: string; rank: string; order: string; decidedIn: string },
+): ClassificationRow | undefined {
   const order = int(f.order);
   if (order === undefined) {
     u.diagnostic({ kind: 'unparseable-field', where, name: 'RankOrder', text: f.order });
     return undefined;
   }
-  return { entryId: f.entryId, bib: f.bib.trim().replace(/\s+/g, ' '), rank: int(f.rank) ?? null, order, decidedIn: f.decidedIn.trim() === '' ? null : f.decidedIn.trim() };
+  return {
+    entryId: f.entryId,
+    bib: f.bib.trim().replace(/\s+/g, ' '),
+    rank: int(f.rank) ?? null,
+    order,
+    decidedIn: f.decidedIn.trim() === '' ? null : f.decidedIn.trim(),
+  };
 }
 
 // ---------------------------------------------------------------- §4.1 marks
 
-const MARKS: Record<string, ResultMark> = { DNS: 'dns', DNF: 'dnf', CAP: 'cap', RAL: 'ral', DSQ: 'dsq', 'DSQ-R': 'dsq-r', DQB: 'dqb', 'NON-RK': 'non-ranked' };
+const MARKS: Record<string, ResultMark> = {
+  DNS: 'dns',
+  DNF: 'dnf',
+  CAP: 'cap',
+  RAL: 'ral',
+  DSQ: 'dsq',
+  'DSQ-R': 'dsq-r',
+  DQB: 'dqb',
+  'NON-RK': 'non-ranked',
+};
 /** undefined: no mark. '*' is under review, not a status. Anything unknown is `other`. */
 export function markOf(raw: string): ResultMark | '*' | undefined {
   const s = raw.trim();
@@ -248,12 +336,14 @@ export function commaCells(s: string, limit: number, bad: CellProblem[], cross =
 /** (b) `Results.Result@Gates` / `XML.Results.Gates`: 3 characters per cell, 30 cells, whatever the course. `limit` as in (a). */
 export function fixedCells(s: string, limit: number, bad: CellProblem[], cross = false): Cells {
   const out: Cells = [];
-  for (let i = 0; i < 30; i++) out.push(i * 3 < s.length ? cell(s.slice(i * 3, i * 3 + 3), i + 1, limit, bad, cross) : null);
+  for (let i = 0; i < 30; i++)
+    out.push(i * 3 < s.length ? cell(s.slice(i * 3, i * 3 + 3), i + 1, limit, bad, cross) : null);
   return out;
 }
 
 export const gateSlots = (slots: CourseSlot[]): CourseSlot[] => slots.filter((s) => s.kind === 'gate');
-export const usable = (slots: CourseSlot[] | undefined): slots is CourseSlot[] => slots !== undefined && slots.length > 0;
+export const usable = (slots: CourseSlot[] | undefined): slots is CourseSlot[] =>
+  slots !== undefined && slots.length > 0;
 
 export const sumJudged = (cells: Cells, slots: CourseSlot[] | undefined): number => {
   const picked = usable(slots) ? gateSlots(slots).map((s) => cells[s.slot - 1] ?? null) : cells;
@@ -267,7 +357,8 @@ export function gatesFromCells(cells: Cells, slots: CourseSlot[]): Gate[] {
   return gateSlots(slots).map((s) => ({ number: s.gateNumber ?? s.slot, penalty: cells[s.slot - 1] ?? null }));
 }
 
-const caption = (s: CourseSlot): string => s.caption ?? (s.gateNumber !== undefined ? String(s.gateNumber) : s.kind === 'start-ramp' ? 'ST' : 'RZ');
+const caption = (s: CourseSlot): string =>
+  s.caption ?? (s.gateNumber !== undefined ? String(s.gateNumber) : s.kind === 'start-ramp' ? 'ST' : 'RZ');
 /** (d) Kayak Cross: cells are fault marks (0 / 2). undefined when nothing has been judged. */
 export function faultsFromCells(cells: Cells, slots: CourseSlot[]): Faults | undefined {
   if (!slots.some((s) => (cells[s.slot - 1] ?? null) !== null)) return undefined;
@@ -300,9 +391,13 @@ export function parseLayout(layout: string, captions?: string[]): Layout {
       out.slots.push({ slot: out.slots.length + 1, kind: 'gate', gateNumber: gate });
     } else if (ch === 'D' || ch === 'E') {
       out.slots.push({ slot: out.slots.length + 1, kind: ch === 'D' ? 'start-ramp' : 'roll-zone' });
-    } else if (ch === 'S') { if (gate > 0 && out.sectorEndsAfterGate[out.sectorEndsAfterGate.length - 1] !== gate) out.sectorEndsAfterGate.push(gate); } // before the first gate records nothing (§2.3)
-    else if (ch === 'I') { if (gate > 0) out.splitsAfterGate.push(gate); }
-    else out.unknownChars.push(ch);
+    } else if (ch === 'S') {
+      if (gate > 0 && out.sectorEndsAfterGate[out.sectorEndsAfterGate.length - 1] !== gate)
+        out.sectorEndsAfterGate.push(gate);
+    } // before the first gate records nothing (§2.3)
+    else if (ch === 'I') {
+      if (gate > 0) out.splitsAfterGate.push(gate);
+    } else out.unknownChars.push(ch);
   }
   if (captions !== undefined) {
     out.slots = out.slots.map((s, i) => {
@@ -319,9 +414,19 @@ type Key = Record<string, string>;
 /** Collects the elements of one unit; `finish` stamps them. */
 export class Unit {
   private readonly els: Record<string, unknown>[] = [];
-  constructor(readonly source: 'tcp' | 'xml', readonly observedAt: string) {}
+  constructor(
+    readonly source: 'tcp' | 'xml',
+    readonly observedAt: string,
+  ) {}
 
-  obs(kind: string, field: string, key: Key, value: unknown, confidence: 'authoritative' | 'inferred' = 'authoritative', extra: Record<string, unknown> = {}): void {
+  obs(
+    kind: string,
+    field: string,
+    key: Key,
+    value: unknown,
+    confidence: 'authoritative' | 'inferred' = 'authoritative',
+    extra: Record<string, unknown> = {},
+  ): void {
     this.els.push({ field, ...key, source: this.source, kind, value, confidence, ...extra });
   }
   unavailable(kind: string, field: string, key: Key, reason: 'not-applicable' | 'not-configured'): void {
@@ -349,6 +454,9 @@ export class Unit {
   }
 }
 
-export const unparseableUnit = (source: 'tcp' | 'xml', ctx: IngestContext, reason: string, text: string): IngestElement[] => [
-  { ingestSeq: 0, observedAt: ctx.observedAt, source, unparseable: { reason, text } },
-];
+export const unparseableUnit = (
+  source: 'tcp' | 'xml',
+  ctx: IngestContext,
+  reason: string,
+  text: string,
+): IngestElement[] => [{ ingestSeq: 0, observedAt: ctx.observedAt, source, unparseable: { reason, text } }];

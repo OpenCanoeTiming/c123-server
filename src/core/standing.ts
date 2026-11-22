@@ -43,45 +43,75 @@ export interface AssembledStanding {
 }
 
 /** `AttemptStatus` in declaration order (§2.6). */
-const STATUS_ORDER = ['not-started', 'at-start', 'on-course', 'left-without-finish', 'finished', 'non-ranked', 'dns', 'dnf', 'dsq', 'dsq-r', 'dqb', 'cap', 'ral', 'other'];
+const STATUS_ORDER = [
+  'not-started',
+  'at-start',
+  'on-course',
+  'left-without-finish',
+  'finished',
+  'non-ranked',
+  'dns',
+  'dnf',
+  'dsq',
+  'dsq-r',
+  'dqb',
+  'cap',
+  'ral',
+  'other',
+];
 const statusIndex = (status: string | undefined): number => {
   const i = STATUS_ORDER.indexOf(status ?? '');
   return i < 0 ? STATUS_ORDER.length : i;
 };
 
 const INTEGER = /^\d+$/;
-const byBib = (a: string, b: string): number => (INTEGER.test(a) && INTEGER.test(b) ? Number(a) - Number(b) : a < b ? -1 : a > b ? 1 : 0);
+const byBib = (a: string, b: string): number =>
+  INTEGER.test(a) && INTEGER.test(b) ? Number(a) - Number(b) : a < b ? -1 : a > b ? 1 : 0;
 
 const orderOf = (e: EntryInput): number => e.placement?.order ?? 0;
 
 /** Entries sort by relayed `order` (§5 step 2), in a heat Phase's `phase` standing by `(heat, order)`; ties keep upstream's sequence. */
-const byRelayedOrder = (a: EntryInput, b: EntryInput): number => (a.heat ?? 0) - (b.heat ?? 0) || orderOf(a) - orderOf(b);
+const byRelayedOrder = (a: EntryInput, b: EntryInput): number =>
+  (a.heat ?? 0) - (b.heat ?? 0) || orderOf(a) - orderOf(b);
 
 /** Classification rows in the order a Standing shows them: two builds that differ only in where the rows sit are the same Standing. */
-export const inRelayedOrder = <T extends { order: number }>(rows: readonly T[]): T[] => [...rows].sort((a, b) => a.order - b.order);
+export const inRelayedOrder = <T extends { order: number }>(rows: readonly T[]): T[] =>
+  [...rows].sort((a, b) => a.order - b.order);
 
 export function assembleStanding(given: StandingInput, scope: StandingScopeInput): AssembledStanding {
   const pair = scope.kind === 'pair';
   const classification = scope.kind === 'classification';
   const duration = given.durationScored ?? (scope.kind === 'phase' || pair);
   const placed = given.entries.filter((e) => e.placement !== null).sort(byRelayedOrder);
-  const unplaced = given.entries.filter((e) => e.placement === null).sort((a, b) => statusIndex(a.status) - statusIndex(b.status) || byBib(a.bib, b.bib));
+  const unplaced = given.entries
+    .filter((e) => e.placement === null)
+    .sort((a, b) => statusIndex(a.status) - statusIndex(b.status) || byBib(a.bib, b.bib));
 
   const ranked = (e: EntryInput): number | null => {
-    if (pair || given.combined === true) return typeof e.pairTotal === 'number' && e.result !== null ? e.pairTotal : null; // an untimed row: null (step 2)
+    if (pair || given.combined === true)
+      return typeof e.pairTotal === 'number' && e.result !== null ? e.pairTotal : null; // an untimed row: null (step 2)
     return e.result?.kind === 'duration' ? e.result.totalSeconds : null;
   };
-  const shape = (list: EntryInput[], rankOf: (e: EntryInput, i: number) => [number | null, number | null]): StandingEntry[] => {
+  const shape = (
+    list: EntryInput[],
+    rankOf: (e: EntryInput, i: number) => [number | null, number | null],
+  ): StandingEntry[] => {
     const lead = duration && list[0]?.placement ? ranked(list[0]) : null;
     return list.map((e, i) => {
       const [rank, order] = rankOf(e, i);
       const value = ranked(e);
       return {
-        entryId: e.entryId, bib: e.bib, rank, order, result: e.result ?? null,
+        entryId: e.entryId,
+        bib: e.bib,
+        rank,
+        order,
+        result: e.result ?? null,
         ...(pair ? { pairTotalSeconds: e.pairTotal ?? null } : {}),
         // step 6: never negative; an entry whose value is smaller than the first-ordered entry's has none
-        behindSeconds: lead !== null && value !== null && e.placement !== null && value >= lead ? r3(value - lead) : null,
-        provisional: e.provisional ?? false, underReview: e.underReview ?? false,
+        behindSeconds:
+          lead !== null && value !== null && e.placement !== null && value >= lead ? r3(value - lead) : null,
+        provisional: e.provisional ?? false,
+        underReview: e.underReview ?? false,
         ...(classification ? { decidedIn: e.decidedIn ?? null } : {}),
       };
     });
@@ -91,18 +121,30 @@ export function assembleStanding(given: StandingInput, scope: StandingScopeInput
     // step 4: a placed entry's rank and order are its position among the category's placed entries in class order; the unplaced follow
     const inCategory = (e: EntryInput): boolean => e.ageCategoryId === given.ageCategoryId;
     const category = placed.filter(inCategory);
-    const standing = shape([...category, ...unplaced.filter(inCategory)], (e, i) => (e.placement === null ? [null, null] : [i + 1, i + 1]));
+    const standing = shape([...category, ...unplaced.filter(inCategory)], (e, i) =>
+      e.placement === null ? [null, null] : [i + 1, i + 1],
+    );
     const anomalies: Anomaly[] = [];
     category.forEach((e, i) => {
       // the check reads placed entries only: an unplaced row's category rank is a list position
       const upstream = given.upstreamCategoryRanks?.[e.entryId];
-      if (upstream !== undefined && upstream !== i + 1) anomalies.push({ kind: 'category-rank-disagreement', entryId: standing[i]!.entryId, assembled: i + 1, upstream });
+      if (upstream !== undefined && upstream !== i + 1)
+        anomalies.push({
+          kind: 'category-rank-disagreement',
+          entryId: standing[i]!.entryId,
+          assembled: i + 1,
+          upstream,
+        });
     });
     return { standing, anomalies, ageCategoryId: given.ageCategoryId };
   }
 
   const standing = shape([...placed, ...unplaced], (e) => [e.placement?.rank ?? null, e.placement?.order ?? null]);
-  return { standing, anomalies: duration && given.cross !== true ? orderAnomalies(placed, ranked) : [], ageCategoryId: null };
+  return {
+    standing,
+    anomalies: duration && given.cross !== true ? orderAnomalies(placed, ranked) : [],
+    ageCategoryId: null,
+  };
 }
 
 /**
@@ -115,7 +157,8 @@ function orderAnomalies(placed: EntryInput[], ranked: (e: EntryInput) => number 
   let smallest: EntryInput | undefined;
   for (let i = comparable.length - 1; i >= 0; i--) {
     const e = comparable[i]!;
-    if (smallest !== undefined && (ranked(smallest) as number) < (ranked(e) as number)) anomalies.unshift({ kind: 'order-disagreement', entryId: e.entryId, aheadOfEntryId: smallest.entryId });
+    if (smallest !== undefined && (ranked(smallest) as number) < (ranked(e) as number))
+      anomalies.unshift({ kind: 'order-disagreement', entryId: e.entryId, aheadOfEntryId: smallest.entryId });
     if (smallest === undefined || (ranked(e) as number) <= (ranked(smallest) as number)) smallest = e;
   }
   return anomalies;

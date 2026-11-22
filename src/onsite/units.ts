@@ -24,7 +24,10 @@ const instanceOf = (text: unknown): 'main' | 'backup' | 'offline' | null => {
  * `event.changed`, only after `core.applyUnit` returns: a throwing `applyUnit` (its programming-error guards)
  * then leaves the presented Event, and whether `event.changed` was sent, in step with each other.
  */
-function nextEventFacts(cx: OnsiteContext, elements: IngestElement[]): { next: CurrentEvent | undefined; changed: boolean } {
+function nextEventFacts(
+  cx: OnsiteContext,
+  elements: IngestElement[],
+): { next: CurrentEvent | undefined; changed: boolean } {
   if (cx.event === undefined) return { next: undefined, changed: false };
   let next = cx.event;
   let changed = false;
@@ -35,7 +38,17 @@ function nextEventFacts(cx: OnsiteContext, elements: IngestElement[]): { next: C
     if (field === 'details') {
       const cur = next.details;
       if (cur.state === 'known' && JSON.stringify(cur.value) === JSON.stringify(value)) continue;
-      next = { ...next, details: { state: 'known', value, observedAt: el.observedAt, source: 'xml', confidence: 'authoritative', provisional: false } as CurrentEvent['details'] };
+      next = {
+        ...next,
+        details: {
+          state: 'known',
+          value,
+          observedAt: el.observedAt,
+          source: 'xml',
+          confidence: 'authoritative',
+          provisional: false,
+        } as CurrentEvent['details'],
+      };
       changed = true;
     } else if (field === 'name' && next.nameFrom === 'snapshot' && typeof value === 'string' && value !== next.name) {
       next = { ...next, name: value };
@@ -46,12 +59,18 @@ function nextEventFacts(cx: OnsiteContext, elements: IngestElement[]): { next: C
 }
 
 /** One ingest unit: merged whole, then stamped and pushed (§1.6). */
-export async function processUnit(cx: OnsiteContext, elements: IngestElement[], bind?: { key: string; writeId: string }): Promise<void> {
+export async function processUnit(
+  cx: OnsiteContext,
+  elements: IngestElement[],
+  bind?: { key: string; writeId: string },
+): Promise<void> {
   for (const el of elements) {
-    const status = el['sourceStatus'] as { tcp?: { upstreamInstance?: unknown; timingClockOffsetSeconds?: unknown } } | undefined;
+    const status = el['sourceStatus'] as
+      { tcp?: { upstreamInstance?: unknown; timingClockOffsetSeconds?: unknown } } | undefined;
     if (status?.tcp === undefined) continue;
     cx.upstreamInstance = instanceOf(status.tcp.upstreamInstance);
-    if (typeof status.tcp.timingClockOffsetSeconds === 'number') cx.timingClockOffsetSeconds = Math.round(status.tcp.timingClockOffsetSeconds);
+    if (typeof status.tcp.timingClockOffsetSeconds === 'number')
+      cx.timingClockOffsetSeconds = Math.round(status.tcp.timingClockOffsetSeconds);
   }
   const { next: nextEvent, changed: eventChanged } = nextEventFacts(cx, elements);
   const before = cx.liveAttempts;
@@ -69,22 +88,36 @@ export async function processUnit(cx: OnsiteContext, elements: IngestElement[], 
   // and is answered and pushed as usual
   if (cx.wstore !== undefined) {
     const held = cx.wstore;
-    wire = wire.filter((m) => m['type'] !== 'write.updated' || canon(held.get((m['write'] as J)['writeId'] as string)) !== canon(m['write']));
+    wire = wire.filter(
+      (m) =>
+        m['type'] !== 'write.updated' || canon(held.get((m['write'] as J)['writeId'] as string)) !== canon(m['write']),
+    );
     // the stored record alone carries the TCP source's retained target cell at submission (DERIVATIONS §6); the store keeps it
-    const changed = wire.filter((m) => m['type'] === 'write.updated').map((m) => m['write'] as J).map((w) => {
-      const retainedCell = cx.core.retainedCell(w['writeId'] as string);
-      return retainedCell === undefined ? w : { ...w, retainedCell };
-    });
+    const changed = wire
+      .filter((m) => m['type'] === 'write.updated')
+      .map((m) => m['write'] as J)
+      .map((w) => {
+        const retainedCell = cx.core.retainedCell(w['writeId'] as string);
+        return retainedCell === undefined ? w : { ...w, retainedCell };
+      });
     // item 50: a still-pending write whose retained value moved (an earlier write on its cell was answered) is stored, not pushed
     const named = new Set(changed.map((w) => w['writeId'] as string));
     for (const w of held.pending()) {
       const id = w['writeId'] as string;
       const retainedCell = named.has(id) ? undefined : cx.core.retainedCell(id);
-      if (retainedCell !== undefined && canon(retainedCell) !== canon(w['retainedCell'] ?? null)) changed.push({ ...w, retainedCell });
+      if (retainedCell !== undefined && canon(retainedCell) !== canon(w['retainedCell'] ?? null))
+        changed.push({ ...w, retainedCell });
     }
     if (changed.length > 0 || bind !== undefined) {
-      try { await held.put(changed, bind); } catch (e) {
-        cx.adminLog({ kind: 'store-write-failed', store: 'writes', file: `${cx.base}writes-${encodeURIComponent(cx.event?.eventId ?? '')}.json`, reason: e instanceof Error ? e.message : String(e) });
+      try {
+        await held.put(changed, bind);
+      } catch (e) {
+        cx.adminLog({
+          kind: 'store-write-failed',
+          store: 'writes',
+          file: `${cx.base}writes-${encodeURIComponent(cx.event?.eventId ?? '')}.json`,
+          reason: e instanceof Error ? e.message : String(e),
+        });
       }
     }
   }
@@ -129,7 +162,9 @@ async function adoptPending(cx: OnsiteContext): Promise<void> {
   const known = new Set(cx.core.attempts());
   // item 50 (d): an Attempt's stored pending writes resume in one unit, in the order sent, so its first delivery is judged once against all
   const byAttempt = new Map<string, J[]>();
-  const order = waiting.map((w, i) => ({ w, i })).sort((x, y) => String(x.w['submittedAt']).localeCompare(String(y.w['submittedAt'])) || x.i - y.i);
+  const order = waiting
+    .map((w, i) => ({ w, i }))
+    .sort((x, y) => String(x.w['submittedAt']).localeCompare(String(y.w['submittedAt'])) || x.i - y.i);
   for (const { w } of order) {
     const t = w['target'] as { phaseId: string; bib: string; run: number };
     const aid = `${t.phaseId}:${t.bib}`;
@@ -139,14 +174,28 @@ async function adoptPending(cx: OnsiteContext): Promise<void> {
   }
   for (const [aid, ws] of byAttempt) {
     for (const w of ws) cx.adopted.add(w['writeId'] as string);
-    await processUnit(cx, ws.map((w) => {
-      const t = w['target'] as { run: number };
-      const v = w['requestedValue'] as { gate: number; value: number };
-      return {
-        ingestSeq: 0, attemptId: aid, field: 'gates', source: 'operator-write', kind: 'operator', observedAt: w['submittedAt'] as string,
-        value: [{ number: v.gate, penalty: v.value }], confidence: 'authoritative', run: t.run, writeId: w['writeId'] as string, retainedCell: w['retainedCell'] ?? null,
-      };
-    }));
+    await processUnit(
+      cx,
+      ws.map((w) => {
+        const t = w['target'] as { run: number };
+        const v = w['requestedValue'] as { gate: number; value: number };
+        return {
+          ingestSeq: 0,
+          attemptId: aid,
+          field: 'gates',
+          source: 'operator-write',
+          kind: 'operator',
+          observedAt: w['submittedAt'] as string,
+          value: [{ number: v.gate, penalty: v.value }],
+          confidence: 'authoritative',
+          run: t.run,
+          writeId: w['writeId'] as string,
+          retainedCell: w['retainedCell'] ?? null,
+        };
+      }),
+    );
   }
 }
-export const unit = (cx: OnsiteContext, elements: IngestElement[]): void => { background(cx, () => processUnit(cx, elements)); };
+export const unit = (cx: OnsiteContext, elements: IngestElement[]): void => {
+  background(cx, () => processUnit(cx, elements));
+};

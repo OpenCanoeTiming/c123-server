@@ -1,7 +1,10 @@
 /** Inputs of the checks wiring, validated before the store is touched (CONTRACTS §1.4 `validation-failed`, §2.10; #273). */
 import type { GateKey } from '../store/checks.js';
 
-export interface Refusal { field: string; issue: string }
+export interface Refusal {
+  field: string;
+  issue: string;
+}
 export class ValidationError extends Error {
   readonly code = 'validation-failed';
   constructor(readonly details: Refusal[]) {
@@ -18,7 +21,13 @@ function key(i: Record<string, unknown>, out: Refusal[]): void {
   if (!isInt(i['run'])) out.push({ field: 'run', issue: 'must be an integer' });
   if (!isInt(i['gate'])) out.push({ field: 'gate', issue: 'must be an integer' });
 }
-const optional = (i: Record<string, unknown>, name: string, ok: (v: unknown) => boolean, issue: string, out: Refusal[]): void => {
+const optional = (
+  i: Record<string, unknown>,
+  name: string,
+  ok: (v: unknown) => boolean,
+  issue: string,
+  out: Refusal[],
+): void => {
   if (i[name] !== undefined && !ok(i[name])) out.push({ field: name, issue });
 };
 function done(out: Refusal[]): void {
@@ -29,11 +38,18 @@ export function checkInput(i: unknown): GateKey & { valueAtCheck: number | null;
   const out: Refusal[] = [];
   if (!isObj(i)) throw new ValidationError([{ field: 'body', issue: 'must be an object' }]);
   key(i, out);
-  if (!('valueAtCheck' in i) || (i['valueAtCheck'] !== null && typeof i['valueAtCheck'] !== 'number')) out.push({ field: 'valueAtCheck', issue: 'must be a number or null' });
+  if (!('valueAtCheck' in i) || (i['valueAtCheck'] !== null && typeof i['valueAtCheck'] !== 'number'))
+    out.push({ field: 'valueAtCheck', issue: 'must be a number or null' });
   optional(i, 'checkedBy', isStr, 'must be a string', out);
   if ('status' in i) out.push({ field: 'status', issue: 'is derived, never written' });
   done(out);
-  return { attemptId: i['attemptId'] as string, run: i['run'] as number, gate: i['gate'] as number, valueAtCheck: i['valueAtCheck'] as number | null, ...(isStr(i['checkedBy']) ? { checkedBy: i['checkedBy'] } : {}) };
+  return {
+    attemptId: i['attemptId'] as string,
+    run: i['run'] as number,
+    gate: i['gate'] as number,
+    valueAtCheck: i['valueAtCheck'] as number | null,
+    ...(isStr(i['checkedBy']) ? { checkedBy: i['checkedBy'] } : {}),
+  };
 }
 
 export function checkKeyInput(i: unknown): GateKey {
@@ -53,7 +69,10 @@ export function flagInput(i: unknown): GateKey & { comment: string; suggestedVal
   optional(i, 'createdBy', isStr, 'must be a string', out);
   done(out);
   return {
-    attemptId: i['attemptId'] as string, run: i['run'] as number, gate: i['gate'] as number, comment: i['comment'] as string,
+    attemptId: i['attemptId'] as string,
+    run: i['run'] as number,
+    gate: i['gate'] as number,
+    comment: i['comment'] as string,
     ...(typeof i['suggestedValue'] === 'number' ? { suggestedValue: i['suggestedValue'] } : {}),
     ...(isStr(i['createdBy']) ? { createdBy: i['createdBy'] } : {}),
   };
@@ -67,5 +86,8 @@ export function resolutionInput(flagId: unknown, i: unknown): { note?: string; r
   optional(body, 'note', isStr, 'must be a string', out);
   optional(body, 'resolvedBy', isStr, 'must be a string', out);
   done(out);
-  return { ...(isStr(body['note']) ? { note: body['note'] } : {}), ...(isStr(body['resolvedBy']) ? { resolvedBy: body['resolvedBy'] } : {}) };
+  return {
+    ...(isStr(body['note']) ? { note: body['note'] } : {}),
+    ...(isStr(body['resolvedBy']) ? { resolvedBy: body['resolvedBy'] } : {}),
+  };
 }

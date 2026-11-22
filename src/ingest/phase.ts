@@ -7,8 +7,20 @@ const NC = 'not-configured' as const;
 
 // CONTRACTS §3.1: Canoe123's 14-value race status, collapsed once.
 const STATUS: Record<number, PhaseStatus> = {
-  0: 'scheduled', 1: 'scheduled', 8: 'scheduled', 12: 'scheduled', 3: 'running', 2: 'paused', 11: 'paused', 4: 'unofficial', 9: 'unofficial',
-  5: 'official', 6: 'revised', 10: 'protested', 13: 'postponed', 7: 'cancelled',
+  0: 'scheduled',
+  1: 'scheduled',
+  8: 'scheduled',
+  12: 'scheduled',
+  3: 'running',
+  2: 'paused',
+  11: 'paused',
+  4: 'unofficial',
+  9: 'unofficial',
+  5: 'official',
+  6: 'revised',
+  10: 'protested',
+  13: 'postponed',
+  7: 'cancelled',
 };
 export const phaseStatus = (raw: string): PhaseStatus | undefined => {
   if (raw.trim() === '') return undefined;
@@ -38,8 +50,17 @@ export type Candidates = Map<string, Candidate>;
 /** The Phases the caller has learned (class from a snapshot or a Results message, format from a snapshot, date from a snapshot). */
 export function learnedCandidates(ctx: IngestContext): Candidates {
   const out: Candidates = new Map();
-  const ids = new Set([...Object.keys(ctx.phaseClasses ?? {}), ...Object.keys(ctx.phaseFormats ?? {}), ...Object.keys(ctx.phaseDates ?? {})]);
-  for (const id of ids) out.set(id, { classId: ctx.phaseClasses?.[id], token: ctx.phaseFormats?.[id] ?? splitRaceId(id).token, date: ctx.phaseDates?.[id] });
+  const ids = new Set([
+    ...Object.keys(ctx.phaseClasses ?? {}),
+    ...Object.keys(ctx.phaseFormats ?? {}),
+    ...Object.keys(ctx.phaseDates ?? {}),
+  ]);
+  for (const id of ids)
+    out.set(id, {
+      classId: ctx.phaseClasses?.[id],
+      token: ctx.phaseFormats?.[id] ?? splitRaceId(id).token,
+      date: ctx.phaseDates?.[id],
+    });
   return out;
 }
 
@@ -47,7 +68,9 @@ export function learnedCandidates(ctx: IngestContext): Candidates {
 function lookup(id: string, c: Candidate, candidates: Candidates): string | undefined {
   const pair = fmtOf(c.token).pair;
   if (pair === null || c.classId === undefined) return undefined;
-  let found = [...candidates].filter(([other, o]) => other !== id && o.classId === c.classId && pair.siblings.includes(o.token)).map(([other]) => other);
+  let found = [...candidates]
+    .filter(([other, o]) => other !== id && o.classId === c.classId && pair.siblings.includes(o.token))
+    .map(([other]) => other);
   if (found.length > 1) {
     const sameDate = found.filter((other) => c.date !== undefined && candidates.get(other)?.date === c.date);
     if (sameDate.length > 0) found = sameDate;
@@ -67,7 +90,11 @@ function siblingOf(phaseId: string, c: Candidate, candidates: Candidates): strin
 export function pairOf(phaseId: string, c: Candidate, candidates: Candidates): PairRole | null {
   const fmt = fmtOf(c.token);
   if (fmt.pair === null) return null;
-  return { role: fmt.pair.role, siblingPhaseId: siblingOf(phaseId, c, candidates) ?? null, combination: fmt.pair.combination };
+  return {
+    role: fmt.pair.role,
+    siblingPhaseId: siblingOf(phaseId, c, candidates) ?? null,
+    combination: fmt.pair.combination,
+  };
 }
 
 /** §2.1: one Phase's structural and scheduled fields. Fields a source does not carry are not emitted. */
@@ -81,7 +108,16 @@ export function emitPhase(u: Unit, kind: 'fragment' | 'result-row', p: PhaseIn, 
   u.obs(kind, 'kind', key, fmt.kind);
   u.obs(kind, 'scoringKind', key, fmt.scoringKind);
   u.obs(kind, 'heats', key, fmt.heats);
-  u.obs(kind, 'pair', key, pairOf(p.phaseId, candidates.get(p.phaseId) ?? { classId: p.xml?.classId.trim() || undefined, token: p.token, date: undefined }, candidates));
+  u.obs(
+    kind,
+    'pair',
+    key,
+    pairOf(
+      p.phaseId,
+      candidates.get(p.phaseId) ?? { classId: p.xml?.classId.trim() || undefined, token: p.token, date: undefined },
+      candidates,
+    ),
+  );
   if (p.order !== undefined) u.obs(kind, 'programmeOrder', key, p.order);
   const status = phaseStatus(p.statusRaw);
   if (status !== undefined) u.obs(kind, 'status', key, status, 'authoritative', { scope: 'phase' });
@@ -108,11 +144,13 @@ export function emitCourse(u: Unit, courseId: string, layout: string): void {
   const key = { courseId };
   const kind = 'result-row';
   if (layout.trim() === '') {
-    for (const f of ['layout', 'gates', 'slots', 'sectorEndsAfterGate', 'splitsAfterGate']) u.unavailable(kind, f, key, NC);
+    for (const f of ['layout', 'gates', 'slots', 'sectorEndsAfterGate', 'splitsAfterGate'])
+      u.unavailable(kind, f, key, NC);
     return;
   }
   const l = parseLayout(layout);
-  if (l.unknownChars.length > 0) u.diagnostic({ kind: 'unknown-layout-char', courseId, chars: [...new Set(l.unknownChars)].sort() });
+  if (l.unknownChars.length > 0)
+    u.diagnostic({ kind: 'unknown-layout-char', courseId, chars: [...new Set(l.unknownChars)].sort() });
   u.obs(kind, 'layout', key, layout);
   u.obs(kind, 'gates', key, l.gates);
   u.obs(kind, 'slots', key, l.slots);

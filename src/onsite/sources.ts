@@ -12,7 +12,11 @@ const DEFAULT_TCP_PORT = 27333;
 const mapTcpState = (s: string): 'connected' | 'reconnecting' => (s === 'connected' ? 'connected' : 'reconnecting');
 
 export const sourcesNow = (cx: OnsiteContext): J => ({
-  tcp: { state: cx.tcpState, upstreamInstance: cx.upstreamInstance, timingClockOffsetSeconds: cx.timingClockOffsetSeconds },
+  tcp: {
+    state: cx.tcpState,
+    upstreamInstance: cx.upstreamInstance,
+    timingClockOffsetSeconds: cx.timingClockOffsetSeconds,
+  },
   xml: { state: cx.xmlStatus.state, lastRewriteDetectedAt: cx.xmlStatus.lastRewriteDetectedAt },
   live: { state: 'not-configured', pendingResources: 0, lastAcceptedAt: null, lastError: null },
 });
@@ -43,7 +47,10 @@ export function startTcp(cx: OnsiteContext, unit: (elements: IngestElement[]) =>
     else if (status === 'disconnected') {
       unit([{ ingestSeq: 0, event: 'tcp-disconnected', observedAt: at }]);
       if (discoveryInUse) opts.discovery?.reset();
-    } else background(cx, async () => { await emit(cx, sourcesChange(cx)); });
+    } else
+      background(cx, async () => {
+        await emit(cx, sourcesChange(cx));
+      });
   }
 
   const tcpOpt = opts.tcp;
@@ -51,13 +58,22 @@ export function startTcp(cx: OnsiteContext, unit: (elements: IngestElement[]) =>
   const hostOpt = tcpOpt !== undefined && !('source' in tcpOpt) ? tcpOpt.host : undefined;
   // legacy rule (`src/server.ts`): discovery runs only while no TCP host is configured
   const discoveryInUse = opts.discovery !== undefined && opts.discovery !== null && !given && hostOpt === undefined;
-  const makeSource = (host: string, port: number): Source => (tcpOpt !== undefined && !('source' in tcpOpt) && tcpOpt.create !== undefined ? tcpOpt.create(host, port) : new TcpSource({ host, port }));
+  const makeSource = (host: string, port: number): Source =>
+    tcpOpt !== undefined && !('source' in tcpOpt) && tcpOpt.create !== undefined
+      ? tcpOpt.create(host, port)
+      : new TcpSource({ host, port });
   function attach(src: Source): void {
     if (cx.tcp !== undefined && cx.tcp !== src) cx.tcp.stop();
     cx.tcp = src;
-    src.on('message', (text) => { if (cx.tcp === src) onTcpMessage(text); });
-    src.on('status', (status) => { if (cx.tcp === src) onTcpStatus(status); });
-    src.on('error', (e) => { cx.log('tcp source', e); });
+    src.on('message', (text) => {
+      if (cx.tcp === src) onTcpMessage(text);
+    });
+    src.on('status', (status) => {
+      if (cx.tcp === src) onTcpStatus(status);
+    });
+    src.on('error', (e) => {
+      cx.log('tcp source', e);
+    });
     src.start();
   }
   let discoveredHost: string | null = null;
@@ -70,15 +86,23 @@ export function startTcp(cx: OnsiteContext, unit: (elements: IngestElement[]) =>
       discoveredHost = host;
       attach(makeSource(host, tcpPort));
     });
-    opts.discovery.on('error', (e: unknown) => { cx.log('discovery', e); });
-    void Promise.resolve(opts.discovery.start()).catch((e: unknown) => { cx.log('discovery', e); });
+    opts.discovery.on('error', (e: unknown) => {
+      cx.log('discovery', e);
+    });
+    void Promise.resolve(opts.discovery.start()).catch((e: unknown) => {
+      cx.log('discovery', e);
+    });
   }
 }
 
 export function startReader(cx: OnsiteContext, unit: (elements: IngestElement[]) => void): void {
   const { opts, clock, fs } = cx;
   cx.reader = createXmlReader({
-    path: opts.xml?.path, pollIntervalSeconds: opts.xml?.pollSeconds, clock, fs, ctx: cx.tracker.ctx,
+    path: opts.xml?.path,
+    pollIntervalSeconds: opts.xml?.pollSeconds,
+    clock,
+    fs,
+    ctx: cx.tracker.ctx,
     onUnit: (elements) => {
       cx.tracker.learn(elements, true);
       unit(elements);
@@ -86,7 +110,9 @@ export function startReader(cx: OnsiteContext, unit: (elements: IngestElement[])
     onStatus: (status) => {
       if (status.state !== cx.xmlStatus.state) cx.toFile(`xml ${status.state}`);
       cx.xmlStatus = status;
-      background(cx, async () => { await emit(cx, sourcesChange(cx)); });
+      background(cx, async () => {
+        await emit(cx, sourcesChange(cx));
+      });
     },
   });
   cx.reader.start();

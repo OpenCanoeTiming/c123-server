@@ -19,20 +19,33 @@ export interface ChecksFs {
 }
 
 export interface StoredCheck {
-  attemptId: string; run: number; gate: number;
-  checkedAt: string; checkedBy?: string;
+  attemptId: string;
+  run: number;
+  gate: number;
+  checkedAt: string;
+  checkedBy?: string;
   valueAtCheck: number | null;
 }
 export interface GateFlag {
   flagId: string;
-  attemptId: string; run: number; gate: number;
-  createdAt: string; createdBy?: string;
+  attemptId: string;
+  run: number;
+  gate: number;
+  createdAt: string;
+  createdBy?: string;
   comment: string;
   suggestedValue?: number;
   resolution?: { resolvedAt: string; resolvedBy?: string; note?: string };
 }
-export interface ChecksState { checks: StoredCheck[]; flags: GateFlag[] }
-export interface GateKey { attemptId: string; run: number; gate: number }
+export interface ChecksState {
+  checks: StoredCheck[];
+  flags: GateFlag[];
+}
+export interface GateKey {
+  attemptId: string;
+  run: number;
+  gate: number;
+}
 
 export interface ChecksStoreOptions {
   fs: ChecksFs;
@@ -48,7 +61,9 @@ export interface ChecksStore {
   putCheck(input: GateKey & { valueAtCheck: number | null; checkedBy?: string }): Promise<StoredCheck>;
   deleteCheck(key: GateKey): Promise<void>;
   /** `flagId`: an id the caller chose ahead (the on-site key map binds it before the flag is created); otherwise `newId`. */
-  createFlag(input: GateKey & { comment: string; suggestedValue?: number; createdBy?: string; flagId?: string }): Promise<GateFlag>;
+  createFlag(
+    input: GateKey & { comment: string; suggestedValue?: number; createdBy?: string; flagId?: string },
+  ): Promise<GateFlag>;
   resolveFlag(flagId: string, input: { note?: string; resolvedBy?: string }): Promise<GateFlag>;
   /** Copies: nothing a caller holds aliases what the store holds (#273 N3). */
   list(): ChecksState;
@@ -58,15 +73,22 @@ export interface ChecksStore {
 }
 
 const copyCheck = (c: StoredCheck): StoredCheck => ({ ...c });
-const copyFlag = (f: GateFlag): GateFlag => ({ ...f, ...(f.resolution !== undefined ? { resolution: { ...f.resolution } } : {}) });
+const copyFlag = (f: GateFlag): GateFlag => ({
+  ...f,
+  ...(f.resolution !== undefined ? { resolution: { ...f.resolution } } : {}),
+});
 
-const sameKey = (a: GateKey, b: GateKey): boolean => a.attemptId === b.attemptId && a.run === b.run && a.gate === b.gate;
+const sameKey = (a: GateKey, b: GateKey): boolean =>
+  a.attemptId === b.attemptId && a.run === b.run && a.gate === b.gate;
 const isArray = (v: unknown): v is unknown[] => Array.isArray(v);
 
 /** Thrown by `openChecksStore` when the file exists but cannot be read as a version-1 store; the file is left as it is. */
 export class ChecksFileInvalidError extends Error {
   readonly code = 'checks-file-invalid';
-  constructor(readonly path: string, readonly reason: string) {
+  constructor(
+    readonly path: string,
+    readonly reason: string,
+  ) {
     super(`checks file invalid at ${path}: ${reason}`);
   }
 }
@@ -78,30 +100,40 @@ const optStr = (v: unknown): boolean => v === undefined || isStr(v);
 
 function checkReason(c: unknown): string | null {
   if (!isObj(c)) return 'not an object';
-  if (!isStr(c['attemptId']) || !isInt(c['run']) || !isInt(c['gate'])) return 'attemptId, run or gate missing or mistyped';
+  if (!isStr(c['attemptId']) || !isInt(c['run']) || !isInt(c['gate']))
+    return 'attemptId, run or gate missing or mistyped';
   if (!isStr(c['checkedAt']) || !optStr(c['checkedBy'])) return 'checkedAt or checkedBy mistyped';
-  if (!('valueAtCheck' in c) || (c['valueAtCheck'] !== null && typeof c['valueAtCheck'] !== 'number')) return 'valueAtCheck must be a number or null';
+  if (!('valueAtCheck' in c) || (c['valueAtCheck'] !== null && typeof c['valueAtCheck'] !== 'number'))
+    return 'valueAtCheck must be a number or null';
   if ('status' in c) return 'status is derived, never stored';
   return null;
 }
 
 function flagReason(f: unknown): string | null {
   if (!isObj(f)) return 'not an object';
-  if (!isStr(f['flagId']) || !isStr(f['attemptId']) || !isInt(f['run']) || !isInt(f['gate'])) return 'flagId, attemptId, run or gate missing or mistyped';
-  if (!isStr(f['createdAt']) || !optStr(f['createdBy']) || !isStr(f['comment'])) return 'createdAt, createdBy or comment missing or mistyped';
+  if (!isStr(f['flagId']) || !isStr(f['attemptId']) || !isInt(f['run']) || !isInt(f['gate']))
+    return 'flagId, attemptId, run or gate missing or mistyped';
+  if (!isStr(f['createdAt']) || !optStr(f['createdBy']) || !isStr(f['comment']))
+    return 'createdAt, createdBy or comment missing or mistyped';
   if (f['suggestedValue'] !== undefined && typeof f['suggestedValue'] !== 'number') return 'suggestedValue mistyped';
   const r = f['resolution'];
   if ('resolution' in f && r !== undefined) {
-    if (!isObj(r) || !isStr(r['resolvedAt']) || !optStr(r['resolvedBy']) || !optStr(r['note'])) return 'resolution must be an object with resolvedAt';
+    if (!isObj(r) || !isStr(r['resolvedAt']) || !optStr(r['resolvedBy']) || !optStr(r['note']))
+      return 'resolution must be an object with resolvedAt';
   }
   return null;
 }
 
 function parse(text: string, path: string): ChecksState {
   let raw: unknown;
-  try { raw = JSON.parse(text); } catch (e) { throw new ChecksFileInvalidError(path, `not JSON: ${(e as Error).message}`); }
+  try {
+    raw = JSON.parse(text);
+  } catch (e) {
+    throw new ChecksFileInvalidError(path, `not JSON: ${(e as Error).message}`);
+  }
   if (!isObj(raw)) throw new ChecksFileInvalidError(path, 'not an object');
-  if (raw['version'] !== 1) throw new ChecksFileInvalidError(path, `unsupported version ${JSON.stringify(raw['version'])}`);
+  if (raw['version'] !== 1)
+    throw new ChecksFileInvalidError(path, `unsupported version ${JSON.stringify(raw['version'])}`);
   const checks = raw['checks'];
   const flags = raw['flags'];
   if (!isArray(checks) || !isArray(flags)) throw new ChecksFileInvalidError(path, 'checks and flags must be arrays');
@@ -159,40 +191,58 @@ export async function openChecksStore(opts: ChecksStoreOptions): Promise<ChecksS
   const iso = (): string => new Date(clock.now()).toISOString();
 
   return {
-    putCheck: (i) => mutate((cur) => {
-      const check: StoredCheck = {
-        attemptId: i.attemptId, run: i.run, gate: i.gate, checkedAt: iso(),
-        ...(i.checkedBy !== undefined ? { checkedBy: i.checkedBy } : {}),
-        valueAtCheck: i.valueAtCheck,
-      };
-      return { next: { ...cur, checks: [...cur.checks.filter((c) => !sameKey(c, i)), check] }, value: copyCheck(check) };
-    }),
-    deleteCheck: (k) => mutate((cur) => ({ next: { ...cur, checks: cur.checks.filter((c) => !sameKey(c, k)) }, value: undefined })),
-    createFlag: (i) => mutate((cur) => {
-      const flag: GateFlag = {
-        flagId: i.flagId ?? newId(), attemptId: i.attemptId, run: i.run, gate: i.gate, createdAt: iso(),
-        ...(i.createdBy !== undefined ? { createdBy: i.createdBy } : {}),
-        comment: i.comment,
-        ...(i.suggestedValue !== undefined ? { suggestedValue: i.suggestedValue } : {}),
-      };
-      return { next: { ...cur, flags: [...cur.flags, flag] }, value: copyFlag(flag) };
-    }),
-    resolveFlag: (flagId, i) => mutate((cur) => {
-      const found = cur.flags.find((f) => f.flagId === flagId);
-      if (!found) throw Object.assign(new Error(`no flag ${flagId}`), { code: 'flag-not-found' });
-      if (found.resolution) return { next: cur, value: copyFlag(found) };
-      const resolved: GateFlag = {
-        ...found,
-        resolution: {
-          resolvedAt: iso(),
-          ...(i.resolvedBy !== undefined ? { resolvedBy: i.resolvedBy } : {}),
-          ...(i.note !== undefined ? { note: i.note } : {}),
-        },
-      };
-      return { next: { ...cur, flags: cur.flags.map((f) => (f.flagId === flagId ? resolved : f)) }, value: copyFlag(resolved) };
-    }),
+    putCheck: (i) =>
+      mutate((cur) => {
+        const check: StoredCheck = {
+          attemptId: i.attemptId,
+          run: i.run,
+          gate: i.gate,
+          checkedAt: iso(),
+          ...(i.checkedBy !== undefined ? { checkedBy: i.checkedBy } : {}),
+          valueAtCheck: i.valueAtCheck,
+        };
+        return {
+          next: { ...cur, checks: [...cur.checks.filter((c) => !sameKey(c, i)), check] },
+          value: copyCheck(check),
+        };
+      }),
+    deleteCheck: (k) =>
+      mutate((cur) => ({ next: { ...cur, checks: cur.checks.filter((c) => !sameKey(c, k)) }, value: undefined })),
+    createFlag: (i) =>
+      mutate((cur) => {
+        const flag: GateFlag = {
+          flagId: i.flagId ?? newId(),
+          attemptId: i.attemptId,
+          run: i.run,
+          gate: i.gate,
+          createdAt: iso(),
+          ...(i.createdBy !== undefined ? { createdBy: i.createdBy } : {}),
+          comment: i.comment,
+          ...(i.suggestedValue !== undefined ? { suggestedValue: i.suggestedValue } : {}),
+        };
+        return { next: { ...cur, flags: [...cur.flags, flag] }, value: copyFlag(flag) };
+      }),
+    resolveFlag: (flagId, i) =>
+      mutate((cur) => {
+        const found = cur.flags.find((f) => f.flagId === flagId);
+        if (!found) throw Object.assign(new Error(`no flag ${flagId}`), { code: 'flag-not-found' });
+        if (found.resolution) return { next: cur, value: copyFlag(found) };
+        const resolved: GateFlag = {
+          ...found,
+          resolution: {
+            resolvedAt: iso(),
+            ...(i.resolvedBy !== undefined ? { resolvedBy: i.resolvedBy } : {}),
+            ...(i.note !== undefined ? { note: i.note } : {}),
+          },
+        };
+        return {
+          next: { ...cur, flags: cur.flags.map((f) => (f.flagId === flagId ? resolved : f)) },
+          value: copyFlag(resolved),
+        };
+      }),
     list: () => ({ checks: state.checks.map(copyCheck), flags: state.flags.map(copyFlag) }),
     checksWithStatus: (presented) => state.checks.map((c) => ({ ...copyCheck(c), status: checkStatus(c, presented) })),
-    status: (presented) => gateStatus({ checks: state.checks.map((c) => ({ ...c })), flags: [...state.flags], presented }).gateStatus,
+    status: (presented) =>
+      gateStatus({ checks: state.checks.map((c) => ({ ...c })), flags: [...state.flags], presented }).gateStatus,
   };
 }

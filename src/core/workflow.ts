@@ -36,7 +36,8 @@ export function gateStatus(given: WorkflowGiven): WorkflowResult {
   const result: Record<string, string> = {};
   for (const [attemptId, p] of Object.entries(given.presented)) {
     const penalties = presentedPenalties(p.gates);
-    const onThis = (r: Record<string, unknown>): boolean => r['attemptId'] === attemptId && r['run'] === p.run && typeof r['gate'] === 'number';
+    const onThis = (r: Record<string, unknown>): boolean =>
+      r['attemptId'] === attemptId && r['run'] === p.run && typeof r['gate'] === 'number';
     const mine = checks.filter(onThis);
     const myFlags = flags.filter(onThis);
     const gates = new Set<number>(penalties.keys());
@@ -58,7 +59,10 @@ export function gateStatus(given: WorkflowGiven): WorkflowResult {
  * penalty of that gate for that Attempt and generation, `stale` otherwise. A generation that is not the presented one has nothing
  * presented to equal, so it is `stale`; `null` and `0` stay distinct.
  */
-export function checkStatus(check: { attemptId: string; run: number; gate: number; valueAtCheck: number | null }, presented: WorkflowGiven['presented']): 'verified' | 'stale' {
+export function checkStatus(
+  check: { attemptId: string; run: number; gate: number; valueAtCheck: number | null },
+  presented: WorkflowGiven['presented'],
+): 'verified' | 'stale' {
   const p = presented[check.attemptId];
   if (p === undefined || p.run !== check.run) return 'stale';
   return check.valueAtCheck === (presentedPenalties(p.gates).get(check.gate) ?? null) ? 'verified' : 'stale';

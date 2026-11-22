@@ -10,9 +10,16 @@ export function createRealClock(): Clock {
   return {
     now: () => Date.now(),
     setTimeout: (fn, ms) => setTimeout(fn, ms),
-    clearTimeout: (h) => { clearTimeout(h); },
-    requestFrame: (fn) => setTimeout(() => { fn(Date.now()); }, 16),
-    cancelFrame: (h) => { clearTimeout(h); },
+    clearTimeout: (h) => {
+      clearTimeout(h);
+    },
+    requestFrame: (fn) =>
+      setTimeout(() => {
+        fn(Date.now());
+      }, 16),
+    cancelFrame: (h) => {
+      clearTimeout(h);
+    },
   };
 }
 
@@ -25,17 +32,29 @@ export function createScaledClock(rate: number, originMs: number, held = false):
   const now = (): number => (started === undefined ? originMs : originMs + (Date.now() - started) * rate);
   return {
     now,
-    start: () => { started ??= Date.now(); },
+    start: () => {
+      started ??= Date.now();
+    },
     setTimeout: (fn, ms) => setTimeout(fn, ms / rate),
-    clearTimeout: (h) => { clearTimeout(h); },
-    requestFrame: (fn) => setTimeout(() => { fn(now()); }, 16),
-    cancelFrame: (h) => { clearTimeout(h); },
+    clearTimeout: (h) => {
+      clearTimeout(h);
+    },
+    requestFrame: (fn) =>
+      setTimeout(() => {
+        fn(now());
+      }, 16),
+    cancelFrame: (h) => {
+      clearTimeout(h);
+    },
   };
 }
 
 export function createRealXmlFs(): XmlFs {
   return {
-    stat: async (path) => { const s = await stat(path); return { mtimeMs: s.mtimeMs, size: s.size }; },
+    stat: async (path) => {
+      const s = await stat(path);
+      return { mtimeMs: s.mtimeMs, size: s.size };
+    },
     read: (path) => readFile(path, 'utf8'),
   };
 }
@@ -49,15 +68,25 @@ const RETRYABLE = new Set(['EPERM', 'EACCES', 'EBUSY']);
  */
 export function createRealChecksFs(): ChecksFs {
   return {
-    mkdir: async (dir) => { await mkdir(dir, { recursive: true }); },
+    mkdir: async (dir) => {
+      await mkdir(dir, { recursive: true });
+    },
     readFile: (path) => readFile(path, 'utf8'),
     writeFile: async (path, data) => {
       const h = await open(path, 'w');
-      try { await h.writeFile(data, 'utf8'); await h.sync(); } finally { await h.close(); }
+      try {
+        await h.writeFile(data, 'utf8');
+        await h.sync();
+      } finally {
+        await h.close();
+      }
     },
     rename: async (from, to) => {
       for (let attempt = 0; ; attempt++) {
-        try { await rename(from, to); break; } catch (e) {
+        try {
+          await rename(from, to);
+          break;
+        } catch (e) {
           const code = (e as { code?: string }).code ?? '';
           if (process.platform !== 'win32' || !RETRYABLE.has(code) || attempt >= 5) throw e;
           await new Promise<void>((r) => setTimeout(r, 20 * (attempt + 1)));
@@ -66,7 +95,11 @@ export function createRealChecksFs(): ChecksFs {
       if (process.platform !== 'win32') {
         // make the rename itself durable; directories cannot be opened for sync on win32
         const d = await open(to.replace(/[/\\][^/\\]*$/, '') || '.', 'r');
-        try { await d.sync(); } finally { await d.close(); }
+        try {
+          await d.sync();
+        } finally {
+          await d.close();
+        }
       }
     },
     readdir: (dir) => readdir(dir),

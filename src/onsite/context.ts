@@ -83,7 +83,9 @@ export interface OnsiteContext extends OnsiteBase {
 export function createBase(opts: OnsiteOptions): OnsiteBase {
   const { clock, fs, dataDir } = opts;
   const iso = (): string => new Date(clock.now()).toISOString();
-  const toFile = (text: string): void => { opts.logFile?.write(text); };
+  const toFile = (text: string): void => {
+    opts.logFile?.write(text);
+  };
   const log = (what: string, e: unknown): void => {
     const text = `${what}: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`;
     console.error(`onsite: ${text}`);
@@ -92,14 +94,22 @@ export function createBase(opts: OnsiteOptions): OnsiteBase {
 
   const base = dataDir.endsWith('/') || dataDir.endsWith('\\') ? dataDir : `${dataDir}/`;
   const adminLine = (en: AdminLogEntry | IngestDiagnostic): string => {
-    if (en.kind === 'store-set-aside') return `${en.kind} store=${en.store}${en.eventId !== undefined ? ` event=${en.eventId}` : ''} file=${en.file} setAsideAs=${en.setAsideAs} reason=${en.reason}`;
+    if (en.kind === 'store-set-aside')
+      return `${en.kind} store=${en.store}${en.eventId !== undefined ? ` event=${en.eventId}` : ''} file=${en.file} setAsideAs=${en.setAsideAs} reason=${en.reason}`;
     if (en.kind === 'store-write-failed') return `${en.kind} store=${en.store} file=${en.file} reason=${en.reason}`;
     if (en.kind === 'xml-table-emptied') return `${en.kind} phase=${en.phaseId} count=${en.count}`;
     // #367: every other ingest-only kind (`unparseable-field`, `gates-absent`, ...), whatever fields it carries
     return `${en.kind} ${JSON.stringify(en)}`;
   };
-  const sink = opts.adminLog ?? ((en: AdminLogEntry | IngestDiagnostic): void => { console.error(`onsite: ${adminLine(en)}`); });
-  const adminLog = (en: AdminLogEntry | IngestDiagnostic): void => { toFile(adminLine(en)); sink(en); };
+  const sink =
+    opts.adminLog ??
+    ((en: AdminLogEntry | IngestDiagnostic): void => {
+      console.error(`onsite: ${adminLine(en)}`);
+    });
+  const adminLog = (en: AdminLogEntry | IngestDiagnostic): void => {
+    toFile(adminLine(en));
+    sink(en);
+  };
   async function setAsideName(file: string): Promise<string> {
     const names = new Set(await fs.readdir(dataDir));
     const stem = file.slice(base.length);
@@ -108,11 +118,34 @@ export function createBase(opts: OnsiteOptions): OnsiteBase {
     while (names.has(nameAt(n))) n++;
     return `${base}${nameAt(n)}`;
   }
-  const report = (store: AdminLogEntry['store'], file: string, setAsideAs: string, reason: string, eventId?: string): void => {
-    adminLog({ kind: 'store-set-aside', store, ...(eventId !== undefined ? { eventId } : {}), file, setAsideAs, reason });
+  const report = (
+    store: AdminLogEntry['store'],
+    file: string,
+    setAsideAs: string,
+    reason: string,
+    eventId?: string,
+  ): void => {
+    adminLog({
+      kind: 'store-set-aside',
+      store,
+      ...(eventId !== undefined ? { eventId } : {}),
+      file,
+      setAsideAs,
+      reason,
+    });
   };
   return {
-    opts, clock, fs, dataDir, base, iso, toFile, log, adminLog, setAsideName, report,
+    opts,
+    clock,
+    fs,
+    dataDir,
+    base,
+    iso,
+    toFile,
+    log,
+    adminLog,
+    setAsideName,
+    report,
     stores: new Map<string, ChecksStore>(),
     writeStores: new Map<string, WritesStore>(),
   };
@@ -121,10 +154,16 @@ export function createBase(opts: OnsiteOptions): OnsiteBase {
 // ------------------------------------------------------------------------------------------------ the queue and the push
 export function enqueue<T>(cx: OnsiteContext, task: () => Promise<T> | T): Promise<T | undefined> {
   const run = cx.tail.then(() => (cx.dead ? undefined : task()));
-  cx.tail = run.catch((e: unknown) => { cx.log('task failed', e); });
+  cx.tail = run.catch((e: unknown) => {
+    cx.log('task failed', e);
+  });
   return run;
 }
-export const background = (cx: OnsiteContext, task: () => Promise<unknown> | unknown): void => { void enqueue(cx, task).catch((e: unknown) => { cx.log('task failed', e); }); };
+export const background = (cx: OnsiteContext, task: () => Promise<unknown> | unknown): void => {
+  void enqueue(cx, task).catch((e: unknown) => {
+    cx.log('task failed', e);
+  });
+};
 
 /** Stamps the batch from the one counter, after the persisted mark covers it, and sends it to `only` or to every client. */
 export async function emit(cx: OnsiteContext, payloads: J[], only?: WebSocket): Promise<J[]> {

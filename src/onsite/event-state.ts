@@ -12,14 +12,17 @@ import type { OnsiteOptions } from './index.js';
 import type { OnsiteBase, OnsiteContext } from './context.js';
 
 type Presented = Record<string, { run: number; gates: unknown[] | null }>;
-export const keyOf = (c: { attemptId: string; run: number; gate: number }): string => `${c.attemptId}|${c.run}|${c.gate}`;
+export const keyOf = (c: { attemptId: string; run: number; gate: number }): string =>
+  `${c.attemptId}|${c.run}|${c.gate}`;
 
 const eventFileOf = (b: OnsiteBase): string => `${b.base}event.json`;
 /** #330: the persisted current event, or undefined when there is none; an unreadable file is set aside and reported like the stores' files. */
 async function readEventFile(b: OnsiteBase): Promise<{ eventId: string; name?: string } | undefined> {
   const eventFile = eventFileOf(b);
   let text: string;
-  try { text = await b.fs.readFile(eventFile); } catch (e) {
+  try {
+    text = await b.fs.readFile(eventFile);
+  } catch (e) {
     if ((e as { code?: string }).code === 'ENOENT') return undefined;
     throw e;
   }
@@ -40,7 +43,10 @@ async function readEventFile(b: OnsiteBase): Promise<{ eventId: string; name?: s
 export async function writeEventFile(b: OnsiteBase, eventId: string, name: string | undefined): Promise<void> {
   const eventFile = eventFileOf(b);
   await b.fs.mkdir(b.dataDir);
-  await b.fs.writeFile(`${eventFile}.tmp`, JSON.stringify({ version: 1, eventId, ...(name !== undefined ? { name } : {}) }));
+  await b.fs.writeFile(
+    `${eventFile}.tmp`,
+    JSON.stringify({ version: 1, eventId, ...(name !== undefined ? { name } : {}) }),
+  );
   await b.fs.rename(`${eventFile}.tmp`, eventFile);
 }
 
@@ -57,13 +63,24 @@ export async function bootEvent(b: OnsiteBase): Promise<CurrentEvent | undefined
     if (enteredName === undefined && kept?.eventId === bootId) enteredName = kept.name;
     await writeEventFile(b, bootId, enteredName);
   }
-  return bootId === undefined ? undefined : {
-    eventId: bootId, name: enteredName ?? bootId, details: { state: 'not-yet' }, nameFrom: enteredName !== undefined ? 'operator' : 'snapshot',
-  };
+  return bootId === undefined
+    ? undefined
+    : {
+        eventId: bootId,
+        name: enteredName ?? bootId,
+        details: { state: 'not-yet' },
+        nameFrom: enteredName !== undefined ? 'operator' : 'snapshot',
+      };
 }
 
-export const newCore = (opts: OnsiteOptions): MergeCore => createMergeCore({ ...(opts.zone !== undefined ? { zone: opts.zone } : { zone: 'Europe/Prague' }), xmlConfigured: opts.xml !== undefined });
-export function newTracker(opts: OnsiteOptions): ContextTracker { return createContextTracker(opts.zone ?? 'Europe/Prague', opts.eventDate, opts.externalIdScheme ?? 'on-site'); }
+export const newCore = (opts: OnsiteOptions): MergeCore =>
+  createMergeCore({
+    ...(opts.zone !== undefined ? { zone: opts.zone } : { zone: 'Europe/Prague' }),
+    xmlConfigured: opts.xml !== undefined,
+  });
+export function newTracker(opts: OnsiteOptions): ContextTracker {
+  return createContextTracker(opts.zone ?? 'Europe/Prague', opts.eventDate, opts.externalIdScheme ?? 'on-site');
+}
 
 /** Renames an invalid checks or writes file aside and reports it; the store then opens empty. */
 async function setAside(b: OnsiteBase, store: 'checks' | 'writes', eventId: string, reason: string): Promise<void> {
@@ -77,9 +94,12 @@ export async function storeFor(b: OnsiteBase, eventId: string): Promise<ChecksSt
   const have = b.stores.get(eventId);
   if (have !== undefined) return have;
   const { fs, dataDir, clock, opts } = b;
-  const open = (): Promise<ChecksStore> => openChecksStore({ fs, dir: dataDir, eventId, clock, ...(opts.newId !== undefined ? { newId: opts.newId } : {}) });
+  const open = (): Promise<ChecksStore> =>
+    openChecksStore({ fs, dir: dataDir, eventId, clock, ...(opts.newId !== undefined ? { newId: opts.newId } : {}) });
   let store: ChecksStore;
-  try { store = await open(); } catch (e) {
+  try {
+    store = await open();
+  } catch (e) {
     if (!(e instanceof ChecksFileInvalidError)) throw e;
     await setAside(b, 'checks', eventId, e.reason);
     store = await open();
@@ -93,7 +113,9 @@ export async function writesFor(b: OnsiteBase, eventId: string): Promise<WritesS
   const { fs, dataDir, clock } = b;
   const open = (): Promise<WritesStore> => openWritesStore({ fs, dir: dataDir, eventId, clock });
   let ws: WritesStore;
-  try { ws = await open(); } catch (e) {
+  try {
+    ws = await open();
+  } catch (e) {
     if (!(e instanceof WritesFileInvalidError)) throw e;
     await setAside(b, 'writes', eventId, e.reason);
     ws = await open();
@@ -104,7 +126,8 @@ export async function writesFor(b: OnsiteBase, eventId: string): Promise<WritesS
 /** §7.2: the statuses hydration already serves are the ones pushed; seeded at startup and at `startNewEvent`. */
 export function seedCheckStatuses(cx: OnsiteContext, s: ChecksStore): void {
   cx.checkStatuses.clear();
-  for (const c of withStatus(cx, s)) cx.checkStatuses.set(keyOf(c as { attemptId: string; run: number; gate: number }), c['status'] as string);
+  for (const c of withStatus(cx, s))
+    cx.checkStatuses.set(keyOf(c as { attemptId: string; run: number; gate: number }), c['status'] as string);
 }
 
 // ------------------------------------------------------------------------------------------------ checks: derived status
@@ -115,11 +138,20 @@ function presentedFor(cx: OnsiteContext, attemptIds: Iterable<string>): Presente
     const run = v['run'] as { state?: string; value?: unknown };
     if (run.state !== 'known' || typeof run.value !== 'number') continue;
     const gates = v['gates'] as { state?: string; value?: unknown };
-    out[id] = { run: run.value, gates: gates.state === 'known' && Array.isArray(gates.value) ? (gates.value as unknown[]) : null };
+    out[id] = {
+      run: run.value,
+      gates: gates.state === 'known' && Array.isArray(gates.value) ? (gates.value as unknown[]) : null,
+    };
   }
   return out;
 }
-export const withStatus = (cx: OnsiteContext, s: ChecksStore): J[] => s.checksWithStatus(presentedFor(cx, s.list().checks.map((c) => c.attemptId))) as unknown as J[];
+export const withStatus = (cx: OnsiteContext, s: ChecksStore): J[] =>
+  s.checksWithStatus(
+    presentedFor(
+      cx,
+      s.list().checks.map((c) => c.attemptId),
+    ),
+  ) as unknown as J[];
 /** §2.10: the checks and flags the store holds stay there; only those of an Attempt that exists are served or pushed. */
 export const ofExisting = <T extends { attemptId: string }>(cx: OnsiteContext, items: T[]): T[] => {
   const live = new Set(cx.core.attempts());
@@ -143,7 +175,8 @@ export function checkAndFlagPushes(cx: OnsiteContext, createdIds: ReadonlySet<st
     out.push({ type: 'check.updated', attemptId: c['attemptId'], run: c['run'], gate: c['gate'], check: c });
   }
   if (createdIds.size > 0) {
-    for (const f of ofExisting(cx, store.list().flags)) if (createdIds.has(f.attemptId)) out.push({ type: 'flag.updated', flag: f as unknown as J });
+    for (const f of ofExisting(cx, store.list().flags))
+      if (createdIds.has(f.attemptId)) out.push({ type: 'flag.updated', flag: f as unknown as J });
   }
   return out;
 }
