@@ -404,11 +404,15 @@ describe('dev-env', () => {
       }, T)
     }
 
-    // Flakes on timing under CI load (#267, #325): retried up to 2 times under CI only.
-    it('down: reaches an up killed with SIGKILL', { retry: process.env.CI ? 2 : 0, timeout: T }, async () => {
+    it('down: reaches an up killed with SIGKILL', { timeout: T }, async () => {
       const docs = makeDocs(), state = makeState()
       const { child, exit } = startUp(docs, state, { STUB_PLAYER_MODE: 'silent' })
-      expect(await waitFor(() => typeof tryReadState(state)?.player?.pid === 'number')).toBe(true)
+      // Both pids must be in state.json before the kill: `up` records the player, spawns the server
+      // and only then records it, so a kill in between leaves a server `--down` cannot know about (#325).
+      expect(await waitFor(() => {
+        const st = tryReadState(state)
+        return typeof st?.player?.pid === 'number' && typeof st?.server?.pid === 'number'
+      })).toBe(true)
       child.kill('SIGKILL')
       await exit
       expect(processesFor(state)).toBe(true) // orphans exist, so --down has something to reach
