@@ -1,5 +1,5 @@
 # Files that tests read byte-exact or parse line by line must keep LF in a Windows checkout (issue #324).
-# schemas.test.ts compares their sha256 with docs/arch/schemas.sha256; contract-drift.test.ts matches
+# schemas.test.ts compares their sha256 with packages/c123-contract/schemas.sha256; contract-drift.test.ts matches
 # CONTRACTS.md fences with /^```ts$/.
 docs/arch/schemas/*.json text eol=lf
 packages/c123-contract/schemas.sha256 text eol=lf
