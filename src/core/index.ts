@@ -5,11 +5,28 @@
  *
  * This file only dispatches. Retention, precedence, generations, retraction and presentation live in their own modules.
  */
-import { applyListing, applyLeaveRule, leave, list, observeStreamOutcome, observeStreamStatus, oncourseView } from './oncourse.js';
+import {
+  applyListing,
+  applyLeaveRule,
+  leave,
+  list,
+  observeStreamOutcome,
+  observeStreamStatus,
+  oncourseView,
+} from './oncourse.js';
 import { isMark } from './precedence.js';
 import { currentDiagnostics, flush } from './notify.js';
 import { phaseResource, attemptFor, deriveFirstRunSiblings, fmtFor, resource } from './registry.js';
-import { FIRST_RUN_FIELDS, PAIR_FIELDS, SECOND_RUN_EMPTY_FIELDS, absentRow, applySchedule, emptied, hasResult, retract } from './retraction.js';
+import {
+  FIRST_RUN_FIELDS,
+  PAIR_FIELDS,
+  SECOND_RUN_EMPTY_FIELDS,
+  absentRow,
+  applySchedule,
+  emptied,
+  hasResult,
+  retract,
+} from './retraction.js';
 import { retain, fieldSlots, slotOf, tick } from './retention.js';
 import { applyRow, floorStatus, putCells, putIdentity, putStanding, rebindCells } from './rows.js';
 import { applyClassification, dirtyHandle, observeResource, refreshCourses, viewResource } from './resources.js';
@@ -17,7 +34,20 @@ import { settleWrites, submitWrite, wireWrite } from './writes.js';
 import { viewAttempt, viewUnknownAttempt } from './presentation.js';
 import { markOf, startGeneration } from './generations.js';
 import type { Standing } from '@opencanoetiming/c123-contract';
-import type { AttemptState, ClassificationRow, ClassificationState, CoreState, Diagnostic, Element, IngestDiagnostic, MergeCoreOptions, Message, Row, SnapshotRow, Source } from './types.js';
+import type {
+  AttemptState,
+  ClassificationRow,
+  ClassificationState,
+  CoreState,
+  Diagnostic,
+  Element,
+  IngestDiagnostic,
+  MergeCoreOptions,
+  Message,
+  Row,
+  SnapshotRow,
+  Source,
+} from './types.js';
 
 export type { IngestDiagnostic, MergeCoreOptions } from './types.js';
 
@@ -58,22 +88,26 @@ const sourceOf = (el: Element): Source | undefined => {
   return v === 'tcp' || v === 'xml' ? v : undefined;
 };
 const isXmlFact = (el: Element): boolean =>
-  ('field' in el && el['source'] === 'xml') || ('snapshot' in el && (el['snapshot'] as { source?: unknown }).source === 'xml');
+  ('field' in el && el['source'] === 'xml') ||
+  ('snapshot' in el && (el['snapshot'] as { source?: unknown }).source === 'xml');
 
 /** Round 18: content age comes from the event alone. Its absence is a programming error, found before anything is applied. */
 function validate(s: CoreState, elements: readonly Element[]): void {
   let seen = s.rewrite !== undefined;
   for (const el of elements) {
     if (el['event'] === 'xml-rewrite-detected') {
-      if (!('changedAfter' in el)) throw new Error('xml-rewrite-detected without changedAfter: the reader always stamps it (DERIVATIONS §0.3)');
+      if (!('changedAfter' in el))
+        throw new Error('xml-rewrite-detected without changedAfter: the reader always stamps it (DERIVATIONS §0.3)');
       seen = true;
-    } else if (isXmlFact(el) && !seen) throw new Error('an xml element with no xml-rewrite-detected before it (CONFORMANCE-VECTORS §1, content age)');
+    } else if (isXmlFact(el) && !seen)
+      throw new Error('an xml element with no xml-rewrite-detected before it (CONFORMANCE-VECTORS §1, content age)');
   }
 }
 
 /** The parsers always name an Attempt; only a vector leaves it to `context.attemptId`. Anything else is a programming error. */
 function keylessAttempt(s: CoreState): string {
-  if (s.options.attemptId === undefined) throw new Error('an element that names no Attempt, with no attemptId option (CONFORMANCE-VECTORS §1)');
+  if (s.options.attemptId === undefined)
+    throw new Error('an element that names no Attempt, with no attemptId option (CONFORMANCE-VECTORS §1)');
   return s.options.attemptId;
 }
 
@@ -108,7 +142,17 @@ function applyEvent(s: CoreState, el: Element): void {
 }
 
 /** §4 step 1's list, `status` marks apart; `courseOrder`, `timeToBeat` and `status`'s lifecycle values are not on it. */
-const REBASELINED = ['outcome', 'gates', 'splits', 'faults', 'placement', 'pairTotal', 'countingRun', 'underReview', 'qualified'] as const;
+const REBASELINED = [
+  'outcome',
+  'gates',
+  'splits',
+  'faults',
+  'placement',
+  'pairTotal',
+  'countingRun',
+  'underReview',
+  'qualified',
+] as const;
 
 /** Step 1 of the re-baseline (§4): upstream's result observations go; identities, `run` and the writes stay. */
 function rebaseline(s: CoreState, el: Element): void {
@@ -123,7 +167,8 @@ function rebaseline(s: CoreState, el: Element): void {
       delete fs.inference;
     }
     const st = a.slots.get('status');
-    for (const side of ['tcp', 'xml'] as const) if (st !== undefined && (isMark(st[side]?.value) || st[side]?.marker === true)) delete st[side]; // lifecycle values stay
+    for (const side of ['tcp', 'xml'] as const)
+      if (st !== undefined && (isMark(st[side]?.value) || st[side]?.marker === true)) delete st[side]; // lifecycle values stay
     a.cells = {};
     a.held = [];
     a.pending = [];
@@ -136,7 +181,9 @@ function rebaseline(s: CoreState, el: Element): void {
     floorStatus(s, a, 'xml', el, tick(s));
   }
   if (scope.kind === 'event') s.parserDiagnostics.clear();
-  else for (const [k, d] of s.parserDiagnostics) if ('attemptId' in d && d.attemptId.startsWith(`${scope.phaseId}:`)) s.parserDiagnostics.delete(k);
+  else
+    for (const [k, d] of s.parserDiagnostics)
+      if ('attemptId' in d && d.attemptId.startsWith(`${scope.phaseId}:`)) s.parserDiagnostics.delete(k);
   s.diagnosticsDirty = true;
   s.pendingRebaseline = scope;
 }
@@ -147,8 +194,13 @@ const delivered = (a: AttemptState, el: Element): void => {
 };
 
 const isBlank = (row: Row): boolean =>
-  !('outcome' in row) && markOf(row) === undefined && row['status'] !== 'finished' && (row['placement'] === null || row['placement'] === undefined) &&
-  !('underReview' in row) && !('finishTime' in row) && row['untimed'] !== true;
+  !('outcome' in row) &&
+  markOf(row) === undefined &&
+  row['status'] !== 'finished' &&
+  (row['placement'] === null || row['placement'] === undefined) &&
+  !('underReview' in row) &&
+  !('finishTime' in row) &&
+  row['untimed'] !== true;
 
 /** CONTRACTS §5 step 4's check: the latest XML snapshot's row of the Attempt (placement, category rank), absent where the snapshot names none. */
 function snapshotRow(s: CoreState, a: AttemptState, row: Row | undefined): void {
@@ -165,7 +217,12 @@ function snapshotRow(s: CoreState, a: AttemptState, row: Row | undefined): void 
 }
 
 function applySnapshot(s: CoreState, el: Element, inUnit: ReadonlySet<string>): void {
-  const { source, phaseId, mode, rows } = el['snapshot'] as { source: Source; phaseId: string; mode: 'results' | 'start-list'; rows: Row[] };
+  const { source, phaseId, mode, rows } = el['snapshot'] as {
+    source: Source;
+    phaseId: string;
+    mode: 'results' | 'start-list';
+    rows: Row[];
+  };
   const fmt = fmtFor(s, phaseId);
   const phase = phaseResource(s, phaseId, el.observedAt);
   if (source === 'tcp') phase.tcpAt = Math.max(phase.tcpAt ?? -Infinity, Date.parse(el.observedAt));
@@ -210,7 +267,9 @@ function applySnapshot(s: CoreState, el: Element, inUnit: ReadonlySet<string>): 
 }
 
 const rowOfField = (el: Element, field: string): Row => {
-  const row: Row = { [field]: el['state'] === 'unavailable' ? { state: 'unavailable', reason: el['reason'] } : el['value'] };
+  const row: Row = {
+    [field]: el['state'] === 'unavailable' ? { state: 'unavailable', reason: el['reason'] } : el['value'],
+  };
   if ('judgingComplete' in el) row['judgingComplete'] = el['judgingComplete'];
   if ('runClosed' in el) row['runClosed'] = el['runClosed'];
   if (el['source'] === 'xml' && typeof el['eventTime'] === 'string') row['finishTime'] = el['eventTime'];
@@ -238,7 +297,8 @@ function observeAttempt(s: CoreState, a: AttemptState, el: Element, field: strin
     return;
   }
   if (field === 'run') {
-    if (typeof el['value'] === 'number' && el['value'] > a.gen.n) startGeneration(s, a, el, typeof el['eventTime'] === 'string' ? el['eventTime'] : undefined, seq);
+    if (typeof el['value'] === 'number' && el['value'] > a.gen.n)
+      startGeneration(s, a, el, typeof el['eventTime'] === 'string' ? el['eventTime'] : undefined, seq);
     s.dirtyAttempts.add(a);
     return;
   }
@@ -254,14 +314,27 @@ function observeAttempt(s: CoreState, a: AttemptState, el: Element, field: strin
       observeStreamOutcome(s, a, el, el['value'] as { kind: string; runSeconds?: number }, seq);
       return;
     case 'cells':
-      putCells(s, a, 'inference', el['value'] as (number | null)[], slotOf(s, el, 'tcp', 'inference', [], seq, STREAM_CELLS));
+      putCells(
+        s,
+        a,
+        'inference',
+        el['value'] as (number | null)[],
+        slotOf(s, el, 'tcp', 'inference', [], seq, STREAM_CELLS),
+      );
       return;
   }
   const extra = 'judgingComplete' in el ? { judgingComplete: el['judgingComplete'] as boolean | null } : {};
   const value = el['state'] === 'unavailable' ? { state: 'unavailable', reason: el['reason'] } : el['value'];
   const confidence = el['confidence'] === 'inferred' || field === 'gates' || field === 'faults' ? STREAM_CELLS : {};
   // round 24: a listing's `entry` is rule 2's `tcp` side, so an `xml` row restating it moves nothing
-  if (retain(fieldSlots(a.slots, field), field === 'entry' ? 'tcp' : 'inference', slotOf(s, el, 'tcp', 'inference', value, seq, { ...extra, ...confidence }))) s.dirtyAttempts.add(a);
+  if (
+    retain(
+      fieldSlots(a.slots, field),
+      field === 'entry' ? 'tcp' : 'inference',
+      slotOf(s, el, 'tcp', 'inference', value, seq, { ...extra, ...confidence }),
+    )
+  )
+    s.dirtyAttempts.add(a);
 }
 
 function observe(s: CoreState, el: Element): void {
@@ -308,7 +381,12 @@ function applyDiagnostic(s: CoreState, el: Element, inUnit: Set<string>): void {
 }
 
 /** A row restated without a cell problem it had: the diagnostic is no longer current. */
-function clearRestated(s: CoreState, source: Source, named: ReadonlySet<AttemptState>, inUnit: ReadonlySet<string>): void {
+function clearRestated(
+  s: CoreState,
+  source: Source,
+  named: ReadonlySet<AttemptState>,
+  inUnit: ReadonlySet<string>,
+): void {
   if (s.parserDiagnostics.size === 0) return;
   const ids = new Set([...named].map((a) => a.id));
   for (const [key, d] of s.parserDiagnostics) {
@@ -332,12 +410,47 @@ function dispatch(s: CoreState, el: Element, inUnit: Set<string>): void {
 
 export function createMergeCore(options: MergeCoreOptions = {}): MergeCore {
   const s: CoreState = {
-    options, counter: options.initialSeq ?? 0, epoch: 0, tcpUp: undefined, rewrite: undefined, xmlRead: false, previousTcpAt: undefined,
-    attempts: new Map(), phases: new Map(), entries: new Map(), classes: new Map(), courses: new Map(), classifications: new Map(),
-    listed: new Map(), oncourseAsOf: null, oncourseSent: '[[],null]', featured: null, writes: [], splitsArmed: undefined,
-    parserDiagnostics: new Map(), phaseDiagnostics: new Map(), diagnosticsSent: '[]', diagnosticsDirty: false, log: [], ingestLog: [],
-    dirtyAttempts: new Set(), dirtyPhases: new Set(), dirtyResources: new Set(), dirtyWrites: new Set(), removed: [], removedPhases: [], removedIds: new Set(), scheduled: new Set(), scheduleArmed: true, pendingRebaseline: undefined,
-    dirtyScopes: new Set(), unitAt: '', standingsSent: new Map(), standingKeys: new Map(), standingsHeld: new Map(), entryPhases: new Map(),
+    options,
+    counter: options.initialSeq ?? 0,
+    epoch: 0,
+    tcpUp: undefined,
+    rewrite: undefined,
+    xmlRead: false,
+    previousTcpAt: undefined,
+    attempts: new Map(),
+    phases: new Map(),
+    entries: new Map(),
+    classes: new Map(),
+    courses: new Map(),
+    classifications: new Map(),
+    listed: new Map(),
+    oncourseAsOf: null,
+    oncourseSent: '[[],null]',
+    featured: null,
+    writes: [],
+    splitsArmed: undefined,
+    parserDiagnostics: new Map(),
+    phaseDiagnostics: new Map(),
+    diagnosticsSent: '[]',
+    diagnosticsDirty: false,
+    log: [],
+    ingestLog: [],
+    dirtyAttempts: new Set(),
+    dirtyPhases: new Set(),
+    dirtyResources: new Set(),
+    dirtyWrites: new Set(),
+    removed: [],
+    removedPhases: [],
+    removedIds: new Set(),
+    scheduled: new Set(),
+    scheduleArmed: true,
+    pendingRebaseline: undefined,
+    dirtyScopes: new Set(),
+    unitAt: '',
+    standingsSent: new Map(),
+    standingKeys: new Map(),
+    standingsHeld: new Map(),
+    entryPhases: new Map(),
     counters: { generations: 0, retractions: 0, contradictions: 0, leaves: 0, refusals: {} },
   };
   return {

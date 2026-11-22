@@ -21,7 +21,15 @@ import { createStepLog } from './step-log.js';
 import { ValidationError } from './validate.js';
 import { onsiteEvent, type CurrentEvent, type J } from './wire.js';
 import { createBase, emit, enqueue, type OnsiteContext } from './context.js';
-import { bootEvent, newCore, newTracker, seedCheckStatuses, storeFor, writeEventFile, writesFor } from './event-state.js';
+import {
+  bootEvent,
+  newCore,
+  newTracker,
+  seedCheckStatuses,
+  storeFor,
+  writeEventFile,
+  writesFor,
+} from './event-state.js';
 import { unit } from './units.js';
 import { arm, startReader, startTcp } from './sources.js';
 import { createRest, doCreateFlag, doDeleteCheck, doPutCheck, doResolveFlag } from './rest.js';
@@ -40,19 +48,21 @@ export interface OnsiteDiscovery extends EventEmitter {
  * #273: a store file that failed validation was renamed aside and the store opened empty. #300: a write of the writes store failed; what it
  * carried stays in memory until the next successful one (CONTRACTS §7.3). Admin log only; nothing goes on the wire.
  */
-export type AdminLogEntry = {
-  kind: 'store-set-aside';
-  store: 'checks' | 'writes' | 'seq' | 'event' | 'clients';
-  eventId?: string;
-  file: string;
-  setAsideAs: string;
-  reason: string;
-} | {
-  kind: 'store-write-failed';
-  store: 'writes';
-  file: string;
-  reason: string;
-};
+export type AdminLogEntry =
+  | {
+      kind: 'store-set-aside';
+      store: 'checks' | 'writes' | 'seq' | 'event' | 'clients';
+      eventId?: string;
+      file: string;
+      setAsideAs: string;
+      reason: string;
+    }
+  | {
+      kind: 'store-write-failed';
+      store: 'writes';
+      file: string;
+      reason: string;
+    };
 
 export interface OnsiteOptions {
   /** Where the admin log goes, the core's ingest-only diagnostics included (DERIVATIONS §0.5); default one stderr line. */
@@ -88,9 +98,22 @@ export interface OnsiteHandle {
   /** Without `eventId` a new one is minted; one given that was current before is the return to it. */
   startNewEvent(e: { eventId?: string; name: string }): Promise<void>;
   checks: {
-    putCheck(i: { attemptId: string; run: number; gate: number; valueAtCheck: number | null; checkedBy?: string }): Promise<J>;
+    putCheck(i: {
+      attemptId: string;
+      run: number;
+      gate: number;
+      valueAtCheck: number | null;
+      checkedBy?: string;
+    }): Promise<J>;
     deleteCheck(k: { attemptId: string; run: number; gate: number }): Promise<void>;
-    createFlag(i: { attemptId: string; run: number; gate: number; comment: string; suggestedValue?: number; createdBy?: string }): Promise<J>;
+    createFlag(i: {
+      attemptId: string;
+      run: number;
+      gate: number;
+      comment: string;
+      suggestedValue?: number;
+      createdBy?: string;
+    }): Promise<J>;
     resolveFlag(flagId: string, i: { note?: string; resolvedBy?: string }): Promise<J>;
   };
 }
@@ -138,7 +161,12 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     tcpState: 'reconnecting',
     upstreamInstance: null,
     timingClockOffsetSeconds: null,
-    xmlStatus: { state: opts.xml === undefined ? 'not-configured' : 'reconnecting', lastRewriteDetectedAt: null, tornReads: 0, abandonedReads: 0 },
+    xmlStatus: {
+      state: opts.xml === undefined ? 'not-configured' : 'reconnecting',
+      lastRewriteDetectedAt: null,
+      tornReads: 0,
+      abandonedReads: 0,
+    },
     sourcesSent: '',
     reader: undefined as unknown as OnsiteContext['reader'], // set by startReader below, before anything reads it
     beat: undefined,
@@ -149,7 +177,9 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
 
   // ------------------------------------------------------------------------------------------------ units and sources
   cx.stepLog = opts.stepLog === undefined ? undefined : createStepLog(opts.stepLog, () => cx.core, seq.current());
-  const onUnit = (elements: Parameters<typeof unit>[1]): void => { unit(cx, elements); };
+  const onUnit = (elements: Parameters<typeof unit>[1]): void => {
+    unit(cx, elements);
+  };
   startTcp(cx, onUnit);
   startReader(cx, onUnit);
   arm(cx);
@@ -157,14 +187,26 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   // ------------------------------------------------------------------------------------------------ HTTP and /ws
   const startNewEvent = async (e: { eventId?: string; name: string }): Promise<void> => {
     await enqueue(cx, async () => {
-      if ((e.eventId !== undefined && (typeof e.eventId !== 'string' || e.eventId === '')) || typeof e.name !== 'string') throw new ValidationError([{ field: 'event', issue: 'needs a name, and an eventId that is non-empty when given' }]);
+      if (
+        (e.eventId !== undefined && (typeof e.eventId !== 'string' || e.eventId === '')) ||
+        typeof e.name !== 'string'
+      )
+        throw new ValidationError([
+          { field: 'event', issue: 'needs a name, and an eventId that is non-empty when given' },
+        ]);
       const eventId = e.eventId ?? randomUUID();
-      if (cx.event?.eventId === eventId) throw new ValidationError([{ field: 'eventId', issue: 'is the event that is already current' }]);
+      if (cx.event?.eventId === eventId)
+        throw new ValidationError([{ field: 'eventId', issue: 'is the event that is already current' }]);
       const next = await storeFor(cx, eventId);
       // §10 item 40 (a): a blank or whitespace-only name counts as none entered; `name` then awaits the snapshot's title.
       const entered = e.name.trim() !== '';
       if (opts.persistEvent === true) await writeEventFile(cx, eventId, entered ? e.name : undefined);
-      cx.event = { eventId, name: entered ? e.name : eventId, details: { state: 'not-yet' }, nameFrom: entered ? 'operator' : 'snapshot' };
+      cx.event = {
+        eventId,
+        name: entered ? e.name : eventId,
+        details: { state: 'not-yet' },
+        nameFrom: entered ? 'operator' : 'snapshot',
+      };
       cx.store = next;
       cx.wstore = await writesFor(cx, eventId);
       cx.adopted.clear();
@@ -190,7 +232,9 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
   };
 
   return {
-    get port() { return cx.port; },
+    get port() {
+      return cx.port;
+    },
     async stop() {
       if (cx.stopping) return;
       cx.stopping = true;
@@ -211,7 +255,9 @@ export async function startOnsite(opts: OnsiteOptions): Promise<OnsiteHandle> {
     startNewEvent,
     checks: {
       putCheck: async (input) => (await enqueue(cx, () => doPutCheck(cx, input))) as J,
-      deleteCheck: async (key) => { await enqueue(cx, () => doDeleteCheck(cx, key)); },
+      deleteCheck: async (key) => {
+        await enqueue(cx, () => doDeleteCheck(cx, key));
+      },
       createFlag: async (input) => (await enqueue(cx, () => doCreateFlag(cx, input))) as J,
       resolveFlag: async (flagId, input) => (await enqueue(cx, () => doResolveFlag(cx, flagId, input))) as J,
     },

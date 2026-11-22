@@ -2,7 +2,17 @@
  * Internal shapes of the merge core (#203). Wire shapes come from `@opencanoetiming/c123-contract`; what is here is retention,
  * which never leaves the core. Nothing here reads a clock: every time is taken from an element.
  */
-import type { ClassificationRow, Diagnostic, Faults, Gate, Outcome, Placement, ResultMark, Standing, WriteRequest } from '@opencanoetiming/c123-contract';
+import type {
+  ClassificationRow,
+  Diagnostic,
+  Faults,
+  Gate,
+  Outcome,
+  Placement,
+  ResultMark,
+  Standing,
+  WriteRequest,
+} from '@opencanoetiming/c123-contract';
 import type { IngestElement } from '../ingest/index.js';
 
 export type { ClassificationRow, Diagnostic, Faults, Gate, Placement, ResultMark };

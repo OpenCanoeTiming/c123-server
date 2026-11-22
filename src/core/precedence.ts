@@ -27,7 +27,17 @@ export function present(fs: FieldSlots | undefined): Slot | undefined {
   return row;
 }
 
-const MARKS: ReadonlySet<unknown> = new Set<ResultMark>(['non-ranked', 'dns', 'dnf', 'dsq', 'dsq-r', 'dqb', 'cap', 'ral', 'other']);
+const MARKS: ReadonlySet<unknown> = new Set<ResultMark>([
+  'non-ranked',
+  'dns',
+  'dnf',
+  'dsq',
+  'dsq-r',
+  'dqb',
+  'cap',
+  'ral',
+  'other',
+]);
 export const isMark = (v: unknown): v is ResultMark => MARKS.has(v);
 /** `Outcome`'s `no-result` set: `non-ranked` is a finished run, so it closes nothing and is no silent-path mark (rule 2, §4.4). */
 export const isNoResultMark = (v: unknown): v is ResultMark => isMark(v) && v !== 'non-ranked';
@@ -38,7 +48,8 @@ const isFloor = (slot: Slot): boolean => slot.value === 'not-started';
 const SILENT_PATH: ReadonlySet<unknown> = new Set(['not-started', 'at-start', 'left-without-finish']);
 
 /** The `tcp` side of `status`: its result rows over the stream. */
-const tcpView = ({ tcp, inference }: FieldSlots): Slot | undefined => (tcp !== undefined && !isFloor(tcp) ? tcp : (inference ?? tcp));
+const tcpView = ({ tcp, inference }: FieldSlots): Slot | undefined =>
+  tcp !== undefined && !isFloor(tcp) ? tcp : (inference ?? tcp);
 
 /** `status`: rule 2 between the `tcp` view and the XML, with the exception for a mark set on a silent path, under the same guard. */
 export function presentStatus(fs: FieldSlots | undefined): Slot | undefined {
@@ -53,7 +64,8 @@ export function presentStatus(fs: FieldSlots | undefined): Slot | undefined {
 }
 
 /** Whether an XML candidate lost to `tcp` only on the guard (a refusal), for the counters. */
-export const refusedByGuard = (tcp: Slot, xml: Slot): boolean => xml.seq > tcp.seq && xml.epoch > tcp.epoch && !newerContent(xml, tcp);
+export const refusedByGuard = (tcp: Slot, xml: Slot): boolean =>
+  xml.seq > tcp.seq && xml.epoch > tcp.epoch && !newerContent(xml, tcp);
 
 /** Whether INV-2c's guard, not rule 2's continuity, keeps the XML's mark from `status`: the whole of its row then stays back (§2.6). */
 export function markRefusedByGuard(fs: FieldSlots): boolean {
@@ -65,7 +77,8 @@ export function markRefusedByGuard(fs: FieldSlots): boolean {
 
 const comparable = (slot: Slot): string => {
   if (slot.state !== 'known') return slot.state;
-  if (Array.isArray(slot.value)) return JSON.stringify(slot.value.map((g: { number?: unknown; penalty?: unknown }) => [g.number, g.penalty]));
+  if (Array.isArray(slot.value))
+    return JSON.stringify(slot.value.map((g: { number?: unknown; penalty?: unknown }) => [g.number, g.penalty]));
   return JSON.stringify(slot.value);
 };
 

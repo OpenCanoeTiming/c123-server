@@ -15,7 +15,12 @@ const emit = (s: CoreState, m: Omit<Message, 'seq'>): void => {
   s.log.push({ ...m, seq: ++s.counter } as Message);
 };
 
-function diff(view: Record<string, unknown>, sent: Map<string, string>, created: boolean, force?: ReadonlySet<string>): Record<string, unknown> {
+function diff(
+  view: Record<string, unknown>,
+  sent: Map<string, string>,
+  created: boolean,
+  force?: ReadonlySet<string>,
+): Record<string, unknown> {
   const fields: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(view)) {
     const text = JSON.stringify(v);
@@ -56,7 +61,8 @@ function duplicateFinishes(s: CoreState, phase: ResourceState): void {
     else bibs.push(a.bib);
   }
   const found: Diagnostic[] = [];
-  for (const [finishTime, bibs] of byFinish) if (bibs.length > 1) found.push({ kind: 'duplicate-finish', phaseId: phase.id, finishTime, bibs: bibs.sort() });
+  for (const [finishTime, bibs] of byFinish)
+    if (bibs.length > 1) found.push({ kind: 'duplicate-finish', phaseId: phase.id, finishTime, bibs: bibs.sort() });
   if (found.length > 0) s.phaseDiagnostics.set(phase.id, found);
   else s.phaseDiagnostics.delete(phase.id);
 }
@@ -92,7 +98,12 @@ function flushRebaseline(s: CoreState): void {
     s.dirtyAttempts.delete(a);
     return view;
   });
-  emit(s, { type: 'scope.replaced', scope, attempts: views, standings: replacedStandings(s, scope as { kind?: string; phaseId?: string }) });
+  emit(s, {
+    type: 'scope.replaced',
+    scope,
+    attempts: views,
+    standings: replacedStandings(s, scope as { kind?: string; phaseId?: string }),
+  });
   s.pendingRebaseline = undefined;
 }
 
@@ -150,14 +161,19 @@ export function flush(s: CoreState, xmlInUnit: boolean): void {
   s.dirtyPhases.clear();
   for (const { type, resource } of s.dirtyResources) {
     if (type === 'course') {
-      if (Object.keys(diff(viewResource(resource, 'course'), resource.sent, resource.created)).length > 0) emit(s, { type: 'course.updated', course: viewResource(resource, 'course') });
+      if (Object.keys(diff(viewResource(resource, 'course'), resource.sent, resource.created)).length > 0)
+        emit(s, { type: 'course.updated', course: viewResource(resource, 'course') });
       resource.created = true;
       continue;
     }
-    const fields = withoutId(diff(viewResource(resource, type), resource.sent, resource.created), type === 'entry' ? 'entryId' : 'classId');
+    const fields = withoutId(
+      diff(viewResource(resource, type), resource.sent, resource.created),
+      type === 'entry' ? 'entryId' : 'classId',
+    );
     resource.created = true;
     if (type === 'entry') for (const phaseId of s.entryPhases.get(resource.id) ?? []) s.dirtyScopes.add(phaseId);
-    if (Object.keys(fields).length > 0) emit(s, { type: `${type}.updated`, [type === 'entry' ? 'entryId' : 'classId']: resource.id, fields });
+    if (Object.keys(fields).length > 0)
+      emit(s, { type: `${type}.updated`, [type === 'entry' ? 'entryId' : 'classId']: resource.id, fields });
   }
   s.dirtyResources.clear();
 

@@ -22,22 +22,44 @@ export function createLogFile(o: { dir: string; clock: { now(): number }; maxByt
   const file = path.join(o.dir, LOG_FILE_NAME);
   const rotated = `${file}.1`;
   const maxBytes = o.maxBytes ?? DEFAULT_LOG_MAX_BYTES;
-  const sizeOf = (p: string): number => { try { return statSync(p).size; } catch { return 0; } };
+  const sizeOf = (p: string): number => {
+    try {
+      return statSync(p).size;
+    } catch {
+      return 0;
+    }
+  };
   const linesOf = (p: string): string[] => {
-    try { return readFileSync(p, 'utf8').split('\n').filter((l) => l !== ''); } catch { return []; }
+    try {
+      return readFileSync(p, 'utf8')
+        .split('\n')
+        .filter((l) => l !== '');
+    } catch {
+      return [];
+    }
   };
   let size = 0;
-  try { mkdirSync(o.dir, { recursive: true }); size = sizeOf(file); } catch { /* the first write reports nothing either */ }
+  try {
+    mkdirSync(o.dir, { recursive: true });
+    size = sizeOf(file);
+  } catch {
+    /* the first write reports nothing either */
+  }
   return {
     path: file,
     write(text) {
       try {
         const line = `${new Date(o.clock.now()).toISOString()} ${text.replace(/\r?\n/g, ' ')}\n`;
         const bytes = Buffer.byteLength(line);
-        if (size > 0 && size + bytes > maxBytes) { renameSync(file, rotated); size = 0; }
+        if (size > 0 && size + bytes > maxBytes) {
+          renameSync(file, rotated);
+          size = 0;
+        }
         appendFileSync(file, line);
         size += bytes;
-      } catch { /* nothing useful to do */ }
+      } catch {
+        /* nothing useful to do */
+      }
     },
     tail(limit) {
       if (limit <= 0) return [];

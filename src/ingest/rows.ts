@@ -1,6 +1,18 @@
 import type { Faults, Gate, Outcome, Placement, Split } from '@opencanoetiming/c123-contract';
 import {
-  type CellProblem, type Fmt, type Unit, faultsFromCells, fixedCells, gatesFromCells, int, judgingComplete, markOf, r3, sumJudged, usable, zonedInstant,
+  type CellProblem,
+  type Fmt,
+  type Unit,
+  faultsFromCells,
+  fixedCells,
+  gatesFromCells,
+  int,
+  judgingComplete,
+  markOf,
+  r3,
+  sumJudged,
+  usable,
+  zonedInstant,
 } from './common.js';
 import type { CourseSlot } from './types.js';
 
@@ -28,17 +40,19 @@ export interface RowIn {
   heat: string;
   q: string;
   /** XML-only columns; undefined for a TCP row. */
-  xml: {
-    dtStart: string;
-    dtFinish: string;
-    totalRank: string;
-    totalRankOrder: string;
-    betterRun: string;
-    /** `CatRnk` of a row with a `CatId`, empty otherwise (CONTRACTS §5 step 4's check). */
-    categoryRank: string;
-    memberGates: string[];
-    splits: string[];
-  } | undefined;
+  xml:
+    | {
+        dtStart: string;
+        dtFinish: string;
+        totalRank: string;
+        totalRankOrder: string;
+        betterRun: string;
+        /** `CatRnk` of a row with a `CatId`, empty otherwise (CONTRACTS §5 step 4's check). */
+        categoryRank: string;
+        memberGates: string[];
+        splits: string[];
+      }
+    | undefined;
 }
 
 export interface RowEnv {
@@ -53,7 +67,9 @@ export interface RowEnv {
 const tod = /^(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/;
 const todSeconds = (s: string): number | undefined => {
   const m = tod.exec(s.trim());
-  return m === null ? undefined : Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) + Number((m[4] ?? '').padEnd(3, '0') || 0) / 1000;
+  return m === null
+    ? undefined
+    : Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) + Number((m[4] ?? '').padEnd(3, '0') || 0) / 1000;
 };
 /** `Result[C]@dtSplitN` / `XML.Results.dtSplitN` minus `dtStart` (§4.8). undefined when nothing is stated. */
 export function splitsOf(dtStart: string, splits: string[]): Split[] | undefined {
@@ -83,7 +99,12 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
   const rank = int(second && x ? x.totalRank : r.rank);
   const order = int(second && x ? x.totalRankOrder : r.rankOrder);
   if (rank !== undefined && order === undefined) {
-    u.diagnostic({ kind: 'unparseable-field', where: attemptId, name: 'RankOrder', text: second && x ? x.totalRankOrder : r.rankOrder });
+    u.diagnostic({
+      kind: 'unparseable-field',
+      where: attemptId,
+      name: 'RankOrder',
+      text: second && x ? x.totalRankOrder : r.rankOrder,
+    });
     row['placement'] = null;
   } else row['placement'] = rank === undefined || order === undefined ? null : ({ rank, order } satisfies Placement);
 
@@ -102,7 +123,8 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
   // stating neither states nothing, `Gates` included
   const statesCells = r.gates.trim() !== '' || hasTime || status !== undefined;
   if (statesCells && slots === undefined) row['cells'] = cells;
-  else if (statesCells && !usable(slots)) row[fmt.cross ? 'faults' : 'gates'] = NOT_CONFIGURED; // a bound course with an empty layout: the snapshot's determination
+  else if (statesCells && !usable(slots))
+    row[fmt.cross ? 'faults' : 'gates'] = NOT_CONFIGURED; // a bound course with an empty layout: the snapshot's determination
   else if (statesCells && slots !== undefined && fmt.cross) {
     row['gates'] = NA;
     const f = faultsFromCells(cells, slots);
@@ -112,12 +134,17 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
     if (x !== undefined && x.memberGates.length > 0) {
       const memberBad: CellProblem[] = [];
       const members = x.memberGates.map((g) => fixedCells(g, slots.length, memberBad));
-      for (const b of memberBad) u.diagnostic({ kind: 'unparseable-cell', attemptId, source, slot: b.slot, text: b.text });
+      for (const b of memberBad)
+        u.diagnostic({ kind: 'unparseable-cell', attemptId, source, slot: b.slot, text: b.text });
       const gateSlots = slots.filter((s) => s.kind === 'gate');
       for (const [i, g] of gates.entries()) {
         const mp = members.map((mc) => mc[(gateSlots[i]?.slot ?? i + 1) - 1] ?? null);
         g.memberPenalties = mp;
-        if (g.penalty !== null && mp.every((v) => v !== null) && mp.reduce<number>((a, v) => a + (v ?? 0), 0) !== g.penalty) {
+        if (
+          g.penalty !== null &&
+          mp.every((v) => v !== null) &&
+          mp.reduce<number>((a, v) => a + (v ?? 0), 0) !== g.penalty
+        ) {
           u.diagnostic({ kind: 'member-sum-mismatch', attemptId, gate: g.number, crew: g.penalty, members: mp });
         }
       }
@@ -128,17 +155,20 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
   if (fmt.cross ? row['faults'] !== undefined : hasTime) row['judgingComplete'] = judgingComplete(cells, slots);
 
   // §4.3-4.4 outcome
-  const untimed = x !== undefined && fmt.scoringKind === 'duration' && hasTime && rank !== undefined && x.dtFinish.trim() === '';
+  const untimed =
+    x !== undefined && fmt.scoringKind === 'duration' && hasTime && rank !== undefined && x.dtFinish.trim() === '';
   // §0.5: a row states what it carries. A mark beside a time stays beside it; `no-result` is the core's presentation (§4.1)
   let outcome: Outcome | typeof NA | undefined;
   if (fmt.heats) outcome = rank !== undefined && order !== undefined ? { kind: 'ordinal', order } : undefined;
   else if (r.time === undefined) outcome = undefined;
   else if (untimed) outcome = NA;
-  else if (fmt.cross) outcome = { kind: 'duration', runSeconds: r.time, penaltySeconds: 0, totalSeconds: r.time }; // §4.4: no time penalties in Cross
+  else if (fmt.cross)
+    outcome = { kind: 'duration', runSeconds: r.time, penaltySeconds: 0, totalSeconds: r.time }; // §4.4: no time penalties in Cross
   else if (second && x === undefined) {
     const pen = sumJudged(cells, slots);
     outcome = { kind: 'duration', runSeconds: r.time, penaltySeconds: pen, totalSeconds: r3(r.time + pen) };
-  } else if (r.pen !== undefined && r.total !== undefined) outcome = { kind: 'duration', runSeconds: r.time, penaltySeconds: r.pen, totalSeconds: r.total };
+  } else if (r.pen !== undefined && r.total !== undefined)
+    outcome = { kind: 'duration', runSeconds: r.time, penaltySeconds: r.pen, totalSeconds: r.total };
   // an empty Pen or Total is absent, never zero (§0.1): no complete duration to state
   if (outcome !== undefined) row['outcome'] = outcome;
   if (untimed) {
@@ -191,4 +221,6 @@ export function buildRow(env: RowEnv, r: RowIn): Record<string, unknown> {
 
 /** Whether a row states a placement or a mark: the structural test of results mode (§0.3). */
 export const rowIsResult = (row: Record<string, unknown>): boolean =>
-  (row['placement'] !== null && row['placement'] !== undefined) || row['status'] !== undefined || row['underReview'] === true;
+  (row['placement'] !== null && row['placement'] !== undefined) ||
+  row['status'] !== undefined ||
+  row['underReview'] === true;

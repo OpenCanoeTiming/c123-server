@@ -40,7 +40,14 @@ export function list(s: CoreState, a: AttemptState, el: Element): void {
   }
 }
 
-const setStream = (s: CoreState, a: AttemptState, el: Element, value: string, seq: number, eventTime?: string): void => {
+const setStream = (
+  s: CoreState,
+  a: AttemptState,
+  el: Element,
+  value: string,
+  seq: number,
+  eventTime?: string,
+): void => {
   const slot = slotOf(s, el, 'tcp', 'inference', value, seq, eventTime !== undefined ? { eventTime } : {});
   const fs = fieldSlots(a.slots, 'status');
   const shown = presentStatus(fs);
@@ -81,7 +88,15 @@ function withdrawFinish(s: CoreState, a: AttemptState): void {
  * §4.11: the first start is no change; a different start with no finish in a recorded generation is the re-run; every other
  * different start is a correction inside the generation. No results-table value, `run` or placement moves at a correction.
  */
-function observeStart(s: CoreState, a: AttemptState, el: Element, start: string, listed: string, ended: boolean, seq: number): void {
+function observeStart(
+  s: CoreState,
+  a: AttemptState,
+  el: Element,
+  start: string,
+  listed: string,
+  ended: boolean,
+  seq: number,
+): void {
   if (a.gen.start === undefined) a.gen.markAtStart = marksHeld(a);
   else if (listed === a.gen.startText) return;
   else if (!ended && a.gen.recorded) startGeneration(s, a, el, start, seq);
@@ -94,16 +109,32 @@ function observeStart(s: CoreState, a: AttemptState, el: Element, start: string,
 function beginCarry(s: CoreState, a: AttemptState): void {
   if (a.gen.started) return;
   a.gen.started = true;
-  if (fmtFor(s, a.phaseId).pair?.role === 'second' && !tablePresentsResult(a)) for (const f of CARRIED) if (present(a.slots.get(f))?.state === 'known') a.carried.add(f);
+  if (fmtFor(s, a.phaseId).pair?.role === 'second' && !tablePresentsResult(a))
+    for (const f of CARRIED) if (present(a.slots.get(f))?.state === 'known') a.carried.add(f);
 }
 
 /** `{ dtStart, dtFinish }` of one listing: a new start, a finish, or the absence of one the row states. */
-export function applyListing(s: CoreState, a: AttemptState, el: Element, value: { dtStart: string | null; dtFinish: string | null }, seq: number): void {
+export function applyListing(
+  s: CoreState,
+  a: AttemptState,
+  el: Element,
+  value: { dtStart: string | null; dtFinish: string | null },
+  seq: number,
+): void {
   const fmt = fmtFor(s, a.phaseId);
   const start = instant(s, a.phaseId, value.dtStart, el.observedAt);
   const finish = instant(s, a.phaseId, value.dtFinish, el.observedAt);
   a.gen.correcting = false;
-  if (start !== undefined) observeStart(s, a, el, start, typeof el['listedStart'] === 'string' ? el['listedStart'] : start, finish !== undefined, seq);
+  if (start !== undefined)
+    observeStart(
+      s,
+      a,
+      el,
+      start,
+      typeof el['listedStart'] === 'string' ? el['listedStart'] : start,
+      finish !== undefined,
+      seq,
+    );
   beginCarry(s, a);
   if (finish !== undefined) {
     if (a.contradiction !== undefined) {
@@ -131,7 +162,13 @@ export function applyListing(s: CoreState, a: AttemptState, el: Element, value: 
 }
 
 /** An on-course outcome. A result row stops the recomputation by precedence; `Completed` and the leave stop it here (§4.3). */
-export function observeStreamOutcome(s: CoreState, a: AttemptState, el: Element, value: { kind: string; runSeconds?: number }, seq: number): void {
+export function observeStreamOutcome(
+  s: CoreState,
+  a: AttemptState,
+  el: Element,
+  value: { kind: string; runSeconds?: number },
+  seq: number,
+): void {
   const finishing = value.kind === 'duration';
   const fs = fieldSlots(a.slots, 'outcome');
   if (!finishing && a.gen.finish !== undefined) return;
@@ -149,7 +186,11 @@ export function observeStreamOutcome(s: CoreState, a: AttemptState, el: Element,
     s.dirtyAttempts.add(a);
   }
   if (!finishing) return;
-  a.gen.finish = { ...a.gen.finish, runSeconds: value.runSeconds as number, ...(eventTime !== undefined ? { eventTime } : {}) };
+  a.gen.finish = {
+    ...a.gen.finish,
+    runSeconds: value.runSeconds as number,
+    ...(eventTime !== undefined ? { eventTime } : {}),
+  };
   if (eventTime !== undefined && streamStatus(a) !== 'finished') setStream(s, a, el, 'finished', seq, eventTime);
   settlePending(s, a);
 }
@@ -179,7 +220,12 @@ export function leave(s: CoreState, a: AttemptState, el: Element): void {
   }
   const seq = tick(s);
   // §4.1: "observed" is read on the stream's state at the leave; a start or a finish it has since withdrawn counts as not observed
-  const drawn = cur === 'at-start' ? 'not-started' : cur === 'on-course' || a.gen.start !== undefined ? 'left-without-finish' : undefined;
+  const drawn =
+    cur === 'at-start'
+      ? 'not-started'
+      : cur === 'on-course' || a.gen.start !== undefined
+        ? 'left-without-finish'
+        : undefined;
   if (drawn === undefined) return;
   if (drawn === 'left-without-finish') delete fieldSlots(a.slots, 'outcome').inference;
   // §3.2, INV-1: a finish or a mark presented from a results table has no way back to `left-without-finish`; that leave is
@@ -203,15 +249,23 @@ export function applyLeaveRule(s: CoreState, el: Element): Element[] {
 }
 
 /** `oncourse.updated`'s body (§7.2): ordered by `courseOrder`, an Attempt without one last by `startOrder` (§4.8). */
-export function oncourseView(s: CoreState): { attemptIds: string[]; featuredByUpstream: string | null; asOf: string | null } {
+export function oncourseView(s: CoreState): {
+  attemptIds: string[];
+  featuredByUpstream: string | null;
+  asOf: string | null;
+} {
   const order = (a: AttemptState, f: string): number => {
     const v = present(a.slots.get(f))?.value;
     return typeof v === 'number' ? v : Number.MAX_SAFE_INTEGER;
   };
   const listed = [...s.listed.values()].sort(
-    (a, b) => order(a, 'courseOrder') - order(b, 'courseOrder') || order(a, 'startOrder') - order(b, 'startOrder') || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    (a, b) =>
+      order(a, 'courseOrder') - order(b, 'courseOrder') ||
+      order(a, 'startOrder') - order(b, 'startOrder') ||
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
   );
-  const named = (side: { attemptId: string } | null | undefined): string | undefined => (side !== null && side !== undefined && s.listed.has(side.attemptId) ? side.attemptId : undefined);
+  const named = (side: { attemptId: string } | null | undefined): string | undefined =>
+    side !== null && side !== undefined && s.listed.has(side.attemptId) ? side.attemptId : undefined;
   return {
     attemptIds: listed.map((a) => a.id),
     featuredByUpstream: named(s.featured?.odd) ?? named(s.featured?.even) ?? null,

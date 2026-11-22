@@ -16,7 +16,8 @@ export const FIRST_RUN_FIELDS = ['outcome', 'gates', 'faults', 'placement', 'und
 export const PAIR_FIELDS = ['pairTotal', 'countingRun'] as const;
 export const SECOND_RUN_EMPTY_FIELDS = ['outcome', 'gates', 'faults'] as const;
 
-const isResultSlot = (slot: Slot | undefined): boolean => slot !== undefined && slot.kind === 'row' && slot.marker !== true && slot.state !== 'not-yet';
+const isResultSlot = (slot: Slot | undefined): boolean =>
+  slot !== undefined && slot.kind === 'row' && slot.marker !== true && slot.state !== 'not-yet';
 
 /** Never an on-course inference, an Attempt never present in a results-table observation, or a row that was never present. */
 export function hasResult(a: AttemptState, fields: readonly string[]): boolean {
@@ -26,11 +27,13 @@ export function hasResult(a: AttemptState, fields: readonly string[]): boolean {
 }
 
 const marker = (s: CoreState, el: Element, source: Source, seq: number, value: unknown): Slot => ({
-  ...slotOf(s, el, source, 'row', value, seq), marker: true,
+  ...slotOf(s, el, source, 'row', value, seq),
+  marker: true,
 });
 
 /** INV-7's guard: an XML retraction applies to a `tcp` observation only when the snapshot's content is later than it. */
-const guardPasses = (age: number | null, tcp: Slot | undefined): boolean => tcp === undefined || tcp.marker === true || newerContent({ age } as Slot, tcp);
+const guardPasses = (age: number | null, tcp: Slot | undefined): boolean =>
+  tcp === undefined || tcp.marker === true || newerContent({ age } as Slot, tcp);
 
 /** Whether a retraction of `status` would take a mark or a row finish away. */
 const statusRetractable = (a: AttemptState): boolean => {
@@ -72,7 +75,14 @@ function retractStatus(s: CoreState, a: AttemptState, source: Source, el: Elemen
 }
 
 /** Retracts `fields` and any mark or row finish in `status`. Returns whether anything changed. */
-export function retract(s: CoreState, a: AttemptState, source: Source, el: Element, fields: readonly string[], seq: number): boolean {
+export function retract(
+  s: CoreState,
+  a: AttemptState,
+  source: Source,
+  el: Element,
+  fields: readonly string[],
+  seq: number,
+): boolean {
   let changed = retractStatus(s, a, source, el, seq);
   for (const f of fields) {
     const fs = a.slots.get(f);
@@ -111,7 +121,14 @@ export function retract(s: CoreState, a: AttemptState, source: Source, el: Eleme
  * an XML snapshot admitted for it removes it (ADR-015 Revisions 6, 7); otherwise it retracts as the TCP absent-row case, from an
  * XML snapshot field by field under the guard (DERIVATIONS §4.12).
  */
-export function absentRow(s: CoreState, a: AttemptState, source: Source, el: Element, fields: readonly string[], seq: number): void {
+export function absentRow(
+  s: CoreState,
+  a: AttemptState,
+  source: Source,
+  el: Element,
+  fields: readonly string[],
+  seq: number,
+): void {
   if (source === 'xml' && admitted(s, a)) remove(s, a, el);
   else if (hasResult(a, fields)) retract(s, a, source, el, fields, seq);
 }
@@ -207,7 +224,8 @@ function removePhase(s: CoreState, p: ResourceState, el: Element): void {
     s.dirtyAttempts.delete(a);
   }
   for (const [k, d] of s.parserDiagnostics) {
-    const of = 'attemptId' in d ? d.attemptId.slice(0, d.attemptId.lastIndexOf(':')) : (d as { phaseId?: unknown }).phaseId;
+    const of =
+      'attemptId' in d ? d.attemptId.slice(0, d.attemptId.lastIndexOf(':')) : (d as { phaseId?: unknown }).phaseId;
     if (of !== p.id) continue;
     s.parserDiagnostics.delete(k);
     s.diagnosticsDirty = true;
@@ -271,7 +289,11 @@ export function carriesContradicted(a: AttemptState, row: Row): boolean {
   if (markOf(row) !== undefined) return false;
   const time = timeOf(row);
   const finish = row['finishTime'] as string | undefined;
-  return a.held.some((c) => (finish !== undefined && c.finishTime !== null ? finish === c.finishTime : time !== undefined && time === c.runSeconds));
+  return a.held.some((c) =>
+    finish !== undefined && c.finishTime !== null
+      ? finish === c.finishTime
+      : time !== undefined && time === c.runSeconds,
+  );
 }
 
 const CONTRADICTED_FIELDS = ['outcome', 'placement', 'pairTotal', 'countingRun'] as const;

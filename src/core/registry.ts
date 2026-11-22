@@ -24,7 +24,8 @@ export function phaseResource(s: CoreState, phaseId: string, observedAt: string)
     if (inferred !== undefined) p.plain.set('date', inferred);
     // §10 item 54 (h): a removed Phase created again: the second runs stating it as their sibling present it again
     if (s.removedIds.delete(phaseId)) {
-      for (const other of s.phases.values()) if (statedPair(other)?.siblingPhaseId === phaseId) s.dirtyPhases.add(other);
+      for (const other of s.phases.values())
+        if (statedPair(other)?.siblingPhaseId === phaseId) s.dirtyPhases.add(other);
     }
     s.dirtyPhases.add(p);
   }
@@ -43,7 +44,8 @@ export function fmtFor(s: CoreState, phaseId: string): Fmt {
   if (r === undefined || !r.plain.has('pair')) return fmt;
   const p = statedPair(r);
   if (p === null || p === undefined || (p.role !== 'first' && p.role !== 'second')) return { ...fmt, pair: null };
-  const combination = p.combination === 'sum' || p.combination === 'best' ? p.combination : (fmt.pair?.combination ?? 'best');
+  const combination =
+    p.combination === 'sum' || p.combination === 'best' ? p.combination : (fmt.pair?.combination ?? 'best');
   return { ...fmt, pair: { role: p.role, combination, siblings: fmt.pair?.siblings ?? [] } };
 }
 
@@ -58,7 +60,7 @@ function namedFirstRun(s: CoreState, phaseId: string): Fmt | undefined {
   return { ...fmtOf(''), pair: { role: 'first', combination, siblings: [] } };
 }
 
-type StatedPair ={ role?: string; siblingPhaseId?: string | null; combination?: string } | null | undefined;
+type StatedPair = { role?: string; siblingPhaseId?: string | null; combination?: string } | null | undefined;
 const statedPair = (r: ResourceState | undefined): StatedPair => r?.plain.get('pair') as StatedPair;
 
 /**
@@ -139,10 +141,35 @@ export function boundSlots(s: CoreState, phaseId: string): CourseSlot[] | undefi
 }
 
 const newAttempt = (id: string, phaseId: string, bib: string, observedAt: string, source: Source): AttemptState => ({
-  id, phaseId, bib, slots: new Map(),
-  gen: { n: 1, recorded: false, markAtStart: [], correcting: false, needsAttribution: false, completed: false, started: false, restated: new Set(), firstEnvelope: { observedAt, source } },
-  listed: false, lastListedAt: 0, left: false, rowNamed: false, held: [], pending: [], history: {}, cells: {}, carried: new Set(), untimed: false,
-  created: false, sent: new Map(), force: new Set(), diagnostics: [],
+  id,
+  phaseId,
+  bib,
+  slots: new Map(),
+  gen: {
+    n: 1,
+    recorded: false,
+    markAtStart: [],
+    correcting: false,
+    needsAttribution: false,
+    completed: false,
+    started: false,
+    restated: new Set(),
+    firstEnvelope: { observedAt, source },
+  },
+  listed: false,
+  lastListedAt: 0,
+  left: false,
+  rowNamed: false,
+  held: [],
+  pending: [],
+  history: {},
+  cells: {},
+  carried: new Set(),
+  untimed: false,
+  created: false,
+  sent: new Map(),
+  force: new Set(),
+  diagnostics: [],
 });
 
 /** `attemptId` is `${phaseId}:${bib}` (CONTRACTS §2.6). */
@@ -162,11 +189,19 @@ const BARE_TIME = /^\d{1,2}:\d{2}:\d{2}/;
  * §0.2 at the ingest seam: where the parser had no Phase date it left a bare time of day; the core builds the instant from the
  * date it holds, the inferred one (the date of the first observation, §2.1) if the snapshot has not stated it.
  */
-export function instant(s: CoreState, phaseId: string, text: string | null | undefined, observedAt: string): string | undefined {
+export function instant(
+  s: CoreState,
+  phaseId: string,
+  text: string | null | undefined,
+  observedAt: string,
+): string | undefined {
   if (text === null || text === undefined) return undefined;
   if (!BARE_TIME.test(text)) return text;
   const stated = s.phases.get(phaseId)?.plain.get('date');
-  return zonedInstant(typeof stated === 'string' ? stated : zonedDate(observedAt, s.options.zone), text, s.options.zone) ?? text;
+  return (
+    zonedInstant(typeof stated === 'string' ? stated : zonedDate(observedAt, s.options.zone), text, s.options.zone) ??
+    text
+  );
 }
 
 export const isInstant = (t: string | undefined): t is string => t !== undefined && t.includes('T');

@@ -13,7 +13,11 @@ import { rebaseline } from './rebaseline.js';
 import type { RestHandlers } from './rest.js';
 import { sourcesNow } from './sources.js';
 
-export async function startHttp(cx: OnsiteContext, rest: RestHandlers, startNewEvent: (e: { eventId?: string; name: string }) => Promise<void>): Promise<() => void> {
+export async function startHttp(
+  cx: OnsiteContext,
+  rest: RestHandlers,
+  startNewEvent: (e: { eventId?: string; name: string }) => Promise<void>,
+): Promise<() => void> {
   const { opts, fs, dataDir, clock } = cx;
   const api: OnsiteApi = {
     port: () => cx.port,
@@ -38,31 +42,57 @@ export async function startHttp(cx: OnsiteContext, rest: RestHandlers, startNewE
     deleteCheck: rest.deleteCheck,
     createFlag: rest.createFlag,
     resolveFlag: rest.resolveFlag,
-    startNewEvent: async (e) => { await startNewEvent(e); return onsiteEvent(cx.event as CurrentEvent); },
+    startNewEvent: async (e) => {
+      await startNewEvent(e);
+      return onsiteEvent(cx.event as CurrentEvent);
+    },
   };
   const clientReg = await openClients({
-    fs, dir: dataDir, now: () => clock.now(), log: cx.log,
-    setAside: async (file, reason) => { const setAsideAs = await cx.setAsideName(file); await fs.rename(file, setAsideAs); cx.report('clients', file, setAsideAs, reason); },
+    fs,
+    dir: dataDir,
+    now: () => clock.now(),
+    log: cx.log,
+    setAside: async (file, reason) => {
+      const setAsideAs = await cx.setAsideName(file);
+      await fs.rename(file, setAsideAs);
+      cx.report('clients', file, setAsideAs, reason);
+    },
   });
   const server: Server = createServer(createApp({ ...api, clientRoutes: clientReg.routes }));
   // two `ws` servers with a `path` each on one HTTP server abort each other's upgrades: the paths are routed here
   const wss = new WebSocketServer({ noServer: true });
   server.on('upgrade', (req, socket, head) => {
     const path = (req.url ?? '/').split('?')[0];
-    if (path === '/ws') wss.handleUpgrade(req, socket, head, (ws) => { wss.emit('connection', ws, req); });
+    if (path === '/ws')
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit('connection', ws, req);
+      });
     else if (path === '/ws/client') clientReg.upgrade(req, socket, head);
-    else { socket.write('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'); socket.destroy(); }
+    else {
+      socket.write('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+    }
   });
   wss.on('connection', (ws) => {
     cx.clients.add(ws);
-    ws.on('close', () => { cx.clients.delete(ws); });
-    ws.on('error', () => { cx.clients.delete(ws); });
-    if (cx.event !== undefined) background(cx, async () => { if (cx.event !== undefined) await emit(cx, [{ type: 'event.changed', event: onsiteEvent(cx.event) }], ws); });
+    ws.on('close', () => {
+      cx.clients.delete(ws);
+    });
+    ws.on('error', () => {
+      cx.clients.delete(ws);
+    });
+    if (cx.event !== undefined)
+      background(cx, async () => {
+        if (cx.event !== undefined) await emit(cx, [{ type: 'event.changed', event: onsiteEvent(cx.event) }], ws);
+      });
   });
   cx.port = 0;
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
-    server.listen(opts.port ?? DEFAULT_PORT, () => { server.off('error', reject); resolve(); });
+    server.listen(opts.port ?? DEFAULT_PORT, () => {
+      server.off('error', reject);
+      resolve();
+    });
   });
   cx.port = (server.address() as { port: number }).port;
   cx.toFile(`start port=${cx.port} dataDir=${dataDir}`);

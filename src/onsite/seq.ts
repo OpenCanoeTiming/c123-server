@@ -22,7 +22,10 @@ export interface SeqCounter {
 
 export class SeqFileInvalidError extends Error {
   readonly code = 'seq-file-invalid';
-  constructor(readonly path: string, readonly reason: string) {
+  constructor(
+    readonly path: string,
+    readonly reason: string,
+  ) {
     super(`seq file invalid at ${path}: ${reason}`);
   }
 }
@@ -56,7 +59,13 @@ export async function openSeq(fs: ChecksFs, dir: string, recover?: SeqRecovery):
     try {
       const raw: unknown = JSON.parse(text);
       const mark = (raw as { highWater?: unknown } | null)?.highWater;
-      if ((raw as { version?: unknown } | null)?.version !== 1 || typeof mark !== 'number' || !Number.isInteger(mark) || mark < 0) reason = 'not a version 1 high-water mark';
+      if (
+        (raw as { version?: unknown } | null)?.version !== 1 ||
+        typeof mark !== 'number' ||
+        !Number.isInteger(mark) ||
+        mark < 0
+      )
+        reason = 'not a version 1 high-water mark';
       else counter = mark;
     } catch (e) {
       reason = (e as Error).message;
