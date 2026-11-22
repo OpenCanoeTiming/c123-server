@@ -44,3 +44,35 @@ jobs:
 
       - name: Test
         run: npm run test -- --run
+
+  # Unit tests and the real-process tests on Windows: path separators, line endings, rename and
+  # child-process behaviour that the ubuntu job cannot show (issue #324). Not the legacy project and
+  # not the rest of the tools project (they need protocol-docs and recordings).
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Unit tests
+        run: npx vitest run --project unit
+
+      - name: Real-process tests
+        run: >-
+          npx vitest run --project tools
+          src/ingest/__tests__/xml-reader.real.test.ts
+          src/store/__tests__/checks.real.test.ts
+          src/onsite/__tests__/main-clock.real.test.ts
