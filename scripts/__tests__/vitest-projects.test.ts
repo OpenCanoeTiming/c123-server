@@ -13,7 +13,9 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
-const BIN = path.join(ROOT, 'node_modules/.bin')
+// node + the package's entry script: node_modules/.bin holds .cmd shims on Windows, which spawnSync cannot run without a shell
+const VITEST = path.join(ROOT, 'node_modules/vitest/vitest.mjs')
+const TSX = path.join(ROOT, 'node_modules/tsx/dist/cli.mjs')
 const T = 120_000
 
 function env(extra: Record<string, string>): NodeJS.ProcessEnv {
@@ -23,7 +25,7 @@ function env(extra: Record<string, string>): NodeJS.ProcessEnv {
   return { ...e, ...extra }
 }
 function list(extra: Record<string, string> = {}): { file: string; project: string }[] {
-  const r = spawnSync(path.join(BIN, 'vitest'), ['list', '--filesOnly', '--json'], { cwd: ROOT, encoding: 'utf8', timeout: T, env: env(extra) })
+  const r = spawnSync(process.execPath, [VITEST, 'list', '--filesOnly', '--json'], { cwd: ROOT, encoding: 'utf8', timeout: T, env: env(extra) })
   expect(r.status, r.stderr).toBe(0)
   const rows = JSON.parse(r.stdout.slice(r.stdout.indexOf('['))) as { file: string; projectName: string }[]
   return rows.map((x) => ({ file: path.relative(ROOT, x.file).split(path.sep).join('/'), project: x.projectName }))
@@ -31,7 +33,7 @@ function list(extra: Record<string, string> = {}): { file: string; project: stri
 function retries(extra: Record<string, string>): Record<string, unknown> {
   const code = "import('./vitest.config.ts').then((m) => console.log(JSON.stringify(Object.fromEntries(" +
     'm.default.test.projects.map((p) => [p.test.name, p.test.retry ?? 0])))))'
-  const r = spawnSync(path.join(BIN, 'tsx'), ['-e', code], { cwd: ROOT, encoding: 'utf8', timeout: T, env: env(extra) })
+  const r = spawnSync(process.execPath, [TSX, '-e', code], { cwd: ROOT, encoding: 'utf8', timeout: T, env: env(extra) })
   expect(r.status, r.stderr).toBe(0)
   return JSON.parse(r.stdout) as Record<string, unknown>
 }

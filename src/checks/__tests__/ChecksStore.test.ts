@@ -10,6 +10,10 @@ import type {
   FlagChangedEvent,
 } from '../types.js';
 
+// The store keeps its files in ~/.c123-server/checks, on Windows in %APPDATA%\c123-server\checks (issue #324).
+const checksDirOf = (home: string) =>
+  process.platform === 'win32' ? join(home, 'c123-server', 'checks') : join(home, '.c123-server', 'checks');
+
 describe('ChecksStore', () => {
   let tempDir: string;
   let store: ChecksStore;
@@ -30,6 +34,7 @@ describe('ChecksStore', () => {
 
     // Set HOME environment variable (works on Linux/macOS)
     process.env.HOME = tempDir;
+    process.env.APPDATA = tempDir;
 
     // Mock homedir to use temp directory (for additional safety)
     vi.spyOn(require('os'), 'homedir').mockReturnValue(tempDir);
@@ -99,7 +104,7 @@ describe('ChecksStore', () => {
       store.flush();
 
       // Verify file exists
-      const checksDir = join(tempDir, '.c123-server', 'checks');
+      const checksDir = checksDirOf(tempDir);
       const filePath = join(checksDir, `${filename}.checks.json`);
 
       // Verify file was written
@@ -116,7 +121,7 @@ describe('ChecksStore', () => {
       store.loadForFile(filename);
       store.setCheck('K1M-1', '1', 1, 2);
 
-      const checksDir = join(tempDir, '.c123-server', 'checks');
+      const checksDir = checksDirOf(tempDir);
       const filePath = join(checksDir, `${filename}.checks.json`);
 
       store.flush();
@@ -447,7 +452,7 @@ describe('ChecksStore', () => {
 
     it('multiple rapid changes result in single disk write', () => {
       const filename = store.getAllChecks()!.xmlFilename;
-      const checksDir = join(tempDir, '.c123-server', 'checks');
+      const checksDir = checksDirOf(tempDir);
       const filePath = join(checksDir, `${filename}.checks.json`);
 
       // Make multiple rapid changes
@@ -471,7 +476,7 @@ describe('ChecksStore', () => {
 
     it('flush() cancels pending debounce and writes immediately', () => {
       const filename = store.getAllChecks()!.xmlFilename;
-      const checksDir = join(tempDir, '.c123-server', 'checks');
+      const checksDir = checksDirOf(tempDir);
       const filePath = join(checksDir, `${filename}.checks.json`);
 
       store.setCheck('K1M-1', '1', 1, 2);
@@ -528,7 +533,7 @@ describe('ChecksStore', () => {
       store.destroy();
 
       // Verify data was flushed
-      const checksDir = join(tempDir, '.c123-server', 'checks');
+      const checksDir = checksDirOf(tempDir);
       const filePath = join(checksDir, `${filename}.checks.json`);
       expect(existsSync(filePath)).toBe(true);
     });
@@ -728,7 +733,7 @@ describe('ChecksStore', () => {
       expect(store.getChecks('A').checks['1:1']).toBeUndefined();
       expect(store.getAllChecks()?.fingerprint).toBeNull();
 
-      const archived = readdirSync(join(tempDir, '.c123-server', 'checks')).filter((f) =>
+      const archived = readdirSync(checksDirOf(tempDir)).filter((f) =>
         f.includes('archived')
       );
       expect(archived).toHaveLength(1);
@@ -762,7 +767,7 @@ describe('ChecksStore', () => {
 
       expect(store.getChecks('A').checks['1:1']).toBeDefined();
 
-      const archived = readdirSync(join(tempDir, '.c123-server', 'checks')).filter((f) =>
+      const archived = readdirSync(checksDirOf(tempDir)).filter((f) =>
         f.includes('archived')
       );
       expect(archived).toHaveLength(0);
@@ -812,7 +817,7 @@ describe('ChecksStore', () => {
 
     it('archives the discarded checks even inside the flush debounce window', () => {
       const filename = getUniqueTestFile();
-      const checksDir = join(tempDir, '.c123-server', 'checks');
+      const checksDir = checksDirOf(tempDir);
       store.loadForFile(filename);
       store.setScheduleFingerprint('A@2026-04-19|B@2026-04-19');
 
@@ -838,7 +843,7 @@ describe('ChecksStore', () => {
 
       store.resetForNewEvent();
 
-      const archived = readdirSync(join(tempDir, '.c123-server', 'checks')).filter((f) =>
+      const archived = readdirSync(checksDirOf(tempDir)).filter((f) =>
         f.includes('archived')
       );
       expect(archived).toHaveLength(0);
@@ -876,7 +881,7 @@ describe('ChecksStore', () => {
 
     it('treats a legacy file with an empty fingerprint as unpinned', () => {
       const filename = getUniqueTestFile();
-      const checksDir = join(tempDir, '.c123-server', 'checks');
+      const checksDir = checksDirOf(tempDir);
       mkdirSync(checksDir, { recursive: true });
       writeFileSync(
         join(checksDir, `${filename}.checks.json`),
@@ -917,7 +922,7 @@ describe('ChecksStore', () => {
 
   describe('Malformed checks files', () => {
     function writeChecksFile(filename: string, body: string): string {
-      const checksDir = join(tempDir, '.c123-server', 'checks');
+      const checksDir = checksDirOf(tempDir);
       mkdirSync(checksDir, { recursive: true });
       writeFileSync(join(checksDir, `${filename}.checks.json`), body);
       return checksDir;
@@ -1104,7 +1109,7 @@ describe('ChecksStore', () => {
       store.setCheck('B', '2', 2, 50);
       store.resetForNewEvent();
 
-      const archived = readdirSync(join(tempDir, '.c123-server', 'checks')).filter((f) =>
+      const archived = readdirSync(checksDirOf(tempDir)).filter((f) =>
         f.includes('archived')
       );
       expect(archived).toHaveLength(2);
@@ -1122,7 +1127,7 @@ describe('ChecksStore', () => {
       expect(store.getAllChecks()?.fingerprint).toBeNull();
       expect(store.getAllChecks()?.xmlFilename).toBe(filename);
 
-      const archived = readdirSync(join(tempDir, '.c123-server', 'checks')).filter((f) =>
+      const archived = readdirSync(checksDirOf(tempDir)).filter((f) =>
         f.includes('archived')
       );
       expect(archived).toHaveLength(1);

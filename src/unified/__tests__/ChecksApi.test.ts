@@ -30,6 +30,7 @@ describe('Penalty Checks API', () => {
     resetAppSettings();
     tempDir = mkdtempSync(join(tmpdir(), 'checks-api-test-'));
     process.env.HOME = tempDir;
+    process.env.APPDATA = tempDir; // the Windows home of ChecksStore (issue #324)
 
     store = new ChecksStore();
     store.loadForFile('test-event.xml');

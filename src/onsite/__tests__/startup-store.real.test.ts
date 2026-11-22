@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, normalize } from 'node:path';
 import { createRealChecksFs, createRealXmlFs } from '../../adapters/real-io.js';
 import { startOnsite, type AdminLogEntry, type OnsiteHandle, type OnsiteOptions } from '../index.js';
 import { virtualClock } from './onsite-harness.js';
@@ -34,7 +34,9 @@ describe('real filesystem (CONTRACTS §2.10, DERIVATIONS §10 item 33)', () => {
     const h = await startOnsite(opts);
     handles.push(h);
     expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({ kind: 'store-set-aside', store: 'checks', eventId: 'ev-real', file: original });
+    expect(entries[0]).toMatchObject({ kind: 'store-set-aside', store: 'checks', eventId: 'ev-real', file: expect.any(String) });
+    // the store joins with '/', which Windows accepts; compare the same file, not the spelling
+    expect(normalize(entries[0]!.file)).toBe(original);
     const aside = entries[0]!.setAsideAs;
     expect(aside).not.toBe(original);
     expect(await readFile(aside, 'utf8'), 'the set-aside file holds the original bytes').toBe(bad);
