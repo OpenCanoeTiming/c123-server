@@ -109,6 +109,9 @@ export function startReader(cx: OnsiteContext, unit: (elements: IngestElement[])
     },
     onStatus: (status) => {
       if (status.state !== cx.xmlStatus.state) cx.toFile(`xml ${status.state}`);
+      if (status.tornReads > cx.xmlStatus.tornReads) cx.toFile(`xml torn read (${status.tornReads} so far)`);
+      if (status.abandonedReads > cx.xmlStatus.abandonedReads)
+        cx.toFile(`xml read abandoned after retries (${status.abandonedReads} so far)`);
       cx.xmlStatus = status;
       background(cx, async () => {
         await emit(cx, sourcesChange(cx));
