@@ -23,7 +23,10 @@ package. Point the scope at that registry in the client's `.npmrc`:
 //npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
 ```
 
-`NODE_AUTH_TOKEN` is a token with `read:packages` (a repository secret in CI). Pin an exact version
-(no `^` or `~`) in `package.json`.
+`NODE_AUTH_TOKEN` is a classic personal access token with `read:packages`; the npm registry of
+GitHub Packages does not take fine-grained tokens. In CI it is a repository secret that the workflow
+exposes as the `NODE_AUTH_TOKEN` environment variable of the job that runs `npm ci` (at job level, so
+that `actions/setup-node`'s cache step sees it too). Pin an exact version (no `^` or `~`) in
+`package.json`.
 
 `schemas.sha256` locks the schema files. A schema edit in `docs/arch/schemas/` requires regenerating it, and that commit is what releases the package: `(cd docs/arch/schemas && sha256sum *.json) > packages/c123-contract/schemas.sha256`
