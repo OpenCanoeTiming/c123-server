@@ -336,13 +336,13 @@ whole. Until settled, live-mini-server has no stated source for those fields (CO
 
 These obligations need the fixture capture, admission and catalogue that are not built (TEST-ARCHITECTURE §3.2, §6); they return to their sections above when that machinery exists.
 
-Until then a rendering client's CI runs on its own hand-authored synthetic fixtures (`RULINGS.md` R-27). It validates them and fails on a `domainLayerVersion.contract` mismatch with the version of its pinned contract package, as TEST-ARCHITECTURE §4 says for a client's own synthetic fixtures.
+Until then a rendering client's CI may run on its own hand-authored synthetic fixtures (`RULINGS.md` R-27). It validates them and fails on a `domainLayerVersion.contract` mismatch with the version of its pinned contract package, as TEST-ARCHITECTURE §4 says for a client's own synthetic fixtures.
 
 ### From Common — All four deployables
 
 - [ ] Pin a specific domain-state fixture set by id and version in a committed reference; never a floating "latest" (TEST-ARCHITECTURE §6).
 - [ ] Consume only fixtures whose `admitted.status` is `admitted`, which `schemas/fixture-admitted.schema.json` allows only with gate 1 and gate 2 true, a window spanning whole races checked against published results with no mismatch, and a `human-checked-<date> by <name>` line certifying the fixture; read `evidence.gate2.exercised` for the properties the window evaluated zero times, for which the fixture is no evidence (TEST-ARCHITECTURE §3.2, §4, §6; ADR-017).
-- [ ] Fail, loudly, on a `domainLayerVersion.contract` mismatch between a fixture and the consumer (for a client, the `version` of its pinned contract package); re-pin deliberately instead of warning; a `generator` change is re-admitted upstream, never re-pinned here (TEST-ARCHITECTURE §4, §6).
+- [ ] Fail, loudly, on a `domainLayerVersion.contract` mismatch between a fixture and the consumer (for a client's own synthetic fixtures until the admission machinery exists, the `version` of its pinned contract package); re-pin deliberately instead of warning; a `generator` change is re-admitted upstream, never re-pinned here (TEST-ARCHITECTURE §4, §6).
 
 ### From Common — Rendering clients, Tests
 

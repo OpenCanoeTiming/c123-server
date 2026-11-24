@@ -697,7 +697,7 @@ resolves every value before it reaches a client (`ARCHITECTURE.md` §2), so no c
 pipeline or a mock WebSocket server of its own. The input is in the §4 format, captured from a
 replay or hand-authored to land exactly on a threshold; both feed the same harness. Captured,
 admitted fixtures and a shared set of synthetic ones are not built (§3.2; c123-protocol-docs#15,
-#20). No client has the harness yet (c123-scoreboard#151).
+#20). c123-scoreboard has the harness since c123-scoreboard#151, fed by its own synthetic fixtures (§4, `RULINGS.md` R-27).
 
 **What is not shared, and must not be:** the *assertions*. Display-lifetime policy is correctly
 different per client and audience (`ARCHITECTURE.md` §2: two correctly implemented clients may
