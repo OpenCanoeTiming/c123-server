@@ -894,6 +894,17 @@ mismatch fails, loudly**: a warning would let a stale fixture keep passing; a co
 the older fixture re-pins deliberately. A `generator` change is not a consumer's concern: it
 requires re-admission through gates 1–3 and a new fixture revision (§6).
 
+**A client's own synthetic fixtures, until the admission machinery exists** (`RULINGS.md` R-27). A
+client's contract is the contract package it pins, which carries neither a wire-protocol `VERSION`
+nor a `docs/arch` commit. So a client's synthetic fixture states the pinned package's version as
+`domainLayerVersion.contract`, and the client's harness compares it with the `version` in
+`@opencanoetiming/c123-contract/package.json`; a mismatch fails. The package ships no schema for
+the whole file yet, only `fixture-admitted.schema.json`. Until it does, the harness checks the
+header and the steps itself: `fixtureId`, `source.kind: "synthetic"` with a `reason`,
+`domainLayerVersion.contract`, a first step of `kind: "hydration"`, and each delta step against the
+package's delta types. An `admitted` block, where one is present, is validated against
+`fixture-admitted.schema.json`.
+
 **The hydration step** holds every §7.1 (or §8.4) GET body of the event at one `asOfSeq`, taken at
 the step that completes the cold-start snapshot read or, for a window inside a longer replay
 (§3.2), at the window's opening step; its `observedAt` is the recorded time of the last element

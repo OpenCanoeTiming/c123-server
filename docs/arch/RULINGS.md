@@ -75,3 +75,9 @@ A row is cited by its id, R-n.
 | R-24 | 2026-11-10 | `/api/events/current` carries `pendingPhaseIds`, the Phases whose class is not yet known, so a hydrating client can request their Attempts. | CONTRACTS §1.6, §7.1 |
 | R-25 | 2026-11-14 | `event.changed` is sent with the same `eventId` when the presented Event's `details` or `name` change. A client holding that `eventId` replaces the Event whole, with no re-hydration. | CONTRACTS §7.2 |
 | R-26 | 2026-11-21 | Client configuration and remote control (ConfigPush, ClientState, ForceRefresh, `clientId`, per-IP records, `/api/clients`) keep today's message shapes. The on-site process serves them on their own WebSocket path `/ws/client` on the same port; `/ws` carries only the contract's §7 messages. A record is keyed by the client's `clientId`, else by its IP, the IPv6 loopback and IPv4-mapped forms counted as IPv4. Setting a new `clientId` moves the record to it. All of it stays outside the contract. | ARCHITECTURE §8; CLIENT-OBLIGATIONS c123-scoreboard; c123-server#328 |
+
+## Tests
+
+| id | date | ruling | where it is applied |
+|---|---|---|---|
+| R-27 | 2026-11-23 | Until the fixture admission machinery exists, a rendering client's CI may run on hand-authored synthetic fixtures in the TEST-ARCHITECTURE §4 format, each with a `reason`, failing on a `domainLayerVersion.contract` mismatch. They are evidence for the client's own rules (display lifetime, rendering, delta application) and for nothing about upstream behaviour. The proof on real data for a client milestone is a run of the built client against the server replaying a recording, its final tables compared with the server's REST results (c123-scoreboard#166). | TEST-ARCHITECTURE §4; CLIENT-OBLIGATIONS "Parked"; c123-server#435 |
