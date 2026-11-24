@@ -697,7 +697,7 @@ resolves every value before it reaches a client (`ARCHITECTURE.md` §2), so no c
 pipeline or a mock WebSocket server of its own. The input is in the §4 format, captured from a
 replay or hand-authored to land exactly on a threshold; both feed the same harness. Captured,
 admitted fixtures and a shared set of synthetic ones are not built (§3.2; c123-protocol-docs#15,
-#20). No client has the harness yet (c123-scoreboard#151).
+#20). c123-scoreboard has the harness since c123-scoreboard#151, fed by its own synthetic fixtures (§4, `RULINGS.md` R-27).
 
 **What is not shared, and must not be:** the *assertions*. Display-lifetime policy is correctly
 different per client and audience (`ARCHITECTURE.md` §2: two correctly implemented clients may
@@ -893,6 +893,17 @@ leaves today's 2.0.0, since every client renegotiates), and until then a `docs/a
 mismatch fails, loudly**: a warning would let a stale fixture keep passing; a consumer that wants
 the older fixture re-pins deliberately. A `generator` change is not a consumer's concern: it
 requires re-admission through gates 1–3 and a new fixture revision (§6).
+
+**A client's own synthetic fixtures, until the admission machinery exists** (`RULINGS.md` R-27). A
+client's contract is the contract package it pins, which carries neither a wire-protocol `VERSION`
+nor a `docs/arch` commit. So a client's synthetic fixture states the pinned package's version as
+`domainLayerVersion.contract`, and the client's harness compares it with the `version` in
+`@opencanoetiming/c123-contract/package.json`; a mismatch fails. The package ships no schema for
+the whole file yet, only `fixture-admitted.schema.json`. Until it does, the harness checks the
+header and the steps itself: `fixtureId`, `source.kind: "synthetic"` with a `reason`,
+`domainLayerVersion.contract`, a first step of `kind: "hydration"`, and each delta step against the
+package's delta types. An `admitted` block, where one is present, is validated against
+`fixture-admitted.schema.json`.
 
 **The hydration step** holds every §7.1 (or §8.4) GET body of the event at one `asOfSeq`, taken at
 the step that completes the cold-start snapshot read or, for a window inside a longer replay
